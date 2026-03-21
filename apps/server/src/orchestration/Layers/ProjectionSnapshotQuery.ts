@@ -201,7 +201,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
-          deleted_at AS "deletedAt"
+          deleted_at AS "deletedAt",
+          custom_metadata AS "customMetadata"
         FROM projection_threads
         ORDER BY created_at ASC, thread_id ASC
       `,
@@ -682,6 +683,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             activities: activitiesByThread.get(row.threadId) ?? [],
             checkpoints: checkpointsByThread.get(row.threadId) ?? [],
             session: sessionsByThread.get(row.threadId) ?? null,
+            customMetadata: JSON.parse((row as Record<string, unknown>).customMetadata as string || "{}"),
           }));
 
           const snapshot = {

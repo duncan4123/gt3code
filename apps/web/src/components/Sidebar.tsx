@@ -124,6 +124,8 @@ import {
   sortProjectsForSidebar,
   sortThreadsForSidebar,
   useThreadJumpHintVisibility,
+  getGcMetadata,
+  countGcAgents,
 } from "./Sidebar.logic";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";

@@ -34,6 +34,7 @@ export const ProjectionThread = Schema.Struct({
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime),
   deletedAt: Schema.NullOr(IsoDateTime),
+  customMetadata: Schema.String.pipe(Schema.withDecodingDefault(() => "{}")),
 });
 export type ProjectionThread = typeof ProjectionThread.Type;
 

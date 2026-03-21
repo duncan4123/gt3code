@@ -109,6 +109,7 @@ export interface Thread {
   worktreePath: string | null;
   turnDiffSummaries: TurnDiffSummary[];
   activities: OrchestrationThreadActivity[];
+  customMetadata?: Record<string, string>;
 }
 
 export interface SidebarThreadSummary {
