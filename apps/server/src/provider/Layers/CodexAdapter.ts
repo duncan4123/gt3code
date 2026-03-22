@@ -77,6 +77,15 @@ function toSessionError(
   return undefined;
 }
 
+function readGcSessionEnv(threadId: ThreadId): NodeJS.ProcessEnv {
+  const envFile = `${process.env.TMPDIR ?? "/tmp"}/gc-session-t3/thread-${threadId}.env.json`;
+  try {
+    return JSON.parse(require("fs").readFileSync(envFile, "utf8")) as NodeJS.ProcessEnv;
+  } catch {
+    return {};
+  }
+}
+
 function toRequestError(threadId: ThreadId, method: string, cause: unknown): ProviderAdapterError {
   const sessionError = toSessionError(threadId, cause);
   if (sessionError) {
@@ -1312,6 +1321,10 @@ const makeCodexAdapter = (options?: CodexAdapterLiveOptions) =>
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
         ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
         ...(input.providerOptions !== undefined ? { providerOptions: input.providerOptions } : {}),
+        runtimeEnv: {
+          ...process.env,
+          ...readGcSessionEnv(input.threadId),
+        },
         runtimeMode: input.runtimeMode,
         ...(input.model !== undefined ? { model: input.model } : {}),
         ...(input.modelOptions?.codex?.fastMode ? { serviceTier: "fast" } : {}),

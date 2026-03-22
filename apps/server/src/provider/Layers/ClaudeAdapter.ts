@@ -2575,8 +2575,19 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           ...(newSessionId ? { sessionId: newSessionId } : {}),
           includePartialMessages: true,
           canUseTool,
-          env: process.env,
+          env: (() => {
+            // Merge GC env vars from gc-session-t3 state if available.
+            const envFile = `${process.env.TMPDIR ?? "/tmp"}/gc-session-t3/thread-${threadId}.env.json`;
+            try {
+              const gcEnv = JSON.parse(require("fs").readFileSync(envFile, "utf8"));
+              return { ...process.env, ...gcEnv };
+            } catch {
+              return process.env;
+            }
+          })(),
           ...(input.cwd ? { additionalDirectories: [input.cwd] } : {}),
+          settingSources: ["project"],
+          enableAllProjectMcpServers: true,
         };
 
         const queryRuntime = yield* Effect.try({
