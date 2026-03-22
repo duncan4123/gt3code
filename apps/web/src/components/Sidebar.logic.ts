@@ -32,11 +32,38 @@ export function getGcMetadata(customMetadata?: Record<string, string>): {
   city: string | undefined;
   bead: string | undefined;
   beadTitle: string | undefined;
+  molecule: string | undefined;
+  formula: string | undefined;
+  convoy: string | undefined;
+  convoyTitle: string | undefined;
+  convoyStatus: string | undefined;
+  convoyClosedCount: string | undefined;
+  convoyTotalCount: string | undefined;
+  doltPort: string | undefined;
+  doltDatabase: string | undefined;
   state: string | undefined;
   provider: string | undefined;
 } {
   if (!customMetadata || !customMetadata["gc.agent"]) {
-    return { isGcManaged: false, agent: undefined, rig: undefined, city: undefined, bead: undefined, beadTitle: undefined, state: undefined, provider: undefined };
+    return {
+      isGcManaged: false,
+      agent: undefined,
+      rig: undefined,
+      city: undefined,
+      bead: undefined,
+      beadTitle: undefined,
+      molecule: undefined,
+      formula: undefined,
+      convoy: undefined,
+      convoyTitle: undefined,
+      convoyStatus: undefined,
+      convoyClosedCount: undefined,
+      convoyTotalCount: undefined,
+      doltPort: undefined,
+      doltDatabase: undefined,
+      state: undefined,
+      provider: undefined,
+    };
   }
   return {
     isGcManaged: true,
@@ -45,9 +72,24 @@ export function getGcMetadata(customMetadata?: Record<string, string>): {
     city: customMetadata["gc.city"],
     bead: customMetadata["gc.bead"],
     beadTitle: customMetadata["gc.beadTitle"],
+    molecule: customMetadata["gc.molecule"],
+    formula: customMetadata["gc.formula"],
+    convoy: customMetadata["gc.convoy"],
+    convoyTitle: customMetadata["gc.convoyTitle"],
+    convoyStatus: customMetadata["gc.convoyStatus"],
+    convoyClosedCount: customMetadata["gc.convoyClosedCount"],
+    convoyTotalCount: customMetadata["gc.convoyTotalCount"],
+    doltPort: customMetadata["gc.doltPort"],
+    doltDatabase: customMetadata["gc.doltDatabase"],
     state: customMetadata["gc.state"],
     provider: customMetadata["gc.provider"],
   };
+}
+
+/** Returns true if a thread is archived (GC state is "drained" or "archived"). */
+export function isThreadArchived(customMetadata?: Record<string, string>): boolean {
+  const state = customMetadata?.["gc.state"];
+  return state === "drained" || state === "archived";
 }
 
 /** Count GC-managed threads per project. */
@@ -55,6 +97,59 @@ export function countGcAgents(threads: ReadonlyArray<{ projectId: string; custom
   return threads.filter(
     (t) => t.projectId === projectId && t.customMetadata?.["gc.agent"],
   ).length;
+}
+
+export interface ConvoyThreadLike {
+  customMetadata?: Record<string, string>;
+}
+
+export interface VirtualConvoyGroup<TThread extends ConvoyThreadLike> {
+  id: string;
+  label: string;
+  status: string | undefined;
+  closedCount: number | null;
+  totalCount: number | null;
+  threads: TThread[];
+}
+
+export function groupThreadsByVirtualConvoy<TThread extends ConvoyThreadLike>(
+  threads: ReadonlyArray<TThread>,
+): {
+  standaloneThreads: TThread[];
+  convoyGroups: VirtualConvoyGroup<TThread>[];
+} {
+  const standaloneThreads: TThread[] = [];
+  const convoyGroupsById = new Map<string, VirtualConvoyGroup<TThread>>();
+
+  for (const thread of threads) {
+    const gcMeta = getGcMetadata(thread.customMetadata);
+    const convoyId = gcMeta.convoy?.trim();
+    if (!convoyId) {
+      standaloneThreads.push(thread);
+      continue;
+    }
+
+    const existingGroup = convoyGroupsById.get(convoyId);
+    if (existingGroup) {
+      existingGroup.threads.push(thread);
+      continue;
+    }
+
+    convoyGroupsById.set(convoyId, {
+      id: convoyId,
+      label: gcMeta.convoyTitle?.trim() || convoyId,
+      status: gcMeta.convoyStatus,
+      closedCount: gcMeta.convoyClosedCount ? Number(gcMeta.convoyClosedCount) : null,
+      totalCount: gcMeta.convoyTotalCount ? Number(gcMeta.convoyTotalCount) : null,
+      threads: [thread],
+    });
+  }
+
+  const convoyGroups = Array.from(convoyGroupsById.values()).sort((a, b) =>
+    a.label.localeCompare(b.label),
+  );
+
+  return { standaloneThreads, convoyGroups };
 }
 
 type ThreadStatusInput = Pick<

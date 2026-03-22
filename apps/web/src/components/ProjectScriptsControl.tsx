@@ -104,6 +104,36 @@ const GC_PRESETS: ActionPreset[] = [
     icon: "configure",
     description: "List open convoys with progress\nUsage: gc convoy list\nOther: gc convoy status <id>, gc convoy create",
   },
+  {
+    name: "GC Convoy Check",
+    command: "gc convoy check",
+    icon: "lint",
+    description: "Auto-close convoys where all issues are resolved\nUsage: gc convoy check",
+  },
+  {
+    name: "GC Stranded",
+    command: "gc convoy stranded",
+    icon: "debug",
+    description: "Find convoys with ready work but no assignee\nUsage: gc convoy stranded",
+  },
+  {
+    name: "GC Events",
+    command: "gc events --since 1h",
+    icon: "play",
+    description: "Show recent city event log\nUsage: gc events [--since 1h] [--type bead.created] [--follow]",
+  },
+  {
+    name: "GC Formulas",
+    command: "gc formula list",
+    icon: "configure",
+    description: "List available formulas\nUsage: gc formula list\nOther: gc formula show <name>, gc formula cook <name>",
+  },
+  {
+    name: "GC Converge",
+    command: "gc converge list",
+    icon: "configure",
+    description: "List active convergence loops\nUsage: gc converge list [--state active]\nOther: gc converge status <id>, gc converge stop <id>",
+  },
 ];
 
 const T3_PRESETS: ActionPreset[] = [
@@ -193,6 +223,18 @@ const BD_PRESETS: ActionPreset[] = [
     command: "bd list ",
     icon: "play",
     description: "List issues — edit command to filter\nUsage: bd list [--type <type>] [--assigned] [--state open|closed]\nExample: bd list --assigned --state open",
+  },
+  {
+    name: "BD Graph",
+    command: "bd graph ",
+    icon: "configure",
+    description: "Show dependency graph for an issue — edit command to add ID\nUsage: bd graph <issue-id>",
+  },
+  {
+    name: "BD Orphans",
+    command: "bd orphans",
+    icon: "debug",
+    description: "Find issues referenced in commits but still open\nUsage: bd orphans",
   },
 ];
 

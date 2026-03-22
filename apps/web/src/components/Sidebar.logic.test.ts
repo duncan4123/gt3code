@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getGcMetadata,
+  groupThreadsByVirtualConvoy,
   hasUnseenCompletion,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
@@ -228,5 +230,103 @@ describe("resolveThreadRowClassName", () => {
     const className = resolveThreadRowClassName({ isActive: true, isSelected: false });
     expect(className).toContain("bg-accent/85");
     expect(className).toContain("hover:bg-accent");
+  });
+});
+
+describe("getGcMetadata", () => {
+  it("extracts convoy and formula metadata when present", () => {
+    expect(
+      getGcMetadata({
+        "gc.agent": "gascity/codex",
+        "gc.molecule": "gc-mol-7",
+        "gc.formula": "mol-do-work",
+        "gc.convoy": "gc-jsd2",
+        "gc.convoyTitle": "T3 Virtual Convoy Folders",
+      }),
+    ).toMatchObject({
+      isGcManaged: true,
+      molecule: "gc-mol-7",
+      formula: "mol-do-work",
+      convoy: "gc-jsd2",
+      convoyTitle: "T3 Virtual Convoy Folders",
+    });
+  });
+});
+
+describe("groupThreadsByVirtualConvoy", () => {
+  it("leaves non-convoy threads as standalone", () => {
+    const result = groupThreadsByVirtualConvoy([
+      { customMetadata: {} },
+      { customMetadata: { "gc.agent": "gascity/codex" } },
+    ]);
+
+    expect(result.standaloneThreads).toHaveLength(2);
+    expect(result.convoyGroups).toHaveLength(0);
+  });
+
+  it("groups threads by convoy id and prefers convoy title for labels", () => {
+    const result = groupThreadsByVirtualConvoy([
+      {
+        customMetadata: {
+          "gc.agent": "gascity/codex-1",
+          "gc.convoy": "gc-jsd2",
+          "gc.convoyTitle": "T3 Virtual Convoy Folders",
+        },
+      },
+      {
+        customMetadata: {
+          "gc.agent": "gascity/claude-1",
+          "gc.convoy": "gc-jsd2",
+          "gc.convoyTitle": "T3 Virtual Convoy Folders",
+        },
+      },
+      {
+        customMetadata: {
+          "gc.agent": "gascity/codex-2",
+          "gc.convoy": "gc-abc1",
+        },
+      },
+      {
+        customMetadata: {
+          "gc.agent": "gascity/codex-3",
+        },
+      },
+    ]);
+
+    expect(result.standaloneThreads).toHaveLength(1);
+    expect(result.convoyGroups).toHaveLength(2);
+    expect(result.convoyGroups[0]).toMatchObject({
+      id: "gc-abc1",
+      label: "gc-abc1",
+    });
+    expect(result.convoyGroups[1]).toMatchObject({
+      id: "gc-jsd2",
+      label: "T3 Virtual Convoy Folders",
+      status: undefined,
+    });
+    expect(result.convoyGroups[1]?.threads).toHaveLength(2);
+  });
+
+  it("preserves convoy progress metadata on the virtual folder", () => {
+    const result = groupThreadsByVirtualConvoy([
+      {
+        customMetadata: {
+          "gc.agent": "gascity/codex-1",
+          "gc.convoy": "gc-ybah",
+          "gc.convoyTitle": "Convoy metadata proof",
+          "gc.convoyStatus": "open",
+          "gc.convoyClosedCount": "1",
+          "gc.convoyTotalCount": "3",
+        },
+      },
+    ]);
+
+    expect(result.convoyGroups[0]).toMatchObject({
+      id: "gc-ybah",
+      label: "Convoy metadata proof",
+      status: "open",
+      closedCount: 1,
+      totalCount: 3,
+    });
   });
 });

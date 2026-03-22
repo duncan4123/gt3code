@@ -45,6 +45,34 @@ export interface WorkLogEntry {
   requestKind?: PendingApproval["requestKind"];
 }
 
+export interface GcTimelineEvent {
+  id: string;
+  createdAt: string;
+  kind: string;
+  summary: string;
+  tone: OrchestrationThreadActivity["tone"];
+  detail?: string;
+  badges?: ReadonlyArray<string>;
+  textPreview?: string;
+  beadId?: string;
+  beadTitle?: string;
+  beadStatus?: string;
+  formula?: string;
+  moleculeId?: string;
+}
+
+export interface WorkedBeadHistoryEntry {
+  id: string;
+  beadId: string;
+  beadTitle?: string;
+  beadStatus?: string;
+  formula?: string;
+  moleculeId?: string;
+  createdAt: string;
+  sourceEventId: string;
+  sourceKind: string;
+}
+
 interface DerivedWorkLogEntry extends WorkLogEntry {
   activityKind: OrchestrationThreadActivity["kind"];
   collapseKey?: string;
@@ -101,6 +129,12 @@ export type TimelineEntry =
       kind: "work";
       createdAt: string;
       entry: WorkLogEntry;
+    }
+  | {
+      id: string;
+      kind: "gc-event";
+      createdAt: string;
+      event: GcTimelineEvent;
     };
 
 export function formatDuration(durationMs: number): string {
@@ -471,6 +505,83 @@ export function deriveWorkLogEntries(
   );
 }
 
+export function deriveGcTimelineEvents(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+): GcTimelineEvent[] {
+  return [...activities]
+    .toSorted(compareActivitiesByOrder)
+    .filter((activity) => activity.kind.startsWith("gc."))
+    .map((activity) => {
+      const payload = asRecord(activity.payload);
+      const badges = [
+        asTrimmedString(payload?.provider),
+        asTrimmedString(payload?.model),
+        asTrimmedString(payload?.template),
+        asTrimmedString(payload?.state),
+        asTrimmedString(payload?.source),
+      ].filter((value): value is string => value !== null);
+      const detail =
+        asTrimmedString(payload?.workDir) ??
+        asTrimmedString(payload?.beadTitle) ??
+        asTrimmedString(payload?.beadId) ??
+        asTrimmedString(payload?.sessionName) ??
+        undefined;
+      return {
+        id: activity.id,
+        createdAt: activity.createdAt,
+        kind: activity.kind,
+        summary: activity.summary,
+        tone: activity.tone,
+        ...(detail ? { detail } : {}),
+        ...(badges.length > 0 ? { badges } : {}),
+        ...(asTrimmedString(payload?.textPreview)
+          ? { textPreview: asTrimmedString(payload?.textPreview) ?? undefined }
+          : {}),
+        ...(asTrimmedString(payload?.beadId) ? { beadId: asTrimmedString(payload?.beadId) ?? undefined } : {}),
+        ...(asTrimmedString(payload?.beadTitle)
+          ? { beadTitle: asTrimmedString(payload?.beadTitle) ?? undefined }
+          : {}),
+        ...(asTrimmedString(payload?.beadStatus)
+          ? { beadStatus: asTrimmedString(payload?.beadStatus) ?? undefined }
+          : {}),
+        ...(asTrimmedString(payload?.formula)
+          ? { formula: asTrimmedString(payload?.formula) ?? undefined }
+          : {}),
+        ...(asTrimmedString(payload?.moleculeId)
+          ? { moleculeId: asTrimmedString(payload?.moleculeId) ?? undefined }
+          : {}),
+      };
+    });
+}
+
+export function deriveWorkedBeadHistory(
+  events: ReadonlyArray<GcTimelineEvent>,
+): WorkedBeadHistoryEntry[] {
+  const historyByBeadId = new Map<string, WorkedBeadHistoryEntry>();
+  for (const event of events) {
+    if (!event.kind.startsWith("gc.bead.")) {
+      continue;
+    }
+    if (!event.beadId) {
+      continue;
+    }
+    historyByBeadId.set(event.beadId, {
+      id: `${event.kind}:${event.beadId}`,
+      beadId: event.beadId,
+      ...(event.beadTitle ? { beadTitle: event.beadTitle } : {}),
+      ...(event.beadStatus ? { beadStatus: event.beadStatus } : {}),
+      ...(event.formula ? { formula: event.formula } : {}),
+      ...(event.moleculeId ? { moleculeId: event.moleculeId } : {}),
+      createdAt: event.createdAt,
+      sourceEventId: event.id,
+      sourceKind: event.kind,
+    });
+  }
+  return [...historyByBeadId.values()].toSorted((left, right) =>
+    right.createdAt.localeCompare(left.createdAt),
+  );
+}
+
 function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): boolean {
   if (activity.kind !== "tool.updated" && activity.kind !== "tool.completed") {
     return false;
@@ -827,6 +938,7 @@ export function deriveTimelineEntries(
   messages: ChatMessage[],
   proposedPlans: ProposedPlan[],
   workEntries: WorkLogEntry[],
+  gcEvents: GcTimelineEvent[] = [],
 ): TimelineEntry[] {
   const messageRows: TimelineEntry[] = messages.map((message) => ({
     id: message.id,
@@ -846,7 +958,13 @@ export function deriveTimelineEntries(
     createdAt: entry.createdAt,
     entry,
   }));
-  return [...messageRows, ...proposedPlanRows, ...workRows].toSorted((a, b) =>
+  const gcEventRows: TimelineEntry[] = gcEvents.map((event) => ({
+    id: event.id,
+    kind: "gc-event",
+    createdAt: event.createdAt,
+    event,
+  }));
+  return [...messageRows, ...proposedPlanRows, ...workRows, ...gcEventRows].toSorted((a, b) =>
     a.createdAt.localeCompare(b.createdAt),
   );
 }

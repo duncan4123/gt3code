@@ -175,6 +175,16 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         continue;
       }
 
+      if (timelineEntry.kind === "gc-event") {
+        nextRows.push({
+          kind: "gc-event",
+          id: timelineEntry.id,
+          createdAt: timelineEntry.createdAt,
+          event: timelineEntry.event,
+        });
+        continue;
+      }
+
       nextRows.push({
         kind: "message",
         id: timelineEntry.id,
@@ -251,6 +261,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       const row = rows[index];
       if (!row) return 96;
       if (row.kind === "work") return 112;
+      if (row.kind === "gc-event") return 128;
       if (row.kind === "proposed-plan") return estimateTimelineProposedPlanHeight(row.proposedPlan);
       if (row.kind === "working") return 40;
       return estimateTimelineMessageHeight(row.message, { timelineWidthPx });
@@ -351,6 +362,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             </div>
           );
         })()}
+
+      {row.kind === "gc-event" && (
+        <GcEventCard event={row.event} timestampFormat={timestampFormat} />
+      )}
 
       {row.kind === "message" &&
         row.message.role === "user" &&
@@ -601,12 +616,19 @@ type TimelineEntry = ReturnType<typeof deriveTimelineEntries>[number];
 type TimelineMessage = Extract<TimelineEntry, { kind: "message" }>["message"];
 type TimelineProposedPlan = Extract<TimelineEntry, { kind: "proposed-plan" }>["proposedPlan"];
 type TimelineWorkEntry = Extract<TimelineEntry, { kind: "work" }>["entry"];
+type TimelineGcEvent = Extract<TimelineEntry, { kind: "gc-event" }>["event"];
 type TimelineRow =
   | {
       kind: "work";
       id: string;
       createdAt: string;
       groupedEntries: TimelineWorkEntry[];
+    }
+  | {
+      kind: "gc-event";
+      id: string;
+      createdAt: string;
+      event: TimelineGcEvent;
     }
   | {
       kind: "message";
@@ -837,6 +859,45 @@ function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
 
   return workToneIcon(workEntry.tone).icon;
 }
+
+const GcEventCard = memo(function GcEventCard(props: {
+  event: TimelineGcEvent;
+  timestampFormat: TimestampFormat;
+}) {
+  return (
+    <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2.5">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center text-amber-600/80 dark:text-amber-300/80">
+          <WrenchIcon className="size-3" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="text-[11px] font-medium text-foreground/85">{props.event.summary}</p>
+            {props.event.badges?.map((badge) => (
+              <span
+                key={`${props.event.id}:${badge}`}
+                className="rounded-md border border-amber-500/20 bg-background/55 px-1.5 py-0.5 text-[10px] text-muted-foreground/75"
+              >
+                {badge}
+              </span>
+            ))}
+          </div>
+          {props.event.detail && (
+            <p className="mt-1 text-[11px] text-muted-foreground/70">{props.event.detail}</p>
+          )}
+          {props.event.textPreview && (
+            <pre className="mt-2 overflow-x-auto rounded-lg border border-border/60 bg-background/65 px-2 py-1.5 whitespace-pre-wrap text-[10px] leading-4 text-muted-foreground/80">
+              {props.event.textPreview}
+            </pre>
+          )}
+          <p className="mt-1.5 text-[10px] text-muted-foreground/35">
+            {formatTimestamp(props.event.createdAt, props.timestampFormat)}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+});
 
 function capitalizePhrase(value: string): string {
   const trimmed = value.trim();

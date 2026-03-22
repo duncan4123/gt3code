@@ -13,6 +13,8 @@ import {
   PROVIDER_OPTIONS,
   derivePendingApprovals,
   derivePendingUserInputs,
+  deriveGcTimelineEvents,
+  deriveWorkedBeadHistory,
   deriveTimelineEntries,
   deriveWorkLogEntries,
   findLatestProposedPlan,
@@ -923,6 +925,20 @@ describe("deriveWorkLogEntries", () => {
 
 describe("deriveTimelineEntries", () => {
   it("includes proposed plans alongside messages and work entries in chronological order", () => {
+    const gcEvents = deriveGcTimelineEvents([
+      makeActivity({
+        id: "gc-event-1",
+        createdAt: "2026-02-23T00:00:02.500Z",
+        kind: "gc.session.started",
+        summary: "GC session started",
+        tone: "info",
+        payload: {
+          provider: "codex",
+          model: "gpt-5-codex",
+          template: "gascity/codex",
+        },
+      }),
+    ]);
     const entries = deriveTimelineEntries(
       [
         {
@@ -952,9 +968,15 @@ describe("deriveTimelineEntries", () => {
           tone: "tool",
         },
       ],
+      gcEvents,
     );
 
-    expect(entries.map((entry) => entry.kind)).toEqual(["message", "proposed-plan", "work"]);
+    expect(entries.map((entry) => entry.kind)).toEqual([
+      "message",
+      "proposed-plan",
+      "gc-event",
+      "work",
+    ]);
     expect(entries[1]).toMatchObject({
       kind: "proposed-plan",
       proposedPlan: {
@@ -963,6 +985,62 @@ describe("deriveTimelineEntries", () => {
         implementationThreadId: null,
       },
     });
+    expect(entries[2]).toMatchObject({
+      kind: "gc-event",
+      event: {
+        summary: "GC session started",
+        badges: ["codex", "gpt-5-codex", "gascity/codex"],
+      },
+    });
+  });
+});
+
+describe("deriveWorkedBeadHistory", () => {
+  it("extracts worked bead history from gc.bead lifecycle events", () => {
+    const gcEvents = deriveGcTimelineEvents([
+      makeActivity({
+        id: "gc-bead-claimed",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "gc.bead.claimed",
+        summary: "GC bead claimed",
+        tone: "info",
+        payload: {
+          beadId: "ga-123",
+          beadTitle: "Implement worker history",
+          beadStatus: "in_progress",
+          formula: "mol-do-work",
+          moleculeId: "ga-123.1",
+        },
+      }),
+      makeActivity({
+        id: "gc-bead-closed",
+        createdAt: "2026-02-23T00:00:03.000Z",
+        kind: "gc.bead.closed",
+        summary: "GC bead closed",
+        tone: "info",
+        payload: {
+          beadId: "ga-123",
+          beadTitle: "Implement worker history",
+          beadStatus: "closed",
+          formula: "mol-do-work",
+          moleculeId: "ga-123.1",
+        },
+      }),
+    ]);
+
+    expect(deriveWorkedBeadHistory(gcEvents)).toEqual([
+      {
+        id: "gc.bead.closed:ga-123",
+        beadId: "ga-123",
+        beadTitle: "Implement worker history",
+        beadStatus: "closed",
+        formula: "mol-do-work",
+        moleculeId: "ga-123.1",
+        createdAt: "2026-02-23T00:00:03.000Z",
+        sourceEventId: "gc-bead-closed",
+        sourceKind: "gc.bead.closed",
+      },
+    ]);
   });
 });
 

@@ -1,6 +1,7 @@
 import {
   type ApprovalRequestId,
   DEFAULT_MODEL_BY_PROVIDER,
+  DEFAULT_PROVIDER_KIND,
   type ClaudeCodeEffort,
   type MessageId,
   type ProjectScript,
@@ -59,6 +60,8 @@ import {
   deriveTimelineEntries,
   deriveActiveWorkStartedAt,
   deriveActivePlanState,
+  deriveGcTimelineEvents,
+  deriveWorkedBeadHistory,
   findSidebarProposedPlan,
   findLatestProposedPlan,
   deriveWorkLogEntries,
@@ -96,6 +99,7 @@ import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import BranchToolbar from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
+import GcContextSidebar from "./GcContextSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import {
   BotIcon,
@@ -149,6 +153,7 @@ import { ComposerPromptEditor, type ComposerPromptEditorHandle } from "./Compose
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { ChatHeader } from "./chat/ChatHeader";
+import { getGcMetadata } from "./Sidebar.logic";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { AVAILABLE_PROVIDER_OPTIONS, ProviderModelPicker } from "./chat/ProviderModelPicker";
 import { ComposerCommandItem, ComposerCommandMenu } from "./chat/ComposerCommandMenu";
@@ -478,6 +483,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const diffOpen = rawSearch.diff === "1";
   const activeThreadId = activeThread?.id ?? null;
+  const activeThreadGcMetadata = getGcMetadata(activeThread?.customMetadata);
   const activeLatestTurn = activeThread?.latestTurn ?? null;
   const latestTurnSettled = isLatestTurnSettled(activeLatestTurn, activeThread?.session ?? null);
   const activeProject = projects.find((p) => p.id === activeThread?.projectId);
@@ -571,7 +577,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     const lastVisitedAt = activeThread.lastVisitedAt ? Date.parse(activeThread.lastVisitedAt) : NaN;
     if (!Number.isNaN(lastVisitedAt) && lastVisitedAt >= turnCompletedAt) return;
 
-    markThreadVisited(activeThread.id);
+    markThreadVisited(activeThread.id, activeLatestTurn.completedAt);
   }, [
     activeThread?.id,
     activeThread?.lastVisitedAt,
@@ -591,7 +597,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const lockedProvider: ProviderKind | null = hasThreadStarted
     ? (sessionProvider ?? selectedProviderByThreadId ?? null)
     : null;
-  const selectedProvider: ProviderKind = lockedProvider ?? selectedProviderByThreadId ?? "codex";
+  const selectedProvider: ProviderKind = lockedProvider ?? selectedProviderByThreadId ?? DEFAULT_PROVIDER_KIND;
   const baseThreadModel = resolveModelSlugForProvider(
     selectedProvider,
     activeThread?.model ?? activeProject?.model ?? getDefaultModel(selectedProvider),
@@ -715,6 +721,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const workLogEntries = useMemo(
     () => deriveWorkLogEntries(threadActivities, activeLatestTurn?.turnId ?? undefined),
     [activeLatestTurn?.turnId, threadActivities],
+  );
+  const gcTimelineEvents = useMemo(() => deriveGcTimelineEvents(threadActivities), [threadActivities]);
+  const workedBeadHistory = useMemo(
+    () => deriveWorkedBeadHistory(gcTimelineEvents),
+    [gcTimelineEvents],
   );
   const latestTurnHasToolActivity = useMemo(
     () => hasToolActivityForTurn(threadActivities, activeLatestTurn?.turnId),
@@ -956,8 +967,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
   }, [serverMessages, attachmentPreviewHandoffByMessageId, optimisticUserMessages]);
   const timelineEntries = useMemo(
     () =>
-      deriveTimelineEntries(timelineMessages, activeThread?.proposedPlans ?? [], workLogEntries),
-    [activeThread?.proposedPlans, timelineMessages, workLogEntries],
+      deriveTimelineEntries(
+        timelineMessages,
+        activeThread?.proposedPlans ?? [],
+        workLogEntries,
+        gcTimelineEvents,
+      ),
+    [activeThread?.proposedPlans, timelineMessages, workLogEntries, gcTimelineEvents],
   );
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);
@@ -4134,6 +4150,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
           ) : null}
         </div>
         {/* end chat column */}
+
+        {/* GC context sidebar */}
+        {activeThreadGcMetadata.isGcManaged && activeThread.customMetadata ? (
+          <GcContextSidebar
+            metadata={activeThread.customMetadata}
+            workedBeads={workedBeadHistory}
+          />
+        ) : null}
 
         {/* Plan sidebar */}
         {planSidebarOpen ? (
