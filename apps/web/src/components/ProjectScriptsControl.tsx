@@ -145,6 +145,39 @@ const T3_PRESETS: ActionPreset[] = [
   },
 ];
 
+const BD_PRESETS: ActionPreset[] = [
+  {
+    name: "BD Status",
+    command: "bd status",
+    icon: "configure",
+    description: "Issue database overview & statistics",
+  },
+  {
+    name: "BD Ready",
+    command: "bd ready",
+    icon: "play",
+    description: "Show open issues with no blockers",
+  },
+  {
+    name: "BD Blocked",
+    command: "bd blocked",
+    icon: "debug",
+    description: "Show blocked issues",
+  },
+  {
+    name: "BD Preflight",
+    command: "bd preflight",
+    icon: "lint",
+    description: "PR readiness checklist",
+  },
+  {
+    name: "BD Doctor",
+    command: "bd doctor",
+    icon: "debug",
+    description: "Check & fix beads installation health",
+  },
+];
+
 const SCRIPT_ICONS: Array<{ id: ProjectScriptIcon; label: string }> = [
   { id: "play", label: "Play" },
   { id: "test", label: "Test" },
@@ -473,6 +506,7 @@ export default function ProjectScriptsControl({
                     [
                       { label: "T3 Code", presets: T3_PRESETS },
                       { label: "GC", presets: GC_PRESETS },
+                      { label: "BD", presets: BD_PRESETS },
                     ] as const
                   ).map(({ label, presets }) => (
                     <div key={label} className="space-y-1.5">
