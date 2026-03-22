@@ -3,3 +3,5 @@ issue-prefix: t3
 dolt.auto-start: false
 
 dolt.port: 45921
+
+dolt.database: "t3"
