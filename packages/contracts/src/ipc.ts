@@ -170,4 +170,43 @@ export interface NativeApi {
     replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationEvent[]>;
     onDomainEvent: (callback: (event: OrchestrationEvent) => void) => () => void;
   };
+  gc: {
+    getThreadContext: (input: { threadId: string }) => Promise<GcThreadContextResult>;
+  };
+}
+
+export interface GcFormulaStepResult {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly needs?: ReadonlyArray<string>;
+}
+
+export interface GcThreadContextResult {
+  readonly bead: {
+    readonly id: string;
+    readonly title: string;
+    readonly description: string;
+    readonly status: string;
+    readonly priority: number;
+    readonly assignee?: string;
+  } | null;
+  readonly convoy: {
+    readonly id: string;
+    readonly title: string;
+    readonly status: string;
+    readonly children: ReadonlyArray<{
+      readonly id: string;
+      readonly title: string;
+      readonly status: string;
+    }>;
+    readonly closedCount: number;
+    readonly totalCount: number;
+  } | null;
+  readonly formula: {
+    readonly name: string;
+    readonly description: string;
+    readonly version: number;
+    readonly steps: ReadonlyArray<GcFormulaStepResult>;
+  } | null;
 }

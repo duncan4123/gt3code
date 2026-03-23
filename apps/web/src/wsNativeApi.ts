@@ -175,6 +175,9 @@ export function createWsNativeApi(): NativeApi {
           callback(message.data),
         ),
     },
+    gc: {
+      getThreadContext: (input) => transport.request(WS_METHODS.gcGetThreadContext, input),
+    },
   };
 
   instance = { api, transport };
