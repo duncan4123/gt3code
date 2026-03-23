@@ -16,7 +16,7 @@ import {
   type GcEvent,
 } from "../Services/GcApiClient.ts";
 
-const GC_API_DEFAULT_URL = "http://localhost:9443";
+const GC_API_DEFAULT_URL = "http://localhost:8372";
 
 function parseJsonSafe<T>(text: string): T | null {
   try {
@@ -97,15 +97,68 @@ const makeGcApiClient = Effect.gen(function* () {
     }
   };
 
+  interface RawApiBead {
+    id: string;
+    title: string;
+    description: string;
+    status: string;
+    type: string;
+    priority?: number;
+    assignee?: string;
+    labels?: string[];
+    ephemeral?: boolean;
+    created_at: string;
+    updated_at?: string;
+  }
+
+  function normalizeBeadResponse(raw: RawApiBead): GcBead {
+    return {
+      id: raw.id,
+      title: raw.title,
+      description: raw.description,
+      status: raw.status,
+      priority: raw.priority ?? 0,
+      issueType: raw.type,
+      assignee: raw.assignee,
+      labels: raw.labels,
+      ephemeral: raw.ephemeral,
+      createdAt: raw.created_at,
+      updatedAt: raw.updated_at ?? raw.created_at,
+    };
+  }
+
+  interface RawApiConvoy {
+    convoy: { id: string; title: string; status: string };
+    children: Array<{ id: string; title: string; status: string }>;
+    progress: { closed: number; total: number };
+  }
+
+  function normalizeConvoyResponse(raw: RawApiConvoy): GcConvoy {
+    return {
+      id: raw.convoy.id,
+      title: raw.convoy.title,
+      status: raw.convoy.status,
+      children: raw.children.map((c) => ({ id: c.id, title: c.title, status: c.status })),
+      closedCount: raw.progress.closed,
+      totalCount: raw.progress.total,
+    };
+  }
+
   const getBead: GcApiClientShape["getBead"] = (id) =>
     Effect.tryPromise({
-      try: () => fetchJson<GcBead>(`/v0/bead/${id}`),
+      try: async () => {
+        const raw = await fetchJson<RawApiBead>(`/v0/bead/${id}`);
+        return raw ? normalizeBeadResponse(raw) : null;
+      },
       catch: () => null,
     }).pipe(Effect.orElseSucceed(() => null));
 
   const getConvoy: GcApiClientShape["getConvoy"] = (id) =>
     Effect.tryPromise({
-      try: () => fetchJson<GcConvoy>(`/v0/convoy/${id}`),
+      try: async () => {
+        const raw = await fetchJson<RawApiConvoy>(`/v0/convoy/${id}`);
+        return raw?.convoy ? normalizeConvoyResponse(raw) : null;
+      },
       catch: () => null,
     }).pipe(Effect.orElseSucceed(() => null));
 
