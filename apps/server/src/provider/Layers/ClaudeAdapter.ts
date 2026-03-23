@@ -2249,11 +2249,41 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         const sessionId = existingResumeSessionId ?? newSessionId;
 
         const promptQueue = yield* Queue.unbounded<PromptQueueItem>();
-        const prompt = Stream.fromQueue(promptQueue).pipe(
+        const rawPromptIterable = Stream.fromQueue(promptQueue).pipe(
           Stream.filter((item) => item.type === "message"),
           Stream.map((item) => item.message),
           Stream.toAsyncIterable,
         );
+        // Wrap the prompt async iterable to catch Effect fiber interruption errors.
+        // When the Claude CLI exits early (e.g., stale --resume with "No conversation
+        // found"), the Effect runtime interrupts all fibers. Stream.toAsyncIterable's
+        // next() throws "All fibers interrupted without error" which the SDK's
+        // streamInput rethrows as an unhandled promise rejection, crashing Node.js.
+        // By catching this and returning done:true, the SDK sees a normal stream end
+        // and handleStreamExit handles cleanup through Effect's error channel.
+        const prompt: AsyncIterable<SDKUserMessage> = {
+          [Symbol.asyncIterator]() {
+            const iter = rawPromptIterable[Symbol.asyncIterator]();
+            return {
+              async next() {
+                try {
+                  return await iter.next();
+                } catch (err: unknown) {
+                  if (
+                    err instanceof Error &&
+                    err.message.includes("All fibers interrupted without error")
+                  ) {
+                    return { done: true as const, value: undefined as never };
+                  }
+                  throw err;
+                }
+              },
+              async return(value?: unknown) {
+                return iter.return?.(value) ?? { done: true as const, value: undefined as never };
+              },
+            };
+          },
+        };
 
         const pendingApprovals = new Map<ApprovalRequestId, PendingApproval>();
         const pendingUserInputs = new Map<ApprovalRequestId, PendingUserInput>();
