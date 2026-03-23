@@ -75,6 +75,7 @@ import {
 import { parseBase64DataUrl } from "./imageMime.ts";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService.ts";
 import { expandHomePath } from "./os-jank.ts";
+import { GcContextProvider } from "./gc/Services/GcContextProvider.ts";
 import { makeServerPushBus } from "./wsServer/pushBus.ts";
 import { makeServerReadiness } from "./wsServer/readiness.ts";
 import { decodeJsonResult, formatSchemaError } from "@t3tools/shared/schemaJson";
@@ -217,7 +218,8 @@ export type ServerRuntimeServices =
   | TerminalManager
   | Keybindings
   | Open
-  | AnalyticsService;
+  | AnalyticsService
+  | GcContextProvider;
 
 export class ServerLifecycleError extends Schema.TaggedErrorClass<ServerLifecycleError>()(
   "ServerLifecycleError",
@@ -255,6 +257,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   const keybindingsManager = yield* Keybindings;
   const providerHealth = yield* ProviderHealth;
   const git = yield* GitCore;
+  const gcContextProvider = yield* GcContextProvider;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
@@ -894,40 +897,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         if (!metadata["gc.agent"]) {
           return { bead: null, convoy: null, formula: null };
         }
-        // Direct GC API fetch — tracer bullet, will move to Effect service layer
-        const gcApiUrl = process.env.GC_API_URL ?? "http://localhost:9443";
-        const beadId = metadata["gc.bead"];
-        const convoyId = metadata["gc.convoy"];
-        const formulaName = metadata["gc.formula"] ?? metadata["gc.beadTitle"];
-        const [bead, convoy, formula] = yield* Effect.tryPromise({
-          try: async () => {
-            const fetchJson = async (path: string) => {
-              try {
-                const r = await fetch(`${gcApiUrl}${path}`);
-                return r.ok ? await r.json() : null;
-              } catch { return null; }
-            };
-            const [b, c] = await Promise.all([
-              beadId ? fetchJson(`/v0/bead/${beadId}`) : null,
-              convoyId ? fetchJson(`/v0/convoy/${convoyId}`) : null,
-            ]);
-            // Formula via bd CLI (no API endpoint yet)
-            let f = null;
-            if (formulaName) {
-              try {
-                const { execSync } = await import("child_process");
-                const out = execSync(
-                  `BEADS_DOLT_PORT=${process.env.GC_DOLT_PORT ?? ""} bd formula show ${formulaName} --json`,
-                  { timeout: 5000, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
-                );
-                f = JSON.parse(out);
-              } catch { /* formula not found */ }
-            }
-            return [b, c, f] as const;
-          },
-          catch: () => [null, null, null] as const,
-        });
-        return { bead, convoy, formula };
+        return yield* gcContextProvider.getThreadContext(metadata);
       }
 
       default: {

@@ -37,6 +37,8 @@ import { GitServiceLive } from "./git/Layers/GitService";
 import { BunPtyAdapterLive } from "./terminal/Layers/BunPTY";
 import { NodePtyAdapterLive } from "./terminal/Layers/NodePTY";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService";
+import { GcApiClientLive } from "./gc/Layers/GcApiClient";
+import { GcContextProviderLive } from "./gc/Layers/GcContextProvider";
 
 export function makeServerProviderLayer(): Layer.Layer<
   ProviderService,
@@ -126,11 +128,16 @@ export function makeServerRuntimeServicesLayer() {
     Layer.provideMerge(textGenerationLayer),
   );
 
+  const gcLayer = GcContextProviderLive.pipe(
+    Layer.provideMerge(GcApiClientLive),
+  );
+
   return Layer.mergeAll(
     orchestrationReactorLayer,
     gitCoreLayer,
     gitManagerLayer,
     terminalLayer,
     KeybindingsLive,
+    gcLayer,
   ).pipe(Layer.provideMerge(NodeServices.layer));
 }
