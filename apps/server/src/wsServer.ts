@@ -80,6 +80,7 @@ import { makeServerPushBus } from "./wsServer/pushBus.ts";
 import { makeServerReadiness } from "./wsServer/readiness.ts";
 import { decodeJsonResult, formatSchemaError } from "@t3tools/shared/schemaJson";
 import { ServerBackupsService } from "./serverBackups.ts";
+import { GcContextProvider } from "./gc";
 
 /**
  * ServerShape - Service API for server lifecycle control.
@@ -210,7 +211,8 @@ export type ServerCoreRuntimeServices =
   | CheckpointDiffQuery
   | OrchestrationReactor
   | ProviderService
-  | ProviderRegistry;
+  | ProviderRegistry
+  | GcContextProvider;
 
 export type ServerRuntimeServices =
   | ServerCoreRuntimeServices
@@ -265,6 +267,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   const keybindingsManager = yield* Keybindings;
   const serverSettingsManager = yield* ServerSettingsService;
   const providerRegistry = yield* ProviderRegistry;
+  const gcContextProvider = yield* GcContextProvider;
   const git = yield* GitCore;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -957,6 +960,20 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       case WS_METHODS.serverPushBackup: {
         const body = stripRequestTag(request.body);
         return yield* serverBackups.pushBackup(body);
+      }
+
+      case WS_METHODS.gcGetThreadContext: {
+        const body = stripRequestTag(request.body);
+        const snapshot = yield* projectionReadModelQuery.getSnapshot();
+        const thread = snapshot.threads.find((t) => t.id === body.threadId);
+        if (!thread) {
+          return { bead: null, convoy: null, formula: null };
+        }
+        const metadata = thread.customMetadata ?? {};
+        if (!metadata["gc.agent"]) {
+          return { bead: null, convoy: null, formula: null };
+        }
+        return yield* gcContextProvider.getThreadContext(metadata);
       }
 
       default: {

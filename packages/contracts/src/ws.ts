@@ -90,6 +90,9 @@ export const WS_METHODS = {
   serverUpsertBackupRemote: "server.upsertBackupRemote",
   serverRemoveBackupRemote: "server.removeBackupRemote",
   serverPushBackup: "server.pushBackup",
+
+  // Gas City integration
+  gcGetThreadContext: "gc.getThreadContext",
 } as const;
 
 // ── Push Event Channels ──────────────────────────────────────────────
@@ -163,6 +166,12 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.serverUpsertBackupRemote, ServerUpsertBackupRemoteInput),
   tagRequestBody(WS_METHODS.serverRemoveBackupRemote, ServerRemoveBackupRemoteInput),
   tagRequestBody(WS_METHODS.serverPushBackup, ServerPushBackupInput),
+
+  // Gas City integration
+  tagRequestBody(
+    WS_METHODS.gcGetThreadContext,
+    Schema.Struct({ threadId: Schema.String }),
+  ),
 ]);
 
 export const WebSocketRequest = Schema.Struct({
