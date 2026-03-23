@@ -75,6 +75,9 @@ export const WS_METHODS = {
   // Server meta
   serverGetConfig: "server.getConfig",
   serverUpsertKeybinding: "server.upsertKeybinding",
+
+  // Gas City integration
+  gcGetThreadContext: "gc.getThreadContext",
 } as const;
 
 // ── Push Event Channels ──────────────────────────────────────────────
@@ -139,6 +142,12 @@ const WebSocketRequestBody = Schema.Union([
   // Server meta
   tagRequestBody(WS_METHODS.serverGetConfig, Schema.Struct({})),
   tagRequestBody(WS_METHODS.serverUpsertKeybinding, KeybindingRule),
+
+  // Gas City integration
+  tagRequestBody(
+    WS_METHODS.gcGetThreadContext,
+    Schema.Struct({ threadId: Schema.String }),
+  ),
 ]);
 
 export const WebSocketRequest = Schema.Struct({
