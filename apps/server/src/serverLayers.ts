@@ -36,6 +36,9 @@ import { RoutingTextGenerationLive } from "./git/Layers/RoutingTextGeneration";
 import { PtyAdapter } from "./terminal/Services/PTY";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService";
 import { ServerBackupsLive } from "./serverBackups";
+import { GcApiClientLive } from "./gc/Layers/GcApiClient";
+import { GcContextProviderLive } from "./gc/Layers/GcContextProvider";
+import { GcEventIngestionLive } from "./gc/Layers/GcEventIngestion";
 
 type RuntimePtyAdapterLoader = {
   layer: Layer.Layer<PtyAdapter, never, FileSystem.FileSystem | Path.Path>;
@@ -140,12 +143,27 @@ export function makeServerRuntimeServicesLayer() {
     Layer.provideMerge(textGenerationLayer),
   );
 
+  const gcApiLayer = GcApiClientLive;
+
+  const gcContextLayer = GcContextProviderLive.pipe(
+    Layer.provide(gcApiLayer),
+  );
+
+  const gcIngestionLayer = GcEventIngestionLive.pipe(
+    Layer.provide(gcApiLayer),
+    Layer.provide(orchestrationReactorLayer),
+  );
+
+  const gcLayer = Layer.mergeAll(gcContextLayer, gcIngestionLayer).pipe(
+    Layer.provideMerge(gcApiLayer),
+  );
   return Layer.mergeAll(
     orchestrationReactorLayer,
     GitCoreLive,
     gitManagerLayer,
     terminalLayer,
     KeybindingsLive,
+    gcLayer,
     ServerBackupsLive,
   ).pipe(Layer.provideMerge(NodeServices.layer));
 }
