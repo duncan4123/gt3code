@@ -39,6 +39,7 @@ import { NodePtyAdapterLive } from "./terminal/Layers/NodePTY";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService";
 import { GcApiClientLive } from "./gc/Layers/GcApiClient";
 import { GcContextProviderLive } from "./gc/Layers/GcContextProvider";
+import { GcEventIngestionLive } from "./gc/Layers/GcEventIngestion";
 
 export function makeServerProviderLayer(): Layer.Layer<
   ProviderService,
@@ -128,8 +129,19 @@ export function makeServerRuntimeServicesLayer() {
     Layer.provideMerge(textGenerationLayer),
   );
 
-  const gcLayer = GcContextProviderLive.pipe(
-    Layer.provideMerge(GcApiClientLive),
+  const gcApiLayer = GcApiClientLive;
+
+  const gcContextLayer = GcContextProviderLive.pipe(
+    Layer.provide(gcApiLayer),
+  );
+
+  const gcIngestionLayer = GcEventIngestionLive.pipe(
+    Layer.provide(gcApiLayer),
+    Layer.provide(orchestrationReactorLayer),
+  );
+
+  const gcLayer = Layer.mergeAll(gcContextLayer, gcIngestionLayer).pipe(
+    Layer.provideMerge(gcApiLayer),
   );
 
   return Layer.mergeAll(
