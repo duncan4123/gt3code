@@ -46,6 +46,7 @@ import { derivePendingApprovals, derivePendingUserInputs } from "../session-logi
 import { gitRemoveWorktreeMutationOptions, gitStatusQueryOptions } from "../lib/gitReactQuery";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
 import { readNativeApi } from "../nativeApi";
+import { GcStatusIndicator } from "./GcStatusIndicator";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
@@ -1809,6 +1810,9 @@ export default function Sidebar() {
 
       <SidebarSeparator />
       <SidebarFooter className="p-2">
+        <div className="flex items-center justify-between px-1 pb-1">
+          <GcStatusIndicator />
+        </div>
         <SidebarMenu>
           <SidebarMenuItem>
             {isOnSettings ? (

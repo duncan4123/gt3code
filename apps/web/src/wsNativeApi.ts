@@ -10,7 +10,7 @@ import {
 } from "@t3tools/contracts";
 
 import { showContextMenuFallback } from "./contextMenuFallback";
-import { WsTransport } from "./wsTransport";
+import { WsTransport, type TransportState } from "./wsTransport";
 
 let instance: { api: NativeApi; transport: WsTransport } | null = null;
 const welcomeListeners = new Set<(payload: WsWelcomePayload) => void>();
@@ -60,6 +60,17 @@ export function onServerConfigUpdated(
   return () => {
     serverConfigUpdatedListeners.delete(listener);
   };
+}
+
+export { type TransportState };
+
+export function getTransportState(): TransportState {
+  return instance?.transport.getState() ?? "connecting";
+}
+
+export function onTransportStateChange(listener: (state: TransportState) => void): () => void {
+  if (!instance) return () => {};
+  return instance.transport.onStateChange(listener);
 }
 
 export function createWsNativeApi(): NativeApi {
