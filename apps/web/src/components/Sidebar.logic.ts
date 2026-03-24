@@ -211,6 +211,18 @@ export function groupThreadsByVirtualConvoy<TThread extends ConvoyThreadLike>(
   return { standaloneThreads, convoyGroups };
 }
 
+const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
+  "Pending Approval": 5,
+  "Awaiting Input": 4,
+  Working: 3,
+  Connecting: 3,
+  "Plan Ready": 2,
+  Completed: 1,
+  Drained: 0,
+  Stopped: 0,
+};
+
+
 type ThreadStatusInput = Pick<
   Thread,
   "interactionMode" | "latestTurn" | "lastVisitedAt" | "proposedPlans" | "session"
@@ -358,4 +370,22 @@ export function resolveThreadStatusPill(input: {
   }
 
   return null;
+}
+
+export function resolveProjectStatusIndicator(
+  statuses: ReadonlyArray<ThreadStatusPill | null>,
+): ThreadStatusPill | null {
+  let highestPriorityStatus: ThreadStatusPill | null = null;
+
+  for (const status of statuses) {
+    if (status === null) continue;
+    if (
+      highestPriorityStatus === null ||
+      THREAD_STATUS_PRIORITY[status.label] > THREAD_STATUS_PRIORITY[highestPriorityStatus.label]
+    ) {
+      highestPriorityStatus = status;
+    }
+  }
+
+  return highestPriorityStatus;
 }

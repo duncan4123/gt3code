@@ -133,7 +133,7 @@ function makeHarness(config?: {
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: ClaudeAdapterLiveOptions["nativeEventLogger"];
   readonly cwd?: string;
-  readonly stateDir?: string;
+  readonly baseDir?: string;
 }) {
   const query = new FakeClaudeQuery();
   let createInput:
@@ -165,7 +165,7 @@ function makeHarness(config?: {
       Layer.provideMerge(
         ServerConfig.layerTest(
           config?.cwd ?? "/tmp/claude-adapter-test",
-          config?.stateDir ?? "/tmp",
+          config?.baseDir ?? "/tmp",
         ),
       ),
       Layer.provideMerge(NodeServices.layer),
@@ -272,8 +272,29 @@ describe("ClaudeAdapterLive", () => {
       });
 
       const createInput = harness.getLastCreateQueryInput();
+      assert.deepEqual(createInput?.options.settingSources, ["user", "project", "local"]);
       assert.equal(createInput?.options.permissionMode, "bypassPermissions");
       assert.equal(createInput?.options.allowDangerouslySkipPermissions, true);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("loads Claude filesystem settings sources for SDK sessions", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "approval-required",
+      });
+
+      const createInput = harness.getLastCreateQueryInput();
+      assert.deepEqual(createInput?.options.settingSources, ["user", "project", "local"]);
+      assert.equal(createInput?.options.permissionMode, undefined);
+      assert.equal(createInput?.options.allowDangerouslySkipPermissions, undefined);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
@@ -515,15 +536,15 @@ describe("ClaudeAdapterLive", () => {
   });
 
   it.effect("embeds image attachments in Claude user messages", () => {
-    const stateDir = mkdtempSync(path.join(os.tmpdir(), "claude-attachments-"));
+    const baseDir = mkdtempSync(path.join(os.tmpdir(), "claude-attachments-"));
     const harness = makeHarness({
       cwd: "/tmp/project-claude-attachments",
-      stateDir,
+      baseDir,
     });
     return Effect.gen(function* () {
       yield* Effect.addFinalizer(() =>
         Effect.sync(() =>
-          rmSync(stateDir, {
+          rmSync(baseDir, {
             recursive: true,
             force: true,
           }),
@@ -531,6 +552,7 @@ describe("ClaudeAdapterLive", () => {
       );
 
       const adapter = yield* ClaudeAdapter;
+      const { attachmentsDir } = yield* ServerConfig;
 
       const attachment = {
         type: "image" as const,
@@ -539,7 +561,7 @@ describe("ClaudeAdapterLive", () => {
         mimeType: "image/png",
         sizeBytes: 4,
       };
-      const attachmentPath = path.join(stateDir, "attachments", attachmentRelativePath(attachment));
+      const attachmentPath = path.join(attachmentsDir, attachmentRelativePath(attachment));
       mkdirSync(path.dirname(attachmentPath), { recursive: true });
       writeFileSync(attachmentPath, Uint8Array.from([1, 2, 3, 4]));
 

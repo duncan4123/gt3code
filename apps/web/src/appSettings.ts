@@ -1,7 +1,16 @@
 import { useCallback } from "react";
 import { Option, Schema } from "effect";
-import { TrimmedNonEmptyString, type ProviderKind } from "@t3tools/contracts";
-import { getDefaultModel, getModelOptions, normalizeModelSlug } from "@t3tools/shared/model";
+import {
+  TrimmedNonEmptyString,
+  type ProviderKind,
+  type ProviderStartOptions,
+} from "@t3tools/contracts";
+import {
+  getDefaultModel,
+  getModelOptions,
+  normalizeModelSlug,
+  resolveSelectableModel,
+} from "@t3tools/shared/model";
 import { useLocalStorage } from "./hooks/useLocalStorage";
 import { EnvMode } from "./components/BranchToolbar.logic";
 
@@ -12,6 +21,16 @@ export const MAX_CUSTOM_MODEL_LENGTH = 256;
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;
 export const DEFAULT_TIMESTAMP_FORMAT: TimestampFormat = "locale";
+type CustomModelSettingsKey = "customCodexModels" | "customClaudeModels";
+export type ProviderCustomModelConfig = {
+  provider: ProviderKind;
+  settingsKey: CustomModelSettingsKey;
+  defaultSettingsKey: CustomModelSettingsKey;
+  title: string;
+  description: string;
+  placeholder: string;
+  example: string;
+};
 
 const BUILT_IN_MODEL_SLUGS_BY_PROVIDER: Record<ProviderKind, ReadonlySet<string>> = {
   codex: new Set(getModelOptions("codex").map((option) => option.slug)),
@@ -32,6 +51,7 @@ const withDefaults =
     );
 
 export const AppSettingsSchema = Schema.Struct({
+  claudeBinaryPath: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
   codexBinaryPath: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
   codexHomePath: Schema.String.check(Schema.isMaxLength(4096)).pipe(withDefaults(() => "")),
   defaultThreadEnvMode: EnvMode.pipe(withDefaults(() => "local" as const satisfies EnvMode)),
@@ -50,6 +70,27 @@ export interface AppModelOption {
 }
 
 const DEFAULT_APP_SETTINGS = AppSettingsSchema.makeUnsafe({});
+const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConfig> = {
+  codex: {
+    provider: "codex",
+    settingsKey: "customCodexModels",
+    defaultSettingsKey: "customCodexModels",
+    title: "Codex",
+    description: "Save additional Codex model slugs for the picker and `/model` command.",
+    placeholder: "your-codex-model-slug",
+    example: "gpt-6.7-codex-ultra-preview",
+  },
+  claudeAgent: {
+    provider: "claudeAgent",
+    settingsKey: "customClaudeModels",
+    defaultSettingsKey: "customClaudeModels",
+    title: "Claude",
+    description: "Save additional Claude model slugs for the picker and `/model` command.",
+    placeholder: "your-claude-model-slug",
+    example: "claude-sonnet-5-0",
+  },
+};
+export const MODEL_PROVIDER_SETTINGS = Object.values(PROVIDER_CUSTOM_MODEL_CONFIG);
 
 export function normalizeCustomModelSlugs(
   models: Iterable<string | null | undefined>,
@@ -87,6 +128,39 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     customClaudeModels: normalizeCustomModelSlugs(settings.customClaudeModels, "claudeAgent"),
   };
 }
+
+export function getCustomModelsForProvider(
+  settings: Pick<AppSettings, CustomModelSettingsKey>,
+  provider: ProviderKind,
+): readonly string[] {
+  return settings[PROVIDER_CUSTOM_MODEL_CONFIG[provider].settingsKey];
+}
+
+export function getDefaultCustomModelsForProvider(
+  defaults: Pick<AppSettings, CustomModelSettingsKey>,
+  provider: ProviderKind,
+): readonly string[] {
+  return defaults[PROVIDER_CUSTOM_MODEL_CONFIG[provider].defaultSettingsKey];
+}
+
+export function patchCustomModels(
+  provider: ProviderKind,
+  models: string[],
+): Partial<Pick<AppSettings, CustomModelSettingsKey>> {
+  return {
+    [PROVIDER_CUSTOM_MODEL_CONFIG[provider].settingsKey]: models,
+  };
+}
+
+export function getCustomModelsByProvider(
+  settings: Pick<AppSettings, CustomModelSettingsKey>,
+): Record<ProviderKind, readonly string[]> {
+  return {
+    codex: getCustomModelsForProvider(settings, "codex"),
+    claudeAgent: getCustomModelsForProvider(settings, "claudeAgent"),
+  };
+}
+
 export function getAppModelOptions(
   provider: ProviderKind,
   customModels: readonly string[],
@@ -98,6 +172,7 @@ export function getAppModelOptions(
     isCustom: false,
   }));
   const seen = new Set(options.map((option) => option.slug));
+  const trimmedSelectedModel = selectedModel?.trim().toLowerCase();
 
   for (const slug of normalizeCustomModelSlugs(customModels, provider)) {
     if (seen.has(slug)) {
@@ -113,7 +188,14 @@ export function getAppModelOptions(
   }
 
   const normalizedSelectedModel = normalizeModelSlug(selectedModel, provider);
-  if (normalizedSelectedModel && !seen.has(normalizedSelectedModel)) {
+  const selectedModelMatchesExistingName =
+    typeof trimmedSelectedModel === "string" &&
+    options.some((option) => option.name.toLowerCase() === trimmedSelectedModel);
+  if (
+    normalizedSelectedModel &&
+    !seen.has(normalizedSelectedModel) &&
+    !selectedModelMatchesExistingName
+  ) {
     options.push({
       slug: normalizedSelectedModel,
       name: normalizedSelectedModel,
@@ -126,34 +208,46 @@ export function getAppModelOptions(
 
 export function resolveAppModelSelection(
   provider: ProviderKind,
-  customModels: readonly string[],
+  customModels: Record<ProviderKind, readonly string[]>,
   selectedModel: string | null | undefined,
 ): string {
-  const options = getAppModelOptions(provider, customModels, selectedModel);
-  const trimmedSelectedModel = selectedModel?.trim();
-  if (trimmedSelectedModel) {
-    const direct = options.find((option) => option.slug === trimmedSelectedModel);
-    if (direct) {
-      return direct.slug;
-    }
+  const customModelsForProvider = customModels[provider];
+  const options = getAppModelOptions(provider, customModelsForProvider, selectedModel);
+  return resolveSelectableModel(provider, selectedModel, options) ?? getDefaultModel(provider);
+}
 
-    const byName = options.find(
-      (option) => option.name.toLowerCase() === trimmedSelectedModel.toLowerCase(),
-    );
-    if (byName) {
-      return byName.slug;
-    }
-  }
+export function getCustomModelOptionsByProvider(
+  settings: Pick<AppSettings, CustomModelSettingsKey>,
+): Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>> {
+  const customModelsByProvider = getCustomModelsByProvider(settings);
+  return {
+    codex: getAppModelOptions("codex", customModelsByProvider.codex),
+    claudeAgent: getAppModelOptions("claudeAgent", customModelsByProvider.claudeAgent),
+  };
+}
 
-  const normalizedSelectedModel = normalizeModelSlug(selectedModel, provider);
-  if (!normalizedSelectedModel) {
-    return getDefaultModel(provider);
-  }
+export function getProviderStartOptions(
+  settings: Pick<AppSettings, "claudeBinaryPath" | "codexBinaryPath" | "codexHomePath">,
+): ProviderStartOptions | undefined {
+  const providerOptions: ProviderStartOptions = {
+    ...(settings.codexBinaryPath || settings.codexHomePath
+      ? {
+          codex: {
+            ...(settings.codexBinaryPath ? { binaryPath: settings.codexBinaryPath } : {}),
+            ...(settings.codexHomePath ? { homePath: settings.codexHomePath } : {}),
+          },
+        }
+      : {}),
+    ...(settings.claudeBinaryPath
+      ? {
+          claudeAgent: {
+            binaryPath: settings.claudeBinaryPath,
+          },
+        }
+      : {}),
+  };
 
-  return (
-    options.find((option) => option.slug === normalizedSelectedModel)?.slug ??
-    getDefaultModel(provider)
-  );
+  return Object.keys(providerOptions).length > 0 ? providerOptions : undefined;
 }
 
 export function useAppSettings() {

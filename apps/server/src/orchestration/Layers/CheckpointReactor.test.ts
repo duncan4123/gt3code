@@ -19,6 +19,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CheckpointStoreLive } from "../../checkpointing/Layers/CheckpointStore.ts";
 import { CheckpointStore } from "../../checkpointing/Services/CheckpointStore.ts";
+import { GitCoreLive } from "../../git/Layers/GitCore.ts";
 import { CheckpointReactorLive } from "./CheckpointReactor.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
@@ -252,12 +253,16 @@ describe("CheckpointReactor", () => {
       Layer.provide(SqlitePersistenceMemory),
     );
 
+    const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
+      prefix: "t3-checkpoint-reactor-test-",
+    });
+
     const layer = CheckpointReactorLive.pipe(
       Layer.provideMerge(orchestrationLayer),
       Layer.provideMerge(RuntimeReceiptBusLive),
       Layer.provideMerge(Layer.succeed(ProviderService, provider.service)),
-      Layer.provideMerge(CheckpointStoreLive),
-      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+      Layer.provideMerge(CheckpointStoreLive.pipe(Layer.provide(GitCoreLive))),
+      Layer.provideMerge(ServerConfigLayer),
       Layer.provideMerge(NodeServices.layer),
     );
 
