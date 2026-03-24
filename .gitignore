@@ -24,21 +24,3 @@ __screenshots__/
 # Dolt database files (added by bd init)
 .dolt/
 *.db
-
-# GC runtime artifacts
-.gc/events.jsonl
-.gc/controller.lock
-.gc/tmp/
-.gc/settings.json
-.gc/scripts/
-.gc/research/
-.runtime/
-.plans/
-.mcp.json
-.nvmrc
-.claude/
-
-# Temp files from agents
-????????-????-????-????-????????????
-node-compile-cache/
-"AGENTS.md\n"
