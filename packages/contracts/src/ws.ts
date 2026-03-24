@@ -79,6 +79,7 @@ export const WS_METHODS = {
 
   // Gas City integration
   gcGetThreadContext: "gc.getThreadContext",
+  gcIsSessionAlive: "gc.isSessionAlive",
 } as const;
 
 // ── Push Event Channels ──────────────────────────────────────────────
@@ -147,6 +148,7 @@ const WebSocketRequestBody = Schema.Union([
 
   // Gas City integration
   tagRequestBody(WS_METHODS.gcGetThreadContext, Schema.Struct({ threadId: Schema.String })),
+  tagRequestBody(WS_METHODS.gcIsSessionAlive, Schema.Struct({ threadId: Schema.String })),
 ]);
 
 export const WebSocketRequest = Schema.Struct({

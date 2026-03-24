@@ -892,6 +892,18 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         return { keybindings: keybindingsConfig, issues: [] };
       }
 
+      case WS_METHODS.gcIsSessionAlive: {
+        const body = stripRequestTag(request.body);
+        const readModel = yield* orchestrationEngine.getReadModel();
+        const thread = readModel.threads.find(
+          (t) => t.id === body.threadId && t.deletedAt === null,
+        );
+        if (!thread || !thread.session) {
+          return { alive: false, status: "gone" };
+        }
+        return { alive: true, status: thread.session.status };
+      }
+
       case WS_METHODS.gcGetThreadContext: {
         const body = stripRequestTag(request.body);
         const snapshot = yield* projectionReadModelQuery.getSnapshot();
