@@ -2,7 +2,7 @@
 
 ## Context
 
-Convoy `t3-50e` implemented the foundation: `customMetadata` on threads, GC badges in sidebar, lifecycle state pills (drained/stopped), thread reuse on restart, and gc.* metadata propagation from gc-session-t3.
+Convoy `t3-50e` implemented the foundation: `customMetadata` on threads, GC badges in sidebar, lifecycle state pills (drained/stopped), thread reuse on restart, and gc.\* metadata propagation from gc-session-t3.
 
 This document explores deeper integration of beads, formulas, and GC CLI commands into T3's existing UI surfaces.
 
@@ -29,11 +29,13 @@ Requires T3 to call `bd show <id> --json` on the server side via a new RPC endpo
 ChatHeader already has: thread title, project badge, GitActionsControl, diff toggle, project scripts, open-in editor.
 
 **Replace/augment the project badge.** For GC-managed threads, show:
+
 - Agent identity badge: `gascity/claude`
 - Bead assignment: `t3-50e.1` (clickable → opens bead detail)
 - A "GC Managed" indicator with tooltip
 
 **GC action menu.** Add a `GcActionsControl` next to `GitActionsControl` (only visible when `gc.agent` is set):
+
 - **Nudge** — Send a message through `gc nudge` instead of the composer
 - **Interrupt** — `gc session interrupt` → maps to `thread.turn.interrupt`
 - **Drain** — Signal the agent to wrap up: `gc session drain`
@@ -47,6 +49,7 @@ Maps directly to gc CLI commands. T3 server needs thin RPC wrappers that shell o
 CompactComposerControlsMenu already has Mode (Chat/Plan) and Access (Supervised/Full access).
 
 **Disable/warn on direct composer input** for GC-managed threads. Agent sessions receive input through `gc nudge`, not the T3 composer. Typing directly could confuse the formula flow. Options:
+
 - Soft warning: "This is a GC-managed session. Messages bypass the GC dispatch pipeline."
 - Or: redirect composer input through `gc nudge <agent>` automatically
 

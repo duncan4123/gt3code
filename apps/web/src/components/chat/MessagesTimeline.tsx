@@ -14,7 +14,7 @@ import {
   type VirtualItem,
   useVirtualizer,
 } from "@tanstack/react-virtual";
-import { deriveTimelineEntries, formatElapsed } from "../../session-logic";
+import { deriveTimelineEntries, formatElapsed, inferRigFromBeadId } from "../../session-logic";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../chat-scroll";
 import { type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
@@ -176,12 +176,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       }
 
       if (timelineEntry.kind === "gc-event") {
-        nextRows.push({
-          kind: "gc-event",
-          id: timelineEntry.id,
-          createdAt: timelineEntry.createdAt,
-          event: timelineEntry.event,
-        });
+        // GC events are shown in the right sidebar (GcContextSidebar), not inline in the chat
         continue;
       }
 
@@ -320,6 +315,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       data-timeline-row-kind={row.kind}
       data-message-id={row.kind === "message" ? row.message.id : undefined}
       data-message-role={row.kind === "message" ? row.message.role : undefined}
+      data-gc-event-id={row.kind === "gc-event" ? row.event.id : undefined}
     >
       {row.kind === "work" &&
         (() => {
@@ -864,6 +860,9 @@ const GcEventCard = memo(function GcEventCard(props: {
   event: TimelineGcEvent;
   timestampFormat: TimestampFormat;
 }) {
+  const beadRig =
+    props.event.rig ?? (props.event.beadId ? inferRigFromBeadId(props.event.beadId) : undefined);
+  const isBeadEvent = props.event.kind.startsWith("gc.bead.");
   return (
     <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2.5">
       <div className="flex items-start gap-2">
@@ -873,6 +872,11 @@ const GcEventCard = memo(function GcEventCard(props: {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <p className="text-[11px] font-medium text-foreground/85">{props.event.summary}</p>
+            {isBeadEvent && beadRig ? (
+              <span className="rounded-md bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-700 uppercase dark:bg-cyan-400/15 dark:text-cyan-300/90">
+                {beadRig}
+              </span>
+            ) : null}
             {props.event.badges?.map((badge) => (
               <span
                 key={`${props.event.id}:${badge}`}

@@ -537,13 +537,9 @@ describe("WebSocket Server", () => {
       Layer.provideMerge(AnalyticsService.layerTest),
       Layer.provideMerge(NodeServices.layer),
     );
-    const runtimeServices = await Effect.runPromise(
-      Layer.build(dependenciesLayer).pipe(Scope.provide(scope)),
-    );
-
     try {
       const runtime = await Effect.runPromise(
-        createServer().pipe(Effect.provide(runtimeServices), Scope.provide(scope)),
+        createServer().pipe(Effect.provide([dependenciesLayer]), Scope.provide(scope)),
       );
       serverScope = scope;
       return runtime;

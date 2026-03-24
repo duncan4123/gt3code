@@ -1,6 +1,8 @@
 import {
   ArrowLeftIcon,
+  CheckIcon,
   ChevronRightIcon,
+  CopyIcon,
   FolderIcon,
   GitPullRequestIcon,
   PlusIcon,
@@ -685,6 +687,23 @@ export default function Sidebar() {
       });
     },
   });
+  const { copyToClipboard: copyConvoyIdToClipboard, isCopied: isConvoyIdCopied } =
+    useCopyToClipboard<{ convoyId: string }>({
+      onCopy: (ctx) => {
+        toastManager.add({
+          type: "success",
+          title: "Convoy ID copied",
+          description: ctx.convoyId,
+        });
+      },
+      onError: (error) => {
+        toastManager.add({
+          type: "error",
+          title: "Failed to copy convoy ID",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+      },
+    });
   const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
     onCopy: (ctx) => {
       toastManager.add({
@@ -1366,10 +1385,8 @@ export default function Sidebar() {
                     const gcMeta = getGcMetadata(thread.customMetadata);
                     const threadStatus = resolveThreadStatusPill({
                       thread,
-                      hasPendingApprovals:
-                        derivePendingApprovals(thread.activities).length > 0,
-                      hasPendingUserInput:
-                        derivePendingUserInputs(thread.activities).length > 0,
+                      hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
+                      hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
                       gcState: gcMeta.state,
                     });
                     const prStatus = prStatusIndicator(prByThreadId.get(thread.id) ?? null);
@@ -1389,11 +1406,7 @@ export default function Sidebar() {
                             isSelected,
                           })}
                           onClick={(event) => {
-                            handleThreadClick(
-                              event,
-                              thread.id,
-                              orderedProjectThreadIds,
-                            );
+                            handleThreadClick(event, thread.id, orderedProjectThreadIds);
                           }}
                           onKeyDown={(event) => {
                             if (event.key !== "Enter" && event.key !== " ") return;
@@ -1409,10 +1422,7 @@ export default function Sidebar() {
                           }}
                           onContextMenu={(event) => {
                             event.preventDefault();
-                            if (
-                              selectedThreadIds.size > 0 &&
-                              selectedThreadIds.has(thread.id)
-                            ) {
+                            if (selectedThreadIds.size > 0 && selectedThreadIds.has(thread.id)) {
                               void handleMultiSelectContextMenu({
                                 x: event.clientX,
                                 y: event.clientY,
@@ -1445,9 +1455,7 @@ export default function Sidebar() {
                                     </button>
                                   }
                                 />
-                                <TooltipPopup side="top">
-                                  {prStatus.tooltip}
-                                </TooltipPopup>
+                                <TooltipPopup side="top">{prStatus.tooltip}</TooltipPopup>
                               </Tooltip>
                             )}
                             {threadStatus && (
@@ -1459,9 +1467,7 @@ export default function Sidebar() {
                                     threadStatus.pulse ? "animate-pulse" : ""
                                   }`}
                                 />
-                                <span className="hidden md:inline">
-                                  {threadStatus.label}
-                                </span>
+                                <span className="hidden md:inline">{threadStatus.label}</span>
                               </span>
                             )}
                             {renamingThreadId === thread.id ? (
@@ -1481,11 +1487,7 @@ export default function Sidebar() {
                                   if (e.key === "Enter") {
                                     e.preventDefault();
                                     renamingCommittedRef.current = true;
-                                    void commitRename(
-                                      thread.id,
-                                      renamingTitle,
-                                      thread.title,
-                                    );
+                                    void commitRename(thread.id, renamingTitle, thread.title);
                                   } else if (e.key === "Escape") {
                                     e.preventDefault();
                                     renamingCommittedRef.current = true;
@@ -1494,11 +1496,7 @@ export default function Sidebar() {
                                 }}
                                 onBlur={() => {
                                   if (!renamingCommittedRef.current) {
-                                    void commitRename(
-                                      thread.id,
-                                      renamingTitle,
-                                      thread.title,
-                                    );
+                                    void commitRename(thread.id, renamingTitle, thread.title);
                                   }
                                 }}
                                 onClick={(e) => e.stopPropagation()}
@@ -1510,7 +1508,7 @@ export default function Sidebar() {
                                     <TooltipTrigger
                                       render={
                                         <span className="mr-1 inline-flex items-center rounded bg-violet-500/15 px-1 py-0 text-[8px] font-semibold uppercase tracking-wide text-violet-600 dark:bg-violet-400/15 dark:text-violet-400/80">
-                                          GC
+                                          {gcMeta.agent && /\-\d+$/.test(gcMeta.agent) ? "pool" : (gcMeta.agent ?? "GC")}
                                         </span>
                                       }
                                     />
@@ -1518,16 +1516,131 @@ export default function Sidebar() {
                                       <div className="text-xs">
                                         <div className="font-medium">Gas City Agent</div>
                                         {gcMeta.agent && <div>Agent: {gcMeta.agent}</div>}
-                                        {gcMeta.beadTitle && <div>Task: {gcMeta.beadTitle}</div>}
-                                        {gcMeta.bead && !gcMeta.beadTitle && <div>Bead: {gcMeta.bead}</div>}
-                                        {gcMeta.convoyTitle && <div>Convoy: {gcMeta.convoyTitle}</div>}
-                                        {gcMeta.convoy && !gcMeta.convoyTitle && <div>Convoy: {gcMeta.convoy}</div>}
+                                        {gcMeta.rig && <div>Rig: {gcMeta.rig}</div>}
                                         {gcMeta.state && <div>State: {gcMeta.state}</div>}
+                                        {gcMeta.runtimeProvider && <div>Provider: {gcMeta.runtimeProvider}</div>}
+                                        {gcMeta.startupModel && <div>Model: {gcMeta.startupModel}</div>}
                                       </div>
                                     </TooltipPopup>
                                   </Tooltip>
                                 )}
-                                {thread.title}
+                                {gcMeta.isGcManaged && gcMeta.bead ? (
+                                  <Tooltip>
+                                    <TooltipTrigger render={<span className="truncate">{thread.title}</span>} />
+                                    <TooltipPopup side="right" sideOffset={8}>
+                                      <div className="min-w-[200px] max-w-[280px] space-y-2 text-xs">
+                                        {/* Header */}
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="font-semibold text-foreground">
+                                            {gcMeta.beadTitle ?? gcMeta.bead}
+                                          </span>
+                                          {gcMeta.beadStatus && (
+                                            <span
+                                              className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium ${
+                                                gcMeta.beadStatus === "closed"
+                                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                                                  : gcMeta.beadStatus === "in_progress"
+                                                    ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+                                                    : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                                              }`}
+                                            >
+                                              {gcMeta.beadStatus}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Description */}
+                                        {gcMeta.beadDescription && (
+                                          <p className="line-clamp-2 text-muted-foreground">
+                                            {gcMeta.beadDescription}
+                                          </p>
+                                        )}
+
+                                        {/* Bead details */}
+                                        <div className="space-y-0.5 text-muted-foreground">
+                                          <div className="flex justify-between">
+                                            <span>ID</span>
+                                            <span className="font-mono text-foreground/80">{gcMeta.bead}</span>
+                                          </div>
+                                          {gcMeta.beadType && (
+                                            <div className="flex justify-between">
+                                              <span>Type</span>
+                                              <span className="text-foreground/80">{gcMeta.beadType}</span>
+                                            </div>
+                                          )}
+                                          {gcMeta.beadPriority && (
+                                            <div className="flex justify-between">
+                                              <span>Priority</span>
+                                              <span className="text-foreground/80">P{gcMeta.beadPriority}</span>
+                                            </div>
+                                          )}
+                                          {gcMeta.beadAssignee && (
+                                            <div className="flex justify-between">
+                                              <span>Assignee</span>
+                                              <span className="text-foreground/80">{gcMeta.beadAssignee}</span>
+                                            </div>
+                                          )}
+                                          {gcMeta.formula && (
+                                            <div className="flex justify-between">
+                                              <span>Formula</span>
+                                              <span className="text-foreground/80">{gcMeta.formula}</span>
+                                            </div>
+                                          )}
+                                          {gcMeta.molecule && (
+                                            <div className="flex justify-between">
+                                              <span>Molecule</span>
+                                              <span className="font-mono text-foreground/80">{gcMeta.molecule}</span>
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Labels */}
+                                        {gcMeta.beadLabels && (
+                                          <div className="flex flex-wrap gap-1">
+                                            {gcMeta.beadLabels.split(",").map((label) => (
+                                              <span
+                                                key={label}
+                                                className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground"
+                                              >
+                                                {label}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+
+                                        {/* Convoy section */}
+                                        {gcMeta.convoy && (
+                                          <div className="border-t border-border/50 pt-1.5 space-y-0.5 text-muted-foreground">
+                                            <div className="flex items-center justify-between">
+                                              <span className="font-medium text-foreground/80">Convoy</span>
+                                              {gcMeta.convoyStatus && (
+                                                <span
+                                                  className={`rounded px-1 py-0 text-[9px] ${
+                                                    gcMeta.convoyStatus === "closed"
+                                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400/80"
+                                                      : "bg-amber-500/10 text-amber-600 dark:text-amber-300/80"
+                                                  }`}
+                                                >
+                                                  {gcMeta.convoyStatus}
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span>{gcMeta.convoyTitle ?? gcMeta.convoy}</span>
+                                              {gcMeta.convoyClosedCount && gcMeta.convoyTotalCount && (
+                                                <span className="font-mono text-foreground/80">
+                                                  {gcMeta.convoyClosedCount}/{gcMeta.convoyTotalCount}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </TooltipPopup>
+                                  </Tooltip>
+                                ) : (
+                                  <span className="truncate">{thread.title}</span>
+                                )}
                               </span>
                             )}
                           </div>
@@ -1634,39 +1747,143 @@ export default function Sidebar() {
                             <SidebarMenuSub className="mx-1 my-0 w-full translate-x-0 gap-0.5 px-1.5 py-0">
                               {standaloneThreads.map((thread) => renderThreadItem(thread))}
                               {convoyGroups.map((group) => (
-                                <Collapsible
-                                  key={group.id}
-                                  defaultOpen
-                                  className="group/convoy"
-                                >
-                                  <CollapsibleTrigger asChild>
+                                <Collapsible key={group.id} defaultOpen className="group/convoy">
+                                  <CollapsibleTrigger
+                                    type="button"
+                                    data-thread-selection-safe
+                                    className="flex w-full items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground/60 hover:text-foreground/75"
+                                  >
+                                    <ChevronRightIcon className="size-2.5 shrink-0 transition-transform group-data-[state=open]/convoy:rotate-90" />
+                                    <FolderIcon className="size-3 shrink-0" />
+                                    <Tooltip>
+                                      <TooltipTrigger
+                                        render={<span className="truncate">{group.label}</span>}
+                                      />
+                                      <TooltipPopup side="right" sideOffset={8}>
+                                        <div className="min-w-[200px] max-w-[280px] space-y-2 text-xs">
+                                          {/* Header */}
+                                          <div className="flex items-center justify-between gap-2">
+                                            <span className="font-semibold text-foreground">
+                                              {group.label}
+                                            </span>
+                                            {group.status && (
+                                              <span
+                                                className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium ${
+                                                  group.status === "closed"
+                                                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                                                    : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                                                }`}
+                                              >
+                                                {group.status}
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          {/* Convoy details */}
+                                          <div className="space-y-0.5 text-muted-foreground">
+                                            <div className="flex justify-between">
+                                              <span>ID</span>
+                                              <span className="font-mono text-foreground/80">{group.id}</span>
+                                            </div>
+                                            {group.closedCount !== null && group.totalCount !== null && (
+                                              <div className="flex justify-between">
+                                                <span>Progress</span>
+                                                <span className="font-mono text-foreground/80">
+                                                  {group.closedCount}/{group.totalCount}
+                                                </span>
+                                              </div>
+                                            )}
+                                            {group.formula && (
+                                              <div className="flex justify-between">
+                                                <span>Formula</span>
+                                                <span className="text-foreground/80">{group.formula}</span>
+                                              </div>
+                                            )}
+                                            {group.molecule && (
+                                              <div className="flex justify-between">
+                                                <span>Molecule</span>
+                                                <span className="font-mono text-foreground/80">{group.molecule}</span>
+                                              </div>
+                                            )}
+                                            <div className="flex justify-between">
+                                              <span>Threads</span>
+                                              <span className="text-foreground/80">{group.threads.length}</span>
+                                            </div>
+                                          </div>
+
+                                          {/* Children list */}
+                                          {group.threads.length > 0 && (
+                                            <div className="border-t border-border/50 pt-1.5 space-y-0.5">
+                                              <div className="font-medium text-foreground/80 mb-1">Workers</div>
+                                              {group.threads.map((t) => {
+                                                const tMeta = (t.customMetadata ?? {}) as Record<string, string>;
+                                                const status = tMeta["gc.beadStatus"];
+                                                return (
+                                                  <div key={t.id} className="flex items-center justify-between gap-2 text-muted-foreground">
+                                                    <span className="truncate">{t.title}</span>
+                                                    {status && (
+                                                      <span
+                                                        className={`shrink-0 rounded px-1 py-0 text-[8px] ${
+                                                          status === "closed"
+                                                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400/80"
+                                                            : "bg-amber-500/10 text-amber-600 dark:text-amber-300/80"
+                                                        }`}
+                                                      >
+                                                        {status}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </TooltipPopup>
+                                    </Tooltip>
+                                    {group.closedCount !== null && group.totalCount !== null && (
+                                      <span className="rounded bg-muted px-1 py-0 text-[9px] text-muted-foreground/75">
+                                        {group.closedCount}/{group.totalCount}
+                                      </span>
+                                    )}
+                                    {group.status && (
+                                      <span
+                                        className={`rounded px-1 py-0 text-[9px] ${
+                                          group.status === "closed"
+                                            ? "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-400/80"
+                                            : "bg-amber-500/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-300/80"
+                                        }`}
+                                      >
+                                        {group.status}
+                                      </span>
+                                    )}
+                                    {group.formula && (
+                                      <span className="rounded border border-border/60 px-1 py-0 text-[9px] text-muted-foreground/75">
+                                        {group.formula}
+                                      </span>
+                                    )}
+                                    {group.molecule && (
+                                      <span className="rounded border border-border/60 px-1 py-0 text-[9px] text-muted-foreground/65">
+                                        {group.molecule}
+                                      </span>
+                                    )}
+                                    <span className="ml-auto text-[9px] text-muted-foreground/45">
+                                      {group.threads.length}
+                                    </span>
                                     <button
                                       type="button"
                                       data-thread-selection-safe
-                                      className="flex w-full items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground/60 hover:text-foreground/75"
+                                      className="ml-1 shrink-0 rounded p-0.5 opacity-0 hover:bg-accent hover:text-foreground group-hover/convoy:opacity-100"
+                                      title="Copy convoy ID"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        copyConvoyIdToClipboard(group.id, { convoyId: group.id });
+                                      }}
                                     >
-                                      <ChevronRightIcon className="size-2.5 shrink-0 transition-transform group-data-[state=open]/convoy:rotate-90" />
-                                      <FolderIcon className="size-3 shrink-0" />
-                                      <span className="truncate">{group.label}</span>
-                                      {group.closedCount !== null && group.totalCount !== null && (
-                                        <span className="rounded bg-muted px-1 py-0 text-[9px] text-muted-foreground/75">
-                                          {group.closedCount}/{group.totalCount}
-                                        </span>
+                                      {isConvoyIdCopied ? (
+                                        <CheckIcon className="size-2.5 text-emerald-500" />
+                                      ) : (
+                                        <CopyIcon className="size-2.5" />
                                       )}
-                                      {group.status && (
-                                        <span
-                                          className={`rounded px-1 py-0 text-[9px] ${
-                                            group.status === "closed"
-                                              ? "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-400/80"
-                                              : "bg-amber-500/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-300/80"
-                                          }`}
-                                        >
-                                          {group.status}
-                                        </span>
-                                      )}
-                                      <span className="ml-auto text-[9px] text-muted-foreground/45">
-                                        {group.threads.length}
-                                      </span>
                                     </button>
                                   </CollapsibleTrigger>
                                   <CollapsibleContent>
@@ -1708,87 +1925,90 @@ export default function Sidebar() {
                                 </SidebarMenuSubItem>
                               )}
                             </SidebarMenuSub>
-                              {archivedThreads.length > 0 && (
-                                <Collapsible defaultOpen={false} className="group/archived">
-                                  <CollapsibleTrigger asChild>
-                                    <button
-                                      type="button"
-                                      data-thread-selection-safe
-                                      className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[10px] text-muted-foreground/40 hover:text-muted-foreground/60"
-                                    >
-                                      <ChevronRightIcon className="size-2.5 shrink-0 transition-transform group-data-[state=open]/archived:rotate-90" />
-                                      <span>Archived ({archivedThreads.length})</span>
-                                    </button>
-                                  </CollapsibleTrigger>
-                                  <CollapsibleContent>
-                                    <SidebarMenuSub className="mx-1 my-0 w-full translate-x-0 gap-0.5 px-1.5 py-0 opacity-60">
-                                      {archivedThreads.map((thread) => {
-                                        const isActive = routeThreadId === thread.id;
-                                        const isSelected = selectedThreadIds.has(thread.id);
-                                        const gcMeta = getGcMetadata(thread.customMetadata);
-                                        const threadStatus = resolveThreadStatusPill({
-                                          thread,
-                                          hasPendingApprovals:
-                                            derivePendingApprovals(thread.activities).length > 0,
-                                          hasPendingUserInput:
-                                            derivePendingUserInputs(thread.activities).length > 0,
-                                          gcState: gcMeta.state,
-                                        });
-                                        return (
-                                          <SidebarMenuSubItem
-                                            key={thread.id}
-                                            className="w-full"
-                                            data-thread-item
+                            {archivedThreads.length > 0 && (
+                              <Collapsible defaultOpen={false} className="group/archived">
+                                <CollapsibleTrigger
+                                  type="button"
+                                  data-thread-selection-safe
+                                  className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[10px] text-muted-foreground/40 hover:text-muted-foreground/60"
+                                >
+                                  <ChevronRightIcon className="size-2.5 shrink-0 transition-transform group-data-[state=open]/archived:rotate-90" />
+                                  <span>Archived ({archivedThreads.length})</span>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                  <SidebarMenuSub className="mx-1 my-0 w-full translate-x-0 gap-0.5 px-1.5 py-0 opacity-60">
+                                    {archivedThreads.map((thread) => {
+                                      const isActive = routeThreadId === thread.id;
+                                      const isSelected = selectedThreadIds.has(thread.id);
+                                      const gcMeta = getGcMetadata(thread.customMetadata);
+                                      const threadStatus = resolveThreadStatusPill({
+                                        thread,
+                                        hasPendingApprovals:
+                                          derivePendingApprovals(thread.activities).length > 0,
+                                        hasPendingUserInput:
+                                          derivePendingUserInputs(thread.activities).length > 0,
+                                        gcState: gcMeta.state,
+                                      });
+                                      return (
+                                        <SidebarMenuSubItem
+                                          key={thread.id}
+                                          className="w-full"
+                                          data-thread-item
+                                        >
+                                          <SidebarMenuSubButton
+                                            render={<div role="button" tabIndex={0} />}
+                                            size="sm"
+                                            isActive={isActive}
+                                            className={resolveThreadRowClassName({
+                                              isActive,
+                                              isSelected,
+                                            })}
+                                            onClick={(event) => {
+                                              handleThreadClick(
+                                                event,
+                                                thread.id,
+                                                orderedProjectThreadIds,
+                                              );
+                                            }}
+                                            onContextMenu={(event) => {
+                                              event.preventDefault();
+                                              void handleThreadContextMenu(thread.id, {
+                                                x: event.clientX,
+                                                y: event.clientY,
+                                              });
+                                            }}
                                           >
-                                            <SidebarMenuSubButton
-                                              render={<div role="button" tabIndex={0} />}
-                                              size="sm"
-                                              isActive={isActive}
-                                              className={resolveThreadRowClassName({
-                                                isActive,
-                                                isSelected,
-                                              })}
-                                              onClick={(event) => {
-                                                handleThreadClick(
-                                                  event,
-                                                  thread.id,
-                                                  orderedProjectThreadIds,
-                                                );
-                                              }}
-                                              onContextMenu={(event) => {
-                                                event.preventDefault();
-                                                void handleThreadContextMenu(thread.id, {
-                                                  x: event.clientX,
-                                                  y: event.clientY,
-                                                });
-                                              }}
-                                            >
-                                              <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-                                                <span className="truncate text-xs">
-                                                  {thread.title}
+                                            <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
+                                              {gcMeta.isGcManaged && (
+                                                <span className="mr-1 inline-flex shrink-0 items-center rounded bg-violet-500/15 px-1 py-0 text-[8px] font-semibold uppercase tracking-wide text-violet-600 dark:bg-violet-400/15 dark:text-violet-400/80">
+                                                  {gcMeta.agent && /\-\d+$/.test(gcMeta.agent) ? "pool" : (gcMeta.agent ?? "GC")}
                                                 </span>
-                                                {threadStatus && (
-                                                  <span
-                                                    className={`flex shrink-0 items-center gap-0.5 text-[10px] ${threadStatus.colorClass}`}
-                                                  >
-                                                    <span
-                                                      className={`inline-block size-1.5 rounded-full ${threadStatus.dotClass}`}
-                                                    />
-                                                    {threadStatus.label}
-                                                  </span>
-                                                )}
-                                              </div>
-                                              <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/40">
-                                                {formatRelativeTime(thread.createdAt)}
+                                              )}
+                                              <span className="truncate text-xs">
+                                                {thread.title}
                                               </span>
-                                            </SidebarMenuSubButton>
-                                          </SidebarMenuSubItem>
-                                        );
-                                      })}
-                                    </SidebarMenuSub>
-                                  </CollapsibleContent>
-                                </Collapsible>
-                              )}
+                                              {threadStatus && (
+                                                <span
+                                                  className={`flex shrink-0 items-center gap-0.5 text-[10px] ${threadStatus.colorClass}`}
+                                                >
+                                                  <span
+                                                    className={`inline-block size-1.5 rounded-full ${threadStatus.dotClass}`}
+                                                  />
+                                                  {threadStatus.label}
+                                                </span>
+                                              )}
+                                            </div>
+                                            <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/40">
+                                              {formatRelativeTime(thread.createdAt)}
+                                            </span>
+                                          </SidebarMenuSubButton>
+                                        </SidebarMenuSubItem>
+                                      );
+                                    })}
+                                  </SidebarMenuSub>
+                                </CollapsibleContent>
+                              </Collapsible>
+                            )}
                           </CollapsibleContent>
                         </Collapsible>
                       )}

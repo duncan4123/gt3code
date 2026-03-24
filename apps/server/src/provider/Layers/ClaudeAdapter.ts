@@ -81,6 +81,10 @@ type ClaudeToolResultStreamKind = Extract<
   "command_output" | "file_change_output"
 >;
 
+type ExtendedClaudeQueryOptions = ClaudeQueryOptions & {
+  enableAllProjectMcpServers?: boolean;
+};
+
 type PromptQueueItem =
   | {
       readonly type: "message";
@@ -2588,7 +2592,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           ...(fastMode ? { fastMode: true } : {}),
         };
 
-        const queryOptions: ClaudeQueryOptions = {
+        const queryOptions: ExtendedClaudeQueryOptions = {
           ...(input.cwd ? { cwd: input.cwd } : {}),
           ...(input.model ? { model: input.model } : {}),
           pathToClaudeCodeExecutable: providerOptions?.binaryPath ?? "claude",

@@ -40,6 +40,7 @@ import { AnalyticsService } from "./telemetry/Services/AnalyticsService";
 import { GcApiClientLive } from "./gc/Layers/GcApiClient";
 import { GcContextProviderLive } from "./gc/Layers/GcContextProvider";
 import { GcEventIngestionLive } from "./gc/Layers/GcEventIngestion";
+import { GcConvoySyncLive } from "./gc/Layers/GcConvoySync";
 
 export function makeServerProviderLayer(): Layer.Layer<
   ProviderService,
@@ -131,16 +132,19 @@ export function makeServerRuntimeServicesLayer() {
 
   const gcApiLayer = GcApiClientLive;
 
-  const gcContextLayer = GcContextProviderLive.pipe(
-    Layer.provide(gcApiLayer),
-  );
+  const gcContextLayer = GcContextProviderLive.pipe(Layer.provide(gcApiLayer));
 
   const gcIngestionLayer = GcEventIngestionLive.pipe(
     Layer.provide(gcApiLayer),
     Layer.provide(orchestrationReactorLayer),
   );
 
-  const gcLayer = Layer.mergeAll(gcContextLayer, gcIngestionLayer).pipe(
+  const gcConvoySyncLayer = GcConvoySyncLive.pipe(
+    Layer.provide(gcApiLayer),
+    Layer.provide(orchestrationReactorLayer),
+  );
+
+  const gcLayer = Layer.mergeAll(gcContextLayer, gcIngestionLayer, gcConvoySyncLayer).pipe(
     Layer.provideMerge(gcApiLayer),
   );
 

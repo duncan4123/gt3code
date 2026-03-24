@@ -19,29 +19,35 @@ It is not a transport redesign. It is a rendering and message-shape plan.
 ### A. Project creation
 
 Source:
+
 - `gc-session-t3`
 - T3 command: `project.create`
 
 Fields:
+
 - `projectId`
 - `title`
 - `workspaceRoot`
 - `defaultModel`
 
 Current UI:
+
 - sidebar project folder
 
 Needed display:
+
 - no special chat card needed
 - use this only for thread context and project badges
 
 ### B. Thread creation
 
 Source:
+
 - `gc-session-t3`
 - T3 command: `thread.create`
 
 Fields:
+
 - `threadId`
 - `projectId`
 - `title`
@@ -51,10 +57,12 @@ Fields:
 - `interactionMode`
 
 Current UI:
+
 - normal thread row in sidebar
 - standard chat thread once opened
 
 Needed display:
+
 - thread header should expose GC-specific context from this creation step:
   - GC agent
   - runtime provider
@@ -64,10 +72,12 @@ Needed display:
 ### C. Initial prompt / start nudge
 
 Source:
+
 - `gc-session-t3`
 - T3 command: `thread.turn.start`
 
 Fields:
+
 - `threadId`
 - `message.role = "user"`
 - `message.text`
@@ -77,13 +87,16 @@ Fields:
 - `interactionMode`
 
 Current UI:
+
 - plain user chat message
 
 Problem:
+
 - this is often not a human chat message
 - it may be a GC bootstrap prompt, work assignment, or system nudge
 
 Needed display:
+
 - `GcNudgeCard`
 - if the turn came from GC startup or GC nudge, render it as a GC-originated
   control message, not a normal human bubble
@@ -91,18 +104,22 @@ Needed display:
 ### D. Runtime nudges after start
 
 Source:
+
 - `gc session nudge`
 - `gc-session-t3 nudge`
 - T3 command: `thread.turn.start`
 
 Fields:
+
 - message text only today
 - provider/model currently inferred from thread mapping
 
 Current UI:
+
 - plain user chat message
 
 Needed display:
+
 - `GcNudgeCard`
 - variants:
   - `info`
@@ -114,10 +131,12 @@ Needed display:
 ### E. GC custom metadata on thread
 
 Source:
+
 - `gc-session-t3`
 - T3 command: `thread.meta.update`
 
 Fields sent today:
+
 - `gc.agent`
 - `gc.rig`
 - `gc.city`
@@ -128,10 +147,12 @@ Fields sent today:
 - `gc.state`
 
 Current UI:
+
 - sidebar GC badge / state pill support
 - not deeply surfaced in chat
 
 Needed display:
+
 - `GcThreadHeader`
 - `GcAssignmentBanner`
 - state badges in header and activity timeline
@@ -139,19 +160,23 @@ Needed display:
 ### F. Session lifecycle transitions
 
 Source:
+
 - `gc-session-t3`
 - T3 command: `thread.meta.update`
 
 States sent today:
+
 - `active`
 - `stopped`
 - `drained`
 - `archived`
 
 Current UI:
+
 - sidebar pills only
 
 Needed display:
+
 - `GcSessionStateCard`
 - generated when state changes
 - useful transitions:
@@ -163,13 +188,16 @@ Needed display:
 ### G. Interrupt
 
 Source:
+
 - `gc-session-t3 interrupt`
 - T3 command: `thread.turn.interrupt`
 
 Current UI:
+
 - no dedicated visible GC display
 
 Needed display:
+
 - `GcInterruptCard`
 - show:
   - who interrupted
@@ -179,6 +207,7 @@ Needed display:
 ### H. Work assignment references
 
 Source today:
+
 - mostly indirect through metadata/env:
   - `GC_BEAD`
   - `GC_BEAD_TITLE`
@@ -187,14 +216,17 @@ Source today:
 - bead routing happens in GC/beads, not directly as a rich T3 event
 
 Current UI:
+
 - thread title may include bead title or bead id
 - sidebar metadata can show bead context
 
 Problem:
+
 - work assignment is the most important GC concept, but it is not represented
   as a first-class typed chat artifact yet
 
 Needed display:
+
 - `GcWorkAssignmentCard`
 - fields:
   - bead id
@@ -210,9 +242,11 @@ Needed display:
 ### I. GC runtime environment injected into provider process
 
 Source:
+
 - GC config -> `gc-session-t3` -> per-thread env file -> T3 provider adapter
 
 Fields sent today:
+
 - `GC_AGENT`
 - `GC_PROVIDER`
 - `GC_CITY`
@@ -227,9 +261,11 @@ Fields sent today:
 - `GC_DOLT_PORT`
 
 Current UI:
+
 - none directly
 
 Needed display:
+
 - no raw env dump in chat
 - selectively expose in a `GC Context` inspector panel:
   - agent
@@ -246,18 +282,21 @@ These are the ones worth adding if we want the chat UI to feel native.
 ### A. Convoy
 
 Desired fields:
+
 - convoy id
 - convoy title
 - convoy role
 - sibling workers
 
 Display:
+
 - `GcConvoyCard`
 - or a compact convoy section in thread header
 
 ### B. Molecule / formula step
 
 Desired fields:
+
 - molecule id
 - formula name
 - current step
@@ -265,39 +304,46 @@ Desired fields:
 - step kind
 
 Display:
+
 - `GcFormulaProgressCard`
 - or compact stepper above composer
 
 ### C. Queue / deferred nudge state
 
 GC already has:
+
 - queued nudges
 - in-flight nudges
 - dead-letter nudges
 
 Display:
+
 - `GcQueuedNudgeCard`
 - `GcDeadLetterCard`
 
 ### D. Outcome / closure report
 
 Desired fields:
+
 - bead outcome
 - summary
 - pass/fail/block reason
 - links to changed files or diff turn
 
 Display:
+
 - `GcOutcomeCard`
 
 ### E. Mail / coordination events
 
 Desired fields:
+
 - mail sender
 - mail subject
 - linked bead or convoy
 
 Display:
+
 - `GcMailCard`
 
 ## 3. Proposed Display Components
@@ -307,6 +353,7 @@ Display:
 Shown for any thread with `gc.agent`.
 
 Content:
+
 - agent badge
 - rig
 - runtime provider
@@ -314,6 +361,7 @@ Content:
 - session state badge
 
 Actions:
+
 - view bead
 - open convoy
 - nudge
@@ -325,6 +373,7 @@ Actions:
 Shown near the top of the chat when the thread is bead-backed.
 
 Content:
+
 - bead title
 - bead id
 - formula / molecule if known
@@ -336,6 +385,7 @@ Used for GC-originated `thread.turn.start` messages that are not ordinary human
 chat.
 
 Content:
+
 - label: `GC Nudge`
 - message body
 - subtype
@@ -347,6 +397,7 @@ Content:
 Represents a routed bead assignment.
 
 Content:
+
 - bead id/title
 - convoy
 - molecule/formula
@@ -358,6 +409,7 @@ Content:
 Represents lifecycle transitions.
 
 Content:
+
 - state transition
 - thread/session identity
 - timestamp
@@ -368,6 +420,7 @@ Content:
 Represents the current molecule/formula step.
 
 Content:
+
 - formula name
 - step index / total
 - current step title
@@ -378,6 +431,7 @@ Content:
 Represents final work completion.
 
 Content:
+
 - pass/fail
 - summary
 - linked bead
@@ -388,6 +442,7 @@ Content:
 Collapsible diagnostic panel.
 
 Content:
+
 - GC agent
 - rig
 - city
@@ -406,6 +461,7 @@ the composer.
 ### Rule 2: Use thread metadata for persistent context
 
 Persistent thread identity belongs in:
+
 - header
 - sidebar
 - inspector
@@ -415,6 +471,7 @@ Not in repeated chat bubbles.
 ### Rule 3: Use typed activity cards for operational events
 
 Operational events:
+
 - assignment
 - nudge
 - interrupt
@@ -434,11 +491,13 @@ different treatments.
 ### Phase 1: No protocol changes
 
 Use existing data only:
+
 - `gc.*` thread metadata
 - `thread.turn.start` messages already sent by GC
 - lifecycle state from `gc.state`
 
 Build:
+
 - `GcThreadHeader`
 - `GcAssignmentBanner`
 - `GcNudgeCard` heuristic for GC-originated startup/nudge turns
@@ -447,6 +506,7 @@ Build:
 ### Phase 2: Add richer GC payloads
 
 Add explicit payloads for:
+
 - work assignment
 - convoy/molecule/formula
 - outcome
@@ -454,6 +514,7 @@ Add explicit payloads for:
 - queued nudges
 
 Build:
+
 - `GcWorkAssignmentCard`
 - `GcFormulaProgressCard`
 - `GcOutcomeCard`

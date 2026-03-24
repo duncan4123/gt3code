@@ -451,7 +451,10 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
           };
           if (event.payload.customMetadata !== undefined) {
             const existing = JSON.parse(existingRow.value.customMetadata || "{}");
-            metaUpdate.customMetadata = JSON.stringify({ ...existing, ...event.payload.customMetadata });
+            metaUpdate.customMetadata = JSON.stringify({
+              ...existing,
+              ...event.payload.customMetadata,
+            });
           }
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,

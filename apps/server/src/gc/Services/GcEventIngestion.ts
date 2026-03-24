@@ -12,7 +12,6 @@ export interface GcEventIngestionShape {
   readonly isRunning: Effect.Effect<boolean>;
 }
 
-export class GcEventIngestion extends ServiceMap.Service<
-  GcEventIngestion,
-  GcEventIngestionShape
->()("t3/gc/Services/GcEventIngestion") {}
+export class GcEventIngestion extends ServiceMap.Service<GcEventIngestion, GcEventIngestionShape>()(
+  "t3/gc/Services/GcEventIngestion",
+) {}

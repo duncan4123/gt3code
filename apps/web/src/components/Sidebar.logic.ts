@@ -25,13 +25,19 @@ export interface ThreadStatusPill {
 }
 
 /** Extract gc.* metadata from a thread's customMetadata. */
-export function getGcMetadata(customMetadata?: Record<string, string>): {
+export interface GcMeta {
   isGcManaged: boolean;
   agent: string | undefined;
   rig: string | undefined;
   city: string | undefined;
   bead: string | undefined;
   beadTitle: string | undefined;
+  beadStatus: string | undefined;
+  beadType: string | undefined;
+  beadPriority: string | undefined;
+  beadAssignee: string | undefined;
+  beadLabels: string | undefined;
+  beadDescription: string | undefined;
   molecule: string | undefined;
   formula: string | undefined;
   convoy: string | undefined;
@@ -39,31 +45,51 @@ export function getGcMetadata(customMetadata?: Record<string, string>): {
   convoyStatus: string | undefined;
   convoyClosedCount: string | undefined;
   convoyTotalCount: string | undefined;
+  convoyChildren: string | undefined;
   doltPort: string | undefined;
   doltDatabase: string | undefined;
   state: string | undefined;
   provider: string | undefined;
-} {
+  runtimeProvider: string | undefined;
+  startupTemplate: string | undefined;
+  startupModel: string | undefined;
+  role: string | undefined;
+}
+
+const EMPTY_GC_META: GcMeta = {
+  isGcManaged: false,
+  agent: undefined,
+  rig: undefined,
+  city: undefined,
+  bead: undefined,
+  beadTitle: undefined,
+  beadStatus: undefined,
+  beadType: undefined,
+  beadPriority: undefined,
+  beadAssignee: undefined,
+  beadLabels: undefined,
+  beadDescription: undefined,
+  molecule: undefined,
+  formula: undefined,
+  convoy: undefined,
+  convoyTitle: undefined,
+  convoyStatus: undefined,
+  convoyClosedCount: undefined,
+  convoyTotalCount: undefined,
+  convoyChildren: undefined,
+  doltPort: undefined,
+  doltDatabase: undefined,
+  state: undefined,
+  provider: undefined,
+  runtimeProvider: undefined,
+  startupTemplate: undefined,
+  startupModel: undefined,
+  role: undefined,
+};
+
+export function getGcMetadata(customMetadata?: Record<string, string>): GcMeta {
   if (!customMetadata || !customMetadata["gc.agent"]) {
-    return {
-      isGcManaged: false,
-      agent: undefined,
-      rig: undefined,
-      city: undefined,
-      bead: undefined,
-      beadTitle: undefined,
-      molecule: undefined,
-      formula: undefined,
-      convoy: undefined,
-      convoyTitle: undefined,
-      convoyStatus: undefined,
-      convoyClosedCount: undefined,
-      convoyTotalCount: undefined,
-      doltPort: undefined,
-      doltDatabase: undefined,
-      state: undefined,
-      provider: undefined,
-    };
+    return EMPTY_GC_META;
   }
   return {
     isGcManaged: true,
@@ -72,6 +98,12 @@ export function getGcMetadata(customMetadata?: Record<string, string>): {
     city: customMetadata["gc.city"],
     bead: customMetadata["gc.bead"],
     beadTitle: customMetadata["gc.beadTitle"],
+    beadStatus: customMetadata["gc.beadStatus"],
+    beadType: customMetadata["gc.beadType"],
+    beadPriority: customMetadata["gc.beadPriority"],
+    beadAssignee: customMetadata["gc.beadAssignee"],
+    beadLabels: customMetadata["gc.beadLabels"],
+    beadDescription: customMetadata["gc.beadDescription"],
     molecule: customMetadata["gc.molecule"],
     formula: customMetadata["gc.formula"],
     convoy: customMetadata["gc.convoy"],
@@ -79,10 +111,15 @@ export function getGcMetadata(customMetadata?: Record<string, string>): {
     convoyStatus: customMetadata["gc.convoyStatus"],
     convoyClosedCount: customMetadata["gc.convoyClosedCount"],
     convoyTotalCount: customMetadata["gc.convoyTotalCount"],
+    convoyChildren: customMetadata["gc.convoyChildren"],
     doltPort: customMetadata["gc.doltPort"],
     doltDatabase: customMetadata["gc.doltDatabase"],
     state: customMetadata["gc.state"],
     provider: customMetadata["gc.provider"],
+    runtimeProvider: customMetadata["gc.runtimeProvider"],
+    startupTemplate: customMetadata["gc.startupTemplate"],
+    startupModel: customMetadata["gc.startupModel"],
+    role: customMetadata["gc.role"],
   };
 }
 
@@ -93,10 +130,11 @@ export function isThreadArchived(customMetadata?: Record<string, string>): boole
 }
 
 /** Count GC-managed threads per project. */
-export function countGcAgents(threads: ReadonlyArray<{ projectId: string; customMetadata?: Record<string, string> }>, projectId: string): number {
-  return threads.filter(
-    (t) => t.projectId === projectId && t.customMetadata?.["gc.agent"],
-  ).length;
+export function countGcAgents(
+  threads: ReadonlyArray<{ projectId: string; customMetadata?: Record<string, string> }>,
+  projectId: string,
+): number {
+  return threads.filter((t) => t.projectId === projectId && t.customMetadata?.["gc.agent"]).length;
 }
 
 export interface ConvoyThreadLike {
@@ -109,6 +147,8 @@ export interface VirtualConvoyGroup<TThread extends ConvoyThreadLike> {
   status: string | undefined;
   closedCount: number | null;
   totalCount: number | null;
+  formula: string | undefined;
+  molecule: string | undefined;
   threads: TThread[];
 }
 
@@ -124,7 +164,9 @@ export function groupThreadsByVirtualConvoy<TThread extends ConvoyThreadLike>(
   for (const thread of threads) {
     const gcMeta = getGcMetadata(thread.customMetadata);
     const convoyId = gcMeta.convoy?.trim();
-    if (!convoyId) {
+    // Operator threads (e.g. convoymaster) stay standalone even with a convoy ID.
+    // Only worker threads get grouped into convoy virtual folders.
+    if (!convoyId || gcMeta.role === "operator") {
       standaloneThreads.push(thread);
       continue;
     }
@@ -141,8 +183,25 @@ export function groupThreadsByVirtualConvoy<TThread extends ConvoyThreadLike>(
       status: gcMeta.convoyStatus,
       closedCount: gcMeta.convoyClosedCount ? Number(gcMeta.convoyClosedCount) : null,
       totalCount: gcMeta.convoyTotalCount ? Number(gcMeta.convoyTotalCount) : null,
+      formula: gcMeta.formula?.trim() || undefined,
+      molecule: gcMeta.molecule?.trim() || undefined,
       threads: [thread],
     });
+  }
+
+  for (const group of convoyGroupsById.values()) {
+    const formulas = new Set(
+      group.threads
+        .map((thread) => getGcMetadata(thread.customMetadata).formula?.trim())
+        .filter((value): value is string => Boolean(value)),
+    );
+    const molecules = new Set(
+      group.threads
+        .map((thread) => getGcMetadata(thread.customMetadata).molecule?.trim())
+        .filter((value): value is string => Boolean(value)),
+    );
+    group.formula = formulas.size === 1 ? [...formulas][0] : undefined;
+    group.molecule = molecules.size === 1 ? [...molecules][0] : undefined;
   }
 
   const convoyGroups = Array.from(convoyGroupsById.values()).sort((a, b) =>

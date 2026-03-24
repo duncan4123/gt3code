@@ -1,8 +1,9 @@
 import { memo, useMemo } from "react";
 import type { GcThreadContextResult } from "@t3tools/contracts";
+import { WrenchIcon } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { ScrollArea } from "./ui/scroll-area";
-import { inferRigFromBeadId } from "../session-logic";
+import { inferRigFromBeadId, type GcTimelineEvent } from "../session-logic";
 
 interface GcContextSidebarProps {
   metadata: Record<string, string>;
@@ -20,6 +21,7 @@ interface GcContextSidebarProps {
     sourceKind: string;
   }>;
   threadContext?: GcThreadContextResult | null;
+  gcEvents?: ReadonlyArray<GcTimelineEvent>;
 }
 
 function contextValue(value: string | undefined, fallback = "—") {
@@ -52,6 +54,7 @@ const GcContextSidebar = memo(function GcContextSidebar({
   onSelectWorkedBead,
   workedBeads = [],
   threadContext,
+  gcEvents = [],
 }: GcContextSidebarProps) {
   const convoyClosedCount = metadata["gc.convoyClosedCount"];
   const convoyTotalCount = metadata["gc.convoyTotalCount"];
@@ -140,10 +143,7 @@ const GcContextSidebar = memo(function GcContextSidebar({
                 </div>
                 <div className="space-y-1">
                   {convoy.children.map((child) => (
-                    <div
-                      key={child.id}
-                      className="flex items-center gap-1.5 text-[11px]"
-                    >
+                    <div key={child.id} className="flex items-center gap-1.5 text-[11px]">
                       <span
                         className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
                           child.status === "closed"
@@ -169,10 +169,7 @@ const GcContextSidebar = memo(function GcContextSidebar({
               ) : null}
               <div className="space-y-1.5">
                 {formula.steps.map((step, index) => (
-                  <div
-                    key={step.id}
-                    className="rounded-md border border-border/50 px-2 py-1.5"
-                  >
+                  <div key={step.id} className="rounded-md border border-border/50 px-2 py-1.5">
                     <div className="flex items-start gap-1.5">
                       <span className="shrink-0 text-[10px] font-semibold text-muted-foreground/50">
                         {index + 1}/{formula.steps.length}
@@ -313,6 +310,65 @@ const GcContextSidebar = memo(function GcContextSidebar({
                     {rig}
                   </Badge>
                 ))}
+              </div>
+            </div>
+          ) : null}
+
+          {gcEvents.length > 0 ? (
+            <div className="space-y-3">
+              <SectionHeader>GC Events</SectionHeader>
+              <div className="space-y-2">
+                {gcEvents.map((event) => {
+                  const beadRig =
+                    event.rig ?? (event.beadId ? inferRigFromBeadId(event.beadId) : undefined);
+                  const isBeadEvent = event.kind.startsWith("gc.bead.");
+                  return (
+                    <div
+                      key={event.id}
+                      data-gc-event-id={event.id}
+                      className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2.5"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center text-amber-600/80 dark:text-amber-300/80">
+                          <WrenchIcon className="size-3" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="text-[11px] font-medium text-foreground/85">
+                              {event.summary}
+                            </p>
+                            {isBeadEvent && beadRig ? (
+                              <span className="rounded-md bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-700 uppercase dark:bg-cyan-400/15 dark:text-cyan-300/90">
+                                {beadRig}
+                              </span>
+                            ) : null}
+                            {event.badges?.map((badge) => (
+                              <span
+                                key={`${event.id}:${badge}`}
+                                className="rounded-md border border-amber-500/20 bg-background/55 px-1.5 py-0.5 text-[10px] text-muted-foreground/75"
+                              >
+                                {badge}
+                              </span>
+                            ))}
+                          </div>
+                          {event.detail && (
+                            <p className="mt-1 text-[11px] text-muted-foreground/70">
+                              {event.detail}
+                            </p>
+                          )}
+                          {event.textPreview && (
+                            <pre className="mt-2 overflow-x-auto rounded-lg border border-border/60 bg-background/65 px-2 py-1.5 whitespace-pre-wrap text-[10px] leading-4 text-muted-foreground/80">
+                              {event.textPreview}
+                            </pre>
+                          )}
+                          <p className="mt-1.5 text-[10px] text-muted-foreground/35">
+                            {new Date(event.createdAt).toLocaleTimeString()}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : null}

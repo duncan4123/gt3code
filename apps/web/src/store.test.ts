@@ -7,7 +7,13 @@ import {
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
-import { markThreadUnread, reorderProjects, syncServerReadModel, type AppState } from "./store";
+import {
+  markThreadUnread,
+  markThreadVisited,
+  reorderProjects,
+  syncServerReadModel,
+  type AppState,
+} from "./store";
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "./types";
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
@@ -110,6 +116,39 @@ function makeReadModelProject(
 }
 
 describe("store pure functions", () => {
+  it("markThreadVisited updates lastVisitedAt when provided with a timestamp", () => {
+    const initialState = makeState(
+      makeThread({
+        lastVisitedAt: "2026-02-25T12:00:00.000Z",
+      }),
+    );
+
+    const next = markThreadVisited(
+      initialState,
+      ThreadId.makeUnsafe("thread-1"),
+      "2026-02-25T13:00:00.000Z",
+    );
+
+    const updatedThread = next.threads[0];
+    expect(updatedThread?.lastVisitedAt).toBe("2026-02-25T13:00:00.000Z");
+  });
+
+  it("markThreadVisited does not update lastVisitedAt if the existing one is newer", () => {
+    const initialState = makeState(
+      makeThread({
+        lastVisitedAt: "2026-02-25T14:00:00.000Z",
+      }),
+    );
+
+    const next = markThreadVisited(
+      initialState,
+      ThreadId.makeUnsafe("thread-1"),
+      "2026-02-25T13:00:00.000Z",
+    );
+
+    expect(next).toBe(initialState);
+  });
+
   it("markThreadUnread moves lastVisitedAt before completion for a completed thread", () => {
     const latestTurnCompletedAt = "2026-02-25T12:30:00.000Z";
     const initialState = makeState(

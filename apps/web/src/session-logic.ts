@@ -59,6 +59,7 @@ export interface GcTimelineEvent {
   beadStatus?: string;
   formula?: string;
   moleculeId?: string;
+  rig?: string;
 }
 
 export interface WorkedBeadHistoryEntry {
@@ -68,9 +69,20 @@ export interface WorkedBeadHistoryEntry {
   beadStatus?: string;
   formula?: string;
   moleculeId?: string;
+  rig?: string;
   createdAt: string;
   sourceEventId: string;
   sourceKind: string;
+}
+
+/**
+ * Infer the rig prefix from a bead ID.
+ * Bead IDs follow the pattern `<prefix>-<id>` where the prefix maps to a rig
+ * (e.g., `t3-xxx` → `t3`, `gc-xxx` → `gc`, `bcc-xxx` → `bcc`).
+ */
+export function inferRigFromBeadId(beadId: string): string | undefined {
+  const match = /^([a-zA-Z][a-zA-Z0-9]*)-/.exec(beadId);
+  return match?.[1] ?? undefined;
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
@@ -526,6 +538,13 @@ export function deriveGcTimelineEvents(
         asTrimmedString(payload?.beadId) ??
         asTrimmedString(payload?.sessionName) ??
         undefined;
+      const textPreview = asTrimmedString(payload?.textPreview);
+      const beadId = asTrimmedString(payload?.beadId);
+      const beadTitle = asTrimmedString(payload?.beadTitle);
+      const beadStatus = asTrimmedString(payload?.beadStatus);
+      const formula = asTrimmedString(payload?.formula);
+      const moleculeId = asTrimmedString(payload?.moleculeId);
+      const rigFromPayload = asTrimmedString(payload?.rig);
       return {
         id: activity.id,
         createdAt: activity.createdAt,
@@ -534,22 +553,20 @@ export function deriveGcTimelineEvents(
         tone: activity.tone,
         ...(detail ? { detail } : {}),
         ...(badges.length > 0 ? { badges } : {}),
-        ...(asTrimmedString(payload?.textPreview)
-          ? { textPreview: asTrimmedString(payload?.textPreview) ?? undefined }
-          : {}),
-        ...(asTrimmedString(payload?.beadId) ? { beadId: asTrimmedString(payload?.beadId) ?? undefined } : {}),
-        ...(asTrimmedString(payload?.beadTitle)
-          ? { beadTitle: asTrimmedString(payload?.beadTitle) ?? undefined }
-          : {}),
-        ...(asTrimmedString(payload?.beadStatus)
-          ? { beadStatus: asTrimmedString(payload?.beadStatus) ?? undefined }
-          : {}),
-        ...(asTrimmedString(payload?.formula)
-          ? { formula: asTrimmedString(payload?.formula) ?? undefined }
-          : {}),
-        ...(asTrimmedString(payload?.moleculeId)
-          ? { moleculeId: asTrimmedString(payload?.moleculeId) ?? undefined }
-          : {}),
+        ...(textPreview ? { textPreview } : {}),
+        ...(beadId ? { beadId } : {}),
+        ...(beadTitle ? { beadTitle } : {}),
+        ...(beadStatus ? { beadStatus } : {}),
+        ...(formula ? { formula } : {}),
+        ...(moleculeId ? { moleculeId } : {}),
+        ...(() => {
+          if (rigFromPayload) return { rig: rigFromPayload };
+          if (beadId) {
+            const inferred = inferRigFromBeadId(beadId);
+            if (inferred) return { rig: inferred };
+          }
+          return {};
+        })(),
       };
     });
 }
@@ -565,6 +582,7 @@ export function deriveWorkedBeadHistory(
     if (!event.beadId) {
       continue;
     }
+    const rig = event.rig ?? inferRigFromBeadId(event.beadId);
     historyByBeadId.set(event.beadId, {
       id: `${event.kind}:${event.beadId}`,
       beadId: event.beadId,
@@ -572,6 +590,7 @@ export function deriveWorkedBeadHistory(
       ...(event.beadStatus ? { beadStatus: event.beadStatus } : {}),
       ...(event.formula ? { formula: event.formula } : {}),
       ...(event.moleculeId ? { moleculeId: event.moleculeId } : {}),
+      ...(rig ? { rig } : {}),
       createdAt: event.createdAt,
       sourceEventId: event.id,
       sourceKind: event.kind,

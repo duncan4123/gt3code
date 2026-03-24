@@ -251,6 +251,18 @@ describe("getGcMetadata", () => {
       convoyTitle: "T3 Virtual Convoy Folders",
     });
   });
+
+  it("extracts gc.role when present", () => {
+    expect(
+      getGcMetadata({
+        "gc.agent": "gascity/convoymaster",
+        "gc.role": "operator",
+      }),
+    ).toMatchObject({
+      isGcManaged: true,
+      role: "operator",
+    });
+  });
 });
 
 describe("groupThreadsByVirtualConvoy", () => {
@@ -303,6 +315,7 @@ describe("groupThreadsByVirtualConvoy", () => {
       id: "gc-jsd2",
       label: "T3 Virtual Convoy Folders",
       status: undefined,
+      formula: undefined,
     });
     expect(result.convoyGroups[1]?.threads).toHaveLength(2);
   });
@@ -327,6 +340,69 @@ describe("groupThreadsByVirtualConvoy", () => {
       status: "open",
       closedCount: 1,
       totalCount: 3,
+    });
+  });
+
+  it("keeps operator-role threads standalone even with a convoy id", () => {
+    const result = groupThreadsByVirtualConvoy([
+      {
+        customMetadata: {
+          "gc.agent": "gascity/convoymaster",
+          "gc.convoy": "gc-jsd2",
+          "gc.convoyTitle": "T3 Virtual Convoy Folders",
+          "gc.role": "operator",
+        },
+      },
+      {
+        customMetadata: {
+          "gc.agent": "gascity/codex-1",
+          "gc.convoy": "gc-jsd2",
+          "gc.convoyTitle": "T3 Virtual Convoy Folders",
+          "gc.role": "worker",
+        },
+      },
+      {
+        customMetadata: {
+          "gc.agent": "gascity/claude-1",
+          "gc.convoy": "gc-jsd2",
+          "gc.convoyTitle": "T3 Virtual Convoy Folders",
+        },
+      },
+    ]);
+
+    // Operator stays standalone; worker + untagged go into convoy group
+    expect(result.standaloneThreads).toHaveLength(1);
+    expect(result.standaloneThreads[0]?.customMetadata?.["gc.agent"]).toBe("gascity/convoymaster");
+    expect(result.convoyGroups).toHaveLength(1);
+    expect(result.convoyGroups[0]?.threads).toHaveLength(2);
+  });
+
+  it("surfaces shared workflow metadata on convoy folders", () => {
+    const result = groupThreadsByVirtualConvoy([
+      {
+        customMetadata: {
+          "gc.agent": "gascity/codex-1",
+          "gc.convoy": "gc-formula",
+          "gc.convoyTitle": "Formula convoy",
+          "gc.formula": "mol-do-work",
+          "gc.molecule": "gc-mol-1",
+        },
+      },
+      {
+        customMetadata: {
+          "gc.agent": "gascity/claude-1",
+          "gc.convoy": "gc-formula",
+          "gc.convoyTitle": "Formula convoy",
+          "gc.formula": "mol-do-work",
+          "gc.molecule": "gc-mol-1",
+        },
+      },
+    ]);
+
+    expect(result.convoyGroups[0]).toMatchObject({
+      id: "gc-formula",
+      formula: "mol-do-work",
+      molecule: "gc-mol-1",
     });
   });
 });

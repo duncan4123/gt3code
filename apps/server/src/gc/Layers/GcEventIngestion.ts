@@ -9,7 +9,7 @@
  * @module GcEventIngestionLive
  */
 import { Effect, Layer, Ref, Stream } from "effect";
-import type { OrchestrationCommand } from "@t3tools/contracts";
+import { CommandId, EventId, type OrchestrationCommand } from "@t3tools/contracts";
 
 import { GcApiClient, type GcEvent } from "../Services/GcApiClient.ts";
 import { GcEventIngestion, type GcEventIngestionShape } from "../Services/GcEventIngestion.ts";
@@ -59,13 +59,13 @@ const makeGcEventIngestion = Effect.gen(function* () {
       for (const thread of matchingThreads) {
         const command: OrchestrationCommand = {
           type: "thread.activity.append",
-          commandId: crypto.randomUUID() as OrchestrationCommand["commandId"],
+          commandId: CommandId.makeUnsafe(crypto.randomUUID()),
           threadId: thread.id,
           activity: {
-            id: crypto.randomUUID() as OrchestrationCommand["commandId"],
+            id: EventId.makeUnsafe(crypto.randomUUID()),
             tone: gcEventTone(event.type),
-            kind: `gc.${event.type}` as string & { readonly _brand?: unknown },
-            summary: gcEventSummary(event) as string & { readonly _brand?: unknown },
+            kind: `gc.${event.type}`,
+            summary: gcEventSummary(event),
             payload: {
               seq: event.seq,
               subject: event.subject ?? null,
@@ -75,21 +75,19 @@ const makeGcEventIngestion = Effect.gen(function* () {
             createdAt: event.ts || nowIso,
           },
           createdAt: nowIso,
-        } as OrchestrationCommand;
+        };
 
         yield* engine.dispatch(command).pipe(
           Effect.tapError((error) =>
             Effect.sync(() =>
-              log.warn(
-                `Failed to dispatch gc activity for thread ${thread.id}: ${String(error)}`,
-              ),
+              log.warn(`Failed to dispatch gc activity for thread ${thread.id}: ${String(error)}`),
             ),
           ),
-          Effect.catchAll(() => Effect.void),
+          Effect.catch(() => Effect.void),
         );
       }
     }).pipe(
-      Effect.catchAll((error) =>
+      Effect.catch((error) =>
         Effect.sync(() => log.warn(`GC event ingestion error: ${String(error)}`)),
       ),
     ),
@@ -97,14 +95,11 @@ const makeGcEventIngestion = Effect.gen(function* () {
 
   yield* Ref.set(runningRef, true);
 
-  yield* ingestFiber.pipe(
-    Effect.ensuring(Ref.set(runningRef, false)),
-    Effect.forkScoped,
-  );
+  yield* ingestFiber.pipe(Effect.ensuring(Ref.set(runningRef, false)), Effect.forkScoped);
 
   return {
     isRunning: Ref.get(runningRef),
   } satisfies GcEventIngestionShape;
 });
 
-export const GcEventIngestionLive = Layer.scoped(GcEventIngestion, makeGcEventIngestion);
+export const GcEventIngestionLive = Layer.effect(GcEventIngestion)(makeGcEventIngestion);

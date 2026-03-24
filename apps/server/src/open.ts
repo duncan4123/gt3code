@@ -41,8 +41,20 @@ const LINE_COLUMN_SUFFIX_PATTERN = /:\d+(?::\d+)?$/;
 
 function shouldUseGotoFlag(editorId: EditorId, target: string): boolean {
   return (
-    (editorId === "cursor" || editorId === "vscode") && LINE_COLUMN_SUFFIX_PATTERN.test(target)
+    (editorId === "cursor" || editorId === "vscode" || editorId === "zed") &&
+    LINE_COLUMN_SUFFIX_PATTERN.test(target)
   );
+}
+
+/** Neovim/Neovide use `+line` flag instead of `--goto path:line:col`. */
+function resolveNeovimArgs(target: string): ReadonlyArray<string> {
+  const match = target.match(/:(\d+)(?::(\d+))?$/);
+  if (!match) return [target];
+  const file = target.replace(LINE_COLUMN_SUFFIX_PATTERN, "");
+  const line = match[1];
+  const col = match[2];
+  if (col) return [`+call cursor(${line},${col})`, file];
+  return [`+${line}`, file];
 }
 
 function fileManagerCommandForPlatform(platform: NodeJS.Platform): string {
@@ -213,6 +225,9 @@ export const resolveEditorLaunch = Effect.fnUntraced(function* (
   }
 
   if (editorDef.command) {
+    if (editorDef.id === "neovim" || editorDef.id === "neovide") {
+      return { command: editorDef.command, args: resolveNeovimArgs(input.cwd) };
+    }
     return shouldUseGotoFlag(editorDef.id, input.cwd)
       ? { command: editorDef.command, args: ["--goto", input.cwd] }
       : { command: editorDef.command, args: [input.cwd] };

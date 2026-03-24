@@ -21,6 +21,7 @@ import {
   findSidebarProposedPlan,
   hasActionableProposedPlan,
   hasToolActivityForTurn,
+  inferRigFromBeadId,
   isLatestTurnSettled,
 } from "./session-logic";
 
@@ -1036,11 +1037,27 @@ describe("deriveWorkedBeadHistory", () => {
         beadStatus: "closed",
         formula: "mol-do-work",
         moleculeId: "ga-123.1",
+        rig: "ga",
         createdAt: "2026-02-23T00:00:03.000Z",
         sourceEventId: "gc-bead-closed",
         sourceKind: "gc.bead.closed",
       },
     ]);
+  });
+});
+
+describe("inferRigFromBeadId", () => {
+  it("extracts alphabetic prefix from bead ID", () => {
+    expect(inferRigFromBeadId("t3-abc")).toBe("t3");
+    expect(inferRigFromBeadId("gc-1ig")).toBe("gc");
+    expect(inferRigFromBeadId("bcc-xyz")).toBe("bcc");
+    expect(inferRigFromBeadId("ga-123")).toBe("ga");
+  });
+
+  it("returns undefined for IDs without a valid prefix", () => {
+    expect(inferRigFromBeadId("")).toBeUndefined();
+    expect(inferRigFromBeadId("123")).toBeUndefined();
+    expect(inferRigFromBeadId("-abc")).toBeUndefined();
   });
 });
 

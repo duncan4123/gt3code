@@ -72,7 +72,8 @@ const GC_PRESETS: ActionPreset[] = [
     name: "GC Mail",
     command: "gc mail inbox",
     icon: "configure",
-    description: "List unread messages\nUsage: gc mail inbox\nOther: gc mail check, gc mail send, gc mail read <id>",
+    description:
+      "List unread messages\nUsage: gc mail inbox\nOther: gc mail check, gc mail send, gc mail read <id>",
   },
   {
     name: "GC Hook",
@@ -90,19 +91,22 @@ const GC_PRESETS: ActionPreset[] = [
     name: "GC Sling",
     command: "gc sling ",
     icon: "play",
-    description: "Route work to an agent — edit command to add target\nUsage: gc sling <agent> <bead-or-text>\nExample: gc sling mayor \"fix the login bug\"",
+    description:
+      'Route work to an agent — edit command to add target\nUsage: gc sling <agent> <bead-or-text>\nExample: gc sling mayor "fix the login bug"',
   },
   {
     name: "GC Sessions",
     command: "gc session list",
     icon: "configure",
-    description: "List active agent sessions\nUsage: gc session list\nOther: gc session peek <agent>, gc session logs <agent>",
+    description:
+      "List active agent sessions\nUsage: gc session list\nOther: gc session peek <agent>, gc session logs <agent>",
   },
   {
     name: "GC Convoys",
     command: "gc convoy list",
     icon: "configure",
-    description: "List open convoys with progress\nUsage: gc convoy list\nOther: gc convoy status <id>, gc convoy create",
+    description:
+      "List open convoys with progress\nUsage: gc convoy list\nOther: gc convoy status <id>, gc convoy create",
   },
   {
     name: "GC Convoy Check",
@@ -120,19 +124,22 @@ const GC_PRESETS: ActionPreset[] = [
     name: "GC Events",
     command: "gc events --since 1h",
     icon: "play",
-    description: "Show recent city event log\nUsage: gc events [--since 1h] [--type bead.created] [--follow]",
+    description:
+      "Show recent city event log\nUsage: gc events [--since 1h] [--type bead.created] [--follow]",
   },
   {
     name: "GC Formulas",
     command: "gc formula list",
     icon: "configure",
-    description: "List available formulas\nUsage: gc formula list\nOther: gc formula show <name>, gc formula cook <name>",
+    description:
+      "List available formulas\nUsage: gc formula list\nOther: gc formula show <name>, gc formula cook <name>",
   },
   {
     name: "GC Converge",
     command: "gc converge list",
     icon: "configure",
-    description: "List active convergence loops\nUsage: gc converge list [--state active]\nOther: gc converge status <id>, gc converge stop <id>",
+    description:
+      "List active convergence loops\nUsage: gc converge list [--state active]\nOther: gc converge status <id>, gc converge stop <id>",
   },
 ];
 
@@ -192,7 +199,8 @@ const BD_PRESETS: ActionPreset[] = [
     name: "BD Status",
     command: "bd status",
     icon: "configure",
-    description: "Issue database overview & statistics\nUsage: bd status [--assigned] [--no-activity]",
+    description:
+      "Issue database overview & statistics\nUsage: bd status [--assigned] [--no-activity]",
   },
   {
     name: "BD Ready",
@@ -222,13 +230,15 @@ const BD_PRESETS: ActionPreset[] = [
     name: "BD List",
     command: "bd list ",
     icon: "play",
-    description: "List issues — edit command to filter\nUsage: bd list [--type <type>] [--assigned] [--state open|closed]\nExample: bd list --assigned --state open",
+    description:
+      "List issues — edit command to filter\nUsage: bd list [--type <type>] [--assigned] [--state open|closed]\nExample: bd list --assigned --state open",
   },
   {
     name: "BD Graph",
     command: "bd graph ",
     icon: "configure",
-    description: "Show dependency graph for an issue — edit command to add ID\nUsage: bd graph <issue-id>",
+    description:
+      "Show dependency graph for an issue — edit command to add ID\nUsage: bd graph <issue-id>",
   },
   {
     name: "BD Orphans",

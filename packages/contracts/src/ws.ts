@@ -144,10 +144,7 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(WS_METHODS.serverUpsertKeybinding, KeybindingRule),
 
   // Gas City integration
-  tagRequestBody(
-    WS_METHODS.gcGetThreadContext,
-    Schema.Struct({ threadId: Schema.String }),
-  ),
+  tagRequestBody(WS_METHODS.gcGetThreadContext, Schema.Struct({ threadId: Schema.String })),
 ]);
 
 export const WebSocketRequest = Schema.Struct({

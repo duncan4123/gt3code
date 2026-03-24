@@ -70,7 +70,7 @@ import {
   isLatestTurnSettled,
   formatElapsed,
 } from "../session-logic";
-import { isScrollContainerNearBottom } from "../chat-scroll";
+import { isScrollContainerNearBottom, scrollSentMessageIntoView } from "../chat-scroll";
 import {
   buildPendingUserInputAnswers,
   derivePendingUserInputProgress,
@@ -239,9 +239,10 @@ const terminalContextIdListsEqual = (
 
 interface ChatViewProps {
   threadId: ThreadId;
+  renderGcSidebar?: boolean;
 }
 
-export default function ChatView({ threadId }: ChatViewProps) {
+export default function ChatView({ threadId, renderGcSidebar = true }: ChatViewProps) {
   const threads = useStore((store) => store.threads);
   const projects = useStore((store) => store.projects);
   const markThreadVisited = useStore((store) => store.markThreadVisited);
@@ -377,6 +378,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     top: number;
   } | null>(null);
   const pendingInteractionAnchorFrameRef = useRef<number | null>(null);
+  const pendingSentMessageIdRef = useRef<string | null>(null);
   const composerEditorRef = useRef<ComposerPromptEditorHandle>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
   const composerFormHeightRef = useRef(0);
@@ -481,7 +483,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const isServerThread = serverThread !== undefined;
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
-  const diffOpen = rawSearch.diff === "1";
+  const diffOpen = rawSearch.panel === "diff" || rawSearch.diff === "1";
+  const gcOpen = rawSearch.panel === "gc";
   const activeThreadId = activeThread?.id ?? null;
   const activeThreadGcMetadata = getGcMetadata(activeThread?.customMetadata);
   const activeLatestTurn = activeThread?.latestTurn ?? null;
@@ -597,7 +600,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const lockedProvider: ProviderKind | null = hasThreadStarted
     ? (sessionProvider ?? selectedProviderByThreadId ?? null)
     : null;
-  const selectedProvider: ProviderKind = lockedProvider ?? selectedProviderByThreadId ?? DEFAULT_PROVIDER_KIND;
+  const selectedProvider: ProviderKind =
+    lockedProvider ?? selectedProviderByThreadId ?? DEFAULT_PROVIDER_KIND;
   const baseThreadModel = resolveModelSlugForProvider(
     selectedProvider,
     activeThread?.model ?? activeProject?.model ?? getDefaultModel(selectedProvider),
@@ -722,11 +726,21 @@ export default function ChatView({ threadId }: ChatViewProps) {
     () => deriveWorkLogEntries(threadActivities, activeLatestTurn?.turnId ?? undefined),
     [activeLatestTurn?.turnId, threadActivities],
   );
-  const gcTimelineEvents = useMemo(() => deriveGcTimelineEvents(threadActivities), [threadActivities]);
+  const gcTimelineEvents = useMemo(
+    () => deriveGcTimelineEvents(threadActivities),
+    [threadActivities],
+  );
   const workedBeadHistory = useMemo(
     () => deriveWorkedBeadHistory(gcTimelineEvents),
     [gcTimelineEvents],
   );
+  const handleSelectWorkedBead = useCallback((sourceEventId: string) => {
+    const target = document.querySelector<HTMLElement>(`[data-gc-event-id="${sourceEventId}"]`);
+    if (!target) {
+      return;
+    }
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
   const latestTurnHasToolActivity = useMemo(
     () => hasToolActivityForTurn(threadActivities, activeLatestTurn?.turnId),
     [activeLatestTurn?.turnId, threadActivities],
@@ -1206,10 +1220,21 @@ export default function ChatView({ threadId }: ChatViewProps) {
       replace: true,
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
-        return diffOpen ? { ...rest, diff: undefined } : { ...rest, diff: "1" };
+        return diffOpen ? rest : { ...rest, panel: "diff", diff: "1" };
       },
     });
   }, [diffOpen, navigate, threadId]);
+  const onToggleGc = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      replace: true,
+      search: (previous) => {
+        const rest = stripDiffSearchParams(previous);
+        return gcOpen ? rest : { ...rest, panel: "gc" };
+      },
+    });
+  }, [gcOpen, navigate, threadId]);
 
   const envLocked = Boolean(
     activeThread &&
@@ -1890,6 +1915,18 @@ export default function ChatView({ threadId }: ChatViewProps) {
     if (!shouldAutoScrollRef.current) return;
     scheduleStickToBottom();
   }, [phase, scheduleStickToBottom, timelineEntries]);
+  useLayoutEffect(() => {
+    const pendingMessageId = pendingSentMessageIdRef.current;
+    if (!pendingMessageId) return;
+    const handled = scrollSentMessageIntoView({
+      container: messagesScrollRef.current,
+      messageId: pendingMessageId,
+      scrollToBottom: scrollMessagesToBottom,
+    });
+    if (handled) {
+      pendingSentMessageIdRef.current = null;
+    }
+  }, [scrollMessagesToBottom, timelineEntries]);
 
   useEffect(() => {
     setExpandedWorkGroups({});
@@ -2529,6 +2566,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         streaming: false,
       },
     ]);
+    pendingSentMessageIdRef.current = messageIdForSend;
     // Sending a message should always bring the latest user turn into view.
     shouldAutoScrollRef.current = true;
     forceStickToBottom();
@@ -2713,6 +2751,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
           const next = existing.filter((message) => message.id !== messageIdForSend);
           return next.length === existing.length ? existing : next;
         });
+        if (pendingSentMessageIdRef.current === messageIdForSend) {
+          pendingSentMessageIdRef.current = null;
+        }
         promptRef.current = promptForSend;
         setPrompt(promptForSend);
         setComposerCursor(collapseExpandedComposerCursor(promptForSend, promptForSend.length));
@@ -2936,6 +2977,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           streaming: false,
         },
       ]);
+      pendingSentMessageIdRef.current = messageIdForSend;
       shouldAutoScrollRef.current = true;
       forceStickToBottom();
 
@@ -2993,6 +3035,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
         setOptimisticUserMessages((existing) =>
           existing.filter((message) => message.id !== messageIdForSend),
         );
+        if (pendingSentMessageIdRef.current === messageIdForSend) {
+          pendingSentMessageIdRef.current = null;
+        }
         setThreadError(
           threadIdForSend,
           err instanceof Error ? err.message : "Failed to send plan follow-up.",
@@ -3533,6 +3578,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
           diffOpen={diffOpen}
+          gcOpen={gcOpen}
           onRunProjectScript={(script) => {
             void runProjectScript(script);
           }}
@@ -3540,6 +3586,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           onUpdateProjectScript={updateProjectScript}
           onDeleteProjectScript={deleteProjectScript}
           onToggleDiff={onToggleDiff}
+          onToggleGc={onToggleGc}
         />
       </header>
 
@@ -4152,9 +4199,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
         {/* end chat column */}
 
         {/* GC context sidebar */}
-        {activeThreadGcMetadata.isGcManaged && activeThread.customMetadata ? (
+        {renderGcSidebar && activeThreadGcMetadata.isGcManaged && activeThread.customMetadata ? (
           <GcContextSidebar
             metadata={activeThread.customMetadata}
+            onSelectWorkedBead={handleSelectWorkedBead}
             workedBeads={workedBeadHistory}
           />
         ) : null}

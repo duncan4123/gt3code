@@ -59,6 +59,7 @@ const GcPanel = memo(function GcPanel({ threadId }: GcPanelProps) {
       workedBeads={workedBeads}
       onSelectWorkedBead={handleSelectWorkedBead}
       threadContext={threadContext}
+      gcEvents={gcTimelineEvents}
     />
   );
 });

@@ -17,8 +17,12 @@ export interface GcBead {
   readonly status: string;
   readonly priority: number;
   readonly issueType: string;
+  readonly type?: string;
   readonly assignee?: string;
+  readonly parentId?: string;
+  readonly ref?: string;
   readonly labels?: ReadonlyArray<string>;
+  readonly metadata?: Record<string, string>;
   readonly ephemeral?: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
