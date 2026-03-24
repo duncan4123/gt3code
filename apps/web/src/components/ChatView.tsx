@@ -662,7 +662,7 @@ export default function ChatView({ threadId, renderGcSidebar = true }: ChatViewP
   const phase = derivePhase(activeThread?.session ?? null);
   const isSendBusy = sendPhase !== "idle";
   const isPreparingWorktree = sendPhase === "preparing-worktree";
-  const isWorking = phase === "running" || isSendBusy || isConnecting || isRevertingCheckpoint;
+  // isWorking is computed below, after pendingUserInputs is available.
   const nowIso = new Date(nowTick).toISOString();
   const activeWorkStartedAt = deriveActiveWorkStartedAt(
     activeLatestTurn,
@@ -701,6 +701,13 @@ export default function ChatView({ threadId, renderGcSidebar = true }: ChatViewP
     () => derivePendingUserInputs(threadActivities),
     [threadActivities],
   );
+  // phase === "running" alone isn't sufficient: the session can stay "running" even after
+  // the latest turn has completed (server lifecycle guard can reject status updates while
+  // completedAt is set through a separate path) or while waiting for user input.
+  // Use completedAt on the latest turn as the reliable completion signal.
+  const turnDone = !!activeLatestTurn?.completedAt;
+  const isActivelyRunning = phase === "running" && pendingUserInputs.length === 0 && !turnDone;
+  const isWorking = isActivelyRunning || isSendBusy || isConnecting || isRevertingCheckpoint;
   const activePendingUserInput = pendingUserInputs[0] ?? null;
   const activePendingDraftAnswers = useMemo(
     () =>
@@ -3994,7 +4001,7 @@ export default function ChatView({ threadId, renderGcSidebar = true }: ChatViewP
                                   : "Next question"}
                             </Button>
                           </div>
-                        ) : phase === "running" ? (
+                        ) : isActivelyRunning ? (
                           <button
                             type="button"
                             className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-rose-500/90 text-white transition-all duration-150 hover:bg-rose-500 hover:scale-105 sm:h-8 sm:w-8"

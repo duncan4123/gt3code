@@ -326,7 +326,11 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (thread.session?.status === "running") {
+  // Use completedAt as the reliable completion signal — activeTurnId can be permanently
+  // stale when the server lifecycle guard rejects status updates.
+  const sidebarTurnDone = !!thread.latestTurn?.completedAt;
+
+  if (thread.session?.status === "running" && !sidebarTurnDone) {
     return {
       label: "Working",
       colorClass: "text-sky-600 dark:text-sky-300/80",
