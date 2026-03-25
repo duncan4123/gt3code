@@ -29,6 +29,7 @@ import {
   type ProviderRuntimeTurnStatus,
   type ProviderSendTurnInput,
   type ProviderSession,
+  type ThreadTokenUsageSnapshot,
   type ProviderUserInputAnswers,
   type RuntimeContentStreamKind,
   RuntimeItemId,
@@ -160,6 +161,7 @@ interface ClaudeSessionContext {
   }>;
   readonly inFlightTools: Map<number, ToolInFlight>;
   turnState: ClaudeTurnState | undefined;
+  lastKnownContextWindow: number | undefined;
   lastAssistantUuid: string | undefined;
   lastThreadStartedId: string | undefined;
   stopped: boolean;
@@ -261,6 +263,82 @@ function isInterruptedResult(result: SDKResultMessage): boolean {
 
 function asRuntimeItemId(value: string): RuntimeItemId {
   return RuntimeItemId.makeUnsafe(value);
+}
+
+function maxClaudeContextWindowFromModelUsage(modelUsage: unknown): number | undefined {
+  if (!modelUsage || typeof modelUsage !== "object") {
+    return undefined;
+  }
+
+  let maxContextWindow: number | undefined;
+  for (const value of Object.values(modelUsage as Record<string, unknown>)) {
+    if (!value || typeof value !== "object") {
+      continue;
+    }
+    const contextWindow = (value as { contextWindow?: unknown }).contextWindow;
+    if (
+      typeof contextWindow !== "number" ||
+      !Number.isFinite(contextWindow) ||
+      contextWindow <= 0
+    ) {
+      continue;
+    }
+    maxContextWindow = Math.max(maxContextWindow ?? 0, contextWindow);
+  }
+
+  return maxContextWindow;
+}
+
+function normalizeClaudeTokenUsage(
+  usage: unknown,
+  contextWindow?: number,
+): ThreadTokenUsageSnapshot | undefined {
+  if (!usage || typeof usage !== "object") {
+    return undefined;
+  }
+
+  const record = usage as Record<string, unknown>;
+  const directUsedTokens =
+    typeof record.total_tokens === "number" && Number.isFinite(record.total_tokens)
+      ? record.total_tokens
+      : undefined;
+  const inputTokens =
+    (typeof record.input_tokens === "number" && Number.isFinite(record.input_tokens)
+      ? record.input_tokens
+      : 0) +
+    (typeof record.cache_creation_input_tokens === "number" &&
+    Number.isFinite(record.cache_creation_input_tokens)
+      ? record.cache_creation_input_tokens
+      : 0) +
+    (typeof record.cache_read_input_tokens === "number" &&
+    Number.isFinite(record.cache_read_input_tokens)
+      ? record.cache_read_input_tokens
+      : 0);
+  const outputTokens =
+    typeof record.output_tokens === "number" && Number.isFinite(record.output_tokens)
+      ? record.output_tokens
+      : 0;
+  const derivedUsedTokens = inputTokens + outputTokens;
+  const usedTokens = directUsedTokens ?? (derivedUsedTokens > 0 ? derivedUsedTokens : undefined);
+  if (usedTokens === undefined || usedTokens <= 0) {
+    return undefined;
+  }
+
+  return {
+    usedTokens,
+    lastUsedTokens: usedTokens,
+    ...(inputTokens > 0 ? { inputTokens } : {}),
+    ...(outputTokens > 0 ? { outputTokens } : {}),
+    ...(typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0
+      ? { maxTokens: contextWindow }
+      : {}),
+    ...(typeof record.tool_uses === "number" && Number.isFinite(record.tool_uses)
+      ? { toolUses: record.tool_uses }
+      : {}),
+    ...(typeof record.duration_ms === "number" && Number.isFinite(record.duration_ms)
+      ? { durationMs: record.duration_ms }
+      : {}),
+  };
 }
 
 function asCanonicalTurnId(value: TurnId): TurnId {
@@ -1291,8 +1369,34 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
       result?: SDKResultMessage,
     ): Effect.Effect<void> =>
       Effect.gen(function* () {
+        const resultUsage =
+          result?.usage && typeof result.usage === "object" ? { ...result.usage } : undefined;
+        const resultContextWindow = maxClaudeContextWindowFromModelUsage(result?.modelUsage);
+        const usageSnapshot = normalizeClaudeTokenUsage(
+          resultUsage,
+          resultContextWindow ?? context.lastKnownContextWindow,
+        );
+        if (resultContextWindow !== undefined) {
+          context.lastKnownContextWindow = resultContextWindow;
+        }
+
         const turnState = context.turnState;
         if (!turnState) {
+          if (usageSnapshot) {
+            const usageStamp = yield* makeEventStamp();
+            yield* offerRuntimeEvent({
+              type: "thread.token-usage.updated",
+              eventId: usageStamp.eventId,
+              provider: PROVIDER,
+              createdAt: usageStamp.createdAt,
+              threadId: context.session.threadId,
+              payload: {
+                usage: usageSnapshot,
+              },
+              providerRefs: {},
+            });
+          }
+
           const stamp = yield* makeEventStamp();
           yield* offerRuntimeEvent({
             type: "turn.completed",
@@ -1359,6 +1463,22 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           id: turnState.turnId,
           items: [...turnState.items],
         });
+
+        if (usageSnapshot) {
+          const usageStamp = yield* makeEventStamp();
+          yield* offerRuntimeEvent({
+            type: "thread.token-usage.updated",
+            eventId: usageStamp.eventId,
+            provider: PROVIDER,
+            createdAt: usageStamp.createdAt,
+            threadId: context.session.threadId,
+            turnId: turnState.turnId,
+            payload: {
+              usage: usageSnapshot,
+            },
+            providerRefs: nativeProviderRefs(context),
+          });
+        }
 
         const stamp = yield* makeEventStamp();
         yield* offerRuntimeEvent({
@@ -1929,6 +2049,24 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             });
             return;
           case "task_progress":
+            if (message.usage) {
+              const normalizedUsage = normalizeClaudeTokenUsage(
+                message.usage,
+                context.lastKnownContextWindow,
+              );
+              if (normalizedUsage) {
+                const usageStamp = yield* makeEventStamp();
+                yield* offerRuntimeEvent({
+                  ...base,
+                  eventId: usageStamp.eventId,
+                  createdAt: usageStamp.createdAt,
+                  type: "thread.token-usage.updated",
+                  payload: {
+                    usage: normalizedUsage,
+                  },
+                });
+              }
+            }
             yield* offerRuntimeEvent({
               ...base,
               type: "task.progress",
@@ -1942,6 +2080,24 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             });
             return;
           case "task_notification":
+            if (message.usage) {
+              const normalizedUsage = normalizeClaudeTokenUsage(
+                message.usage,
+                context.lastKnownContextWindow,
+              );
+              if (normalizedUsage) {
+                const usageStamp = yield* makeEventStamp();
+                yield* offerRuntimeEvent({
+                  ...base,
+                  eventId: usageStamp.eventId,
+                  createdAt: usageStamp.createdAt,
+                  type: "thread.token-usage.updated",
+                  payload: {
+                    usage: normalizedUsage,
+                  },
+                });
+              }
+            }
             yield* offerRuntimeEvent({
               ...base,
               type: "task.completed",
@@ -2262,6 +2418,9 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
         const rawPromptIterable = Stream.fromQueue(promptQueue).pipe(
           Stream.filter((item) => item.type === "message"),
           Stream.map((item) => item.message),
+          Stream.catchCause((cause) =>
+            Cause.hasInterruptsOnly(cause) ? Stream.empty : Stream.failCause(cause),
+          ),
           Stream.toAsyncIterable,
         );
         // Wrap the prompt async iterable to catch Effect fiber interruption errors.
@@ -2679,6 +2838,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
           turns: [],
           inFlightTools,
           turnState: undefined,
+          lastKnownContextWindow: undefined,
           lastAssistantUuid: resumeState?.resumeSessionAt,
           lastThreadStartedId: undefined,
           stopped: false,

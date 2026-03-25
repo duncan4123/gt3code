@@ -1,5 +1,6 @@
 import {
   ArrowLeftIcon,
+  ArrowUpDownIcon,
   CheckIcon,
   ChevronRightIcon,
   CopyIcon,
@@ -12,6 +13,7 @@ import {
   TerminalIcon,
   TriangleAlertIcon,
 } from "lucide-react";
+import { autoAnimate } from "@formkit/auto-animate";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import {
   DndContext,
@@ -38,7 +40,11 @@ import {
 } from "@t3tools/contracts";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
-import { useAppSettings } from "../appSettings";
+import {
+  type SidebarProjectSortOrder,
+  type SidebarThreadSortOrder,
+  useAppSettings,
+} from "../appSettings";
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { isLinuxPlatform, isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
@@ -66,6 +72,7 @@ import {
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { Menu, MenuGroup, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import {
   SidebarContent,
@@ -86,6 +93,7 @@ import { useThreadSelectionStore } from "../threadSelectionStore";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../worktreeCleanup";
 import { isNonEmpty as isNonEmptyString } from "effect/String";
 import {
+  getVisibleThreadsForProject,
   resolveProjectStatusIndicator,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
@@ -95,11 +103,27 @@ import {
   countGcAgents,
   groupThreadsByVirtualConvoy,
   isThreadArchived,
+  sortProjectsForSidebar,
+  sortThreadsForSidebar,
 } from "./Sidebar.logic";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const THREAD_PREVIEW_LIMIT = 6;
+const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
+  updated_at: "Last user message",
+  created_at: "Created at",
+  manual: "Manual",
+};
+const SIDEBAR_THREAD_SORT_LABELS: Record<SidebarThreadSortOrder, string> = {
+  updated_at: "Last user message",
+  created_at: "Created at",
+};
+const SIDEBAR_LIST_ANIMATION_OPTIONS = {
+  duration: 180,
+  easing: "ease-out",
+} as const;
+const loadedProjectFaviconSrcs = new Set<string>();
 
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -210,9 +234,10 @@ function getServerHttpOrigin(): string {
 const serverHttpOrigin = getServerHttpOrigin();
 
 function ProjectFavicon({ cwd }: { cwd: string }) {
-  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
-
   const src = `${serverHttpOrigin}/api/project-favicon?cwd=${encodeURIComponent(cwd)}`;
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">(() =>
+    loadedProjectFaviconSrcs.has(src) ? "loaded" : "loading",
+  );
 
   if (status === "error") {
     return <FolderIcon className="size-3.5 shrink-0 text-muted-foreground/50" />;
@@ -223,23 +248,106 @@ function ProjectFavicon({ cwd }: { cwd: string }) {
       src={src}
       alt=""
       className={`size-3.5 shrink-0 rounded-sm object-contain ${status === "loading" ? "hidden" : ""}`}
-      onLoad={() => setStatus("loaded")}
+      onLoad={() => {
+        loadedProjectFaviconSrcs.add(src);
+        setStatus("loaded");
+      }}
       onError={() => setStatus("error")}
     />
   );
 }
 
-type SortableProjectHandleProps = Pick<ReturnType<typeof useSortable>, "attributes" | "listeners">;
+type SortableProjectHandleProps = Pick<
+  ReturnType<typeof useSortable>,
+  "attributes" | "listeners" | "setActivatorNodeRef"
+>;
+
+function ProjectSortMenu({
+  projectSortOrder,
+  threadSortOrder,
+  onProjectSortOrderChange,
+  onThreadSortOrderChange,
+}: {
+  projectSortOrder: SidebarProjectSortOrder;
+  threadSortOrder: SidebarThreadSortOrder;
+  onProjectSortOrderChange: (sortOrder: SidebarProjectSortOrder) => void;
+  onThreadSortOrderChange: (sortOrder: SidebarThreadSortOrder) => void;
+}) {
+  return (
+    <Menu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <MenuTrigger className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground" />
+          }
+        >
+          <ArrowUpDownIcon className="size-3.5" />
+        </TooltipTrigger>
+        <TooltipPopup side="right">Sort projects</TooltipPopup>
+      </Tooltip>
+      <MenuPopup align="end" side="bottom" className="min-w-44">
+        <MenuGroup>
+          <div className="px-2 py-1 sm:text-xs font-medium text-muted-foreground">
+            Sort projects
+          </div>
+          <MenuRadioGroup
+            value={projectSortOrder}
+            onValueChange={(value) => {
+              onProjectSortOrderChange(value as SidebarProjectSortOrder);
+            }}
+          >
+            {(Object.entries(SIDEBAR_SORT_LABELS) as Array<[SidebarProjectSortOrder, string]>).map(
+              ([value, label]) => (
+                <MenuRadioItem key={value} value={value} className="min-h-7 py-1 sm:text-xs">
+                  {label}
+                </MenuRadioItem>
+              ),
+            )}
+          </MenuRadioGroup>
+        </MenuGroup>
+        <MenuGroup>
+          <div className="px-2 pt-2 pb-1 sm:text-xs font-medium text-muted-foreground">
+            Sort threads
+          </div>
+          <MenuRadioGroup
+            value={threadSortOrder}
+            onValueChange={(value) => {
+              onThreadSortOrderChange(value as SidebarThreadSortOrder);
+            }}
+          >
+            {(
+              Object.entries(SIDEBAR_THREAD_SORT_LABELS) as Array<[SidebarThreadSortOrder, string]>
+            ).map(([value, label]) => (
+              <MenuRadioItem key={value} value={value} className="min-h-7 py-1 sm:text-xs">
+                {label}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuGroup>
+      </MenuPopup>
+    </Menu>
+  );
+}
 
 function SortableProjectItem({
   projectId,
+  disabled = false,
   children,
 }: {
   projectId: ProjectId;
+  disabled?: boolean;
   children: (handleProps: SortableProjectHandleProps) => React.ReactNode;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } =
-    useSortable({ id: projectId });
+  const {
+    attributes,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver,
+  } = useSortable({ id: projectId, disabled });
   return (
     <li
       ref={setNodeRef}
@@ -253,7 +361,7 @@ function SortableProjectItem({
       data-sidebar="menu-item"
       data-slot="sidebar-menu-item"
     >
-      {children({ attributes, listeners })}
+      {children({ attributes, listeners, setActivatorNodeRef })}
     </li>
   );
 }
@@ -278,7 +386,7 @@ export default function Sidebar() {
   );
   const navigate = useNavigate();
   const isOnSettings = useLocation({ select: (loc) => loc.pathname === "/settings" });
-  const { settings: appSettings } = useAppSettings();
+  const { settings: appSettings, updateSettings } = useAppSettings();
   const { handleNewThread } = useHandleNewThread();
   const routeThreadId = useParams({
     strict: false,
@@ -391,13 +499,10 @@ export default function Sidebar() {
 
   const focusMostRecentThreadForProject = useCallback(
     (projectId: ProjectId) => {
-      const latestThread = threads
-        .filter((thread) => thread.projectId === projectId)
-        .toSorted((a, b) => {
-          const byDate = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-          if (byDate !== 0) return byDate;
-          return b.id.localeCompare(a.id);
-        })[0];
+      const latestThread = sortThreadsForSidebar(
+        threads.filter((thread) => thread.projectId === projectId),
+        appSettings.sidebarThreadSortOrder,
+      )[0];
       if (!latestThread) return;
 
       void navigate({
@@ -405,7 +510,7 @@ export default function Sidebar() {
         params: { threadId: latestThread.id },
       });
     },
-    [navigate, threads],
+    [appSettings.sidebarThreadSortOrder, navigate, threads],
   );
 
   const addProjectFromPath = useCallback(
@@ -954,6 +1059,10 @@ export default function Sidebar() {
 
   const handleProjectDragEnd = useCallback(
     (event: DragEndEvent) => {
+      if (appSettings.sidebarProjectSortOrder !== "manual") {
+        dragInProgressRef.current = false;
+        return;
+      }
       dragInProgressRef.current = false;
       const { active, over } = event;
       if (!over || active.id === over.id) return;
@@ -962,21 +1071,360 @@ export default function Sidebar() {
       if (!activeProject || !overProject) return;
       reorderProjects(activeProject.id, overProject.id);
     },
-    [projects, reorderProjects],
+    [appSettings.sidebarProjectSortOrder, projects, reorderProjects],
   );
 
-  const handleProjectDragStart = useCallback((_event: DragStartEvent) => {
-    dragInProgressRef.current = true;
-    suppressProjectClickAfterDragRef.current = true;
-  }, []);
+  const handleProjectDragStart = useCallback(
+    (_event: DragStartEvent) => {
+      if (appSettings.sidebarProjectSortOrder !== "manual") {
+        return;
+      }
+      dragInProgressRef.current = true;
+      suppressProjectClickAfterDragRef.current = true;
+    },
+    [appSettings.sidebarProjectSortOrder],
+  );
 
   const handleProjectDragCancel = useCallback((_event: DragCancelEvent) => {
     dragInProgressRef.current = false;
   }, []);
 
+  const animatedProjectListsRef = useRef(new WeakSet<HTMLElement>());
+  const attachProjectListAutoAnimateRef = useCallback((node: HTMLElement | null) => {
+    if (!node || animatedProjectListsRef.current.has(node)) {
+      return;
+    }
+    autoAnimate(node, SIDEBAR_LIST_ANIMATION_OPTIONS);
+    animatedProjectListsRef.current.add(node);
+  }, []);
+
+  const animatedThreadListsRef = useRef(new WeakSet<HTMLElement>());
+  const attachThreadListAutoAnimateRef = useCallback((node: HTMLElement | null) => {
+    if (!node || animatedThreadListsRef.current.has(node)) {
+      return;
+    }
+    autoAnimate(node, SIDEBAR_LIST_ANIMATION_OPTIONS);
+    animatedThreadListsRef.current.add(node);
+  }, []);
+
   const handleProjectTitlePointerDownCapture = useCallback(() => {
     suppressProjectClickAfterDragRef.current = false;
   }, []);
+
+  const sortedProjects = useMemo(
+    () => sortProjectsForSidebar(projects, threads, appSettings.sidebarProjectSortOrder),
+    [appSettings.sidebarProjectSortOrder, projects, threads],
+  );
+  const isManualProjectSorting = appSettings.sidebarProjectSortOrder === "manual";
+
+  function renderProjectItem(
+    project: (typeof sortedProjects)[number],
+    dragHandleProps: SortableProjectHandleProps | null,
+  ) {
+    const projectThreads = sortThreadsForSidebar(
+      threads.filter((thread) => thread.projectId === project.id),
+      appSettings.sidebarThreadSortOrder,
+    );
+    const projectStatus = resolveProjectStatusIndicator(
+      projectThreads.map((thread) =>
+        resolveThreadStatusPill({
+          thread,
+          hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
+          hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
+        }),
+      ),
+    );
+    const activeThreadId = routeThreadId ?? undefined;
+    const isThreadListExpanded = expandedThreadListsByProject.has(project.id);
+    const pinnedCollapsedThread =
+      !project.expanded && activeThreadId
+        ? (projectThreads.find((thread) => thread.id === activeThreadId) ?? null)
+        : null;
+    const shouldShowThreadPanel = project.expanded || pinnedCollapsedThread !== null;
+    const { hasHiddenThreads, visibleThreads } = getVisibleThreadsForProject({
+      threads: projectThreads,
+      activeThreadId,
+      isThreadListExpanded,
+      previewLimit: THREAD_PREVIEW_LIMIT,
+    });
+    const orderedProjectThreadIds = projectThreads.map((thread) => thread.id);
+    const renderedThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : visibleThreads;
+    const renderThreadRow = (thread: (typeof projectThreads)[number]) => {
+      const isActive = routeThreadId === thread.id;
+      const isSelected = selectedThreadIds.has(thread.id);
+      const isHighlighted = isActive || isSelected;
+      const threadStatus = resolveThreadStatusPill({
+        thread,
+        hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
+        hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
+      });
+      const prStatus = prStatusIndicator(prByThreadId.get(thread.id) ?? null);
+      const terminalStatus = terminalStatusFromRunningIds(
+        selectThreadTerminalState(terminalStateByThreadId, thread.id).runningTerminalIds,
+      );
+
+      return (
+        <SidebarMenuSubItem key={thread.id} className="w-full" data-thread-item>
+          <SidebarMenuSubButton
+            render={<div role="button" tabIndex={0} />}
+            size="sm"
+            isActive={isActive}
+            className={resolveThreadRowClassName({
+              isActive,
+              isSelected,
+            })}
+            onClick={(event) => {
+              handleThreadClick(event, thread.id, orderedProjectThreadIds);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              if (selectedThreadIds.size > 0) {
+                clearSelection();
+              }
+              setSelectionAnchor(thread.id);
+              void navigate({
+                to: "/$threadId",
+                params: { threadId: thread.id },
+              });
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              if (selectedThreadIds.size > 0 && selectedThreadIds.has(thread.id)) {
+                void handleMultiSelectContextMenu({
+                  x: event.clientX,
+                  y: event.clientY,
+                });
+              } else {
+                if (selectedThreadIds.size > 0) {
+                  clearSelection();
+                }
+                void handleThreadContextMenu(thread.id, {
+                  x: event.clientX,
+                  y: event.clientY,
+                });
+              }
+            }}
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
+              {prStatus && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label={prStatus.tooltip}
+                        className={`inline-flex items-center justify-center ${prStatus.colorClass} cursor-pointer rounded-sm outline-hidden focus-visible:ring-1 focus-visible:ring-ring`}
+                        onClick={(event) => {
+                          openPrLink(event, prStatus.url);
+                        }}
+                      >
+                        <GitPullRequestIcon className="size-3" />
+                      </button>
+                    }
+                  />
+                  <TooltipPopup side="top">{prStatus.tooltip}</TooltipPopup>
+                </Tooltip>
+              )}
+              {threadStatus && (
+                <span
+                  className={`inline-flex items-center gap-1 text-[10px] ${threadStatus.colorClass}`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${threadStatus.dotClass} ${
+                      threadStatus.pulse ? "animate-pulse" : ""
+                    }`}
+                  />
+                  <span className="hidden md:inline">{threadStatus.label}</span>
+                </span>
+              )}
+              {renamingThreadId === thread.id ? (
+                <input
+                  ref={(el) => {
+                    if (el && renamingInputRef.current !== el) {
+                      renamingInputRef.current = el;
+                      el.focus();
+                      el.select();
+                    }
+                  }}
+                  className="min-w-0 flex-1 truncate text-xs bg-transparent outline-none border border-ring rounded px-0.5"
+                  value={renamingTitle}
+                  onChange={(e) => setRenamingTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      renamingCommittedRef.current = true;
+                      void commitRename(thread.id, renamingTitle, thread.title);
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      renamingCommittedRef.current = true;
+                      cancelRename();
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!renamingCommittedRef.current) {
+                      void commitRename(thread.id, renamingTitle, thread.title);
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-xs">{thread.title}</span>
+              )}
+            </div>
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              {terminalStatus && (
+                <span
+                  role="img"
+                  aria-label={terminalStatus.label}
+                  title={terminalStatus.label}
+                  className={`inline-flex items-center justify-center ${terminalStatus.colorClass}`}
+                >
+                  <TerminalIcon
+                    className={`size-3 ${terminalStatus.pulse ? "animate-pulse" : ""}`}
+                  />
+                </span>
+              )}
+              <span
+                className={`text-[10px] ${
+                  isHighlighted
+                    ? "text-foreground/72 dark:text-foreground/82"
+                    : "text-muted-foreground/40"
+                }`}
+              >
+                {formatRelativeTime(thread.updatedAt ?? thread.createdAt)}
+              </span>
+            </div>
+          </SidebarMenuSubButton>
+        </SidebarMenuSubItem>
+      );
+    };
+
+    return (
+      <Collapsible className="group/collapsible" open={shouldShowThreadPanel}>
+        <div className="group/project-header relative">
+          <SidebarMenuButton
+            ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
+            size="sm"
+            className={`gap-2 px-2 py-1.5 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground ${
+              isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+            }`}
+            {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.attributes : {})}
+            {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.listeners : {})}
+            onPointerDownCapture={handleProjectTitlePointerDownCapture}
+            onClick={(event) => handleProjectTitleClick(event, project.id)}
+            onKeyDown={(event) => handleProjectTitleKeyDown(event, project.id)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              void handleProjectContextMenu(project.id, {
+                x: event.clientX,
+                y: event.clientY,
+              });
+            }}
+          >
+            {!project.expanded && projectStatus ? (
+              <span
+                aria-hidden="true"
+                title={projectStatus.label}
+                className={`-ml-0.5 relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
+              >
+                <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
+                  <span
+                    className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
+                      projectStatus.pulse ? "animate-pulse" : ""
+                    }`}
+                  />
+                </span>
+                <ChevronRightIcon className="absolute inset-0 m-auto size-3.5 text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100" />
+              </span>
+            ) : (
+              <ChevronRightIcon
+                className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
+                  project.expanded ? "rotate-90" : ""
+                }`}
+              />
+            )}
+            <ProjectFavicon cwd={project.cwd} />
+            <span className="flex-1 truncate text-xs font-medium text-foreground/90">
+              {project.name}
+            </span>
+          </SidebarMenuButton>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <SidebarMenuAction
+                  render={
+                    <button
+                      type="button"
+                      aria-label={`Create new thread in ${project.name}`}
+                      data-testid="new-thread-button"
+                    />
+                  }
+                  showOnHover
+                  className="top-1 right-1 size-5 rounded-md p-0 text-muted-foreground/70 hover:bg-secondary hover:text-foreground"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void handleNewThread(project.id, {
+                      envMode: resolveSidebarNewThreadEnvMode({
+                        defaultEnvMode: appSettings.defaultThreadEnvMode,
+                      }),
+                    });
+                  }}
+                >
+                  <SquarePenIcon className="size-3.5" />
+                </SidebarMenuAction>
+              }
+            />
+            <TooltipPopup side="top">
+              {newThreadShortcutLabel ? `New thread (${newThreadShortcutLabel})` : "New thread"}
+            </TooltipPopup>
+          </Tooltip>
+        </div>
+
+        <CollapsibleContent>
+          <SidebarMenuSub
+            ref={attachThreadListAutoAnimateRef}
+            className="mx-1 my-0 w-full translate-x-0 gap-0.5 px-1.5 py-0"
+          >
+            {renderedThreads.map((thread) => renderThreadRow(thread))}
+
+            {project.expanded && hasHiddenThreads && !isThreadListExpanded && (
+              <SidebarMenuSubItem className="w-full">
+                <SidebarMenuSubButton
+                  render={<button type="button" />}
+                  data-thread-selection-safe
+                  size="sm"
+                  className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                  onClick={() => {
+                    expandThreadListForProject(project.id);
+                  }}
+                >
+                  <span>Show more</span>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            )}
+            {project.expanded && hasHiddenThreads && isThreadListExpanded && (
+              <SidebarMenuSubItem className="w-full">
+                <SidebarMenuSubButton
+                  render={<button type="button" />}
+                  data-thread-selection-safe
+                  size="sm"
+                  className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                  onClick={() => {
+                    collapseThreadListForProject(project.id);
+                  }}
+                >
+                  <span>Show less</span>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            )}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  }
 
   const handleProjectTitleClick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>, projectId: ProjectId) => {
@@ -1086,12 +1534,9 @@ export default function Sidebar() {
         : shouldHighlightDesktopUpdateError(desktopUpdateState)
           ? "text-rose-500 animate-pulse"
           : "text-amber-500 animate-pulse";
-  const newThreadShortcutLabel = useMemo(
-    () =>
-      shortcutLabelForCommand(keybindings, "chat.newLocal") ??
-      shortcutLabelForCommand(keybindings, "chat.new"),
-    [keybindings],
-  );
+  const newThreadShortcutLabel =
+    shortcutLabelForCommand(keybindings, "chat.newLocal") ??
+    shortcutLabelForCommand(keybindings, "chat.new");
 
   const handleDesktopUpdateButtonClick = useCallback(() => {
     const bridge = window.desktopBridge;
@@ -1255,28 +1700,40 @@ export default function Sidebar() {
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
               Projects
             </span>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
-                    aria-pressed={shouldShowProjectPathEntry}
-                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-                    onClick={handleStartAddProject}
+            <div className="flex items-center gap-1">
+              <ProjectSortMenu
+                projectSortOrder={appSettings.sidebarProjectSortOrder}
+                threadSortOrder={appSettings.sidebarThreadSortOrder}
+                onProjectSortOrderChange={(sortOrder) => {
+                  updateSettings({ sidebarProjectSortOrder: sortOrder });
+                }}
+                onThreadSortOrderChange={(sortOrder) => {
+                  updateSettings({ sidebarThreadSortOrder: sortOrder });
+                }}
+              />
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
+                      aria-pressed={shouldShowProjectPathEntry}
+                      className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                      onClick={handleStartAddProject}
+                    />
+                  }
+                >
+                  <PlusIcon
+                    className={`size-3.5 transition-transform duration-150 ${
+                      shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
+                    }`}
                   />
-                }
-              >
-                <PlusIcon
-                  className={`size-3.5 transition-transform duration-150 ${
-                    shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
-                  }`}
-                />
-              </TooltipTrigger>
-              <TooltipPopup side="right">
-                {shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
-              </TooltipPopup>
-            </Tooltip>
+                </TooltipTrigger>
+                <TooltipPopup side="right">
+                  {shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
+                </TooltipPopup>
+              </Tooltip>
+            </div>
           </div>
 
           {shouldShowProjectPathEntry && (
@@ -1344,709 +1801,37 @@ export default function Sidebar() {
             </div>
           )}
 
-          <DndContext
-            sensors={projectDnDSensors}
-            collisionDetection={projectCollisionDetection}
-            modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
-            onDragStart={handleProjectDragStart}
-            onDragEnd={handleProjectDragEnd}
-            onDragCancel={handleProjectDragCancel}
-          >
-            <SidebarMenu>
-              <SortableContext
-                items={projects.map((project) => project.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {projects.map((project) => {
-                  const projectThreads = threads
-                    .filter((thread) => thread.projectId === project.id)
-                    .toSorted((a, b) => {
-                      const byDate =
-                        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-                      if (byDate !== 0) return byDate;
-                      return b.id.localeCompare(a.id);
-                    });
-                  const activeThreads = projectThreads.filter(
-                    (t) => !isThreadArchived(t.customMetadata),
-                  );
-                  const archivedThreads = projectThreads.filter((t) =>
-                    isThreadArchived(t.customMetadata),
-                  );
-                  const projectStatus = resolveProjectStatusIndicator(
-                    projectThreads.map((thread) =>
-                      resolveThreadStatusPill({
-                        thread,
-                        hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
-                        hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
-                      }),
-                    ),
-                  );
-                  const isThreadListExpanded = expandedThreadListsByProject.has(project.id);
-                  const hasHiddenThreads = activeThreads.length > THREAD_PREVIEW_LIMIT;
-                  const visibleThreads =
-                    hasHiddenThreads && !isThreadListExpanded
-                      ? activeThreads.slice(0, THREAD_PREVIEW_LIMIT)
-                      : activeThreads;
-                  const { standaloneThreads, convoyGroups } =
-                    groupThreadsByVirtualConvoy(visibleThreads);
-                  const orderedProjectThreadIds = projectThreads.map((t) => t.id);
-                  const renderThreadItem = (thread: (typeof projectThreads)[number]) => {
-                    const isActive = routeThreadId === thread.id;
-                    const isSelected = selectedThreadIds.has(thread.id);
-                    const isHighlighted = isActive || isSelected;
-                    const gcMeta = getGcMetadata(thread.customMetadata);
-                    const threadStatus = resolveThreadStatusPill({
-                      thread,
-                      hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
-                      hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
-                      gcState: gcMeta.state,
-                    });
-                    const prStatus = prStatusIndicator(prByThreadId.get(thread.id) ?? null);
-                    const terminalStatus = terminalStatusFromRunningIds(
-                      selectThreadTerminalState(terminalStateByThreadId, thread.id)
-                        .runningTerminalIds,
-                    );
-
-                    return (
-                      <SidebarMenuSubItem key={thread.id} className="w-full" data-thread-item>
-                        <SidebarMenuSubButton
-                          render={<div role="button" tabIndex={0} />}
-                          size="sm"
-                          isActive={isActive}
-                          className={resolveThreadRowClassName({
-                            isActive,
-                            isSelected,
-                          })}
-                          onClick={(event) => {
-                            handleThreadClick(event, thread.id, orderedProjectThreadIds);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key !== "Enter" && event.key !== " ") return;
-                            event.preventDefault();
-                            if (selectedThreadIds.size > 0) {
-                              clearSelection();
-                            }
-                            setSelectionAnchor(thread.id);
-                            void navigate({
-                              to: "/$threadId",
-                              params: { threadId: thread.id },
-                            });
-                          }}
-                          onContextMenu={(event) => {
-                            event.preventDefault();
-                            if (selectedThreadIds.size > 0 && selectedThreadIds.has(thread.id)) {
-                              void handleMultiSelectContextMenu({
-                                x: event.clientX,
-                                y: event.clientY,
-                              });
-                            } else {
-                              if (selectedThreadIds.size > 0) {
-                                clearSelection();
-                              }
-                              void handleThreadContextMenu(thread.id, {
-                                x: event.clientX,
-                                y: event.clientY,
-                              });
-                            }
-                          }}
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-                            {prStatus && (
-                              <Tooltip>
-                                <TooltipTrigger
-                                  render={
-                                    <button
-                                      type="button"
-                                      aria-label={prStatus.tooltip}
-                                      className={`inline-flex items-center justify-center ${prStatus.colorClass} cursor-pointer rounded-sm outline-hidden focus-visible:ring-1 focus-visible:ring-ring`}
-                                      onClick={(event) => {
-                                        openPrLink(event, prStatus.url);
-                                      }}
-                                    >
-                                      <GitPullRequestIcon className="size-3" />
-                                    </button>
-                                  }
-                                />
-                                <TooltipPopup side="top">{prStatus.tooltip}</TooltipPopup>
-                              </Tooltip>
-                            )}
-                            {threadStatus && (
-                              <span
-                                className={`inline-flex items-center gap-1 text-[10px] ${threadStatus.colorClass}`}
-                              >
-                                <span
-                                  className={`h-1.5 w-1.5 rounded-full ${threadStatus.dotClass} ${
-                                    threadStatus.pulse ? "animate-pulse" : ""
-                                  }`}
-                                />
-                                <span className="hidden md:inline">{threadStatus.label}</span>
-                              </span>
-                            )}
-                            {renamingThreadId === thread.id ? (
-                              <input
-                                ref={(el) => {
-                                  if (el && renamingInputRef.current !== el) {
-                                    renamingInputRef.current = el;
-                                    el.focus();
-                                    el.select();
-                                  }
-                                }}
-                                className="min-w-0 flex-1 truncate text-xs bg-transparent outline-none border border-ring rounded px-0.5"
-                                value={renamingTitle}
-                                onChange={(e) => setRenamingTitle(e.target.value)}
-                                onKeyDown={(e) => {
-                                  e.stopPropagation();
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    renamingCommittedRef.current = true;
-                                    void commitRename(thread.id, renamingTitle, thread.title);
-                                  } else if (e.key === "Escape") {
-                                    e.preventDefault();
-                                    renamingCommittedRef.current = true;
-                                    cancelRename();
-                                  }
-                                }}
-                                onBlur={() => {
-                                  if (!renamingCommittedRef.current) {
-                                    void commitRename(thread.id, renamingTitle, thread.title);
-                                  }
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                            ) : (
-                              <span className="min-w-0 flex-1 truncate text-xs">
-                                {gcMeta.isGcManaged && (
-                                  <Tooltip>
-                                    <TooltipTrigger
-                                      render={
-                                        <span className="mr-1 inline-flex items-center rounded bg-violet-500/15 px-1 py-0 text-[8px] font-semibold uppercase tracking-wide text-violet-600 dark:bg-violet-400/15 dark:text-violet-400/80">
-                                          {gcMeta.agent && /\-\d+$/.test(gcMeta.agent) ? "pool" : (gcMeta.agent ?? "GC")}
-                                        </span>
-                                      }
-                                    />
-                                    <TooltipPopup side="top" sideOffset={4}>
-                                      <div className="text-xs">
-                                        <div className="font-medium">Gas City Agent</div>
-                                        {gcMeta.agent && <div>Agent: {gcMeta.agent}</div>}
-                                        {gcMeta.rig && <div>Rig: {gcMeta.rig}</div>}
-                                        {gcMeta.state && <div>State: {gcMeta.state}</div>}
-                                        {gcMeta.runtimeProvider && <div>Provider: {gcMeta.runtimeProvider}</div>}
-                                        {gcMeta.startupModel && <div>Model: {gcMeta.startupModel}</div>}
-                                      </div>
-                                    </TooltipPopup>
-                                  </Tooltip>
-                                )}
-                                {gcMeta.isGcManaged && gcMeta.bead ? (
-                                  <Tooltip>
-                                    <TooltipTrigger render={<span className="truncate">{thread.title}</span>} />
-                                    <TooltipPopup side="right" sideOffset={8}>
-                                      <div className="min-w-[200px] max-w-[280px] space-y-2 text-xs">
-                                        {/* Header */}
-                                        <div className="flex items-center justify-between gap-2">
-                                          <span className="font-semibold text-foreground">
-                                            {gcMeta.beadTitle ?? gcMeta.bead}
-                                          </span>
-                                          {gcMeta.beadStatus && (
-                                            <span
-                                              className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium ${
-                                                gcMeta.beadStatus === "closed"
-                                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                                                  : gcMeta.beadStatus === "in_progress"
-                                                    ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
-                                                    : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                                              }`}
-                                            >
-                                              {gcMeta.beadStatus}
-                                            </span>
-                                          )}
-                                        </div>
-
-                                        {/* Description */}
-                                        {gcMeta.beadDescription && (
-                                          <p className="line-clamp-2 text-muted-foreground">
-                                            {gcMeta.beadDescription}
-                                          </p>
-                                        )}
-
-                                        {/* Bead details */}
-                                        <div className="space-y-0.5 text-muted-foreground">
-                                          <div className="flex justify-between">
-                                            <span>ID</span>
-                                            <span className="font-mono text-foreground/80">{gcMeta.bead}</span>
-                                          </div>
-                                          {gcMeta.beadType && (
-                                            <div className="flex justify-between">
-                                              <span>Type</span>
-                                              <span className="text-foreground/80">{gcMeta.beadType}</span>
-                                            </div>
-                                          )}
-                                          {gcMeta.beadPriority && (
-                                            <div className="flex justify-between">
-                                              <span>Priority</span>
-                                              <span className="text-foreground/80">P{gcMeta.beadPriority}</span>
-                                            </div>
-                                          )}
-                                          {gcMeta.beadAssignee && (
-                                            <div className="flex justify-between">
-                                              <span>Assignee</span>
-                                              <span className="text-foreground/80">{gcMeta.beadAssignee}</span>
-                                            </div>
-                                          )}
-                                          {gcMeta.formula && (
-                                            <div className="flex justify-between">
-                                              <span>Formula</span>
-                                              <span className="text-foreground/80">{gcMeta.formula}</span>
-                                            </div>
-                                          )}
-                                          {gcMeta.molecule && (
-                                            <div className="flex justify-between">
-                                              <span>Molecule</span>
-                                              <span className="font-mono text-foreground/80">{gcMeta.molecule}</span>
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* Labels */}
-                                        {gcMeta.beadLabels && (
-                                          <div className="flex flex-wrap gap-1">
-                                            {gcMeta.beadLabels.split(",").map((label) => (
-                                              <span
-                                                key={label}
-                                                className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground"
-                                              >
-                                                {label}
-                                              </span>
-                                            ))}
-                                          </div>
-                                        )}
-
-                                        {/* Convoy section */}
-                                        {gcMeta.convoy && (
-                                          <div className="border-t border-border/50 pt-1.5 space-y-0.5 text-muted-foreground">
-                                            <div className="flex items-center justify-between">
-                                              <span className="font-medium text-foreground/80">Convoy</span>
-                                              {gcMeta.convoyStatus && (
-                                                <span
-                                                  className={`rounded px-1 py-0 text-[9px] ${
-                                                    gcMeta.convoyStatus === "closed"
-                                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400/80"
-                                                      : "bg-amber-500/10 text-amber-600 dark:text-amber-300/80"
-                                                  }`}
-                                                >
-                                                  {gcMeta.convoyStatus}
-                                                </span>
-                                              )}
-                                            </div>
-                                            <div className="flex justify-between">
-                                              <span>{gcMeta.convoyTitle ?? gcMeta.convoy}</span>
-                                              {gcMeta.convoyClosedCount && gcMeta.convoyTotalCount && (
-                                                <span className="font-mono text-foreground/80">
-                                                  {gcMeta.convoyClosedCount}/{gcMeta.convoyTotalCount}
-                                                </span>
-                                              )}
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </TooltipPopup>
-                                  </Tooltip>
-                                ) : (
-                                  <span className="truncate">{thread.title}</span>
-                                )}
-                              </span>
-                            )}
-                          </div>
-                          <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                            {terminalStatus && (
-                              <span
-                                role="img"
-                                aria-label={terminalStatus.label}
-                                title={terminalStatus.label}
-                                className={`inline-flex items-center justify-center ${terminalStatus.colorClass}`}
-                              >
-                                <TerminalIcon
-                                  className={`size-3 ${terminalStatus.pulse ? "animate-pulse" : ""}`}
-                                />
-                              </span>
-                            )}
-                            <span
-                              className={`text-[10px] ${
-                                isHighlighted
-                                  ? "text-foreground/72 dark:text-foreground/82"
-                                  : "text-muted-foreground/40"
-                              }`}
-                            >
-                              {formatRelativeTime(thread.createdAt)}
-                            </span>
-                          </div>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    );
-                  };
-
-                  return (
+          {isManualProjectSorting ? (
+            <DndContext
+              sensors={projectDnDSensors}
+              collisionDetection={projectCollisionDetection}
+              modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
+              onDragStart={handleProjectDragStart}
+              onDragEnd={handleProjectDragEnd}
+              onDragCancel={handleProjectDragCancel}
+            >
+              <SidebarMenu>
+                <SortableContext
+                  items={sortedProjects.map((project) => project.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {sortedProjects.map((project) => (
                     <SortableProjectItem key={project.id} projectId={project.id}>
-                      {(dragHandleProps) => (
-                        <Collapsible className="group/collapsible" open={project.expanded}>
-                          <div className="group/project-header relative">
-                            <SidebarMenuButton
-                              size="sm"
-                              className="gap-2 px-2 py-1.5 text-left cursor-grab active:cursor-grabbing hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground"
-                              {...dragHandleProps.attributes}
-                              {...dragHandleProps.listeners}
-                              onPointerDownCapture={handleProjectTitlePointerDownCapture}
-                              onClick={(event) => handleProjectTitleClick(event, project.id)}
-                              onKeyDown={(event) => handleProjectTitleKeyDown(event, project.id)}
-                              onContextMenu={(event) => {
-                                event.preventDefault();
-                                void handleProjectContextMenu(project.id, {
-                                  x: event.clientX,
-                                  y: event.clientY,
-                                });
-                              }}
-                            >
-                              {!project.expanded && projectStatus ? (
-                                <span
-                                  aria-hidden="true"
-                                  title={projectStatus.label}
-                                  className={`-ml-0.5 relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
-                                >
-                                  <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
-                                    <span
-                                      className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
-                                        projectStatus.pulse ? "animate-pulse" : ""
-                                      }`}
-                                    />
-                                  </span>
-                                  <ChevronRightIcon className="absolute inset-0 m-auto size-3.5 text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100" />
-                                </span>
-                              ) : (
-                                <ChevronRightIcon
-                                  className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
-                                    project.expanded ? "rotate-90" : ""
-                                  }`}
-                                />
-                              )}
-                              <ProjectFavicon cwd={project.cwd} />
-                              <span className="flex-1 truncate text-xs font-medium text-foreground/90">
-                                {project.name}
-                              </span>
-                              {countGcAgents(threads, project.id) > 0 && (
-                                <span className="rounded bg-violet-500/15 px-1 py-0 text-[8px] font-semibold uppercase tracking-wide text-violet-600 dark:bg-violet-400/15 dark:text-violet-400/80">
-                                  GC {countGcAgents(threads, project.id)}
-                                </span>
-                              )}
-                            </SidebarMenuButton>
-                            <Tooltip>
-                              <TooltipTrigger
-                                render={
-                                  <SidebarMenuAction
-                                    render={
-                                      <button
-                                        type="button"
-                                        aria-label={`Create new thread in ${project.name}`}
-                                        data-testid="new-thread-button"
-                                      />
-                                    }
-                                    showOnHover
-                                    className="top-1 right-1 size-5 rounded-md p-0 text-muted-foreground/70 hover:bg-secondary hover:text-foreground"
-                                    onClick={(event) => {
-                                      event.preventDefault();
-                                      event.stopPropagation();
-                                      void handleNewThread(project.id, {
-                                        envMode: resolveSidebarNewThreadEnvMode({
-                                          defaultEnvMode: appSettings.defaultThreadEnvMode,
-                                        }),
-                                      });
-                                    }}
-                                  >
-                                    <SquarePenIcon className="size-3.5" />
-                                  </SidebarMenuAction>
-                                }
-                              />
-                              <TooltipPopup side="top">
-                                {newThreadShortcutLabel
-                                  ? `New thread (${newThreadShortcutLabel})`
-                                  : "New thread"}
-                              </TooltipPopup>
-                            </Tooltip>
-                          </div>
-
-                          <CollapsibleContent keepMounted>
-                            <SidebarMenuSub className="mx-1 my-0 w-full translate-x-0 gap-0.5 px-1.5 py-0">
-                              {standaloneThreads.map((thread) => renderThreadItem(thread))}
-                              {convoyGroups.map((group) => (
-                                <Collapsible key={group.id} defaultOpen className="group/convoy">
-                                  <CollapsibleTrigger
-                                    type="button"
-                                    data-thread-selection-safe
-                                    className="flex w-full items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground/60 hover:text-foreground/75"
-                                  >
-                                    <ChevronRightIcon className="size-2.5 shrink-0 transition-transform group-data-[state=open]/convoy:rotate-90" />
-                                    <FolderIcon className="size-3 shrink-0" />
-                                    <Tooltip>
-                                      <TooltipTrigger
-                                        render={<span className="truncate">{group.label}</span>}
-                                      />
-                                      <TooltipPopup side="right" sideOffset={8}>
-                                        <div className="min-w-[200px] max-w-[280px] space-y-2 text-xs">
-                                          {/* Header */}
-                                          <div className="flex items-center justify-between gap-2">
-                                            <span className="font-semibold text-foreground">
-                                              {group.label}
-                                            </span>
-                                            {group.status && (
-                                              <span
-                                                className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium ${
-                                                  group.status === "closed"
-                                                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                                                    : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                                                }`}
-                                              >
-                                                {group.status}
-                                              </span>
-                                            )}
-                                          </div>
-
-                                          {/* Convoy details */}
-                                          <div className="space-y-0.5 text-muted-foreground">
-                                            <div className="flex justify-between">
-                                              <span>ID</span>
-                                              <span className="font-mono text-foreground/80">{group.id}</span>
-                                            </div>
-                                            {group.closedCount !== null && group.totalCount !== null && (
-                                              <div className="flex justify-between">
-                                                <span>Progress</span>
-                                                <span className="font-mono text-foreground/80">
-                                                  {group.closedCount}/{group.totalCount}
-                                                </span>
-                                              </div>
-                                            )}
-                                            {group.formula && (
-                                              <div className="flex justify-between">
-                                                <span>Formula</span>
-                                                <span className="text-foreground/80">{group.formula}</span>
-                                              </div>
-                                            )}
-                                            {group.molecule && (
-                                              <div className="flex justify-between">
-                                                <span>Molecule</span>
-                                                <span className="font-mono text-foreground/80">{group.molecule}</span>
-                                              </div>
-                                            )}
-                                            <div className="flex justify-between">
-                                              <span>Threads</span>
-                                              <span className="text-foreground/80">{group.threads.length}</span>
-                                            </div>
-                                          </div>
-
-                                          {/* Children list */}
-                                          {group.threads.length > 0 && (
-                                            <div className="border-t border-border/50 pt-1.5 space-y-0.5">
-                                              <div className="font-medium text-foreground/80 mb-1">Workers</div>
-                                              {group.threads.map((t) => {
-                                                const tMeta = (t.customMetadata ?? {}) as Record<string, string>;
-                                                const status = tMeta["gc.beadStatus"];
-                                                return (
-                                                  <div key={t.id} className="flex items-center justify-between gap-2 text-muted-foreground">
-                                                    <span className="truncate">{t.title}</span>
-                                                    {status && (
-                                                      <span
-                                                        className={`shrink-0 rounded px-1 py-0 text-[8px] ${
-                                                          status === "closed"
-                                                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400/80"
-                                                            : "bg-amber-500/10 text-amber-600 dark:text-amber-300/80"
-                                                        }`}
-                                                      >
-                                                        {status}
-                                                      </span>
-                                                    )}
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                          )}
-                                        </div>
-                                      </TooltipPopup>
-                                    </Tooltip>
-                                    {group.closedCount !== null && group.totalCount !== null && (
-                                      <span className="rounded bg-muted px-1 py-0 text-[9px] text-muted-foreground/75">
-                                        {group.closedCount}/{group.totalCount}
-                                      </span>
-                                    )}
-                                    {group.status && (
-                                      <span
-                                        className={`rounded px-1 py-0 text-[9px] ${
-                                          group.status === "closed"
-                                            ? "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-400/80"
-                                            : "bg-amber-500/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-300/80"
-                                        }`}
-                                      >
-                                        {group.status}
-                                      </span>
-                                    )}
-                                    {group.formula && (
-                                      <span className="rounded border border-border/60 px-1 py-0 text-[9px] text-muted-foreground/75">
-                                        {group.formula}
-                                      </span>
-                                    )}
-                                    {group.molecule && (
-                                      <span className="rounded border border-border/60 px-1 py-0 text-[9px] text-muted-foreground/65">
-                                        {group.molecule}
-                                      </span>
-                                    )}
-                                    <span className="ml-auto text-[9px] text-muted-foreground/45">
-                                      {group.threads.length}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      data-thread-selection-safe
-                                      className="ml-1 shrink-0 rounded p-0.5 opacity-0 hover:bg-accent hover:text-foreground group-hover/convoy:opacity-100"
-                                      title="Copy convoy ID"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        copyConvoyIdToClipboard(group.id, { convoyId: group.id });
-                                      }}
-                                    >
-                                      {isConvoyIdCopied ? (
-                                        <CheckIcon className="size-2.5 text-emerald-500" />
-                                      ) : (
-                                        <CopyIcon className="size-2.5" />
-                                      )}
-                                    </button>
-                                  </CollapsibleTrigger>
-                                  <CollapsibleContent>
-                                    <SidebarMenuSub className="mx-0 my-0 w-full translate-x-0 gap-0.5 px-0 py-0">
-                                      {group.threads.map((thread) => renderThreadItem(thread))}
-                                    </SidebarMenuSub>
-                                  </CollapsibleContent>
-                                </Collapsible>
-                              ))}
-
-                              {hasHiddenThreads && !isThreadListExpanded && (
-                                <SidebarMenuSubItem className="w-full">
-                                  <SidebarMenuSubButton
-                                    render={<button type="button" />}
-                                    data-thread-selection-safe
-                                    size="sm"
-                                    className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
-                                    onClick={() => {
-                                      expandThreadListForProject(project.id);
-                                    }}
-                                  >
-                                    <span>Show more</span>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              )}
-                              {hasHiddenThreads && isThreadListExpanded && (
-                                <SidebarMenuSubItem className="w-full">
-                                  <SidebarMenuSubButton
-                                    render={<button type="button" />}
-                                    data-thread-selection-safe
-                                    size="sm"
-                                    className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
-                                    onClick={() => {
-                                      collapseThreadListForProject(project.id);
-                                    }}
-                                  >
-                                    <span>Show less</span>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              )}
-                            </SidebarMenuSub>
-                            {archivedThreads.length > 0 && (
-                              <Collapsible defaultOpen={false} className="group/archived">
-                                <CollapsibleTrigger
-                                  type="button"
-                                  data-thread-selection-safe
-                                  className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[10px] text-muted-foreground/40 hover:text-muted-foreground/60"
-                                >
-                                  <ChevronRightIcon className="size-2.5 shrink-0 transition-transform group-data-[state=open]/archived:rotate-90" />
-                                  <span>Archived ({archivedThreads.length})</span>
-                                </CollapsibleTrigger>
-                                <CollapsibleContent>
-                                  <SidebarMenuSub className="mx-1 my-0 w-full translate-x-0 gap-0.5 px-1.5 py-0 opacity-60">
-                                    {archivedThreads.map((thread) => {
-                                      const isActive = routeThreadId === thread.id;
-                                      const isSelected = selectedThreadIds.has(thread.id);
-                                      const gcMeta = getGcMetadata(thread.customMetadata);
-                                      const threadStatus = resolveThreadStatusPill({
-                                        thread,
-                                        hasPendingApprovals:
-                                          derivePendingApprovals(thread.activities).length > 0,
-                                        hasPendingUserInput:
-                                          derivePendingUserInputs(thread.activities).length > 0,
-                                        gcState: gcMeta.state,
-                                      });
-                                      return (
-                                        <SidebarMenuSubItem
-                                          key={thread.id}
-                                          className="w-full"
-                                          data-thread-item
-                                        >
-                                          <SidebarMenuSubButton
-                                            render={<div role="button" tabIndex={0} />}
-                                            size="sm"
-                                            isActive={isActive}
-                                            className={resolveThreadRowClassName({
-                                              isActive,
-                                              isSelected,
-                                            })}
-                                            onClick={(event) => {
-                                              handleThreadClick(
-                                                event,
-                                                thread.id,
-                                                orderedProjectThreadIds,
-                                              );
-                                            }}
-                                            onContextMenu={(event) => {
-                                              event.preventDefault();
-                                              void handleThreadContextMenu(thread.id, {
-                                                x: event.clientX,
-                                                y: event.clientY,
-                                              });
-                                            }}
-                                          >
-                                            <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-                                              {gcMeta.isGcManaged && (
-                                                <span className="mr-1 inline-flex shrink-0 items-center rounded bg-violet-500/15 px-1 py-0 text-[8px] font-semibold uppercase tracking-wide text-violet-600 dark:bg-violet-400/15 dark:text-violet-400/80">
-                                                  {gcMeta.agent && /\-\d+$/.test(gcMeta.agent) ? "pool" : (gcMeta.agent ?? "GC")}
-                                                </span>
-                                              )}
-                                              <span className="truncate text-xs">
-                                                {thread.title}
-                                              </span>
-                                              {threadStatus && (
-                                                <span
-                                                  className={`flex shrink-0 items-center gap-0.5 text-[10px] ${threadStatus.colorClass}`}
-                                                >
-                                                  <span
-                                                    className={`inline-block size-1.5 rounded-full ${threadStatus.dotClass}`}
-                                                  />
-                                                  {threadStatus.label}
-                                                </span>
-                                              )}
-                                            </div>
-                                            <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/40">
-                                              {formatRelativeTime(thread.createdAt)}
-                                            </span>
-                                          </SidebarMenuSubButton>
-                                        </SidebarMenuSubItem>
-                                      );
-                                    })}
-                                  </SidebarMenuSub>
-                                </CollapsibleContent>
-                              </Collapsible>
-                            )}
-                          </CollapsibleContent>
-                        </Collapsible>
-                      )}
+                      {(dragHandleProps) => renderProjectItem(project, dragHandleProps)}
                     </SortableProjectItem>
-                  );
-                })}
-              </SortableContext>
+                  ))}
+                </SortableContext>
+              </SidebarMenu>
+            </DndContext>
+          ) : (
+            <SidebarMenu ref={attachProjectListAutoAnimateRef}>
+              {sortedProjects.map((project) => (
+                <SidebarMenuItem key={project.id} className="rounded-md">
+                  {renderProjectItem(project, null)}
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
-          </DndContext>
+          )}
 
           {projects.length === 0 && !shouldShowProjectPathEntry && (
             <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
