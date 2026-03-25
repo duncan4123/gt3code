@@ -1965,6 +1965,401 @@ server.registerTool(
 );
 
 // ─────────────────────────────────────────────────────────
+// Doltlite version control tools
+// ─────────────────────────────────────────────────────────
+
+server.registerTool(
+  "ctx_commit",
+  {
+    title: "Commit Knowledge Base",
+    description:
+      "Save a versioned snapshot of the current knowledge base state. " +
+      "Uses doltlite's git-like versioning to create an immutable commit. " +
+      "Useful after indexing important sources, at end of research phases, " +
+      "or before making experimental changes to the knowledge base.",
+    inputSchema: z.object({
+      message: z.string().describe("Commit message describing what was indexed or changed"),
+    }),
+  },
+  async ({ message }) => {
+    const store = getStore();
+    try {
+      store.exec(`SELECT dolt_add('-A')`);
+      const result = store.queryOne(`SELECT dolt_commit('-m', ?)`, message) as Record<string, string> | undefined;
+      const hash = result ? Object.values(result)[0] : "unknown";
+      return trackResponse("ctx_commit", {
+        content: [{ type: "text" as const, text: `Committed: ${hash}\nMessage: ${message}` }],
+      });
+    } catch (e: any) {
+      // No changes to commit is not an error
+      if (e.message?.includes("nothing to commit")) {
+        return trackResponse("ctx_commit", {
+          content: [{ type: "text" as const, text: "Nothing to commit — knowledge base unchanged since last commit." }],
+        });
+      }
+      return trackResponse("ctx_commit", {
+        content: [{ type: "text" as const, text: `Commit failed: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_log",
+  {
+    title: "Knowledge Base History",
+    description:
+      "View the commit history of the knowledge base. Shows when content was " +
+      "indexed, what changed, and commit hashes for point-in-time reference. " +
+      "Use to understand what an agent has indexed and when.",
+    inputSchema: z.object({
+      limit: z.number().optional().default(10).describe("Max commits to show (default 10)"),
+    }),
+  },
+  async ({ limit }) => {
+    const store = getStore();
+    try {
+      const rows = store.queryAll(
+        `SELECT commit_hash, committer, date, message FROM dolt_log LIMIT ?`, limit
+      ) as Array<Record<string, string>>;
+
+      if (!rows.length) {
+        return trackResponse("ctx_log", {
+          content: [{ type: "text" as const, text: "No commits yet. Use ctx_commit to save a snapshot." }],
+        });
+      }
+
+      const lines = rows.map((r) =>
+        `${(r.commit_hash || "").slice(0, 10)} | ${r.date || ""} | ${r.message || ""}`
+      );
+      const text = `## Knowledge Base History (${rows.length} commits)\n\n` +
+        `| Hash | Date | Message |\n|------|------|---------|\n` +
+        lines.map(l => `| ${l.split(" | ").join(" | ")} |`).join("\n");
+
+      return trackResponse("ctx_log", {
+        content: [{ type: "text" as const, text }],
+      });
+    } catch (e: any) {
+      // dolt_log doesn't exist if no commits yet
+      if (e.message?.includes("dolt_log")) {
+        return trackResponse("ctx_log", {
+          content: [{ type: "text" as const, text: "No version history — doltlite not initialized or no commits yet." }],
+        });
+      }
+      return trackResponse("ctx_log", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_diff",
+  {
+    title: "Knowledge Base Diff",
+    description:
+      "Show what changed in the knowledge base since the last commit. " +
+      "Reports added, modified, and deleted chunks. Use before committing " +
+      "to review what will be saved, or to understand recent indexing activity.",
+    inputSchema: z.object({}),
+  },
+  async () => {
+    const store = getStore();
+    try {
+      const status = store.queryAll(
+        `SELECT table_name, staged, status FROM dolt_status`
+      ) as Array<Record<string, string>>;
+
+      if (!status.length) {
+        return trackResponse("ctx_diff", {
+          content: [{ type: "text" as const, text: "No changes — knowledge base matches last commit." }],
+        });
+      }
+
+      const lines = status.map((r) =>
+        `- **${r.table_name}**: ${r.status}${r.staged === "1" || r.staged === "true" ? " (staged)" : ""}`
+      );
+      const text = `## Knowledge Base Changes\n\n${lines.join("\n")}`;
+
+      return trackResponse("ctx_diff", {
+        content: [{ type: "text" as const, text }],
+      });
+    } catch (e: any) {
+      if (e.message?.includes("dolt_status")) {
+        return trackResponse("ctx_diff", {
+          content: [{ type: "text" as const, text: "No version history — doltlite not initialized or no commits yet." }],
+        });
+      }
+      return trackResponse("ctx_diff", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_status",
+  {
+    title: "Knowledge Base Status",
+    description:
+      "Show the current state of the knowledge base: engine type, commit count, " +
+      "source count, and any uncommitted changes. Quick health check for the " +
+      "versioned knowledge base.",
+    inputSchema: z.object({}),
+  },
+  async () => {
+    const store = getStore();
+    const lines: string[] = ["## Knowledge Base Status\n"];
+
+    // Engine check
+    try {
+      const engine = store.queryOne("SELECT doltlite_engine()") as Record<string, string> | undefined;
+      lines.push(`- **Engine**: ${engine ? Object.values(engine)[0] : "unknown"}`);
+    } catch {
+      lines.push("- **Engine**: sqlite (no doltlite versioning)");
+    }
+
+    // Source count
+    try {
+      const sources = store.queryOne("SELECT COUNT(*) as n FROM sources") as { n: number } | undefined;
+      lines.push(`- **Sources indexed**: ${sources?.n ?? 0}`);
+    } catch { /* table may not exist */ }
+
+    // Chunk count
+    try {
+      const chunks = store.queryOne("SELECT COUNT(*) as n FROM chunks") as { n: number } | undefined;
+      lines.push(`- **Chunks**: ${chunks?.n ?? 0}`);
+    } catch { /* table may not exist */ }
+
+    // Commit count
+    try {
+      const commits = store.queryOne("SELECT COUNT(*) as n FROM dolt_log") as { n: number } | undefined;
+      lines.push(`- **Commits**: ${commits?.n ?? 0}`);
+    } catch {
+      lines.push("- **Commits**: 0 (no history yet)");
+    }
+
+    // Uncommitted changes
+    try {
+      const changes = store.queryOne("SELECT COUNT(*) as n FROM dolt_status") as { n: number } | undefined;
+      lines.push(`- **Uncommitted changes**: ${changes?.n ?? 0} tables modified`);
+    } catch {
+      lines.push("- **Uncommitted changes**: n/a");
+    }
+
+    lines.push(`- **DB path**: ${store.dbPath}`);
+
+    return trackResponse("ctx_status", {
+      content: [{ type: "text" as const, text: lines.join("\n") }],
+    });
+  },
+);
+
+// ─────────────────────────────────────────────────────────
+// Draft convoy / bead tools
+// ─────────────────────────────────────────────────────────
+
+server.registerTool(
+  "ctx_convoy_create",
+  {
+    title: "Create Draft Convoy",
+    description:
+      "Create a draft convoy in the local doltlite knowledge base. A convoy is a " +
+      "parent issue that groups related work beads. Agents can draft full convoy " +
+      "structures here before deploying to production GC via ctx_convoy_deploy. " +
+      "Returns the convoy ID for use with ctx_bead_create.",
+    inputSchema: z.object({
+      title: z.string().describe("Convoy title"),
+      description: z.string().optional().default("").describe("What this convoy accomplishes"),
+      rig: z.string().optional().default("").describe("Target rig name (e.g. gascity, t3code)"),
+      metadata: z.record(z.unknown()).optional().describe("Additional metadata as JSON object"),
+    }),
+  },
+  async ({ title, description, rig, metadata }) => {
+    const store = getStore();
+    try {
+      const { randomUUID } = await import("node:crypto");
+      const id = randomUUID();
+      const now = new Date().toISOString();
+      store.exec(
+        `INSERT INTO issues (id, title, description, issue_type, status, rig, created_at, updated_at, metadata)
+         VALUES ('${id.replace(/'/g, "''")}', '${title.replace(/'/g, "''")}', '${description.replace(/'/g, "''")}',
+                 'convoy', 'open', '${rig.replace(/'/g, "''")}', '${now}', '${now}',
+                 '${JSON.stringify(metadata ?? {}).replace(/'/g, "''")}')`
+      );
+      store.exec(`INSERT INTO labels (issue_id, label) VALUES ('${id}', 'draft')`);
+      return trackResponse("ctx_convoy_create", {
+        content: [{ type: "text" as const, text: `Created convoy: ${id}\nTitle: ${title}\nRig: ${rig || "(any)"}` }],
+      });
+    } catch (e: any) {
+      return trackResponse("ctx_convoy_create", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_bead_create",
+  {
+    title: "Create Draft Bead",
+    description:
+      "Create a draft work bead (issue) in the local doltlite knowledge base. " +
+      "Beads represent individual tasks within a convoy. Set convoy_id to nest " +
+      "the bead under a convoy created with ctx_convoy_create. " +
+      "Use ctx_dep_add to wire dependencies after creating beads.",
+    inputSchema: z.object({
+      title: z.string().describe("Bead title"),
+      description: z.string().optional().default("").describe("What this bead requires"),
+      rig: z.string().optional().default("").describe("Target rig (e.g. gascity, t3code)"),
+      convoy_id: z.string().optional().default("").describe("Parent convoy ID from ctx_convoy_create"),
+      issue_type: z.string().optional().default("task").describe("task | gate | formula | session"),
+      priority: z.number().optional().default(2).describe("Priority 1-4 (1=highest)"),
+      assignee: z.string().optional().describe("Agent assignee"),
+    }),
+  },
+  async ({ title, description, rig, convoy_id, issue_type, priority, assignee }) => {
+    const store = getStore();
+    try {
+      const { randomUUID } = await import("node:crypto");
+      const id = randomUUID();
+      const now = new Date().toISOString();
+      const assigneeVal = assignee ?? "";
+      store.exec(
+        `INSERT INTO issues (id, title, description, issue_type, status, rig, priority, assignee, created_at, updated_at, metadata)
+         VALUES ('${id}', '${title.replace(/'/g, "''")}', '${description.replace(/'/g, "''")}',
+                 '${issue_type}', 'open', '${rig.replace(/'/g, "''")}', ${priority},
+                 '${assigneeVal.replace(/'/g, "''")}', '${now}', '${now}', '{}')`
+      );
+      store.exec(`INSERT INTO labels (issue_id, label) VALUES ('${id}', 'draft')`);
+      if (convoy_id) {
+        store.exec(
+          `INSERT INTO dependencies (issue_id, depends_on_id, type, created_at, created_by)
+           VALUES ('${id}', '${convoy_id.replace(/'/g, "''")}', 'child-of', '${now}', 'ctx_bead_create')`
+        );
+      }
+      return trackResponse("ctx_bead_create", {
+        content: [{ type: "text" as const, text: `Created bead: ${id}\nTitle: ${title}\nType: ${issue_type} | Rig: ${rig || "(any)"}${convoy_id ? `\nConvoy: ${convoy_id}` : ""}` }],
+      });
+    } catch (e: any) {
+      return trackResponse("ctx_bead_create", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_dep_add",
+  {
+    title: "Add Bead Dependency",
+    description:
+      "Add a dependency relationship between two beads. The bead with issue_id " +
+      "will depend on (be blocked by) the bead with depends_on_id. " +
+      "Use type 'blocks' (default) for sequential work, 'child-of' for hierarchy.",
+    inputSchema: z.object({
+      issue_id: z.string().describe("ID of the dependent bead (the one that is blocked)"),
+      depends_on_id: z.string().describe("ID of the bead it depends on (the blocker)"),
+      type: z.string().optional().default("blocks").describe("Relationship type: blocks | child-of | relates-to"),
+    }),
+  },
+  async ({ issue_id, depends_on_id, type }) => {
+    const store = getStore();
+    try {
+      const now = new Date().toISOString();
+      store.exec(
+        `INSERT OR REPLACE INTO dependencies (issue_id, depends_on_id, type, created_at, created_by)
+         VALUES ('${issue_id.replace(/'/g, "''")}', '${depends_on_id.replace(/'/g, "''")}',
+                 '${type.replace(/'/g, "''")}', '${now}', 'ctx_dep_add')`
+      );
+      return trackResponse("ctx_dep_add", {
+        content: [{ type: "text" as const, text: `Dependency added: ${issue_id} ${type} ${depends_on_id}` }],
+      });
+    } catch (e: any) {
+      return trackResponse("ctx_dep_add", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_convoy_list",
+  {
+    title: "List Draft Convoys",
+    description:
+      "List all draft convoys and their beads in the local doltlite knowledge base. " +
+      "Shows convoy structure with child beads, rig assignments, and dependency counts. " +
+      "Use to review staged work before deploying to production GC.",
+    inputSchema: z.object({
+      include_beads: z.boolean().optional().default(true).describe("Include child beads under each convoy"),
+    }),
+  },
+  async ({ include_beads }) => {
+    const store = getStore();
+    try {
+      const convoys = store.queryAll(
+        `SELECT id, title, description, rig, status, created_at FROM issues
+         WHERE issue_type = 'convoy' AND id IN (SELECT issue_id FROM labels WHERE label = 'draft')
+         ORDER BY created_at DESC`
+      ) as Array<Record<string, string>>;
+
+      if (!convoys.length) {
+        return trackResponse("ctx_convoy_list", {
+          content: [{ type: "text" as const, text: "No draft convoys. Use ctx_convoy_create to start one." }],
+        });
+      }
+
+      const lines: string[] = [`## Draft Convoys (${convoys.length})\n`];
+      for (const convoy of convoys) {
+        lines.push(`### ${convoy.title}`);
+        lines.push(`ID: \`${convoy.id}\` | Rig: ${convoy.rig || "(any)"} | Status: ${convoy.status}`);
+        if (convoy.description) lines.push(convoy.description);
+
+        if (include_beads) {
+          const beads = store.queryAll(
+            `SELECT i.id, i.title, i.issue_type, i.rig, i.priority, i.assignee
+             FROM issues i
+             JOIN dependencies d ON d.issue_id = i.id AND d.depends_on_id = ? AND d.type = 'child-of'
+             WHERE i.issue_type != 'convoy'
+             ORDER BY i.priority, i.created_at`,
+            convoy.id
+          ) as Array<Record<string, string>>;
+
+          if (beads.length) {
+            lines.push(`\n**Beads (${beads.length}):**`);
+            for (const b of beads) {
+              const deps = store.queryOne(
+                `SELECT COUNT(*) as n FROM dependencies WHERE issue_id = ? AND type = 'blocks'`, b.id
+              ) as { n: number } | undefined;
+              lines.push(`- [${b.issue_type}] ${b.title} | rig:${b.rig || "any"} | assignee:${b.assignee || "-"} | blockers:${deps?.n ?? 0} | \`${b.id}\``);
+            }
+          } else {
+            lines.push("*(no beads yet — use ctx_bead_create with convoy_id)*");
+          }
+        }
+        lines.push("");
+      }
+
+      return trackResponse("ctx_convoy_list", {
+        content: [{ type: "text" as const, text: lines.join("\n") }],
+      });
+    } catch (e: any) {
+      return trackResponse("ctx_convoy_list", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────
 // Server startup
 // ─────────────────────────────────────────────────────────
 

@@ -278,7 +278,7 @@ export class ContentStore {
         label TEXT NOT NULL,
         chunk_count INTEGER NOT NULL DEFAULT 0,
         code_chunk_count INTEGER NOT NULL DEFAULT 0,
-        indexed_at TEXT NOT NULL DEFAULT (datetime('now'))
+        indexed_at TEXT NOT NULL DEFAULT ''
       );
 
       CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
@@ -300,16 +300,112 @@ export class ContentStore {
       CREATE TABLE IF NOT EXISTS vocabulary (
         word TEXT PRIMARY KEY
       );
+
+      -- Beads-compatible schema for draft convoys.
+      -- Column types and names match dolt so rows can be copied directly.
+      -- Function-call defaults replaced with static values for doltlite compat.
+      CREATE TABLE IF NOT EXISTS issues (
+        id TEXT PRIMARY KEY,
+        content_hash TEXT,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        design TEXT NOT NULL DEFAULT '',
+        acceptance_criteria TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'open',
+        priority INTEGER NOT NULL DEFAULT 2,
+        issue_type TEXT NOT NULL DEFAULT 'task',
+        assignee TEXT,
+        estimated_minutes INTEGER,
+        created_at TEXT NOT NULL DEFAULT '',
+        created_by TEXT DEFAULT '',
+        owner TEXT DEFAULT '',
+        updated_at TEXT NOT NULL DEFAULT '',
+        closed_at TEXT,
+        closed_by_session TEXT DEFAULT '',
+        external_ref TEXT,
+        spec_id TEXT,
+        compaction_level INTEGER DEFAULT 0,
+        compacted_at TEXT,
+        compacted_at_commit TEXT,
+        original_size INTEGER,
+        sender TEXT DEFAULT '',
+        ephemeral INTEGER DEFAULT 0,
+        no_history INTEGER DEFAULT 0,
+        wisp_type TEXT DEFAULT '',
+        pinned INTEGER DEFAULT 0,
+        is_template INTEGER DEFAULT 0,
+        crystallizes INTEGER DEFAULT 0,
+        mol_type TEXT DEFAULT '',
+        work_type TEXT DEFAULT 'mutex',
+        quality_score REAL,
+        source_system TEXT DEFAULT '',
+        metadata TEXT DEFAULT '{}',
+        source_repo TEXT DEFAULT '',
+        close_reason TEXT DEFAULT '',
+        event_kind TEXT DEFAULT '',
+        actor TEXT DEFAULT '',
+        target TEXT DEFAULT '',
+        payload TEXT DEFAULT '',
+        await_type TEXT DEFAULT '',
+        await_id TEXT DEFAULT '',
+        timeout_ns INTEGER DEFAULT 0,
+        waiters TEXT DEFAULT '',
+        hook_bead TEXT DEFAULT '',
+        role_bead TEXT DEFAULT '',
+        agent_state TEXT DEFAULT '',
+        last_activity TEXT,
+        role_type TEXT DEFAULT '',
+        rig TEXT DEFAULT '',
+        due_at TEXT,
+        defer_until TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS dependencies (
+        issue_id TEXT NOT NULL,
+        depends_on_id TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'blocks',
+        created_at TEXT NOT NULL DEFAULT '',
+        created_by TEXT NOT NULL DEFAULT '',
+        metadata TEXT DEFAULT '{}',
+        thread_id TEXT DEFAULT '',
+        PRIMARY KEY (issue_id, depends_on_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS labels (
+        issue_id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        PRIMARY KEY (issue_id, label)
+      );
+
+      CREATE TABLE IF NOT EXISTS comments (
+        id TEXT PRIMARY KEY,
+        issue_id TEXT NOT NULL,
+        author TEXT NOT NULL,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT ''
+      );
+
+      CREATE TABLE IF NOT EXISTS events (
+        id TEXT PRIMARY KEY,
+        issue_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        old_value TEXT,
+        new_value TEXT,
+        comment TEXT,
+        created_at TEXT NOT NULL DEFAULT ''
+      );
     `);
   }
 
   #prepareStatements(): void {
     // Write path
     this.#stmtInsertSourceEmpty = this.#db.prepare(
-      "INSERT INTO sources (label, chunk_count, code_chunk_count) VALUES (?, 0, 0)",
+      "INSERT INTO sources (label, chunk_count, code_chunk_count, indexed_at) VALUES (?, 0, 0, datetime('now'))",
     );
     this.#stmtInsertSource = this.#db.prepare(
-      "INSERT INTO sources (label, chunk_count, code_chunk_count) VALUES (?, ?, ?)",
+      "INSERT INTO sources (label, chunk_count, code_chunk_count, indexed_at) VALUES (?, ?, ?, datetime('now'))",
     );
     this.#stmtInsertChunk = this.#db.prepare(
       "INSERT INTO chunks (title, content, source_id, content_type) VALUES (?, ?, ?, ?)",
@@ -978,6 +1074,28 @@ export class ContentStore {
 
   close(): void {
     closeDB(this.#db); // WAL checkpoint before close — important for persistent DBs
+  }
+
+  // ── Doltlite Version Control ──
+
+  /** Execute a SQL statement (no return value). For dolt_add, dolt_commit, etc. */
+  exec(sql: string): void {
+    this.#db.exec(sql);
+  }
+
+  /** Run a prepared query and return one row. For dolt_log, dolt_status, etc. */
+  queryOne(sql: string, ...params: unknown[]): unknown {
+    return this.#db.prepare(sql).get(...params);
+  }
+
+  /** Run a prepared query and return all rows. For dolt_log, dolt_status, etc. */
+  queryAll(sql: string, ...params: unknown[]): unknown[] {
+    return this.#db.prepare(sql).all(...params);
+  }
+
+  /** The database file path (for status display). */
+  get dbPath(): string {
+    return this.#dbPath;
   }
 
   // ── Vocabulary Extraction ──

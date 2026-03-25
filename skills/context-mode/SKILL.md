@@ -15,6 +15,8 @@ description: |
   "outdated packages", "dependency tree", "cloud resources", "CI/CD output".
   Also triggers on ANY MCP tool output that may exceed 20 lines.
   Subagent routing is handled automatically via PreToolUse hook.
+  Powered by doltlite — versioned knowledge bases with ctx_commit, ctx_log, ctx_diff, ctx_status.
+  Draft convoy creation with ctx_convoy_create, ctx_bead_create, ctx_dep_add, ctx_convoy_list.
 ---
 
 # Context Mode: Default for All Large Output
@@ -100,6 +102,14 @@ About to run a command / read a file / call an API?
 | Playwright console/network | `browser_*(filename)` → `ctx_execute_file(path)` | Save to file, analyze in sandbox |
 | MCP output (already in context) | Use directly | Don't re-index — it's already loaded |
 | MCP output (need multi-query) | `ctx_execute` to save → `ctx_index(path)` → `ctx_search` | Save to file first, index server-side |
+| Save knowledge base snapshot | `ctx_commit` | After indexing docs, end of research phase |
+| Check what's been indexed | `ctx_log` | See commit history of knowledge base |
+| Review pending changes | `ctx_diff` | What's changed since last commit |
+| Knowledge base health check | `ctx_status` | Engine, sources, chunks, commits, uncommitted |
+| Create draft convoy | `ctx_convoy_create` | Start staging a new convoy of work |
+| Create draft bead | `ctx_bead_create` | Add a task/gate to a draft convoy |
+| Add bead dependency | `ctx_dep_add` | Wire sequential blocking between beads |
+| List draft convoys | `ctx_convoy_list` | Review staged convoys before deploy |
 
 ## Automatic Triggers
 
@@ -288,6 +298,88 @@ Subagents automatically receive context-mode tool routing via a PreToolUse hook.
 - Passing ANY large data to `ctx_index(content: ...)` → data enters context as a parameter. **Always** use `ctx_index(path: ...)` to read server-side. The `content` parameter should only be used for small inline text you're composing yourself.
 - Calling an MCP tool (Context7 `query-docs`, GitHub API, etc.) then passing the response to `ctx_index(content: response)` → **doubles** context usage. The response is already in context — use it directly or save to file first.
 - Ignoring `browser_navigate` auto-snapshot → navigation response includes a full page snapshot. Don't rely on it for inspection — call `browser_snapshot(filename)` separately.
+
+## Knowledge Base Versioning (Doltlite)
+
+context-mode uses doltlite — a SQLite fork with git-like version control. Every knowledge base is automatically versioned. Use these tools to manage snapshots of your indexed content.
+
+### Tools
+
+| Tool | Purpose | When to Use |
+|------|---------|-------------|
+| `ctx_commit` | Save a named snapshot | After indexing important sources, completing a research phase, before experimental changes |
+| `ctx_log` | View commit history | Understand what was indexed and when, audit agent research activity |
+| `ctx_diff` | Show uncommitted changes | Review what will be saved before committing, check recent indexing activity |
+| `ctx_status` | Knowledge base overview | Quick health check — engine, source count, commit count, pending changes |
+
+### When to Commit
+
+- **After indexing major documentation** — `ctx_fetch_and_index` + `ctx_commit("indexed React docs v19")`
+- **End of a research phase** — before switching to implementation, commit the research KB state
+- **Before re-indexing** — commit current state so you can compare what changed
+- **At session boundaries** — commit before the session ends to preserve indexed knowledge
+
+### Use Cases
+
+**Multi-agent knowledge sharing:**
+Agent A indexes API docs and commits. Agent B can see what Agent A indexed via `ctx_log` and search the same knowledge base — both agents share the doltlite-backed store.
+
+**Research audit trail:**
+After a long investigation, `ctx_log` shows exactly what was indexed, in what order, with commit messages explaining why. Useful for understanding how an agent arrived at its conclusions.
+
+**Safe re-indexing:**
+Before re-indexing a source that may have changed, commit the current state. If the new content is worse (truncated, wrong version), the commit history preserves the previous good state.
+
+**Session continuity:**
+When a GC agent drains and restarts with a fresh thread, the versioned knowledge base persists. The new session inherits all indexed content from the previous session's commits.
+
+## Draft Convoy Management
+
+context-mode includes a production-compatible beads schema backed by doltlite. Agents can draft full convoy structures locally — with versioning — then deploy them to the production GC/dolt server.
+
+### Tools
+
+| Tool | Purpose | When to Use |
+|------|---------|-------------|
+| `ctx_convoy_create` | Create a draft convoy (parent container) | Start of planning — returns convoy ID for child beads |
+| `ctx_bead_create` | Create a draft work bead | Add tasks/gates to a convoy; set `convoy_id` to nest under parent |
+| `ctx_dep_add` | Add a dependency between beads | Wire sequential work; `type: "blocks"` for blockers, `"child-of"` for nesting |
+| `ctx_convoy_list` | List all draft convoys with beads | Review staged work before deploying |
+
+### Workflow
+
+```
+1. ctx_convoy_create(title, rig) → convoy_id
+2. ctx_bead_create(title, convoy_id, rig) → bead_id (repeat for each task)
+3. ctx_dep_add(bead_id, blocker_id, "blocks") — wire sequential deps
+4. ctx_convoy_list() — review the full structure
+5. ctx_commit("convoy: health integration draft") — snapshot it
+6. [deploy to production via GC API when ready]
+```
+
+### Example: Multi-rig convoy
+
+```
+# Create convoy
+convoy = ctx_convoy_create("Health Integration", rig="gascity")
+
+# Add tasks for different rigs
+step1 = ctx_bead_create("Add /health/dolt endpoint", convoy_id=convoy, rig="gascity", issue_type="task")
+step2 = ctx_bead_create("Wire Effect service for dolt status", convoy_id=convoy, rig="t3code", issue_type="task")
+gate  = ctx_bead_create("Review dolt health UI", convoy_id=convoy, issue_type="gate")
+
+# step2 waits for step1, gate waits for step2
+ctx_dep_add(step2, step1, "blocks")
+ctx_dep_add(gate, step2, "blocks")
+
+# Snapshot the draft
+ctx_commit("convoy: health integration v1")
+ctx_convoy_list()
+```
+
+### Schema compatibility
+
+Draft beads use the same schema as production GC dolt (`issues`, `dependencies`, `labels`, `comments`, `events` tables). Column names are identical, enabling direct row-level copy from staging to production on deploy. All `draft`-labelled issues are staging-only.
 
 ## Reference Files
 
