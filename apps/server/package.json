@@ -15,7 +15,7 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "bun --watch run src/index.ts",
+    "dev": "tsx --watch src/index.ts",
     "build": "bun scripts/cli.ts build",
     "start": "node dist/index.mjs",
     "prepare": "effect-language-service patch",
@@ -34,16 +34,17 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@effect/language-service": "catalog:",
     "@effect/vitest": "catalog:",
     "@t3tools/contracts": "workspace:*",
     "@t3tools/shared": "workspace:*",
     "@t3tools/web": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "^8.5.13",
     "tsdown": "catalog:",
+    "tsx": "^4.21.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
