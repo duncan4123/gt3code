@@ -6,7 +6,7 @@ export default Effect.gen(function* () {
 
   yield* sql`
     CREATE TABLE IF NOT EXISTS orchestration_events (
-      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      sequence INTEGER PRIMARY KEY,
       event_id TEXT NOT NULL UNIQUE,
       aggregate_kind TEXT NOT NULL,
       stream_id TEXT NOT NULL,

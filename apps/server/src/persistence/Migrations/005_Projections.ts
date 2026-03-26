@@ -73,7 +73,7 @@ export default Effect.gen(function* () {
 
   yield* sql`
     CREATE TABLE IF NOT EXISTS projection_turns (
-      row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      row_id INTEGER PRIMARY KEY,
       thread_id TEXT NOT NULL,
       turn_id TEXT,
       pending_message_id TEXT,
