@@ -13,7 +13,7 @@ type Loader = {
 };
 const defaultSqliteClientLoaders = {
   bun: () => import("@effect/sql-sqlite-bun/SqliteClient"),
-  node: () => import("../NodeSqliteClient.ts"),
+  node: () => import("../DoltliteClient.ts"),
 } satisfies Record<string, () => Promise<Loader>>;
 
 const makeRuntimeSqliteLayer = (
@@ -29,7 +29,6 @@ const makeRuntimeSqliteLayer = (
 const setup = Layer.effectDiscard(
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    yield* sql`PRAGMA journal_mode = WAL;`;
     yield* sql`PRAGMA foreign_keys = ON;`;
     yield* runMigrations;
   }),
