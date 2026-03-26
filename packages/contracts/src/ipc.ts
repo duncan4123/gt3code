@@ -184,6 +184,29 @@ export interface GcFormulaStepResult {
   readonly needs?: ReadonlyArray<string>;
 }
 
+export interface GcSessionResult {
+  readonly id: string;
+  readonly sessionName: string;
+  readonly state: string;
+  readonly provider: string;
+  readonly template: string;
+  readonly running: boolean;
+  readonly attached: boolean;
+  readonly title?: string;
+  readonly displayName?: string;
+  readonly kind?: string;
+  readonly rig?: string;
+  readonly pool?: string;
+  readonly model?: string;
+  readonly contextPct?: number;
+  readonly contextWindow?: number;
+  readonly activity?: string;
+  readonly activeBead?: string;
+  readonly lastActive?: string;
+  readonly createdAt: string;
+  readonly metadata?: Record<string, string>;
+}
+
 export interface GcThreadContextResult {
   readonly bead: {
     readonly id: string;
@@ -211,4 +234,5 @@ export interface GcThreadContextResult {
     readonly version: number;
     readonly steps: ReadonlyArray<GcFormulaStepResult>;
   } | null;
+  readonly session: GcSessionResult | null;
 }

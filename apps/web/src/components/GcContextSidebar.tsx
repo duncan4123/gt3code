@@ -71,8 +71,16 @@ const GcContextSidebar = memo(function GcContextSidebar({
 
   // Enriched data from gc.getThreadContext
   const formula = threadContext?.formula ?? null;
-  const beadDescription = threadContext?.bead?.description ?? null;
+  const apiBead = threadContext?.bead ?? null;
+  const beadDescription = apiBead?.description ?? metadata["gc.beadDescription"] ?? null;
+  const beadStatus = apiBead?.status ?? metadata["gc.beadStatus"];
+  const beadPriority =
+    apiBead?.priority != null ? String(apiBead.priority) : metadata["gc.beadPriority"];
+  const beadAssignee = apiBead?.assignee ?? metadata["gc.beadAssignee"];
+  const beadType = metadata["gc.beadType"];
+  const beadLabels = metadata["gc.beadLabels"];
   const convoy = threadContext?.convoy ?? null;
+  const session = threadContext?.session ?? null;
 
   // Prefer API convoy data over metadata when available
   const effectiveConvoyProgress = convoy
@@ -110,16 +118,117 @@ const GcContextSidebar = memo(function GcContextSidebar({
         <div className="space-y-4 p-3">
           <div className="space-y-3">
             <SectionHeader>Session</SectionHeader>
-            <ContextRow label="Agent" value={metadata["gc.agent"]} />
-            <ContextRow label="Rig" value={metadata["gc.rig"]} />
-            <ContextRow label="State" value={metadata["gc.state"]} />
-            <ContextRow label="Provider" value={metadata["gc.runtimeProvider"]} />
+            <ContextRow label="Agent" value={session?.sessionName ?? metadata["gc.agent"]} />
+            <ContextRow label="Rig" value={session?.rig ?? metadata["gc.rig"]} />
+            {session ? (
+              <div className="space-y-1">
+                <div className="text-[10px] font-semibold tracking-widest text-muted-foreground/45 uppercase">
+                  State
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
+                      session.state === "active"
+                        ? "bg-green-500"
+                        : session.state === "draining" || session.state === "creating"
+                          ? "bg-yellow-500"
+                          : session.state === "stopped" || session.state === "archived"
+                            ? "bg-muted-foreground/30"
+                            : session.state === "quarantined" || session.state === "orphaned"
+                              ? "bg-red-500"
+                              : "bg-muted-foreground/30"
+                    }`}
+                  />
+                  <span className="text-[13px] leading-snug text-foreground/85">{session.state}</span>
+                  {session.running ? (
+                    <Badge
+                      variant="secondary"
+                      className="rounded-md bg-green-500/10 px-1.5 py-0 text-[10px] font-semibold text-green-700 uppercase dark:bg-green-400/10 dark:text-green-400"
+                    >
+                      running
+                    </Badge>
+                  ) : null}
+                  {session.attached ? (
+                    <Badge
+                      variant="secondary"
+                      className="rounded-md bg-blue-500/10 px-1.5 py-0 text-[10px] font-semibold text-blue-700 uppercase dark:bg-blue-400/10 dark:text-blue-400"
+                    >
+                      attached
+                    </Badge>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <ContextRow label="State" value={metadata["gc.state"]} />
+            )}
+            <ContextRow label="Provider" value={session?.provider ?? metadata["gc.runtimeProvider"]} />
+            <ContextRow label="Template" value={session?.template} />
+            <ContextRow label="Kind" value={session?.kind} />
+            <ContextRow label="Pool" value={session?.pool} />
+            <ContextRow label="Model" value={session?.model ?? metadata["gc.startupModel"]} />
+            {session?.contextPct != null ? (
+              <div className="space-y-1">
+                <div className="text-[10px] font-semibold tracking-widest text-muted-foreground/45 uppercase">
+                  Context
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted/40">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        session.contextPct > 80
+                          ? "bg-red-500"
+                          : session.contextPct > 60
+                            ? "bg-yellow-500"
+                            : "bg-green-500"
+                      }`}
+                      style={{ width: `${Math.min(100, session.contextPct)}%` }}
+                    />
+                  </div>
+                  <span className="shrink-0 text-[11px] tabular-nums text-foreground/70">
+                    {session.contextPct}%
+                    {session.contextWindow != null ? ` / ${session.contextWindow.toLocaleString()}` : ""}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+            <ContextRow label="Activity" value={session?.activity} />
+            <ContextRow label="Active Bead" value={session?.activeBead} />
+            <ContextRow label="Session ID" value={session?.id} />
+            {session?.lastActive ? (
+              <ContextRow
+                label="Last Active"
+                value={new Date(session.lastActive).toLocaleString()}
+              />
+            ) : null}
           </div>
 
           <div className="space-y-3">
-            <SectionHeader>Work</SectionHeader>
-            <ContextRow label="Bead" value={metadata["gc.bead"]} />
-            <ContextRow label="Task" value={metadata["gc.beadTitle"]} />
+            <SectionHeader>Bead</SectionHeader>
+            <ContextRow label="ID" value={metadata["gc.bead"]} />
+            <ContextRow label="Title" value={metadata["gc.beadTitle"]} />
+            {beadStatus ? (
+              <div className="space-y-1">
+                <div className="text-[10px] font-semibold tracking-widest text-muted-foreground/45 uppercase">
+                  Status
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
+                      beadStatus === "closed"
+                        ? "bg-green-500"
+                        : beadStatus === "in_progress"
+                          ? "bg-yellow-500"
+                          : "bg-muted-foreground/30"
+                    }`}
+                  />
+                  <span className="text-[13px] leading-snug text-foreground/85">{beadStatus}</span>
+                </div>
+              </div>
+            ) : null}
+            <ContextRow label="Type" value={beadType} />
+            <ContextRow label="Priority" value={beadPriority} />
+            <ContextRow label="Assignee" value={beadAssignee} />
+            <ContextRow label="Labels" value={beadLabels} />
             {beadDescription ? (
               <div className="space-y-1">
                 <div className="text-[10px] font-semibold tracking-widest text-muted-foreground/45 uppercase">
@@ -130,16 +239,20 @@ const GcContextSidebar = memo(function GcContextSidebar({
                 </div>
               </div>
             ) : null}
+          </div>
+
+          <div className="space-y-3">
+            <SectionHeader>Convoy</SectionHeader>
             <ContextRow
               label="Convoy"
               value={convoy?.title ?? metadata["gc.convoyTitle"] ?? metadata["gc.convoy"]}
             />
-            <ContextRow label="Convoy Status" value={effectiveConvoyStatus} />
-            <ContextRow label="Convoy Progress" value={effectiveConvoyProgress} />
+            <ContextRow label="Status" value={effectiveConvoyStatus} />
+            <ContextRow label="Progress" value={effectiveConvoyProgress} />
             {convoy && convoy.children.length > 0 ? (
               <div className="space-y-1.5">
                 <div className="text-[10px] font-semibold tracking-widest text-muted-foreground/45 uppercase">
-                  Convoy Children
+                  Children
                 </div>
                 <div className="space-y-1">
                   {convoy.children.map((child) => (
@@ -194,10 +307,6 @@ const GcContextSidebar = memo(function GcContextSidebar({
               <SectionHeader>Workflow</SectionHeader>
               <ContextRow label="Formula" value={workflowFormula} />
               <ContextRow label="Molecule" value={workflowMolecule} />
-              <ContextRow
-                label="Current Bead"
-                value={metadata["gc.beadTitle"] ?? metadata["gc.bead"]}
-              />
               <ContextRow
                 label="Completed Beads"
                 value={

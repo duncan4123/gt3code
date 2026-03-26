@@ -13,6 +13,7 @@ import {
   type GcBead,
   type GcConvoy,
   type GcFormula,
+  type GcSession,
   type GcEvent,
 } from "../Services/GcApiClient.ts";
 import { createResourceCache } from "../resourceCache.ts";
@@ -82,6 +83,7 @@ const sanitizeKey = (value: string): string => value.trim();
 const BEAD_CACHE_TTL_MS = 3_000;
 const CONVOY_CACHE_TTL_MS = 5_000;
 const FORMULA_CACHE_TTL_MS = 30_000;
+const SESSION_CACHE_TTL_MS = 5_000;
 const CACHE_MAX_ENTRIES = 512;
 
 const makeGcApiClient = Effect.gen(function* () {
@@ -102,6 +104,10 @@ const makeGcApiClient = Effect.gen(function* () {
   const formulaCache = createResourceCache<string, GcFormula | null>({
     ttlMs: FORMULA_CACHE_TTL_MS,
     maxEntries: Math.max(64, CACHE_MAX_ENTRIES / 4),
+  });
+  const sessionCache = createResourceCache<string, GcSession | null>({
+    ttlMs: SESSION_CACHE_TTL_MS,
+    maxEntries: 128,
   });
 
   // SSE connection to /v0/events/stream — reconnects on failure.
@@ -246,6 +252,65 @@ const makeGcApiClient = Effect.gen(function* () {
     }).pipe(Effect.orElseSucceed(() => null));
   };
 
+  interface RawApiSession {
+    id: string;
+    session_name: string;
+    state: string;
+    provider: string;
+    template: string;
+    running: boolean;
+    attached: boolean;
+    title?: string;
+    display_name?: string;
+    kind?: string;
+    rig?: string;
+    pool?: string;
+    model?: string;
+    context_pct?: number;
+    context_window?: number;
+    activity?: string;
+    active_bead?: string;
+    last_active?: string;
+    created_at: string;
+    metadata?: Record<string, string>;
+  }
+
+  const normalizeSessionResponse = (raw: RawApiSession): GcSession => ({
+    id: raw.id,
+    sessionName: raw.session_name,
+    state: raw.state,
+    provider: raw.provider,
+    template: raw.template,
+    running: raw.running,
+    attached: raw.attached,
+    ...(raw.title ? { title: raw.title } : {}),
+    ...(raw.display_name ? { displayName: raw.display_name } : {}),
+    ...(raw.kind ? { kind: raw.kind } : {}),
+    ...(raw.rig ? { rig: raw.rig } : {}),
+    ...(raw.pool ? { pool: raw.pool } : {}),
+    ...(raw.model ? { model: raw.model } : {}),
+    ...(raw.context_pct != null ? { contextPct: raw.context_pct } : {}),
+    ...(raw.context_window != null ? { contextWindow: raw.context_window } : {}),
+    ...(raw.activity ? { activity: raw.activity } : {}),
+    ...(raw.active_bead ? { activeBead: raw.active_bead } : {}),
+    ...(raw.last_active ? { lastActive: raw.last_active } : {}),
+    createdAt: raw.created_at,
+    ...(raw.metadata ? { metadata: raw.metadata } : {}),
+  });
+
+  const getSession: GcApiClientShape["getSession"] = (id) => {
+    const sessionId = sanitizeKey(id);
+    if (!sessionId) return Effect.succeed(null);
+    return Effect.tryPromise({
+      try: () =>
+        sessionCache.get(sessionId, async () => {
+          const raw = await fetchJson<RawApiSession>(`/v0/session/${encodeURIComponent(sessionId)}`);
+          return raw ? normalizeSessionResponse(raw) : null;
+        }),
+      catch: () => null,
+    }).pipe(Effect.orElseSucceed(() => null));
+  };
+
   const isAvailable: GcApiClientShape["isAvailable"] = Effect.tryPromise({
     try: async () => {
       const response = await fetch(`${baseUrl}/health`);
@@ -258,6 +323,7 @@ const makeGcApiClient = Effect.gen(function* () {
     getBead,
     getConvoy,
     getFormula,
+    getSession,
     streamEvents: Stream.fromPubSub(eventPubSub),
     isAvailable,
   } satisfies GcApiClientShape;

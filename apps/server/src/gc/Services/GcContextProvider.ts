@@ -8,12 +8,13 @@
  */
 import { ServiceMap } from "effect";
 import type { Effect } from "effect";
-import type { GcBead, GcConvoy, GcFormula } from "./GcApiClient.ts";
+import type { GcBead, GcConvoy, GcFormula, GcSession } from "./GcApiClient.ts";
 
 export interface GcThreadContext {
   readonly bead: GcBead | null;
   readonly convoy: GcConvoy | null;
   readonly formula: GcFormula | null;
+  readonly session: GcSession | null;
 }
 
 export interface GcContextProviderShape {

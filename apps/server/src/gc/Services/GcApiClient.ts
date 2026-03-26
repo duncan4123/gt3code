@@ -65,6 +65,29 @@ export interface GcEvent {
   readonly payload: Record<string, unknown>;
 }
 
+export interface GcSession {
+  readonly id: string;
+  readonly sessionName: string;
+  readonly state: string;
+  readonly provider: string;
+  readonly template: string;
+  readonly running: boolean;
+  readonly attached: boolean;
+  readonly title?: string;
+  readonly displayName?: string;
+  readonly kind?: string;
+  readonly rig?: string;
+  readonly pool?: string;
+  readonly model?: string;
+  readonly contextPct?: number;
+  readonly contextWindow?: number;
+  readonly activity?: string;
+  readonly activeBead?: string;
+  readonly lastActive?: string;
+  readonly createdAt: string;
+  readonly metadata?: Record<string, string>;
+}
+
 export interface GcApiClientShape {
   /** Fetch a single bead by ID. */
   readonly getBead: (id: string) => Effect.Effect<GcBead | null>;
@@ -74,6 +97,9 @@ export interface GcApiClientShape {
 
   /** Fetch formula steps by formula name. Returns null if not found. */
   readonly getFormula: (name: string) => Effect.Effect<GcFormula | null>;
+
+  /** Fetch a session by name or bead ID. */
+  readonly getSession: (id: string) => Effect.Effect<GcSession | null>;
 
   /** Stream GC events via SSE. */
   readonly streamEvents: Stream.Stream<GcEvent>;

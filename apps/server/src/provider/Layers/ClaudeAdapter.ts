@@ -2786,7 +2786,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
             }
           })(),
           ...(input.cwd ? { additionalDirectories: [input.cwd] } : {}),
-          settingSources: ["project"],
+          settingSources: [...CLAUDE_SETTING_SOURCES],
           enableAllProjectMcpServers: true,
         };
 

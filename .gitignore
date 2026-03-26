@@ -24,3 +24,6 @@ __screenshots__/
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+# Beads metadata (environment-specific, not portable across rigs)
+.beads/metadata.json

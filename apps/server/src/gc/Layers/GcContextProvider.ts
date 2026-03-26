@@ -22,17 +22,19 @@ const makeGcContextProvider = Effect.gen(function* () {
       // Also try to derive formula from the bead title (e.g., "mol-deacon-patrol")
       const beadTitle = metadata["gc.beadTitle"];
       const effectiveFormulaName = formulaName ?? beadTitle;
+      const agentName = metadata["gc.agent"];
 
-      const [bead, convoy, formula] = yield* Effect.all(
+      const [bead, convoy, formula, session] = yield* Effect.all(
         [
           beadId ? gcApi.getBead(beadId) : Effect.succeed(null),
           convoyId ? gcApi.getConvoy(convoyId) : Effect.succeed(null),
           effectiveFormulaName ? gcApi.getFormula(effectiveFormulaName) : Effect.succeed(null),
+          agentName ? gcApi.getSession(agentName) : Effect.succeed(null),
         ],
-        { concurrency: 3 },
+        { concurrency: 4 },
       );
 
-      return { bead, convoy, formula } satisfies GcThreadContext;
+      return { bead, convoy, formula, session } satisfies GcThreadContext;
     });
 
   const isAvailable = gcApi.isAvailable;
