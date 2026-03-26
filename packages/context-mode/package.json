@@ -1,8 +1,9 @@
 {
-  "name": "context-mode",
-  "version": "1.0.53",
+  "name": "@t3tools/context-mode",
+  "version": "0.0.1",
+  "private": true,
   "type": "module",
-  "description": "MCP plugin that saves 98% of your context window. Works with Claude Code, Gemini CLI, VS Code Copilot, OpenCode, and Codex CLI. Sandboxed code execution, FTS5 knowledge base, and intent-driven search.",
+  "description": "T3-integrated context-mode MCP server with persistent doltlite knowledge base",
   "author": "Mert Koseoğlu",
   "license": "Elastic-2.0",
   "keywords": [
