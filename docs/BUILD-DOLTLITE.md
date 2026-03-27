@@ -63,8 +63,8 @@ The script:
 
 ### What changes
 
-The only file modified in better-sqlite3 is `deps/sqlite3.gyp`. The original is
-backed up as `deps/sqlite3.gyp.bak`. The native addon (`better_sqlite3.node`)
+The only file modified in better-sqlite3 is `deps/sqlite3.gyp` (overwritten in
+place — no backup is created). The native addon (`better_sqlite3.node`)
 grows from ~2 MB to ~6 MB because it now includes the prolly tree engine.
 
 ## Step 3: Install and run

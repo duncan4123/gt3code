@@ -8,7 +8,7 @@
 
 Context Mode is not a CLI output filter or a cloud analytics dashboard. It operates at the MCP protocol layer — raw data stays in a sandboxed subprocess and never enters your context window. Web pages, API responses, file analysis, Playwright snapshots, log files — everything is processed in complete isolation.
 
-**Nothing leaves your machine.** No telemetry, no cloud sync, no usage tracking, no account required. Your code, your prompts, your session data — all local. The SQLite databases live in your home directory and die when you're done.
+**Nothing leaves your machine.** No telemetry, no cloud sync, no usage tracking, no account required. Your code, your prompts, your session data — all local. The databases live in your home directory (`~/.context-mode/`). With standard SQLite they're ephemeral; with [doltlite](docs/BUILD-DOLTLITE.md) they gain git-like version control (commit, branch, merge, diff).
 
 This is a deliberate architectural choice, not a missing feature. Context optimization should happen at the source, not in a dashboard behind a per-seat subscription. Privacy-first is our philosophy — and every design decision follows from it. [License →](#license)
 
@@ -41,13 +41,15 @@ Platforms are grouped by install complexity. Hook-capable platforms get automati
 
 Restart Claude Code (or run `/reload-plugins`).
 
+**Doltlite (optional):** To enable git-like version control on the knowledge base, build `libdoltlite.a` and run the patch script. See **[Building with Doltlite](docs/BUILD-DOLTLITE.md)** for the full pipeline. If skipped, standard SQLite works fine — doltlite is opt-in.
+
 **Verify:**
 
 ```
 /context-mode-doltlite:ctx-doctor
 ```
 
-All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, and plugin registration.
+All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, plugin registration, and doltlite patch status.
 
 **Routing:** Automatic. The SessionStart hook injects routing instructions at runtime — no file is written to your project. The plugin registers all hooks (PreToolUse, PostToolUse, PreCompact, SessionStart) and 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`).
 
@@ -618,6 +620,8 @@ When output exceeds 5 KB and an `intent` is provided, Context Mode switches to i
 ## How the Knowledge Base Works
 
 The `ctx_index` tool chunks markdown content by headings while keeping code blocks intact, then stores them in a **SQLite FTS5** (Full-Text Search 5) virtual table. Search uses **BM25 ranking** — a probabilistic relevance algorithm that scores documents based on term frequency, inverse document frequency, and document length normalization. **Porter stemming** is applied at index time so "running", "runs", and "ran" match the same stem. Titles and headings are weighted **5x** in BM25 scoring for precise navigational queries.
+
+When [doltlite](docs/BUILD-DOLTLITE.md) is active, the knowledge base uses a **prolly tree** storage engine instead of SQLite's B-tree. This adds git-like version control — `ctx_commit`, `ctx_log`, `ctx_diff`, and `ctx_status` expose commit/branch/merge/diff operations on the indexed content. FTS5 search works identically under both engines.
 
 When you call `ctx_search`, it returns relevant content snippets focused around matching query terms — not full documents, not approximations, the actual indexed content with smart extraction around what you're looking for. `ctx_fetch_and_index` extends this to URLs: fetch, convert HTML to markdown, chunk, index. The raw page never enters context. Use the `contentType` parameter to filter results by type (e.g. `code` or `prose`).
 
