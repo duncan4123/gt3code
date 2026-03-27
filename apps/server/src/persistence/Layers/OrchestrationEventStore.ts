@@ -98,10 +98,14 @@ const makeEventStore = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   // Workaround for doltlite bugs:
-  //  - timsehn/doltlite#179: reads within a transaction don't see prior writes
-  //  - timsehn/doltlite#180: MAX(col) with WHERE returns wrong results
+  //  - timsehn/doltlite#179: deferred mutations (pTE->pPending) not flushed
+  //    before reads within the same transaction — pTE->root stays stale
+  //  - timsehn/doltlite#180: WHERE_ONEROW flag incorrectly set on non-unique
+  //    index scans, causing OP_Noop instead of OP_Next — only first row processed
   // We warm the cache at startup using GROUP BY (which works correctly), then
   // increment locally. This avoids ever hitting the broken per-stream queries.
+  // Alternatives to GROUP BY HAVING: use +column (disables index per-term) or
+  // NOT INDEXED (forces full table scan) to avoid WHERE_ONEROW.
   const streamVersionCache = new Map<string, number>();
 
   // Warm cache at startup so first append never queries per-stream
@@ -126,14 +130,14 @@ const makeEventStore = Effect.gen(function* () {
       streamVersionCache.set(key, next);
       return Effect.succeed(next);
     }
-    // Workaround for doltlite bug: MAX(col) with WHERE clause returns wrong
-    // results (only scans first matching row). GROUP BY … HAVING works correctly.
+    // Workaround for doltlite#180: WHERE_ONEROW incorrectly set on non-unique
+    // index scans → OP_Noop instead of OP_Next → only first row processed.
+    // Using +col to disable index usage and avoid the WHERE_ONEROW code path.
     return sql`
       SELECT COALESCE(MAX(stream_version) + 1, 0) AS "nextVersion"
       FROM orchestration_events
-      GROUP BY aggregate_kind, stream_id
-      HAVING aggregate_kind = ${aggregateKind}
-        AND stream_id = ${streamId}
+      WHERE +aggregate_kind = ${aggregateKind}
+        AND +stream_id = ${streamId}
     `.pipe(
       Effect.map((rows) => {
         // No rows when the stream has no events yet → start at version 0
