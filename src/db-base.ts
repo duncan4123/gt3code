@@ -166,16 +166,18 @@ export function applyWALPragmas(db: DatabaseInstance): void {
 // ─────────────────────────────────────────────────────────
 
 /**
- * Delete all three SQLite files for a given db path (main, WAL, SHM).
- * Silently ignores individual deletion errors so a partial cleanup
- * does not abort the rest.
+ * Delete database files for a given db path.
+ *
+ * Under stock SQLite this removes the main file plus WAL/SHM sidecars.
+ * Under doltlite (Manifest V6) the WAL is merged into the main file so
+ * `-wal`/`-shm` won't exist — deletion attempts are harmlessly ignored.
  */
 export function deleteDBFiles(dbPath: string): void {
   for (const suffix of ["", "-wal", "-shm"]) {
     try {
       unlinkSync(dbPath + suffix);
     } catch {
-      // ignore — file may not exist
+      // ignore — file may not exist (expected for doltlite single-file format)
     }
   }
 }
@@ -183,11 +185,24 @@ export function deleteDBFiles(dbPath: string): void {
 /**
  * Safely close a database connection. Swallows errors so callers can
  * always call this in a finally/cleanup path without try/catch.
+ *
+ * Under doltlite the WAL is merged into the main file (Manifest V6,
+ * single-file storage — upstream doltlite#118), so SQLite-level
+ * wal_checkpoint is skipped entirely.
  */
 export function closeDB(db: DatabaseInstance): void {
   try {
-    // Checkpoint WAL before close to prevent contention on restart (#103)
-    db.pragma("wal_checkpoint(TRUNCATE)");
+    // Skip checkpoint under doltlite — its WAL is internal (#131, doltlite#118)
+    const isDoltlite = (() => {
+      try {
+        (db as any).prepare("SELECT doltlite_engine()").get();
+        return true;
+      } catch { return false; }
+    })();
+    if (!isDoltlite) {
+      // Checkpoint WAL before close to prevent contention on restart (#103)
+      db.pragma("wal_checkpoint(TRUNCATE)");
+    }
   } catch { /* WAL may not be active */ }
   try {
     db.close();

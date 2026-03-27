@@ -121,9 +121,30 @@ writes both formats transparently.
 
 ### WAL compatibility
 
-Doltlite manages its own journal via the prolly chunk store. SQLite's WAL mode
-is incompatible. The `applyWALPragmas()` function in `db-base.ts` detects
-doltlite by calling `SELECT doltlite_engine()` and skips WAL setup.
+Since doltlite#118 (Manifest V6, single-file storage), the WAL is merged into
+the main database file as an append-only region at EOF — there are no separate
+`-wal` or `-shm` sidecar files. SQLite's `journal_mode = WAL` pragma is
+incompatible with this internal WAL.
+
+`db-base.ts` handles this in three places:
+
+1. **`applyWALPragmas()`** — detects doltlite via `SELECT doltlite_engine()`
+   and skips `journal_mode = WAL` + `synchronous = NORMAL`.
+2. **`closeDB()`** — skips `wal_checkpoint(TRUNCATE)` under doltlite since
+   the internal WAL is managed by the prolly chunk store.
+3. **`deleteDBFiles()`** — still attempts `-wal`/`-shm` cleanup (harmless
+   no-ops under doltlite's single-file format).
+
+#### Lessons from t3code migration
+
+The t3code project completed the same SQLite→doltlite migration (Mar 26, 2026).
+Key compatibility findings that also apply here:
+
+- **AUTOINCREMENT**: Supported in current doltlite builds (was rejected in
+  earlier versions — monitor if upgrading doltlite).
+- **JSON SQL functions**: `json_set`, `json_type` etc. may be unavailable.
+  context-mode does not use these currently.
+- **FTS5**: Supported and verified working with doltlite-patched better-sqlite3.
 
 ### Version control via SQL
 

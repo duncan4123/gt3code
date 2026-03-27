@@ -522,24 +522,43 @@ async function upgrade() {
     });
     s.stop("Dependencies ready");
 
-    // Rebuild native addons for current Node.js ABI (fixes #131)
+    // Rebuild native addons — prefer doltlite patch if available (#131)
     s.start("Rebuilding native addons");
-    try {
-      execSync("npm rebuild better-sqlite3", {
-        cwd: pluginRoot,
-        stdio: "pipe",
-        timeout: 60000,
-      });
-      s.stop(color.green("Native addons rebuilt"));
-      changes.push("Rebuilt better-sqlite3 for current Node.js");
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      s.stop(color.yellow("Native addon rebuild warning"));
-      p.log.warn(
-        color.yellow("better-sqlite3 rebuild issue") +
-          ` — ${message}` +
-          color.dim(`\n  Try manually: cd "${pluginRoot}" && npm rebuild better-sqlite3`),
-      );
+    const patchScript = resolve(pluginRoot, "scripts", "patch-doltlite.mjs");
+    let doltlitePatched = false;
+    if (existsSync(patchScript)) {
+      try {
+        execSync(`node "${patchScript}"`, {
+          cwd: pluginRoot,
+          stdio: "pipe",
+          timeout: 120000,
+        });
+        s.stop(color.green("Native addons rebuilt (doltlite)"));
+        changes.push("Patched better-sqlite3 with doltlite");
+        doltlitePatched = true;
+      } catch {
+        // patch-doltlite exits 0 if libdoltlite.a not found (skips silently),
+        // so a real failure here means rebuild issue — fall through to generic
+      }
+    }
+    if (!doltlitePatched) {
+      try {
+        execSync("npm rebuild better-sqlite3", {
+          cwd: pluginRoot,
+          stdio: "pipe",
+          timeout: 60000,
+        });
+        s.stop(color.green("Native addons rebuilt"));
+        changes.push("Rebuilt better-sqlite3 for current Node.js");
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        s.stop(color.yellow("Native addon rebuild warning"));
+        p.log.warn(
+          color.yellow("better-sqlite3 rebuild issue") +
+            ` — ${message}` +
+            color.dim(`\n  Try manually: cd "${pluginRoot}" && npm rebuild better-sqlite3`),
+        );
+      }
     }
 
     // Update global npm
