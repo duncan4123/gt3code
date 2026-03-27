@@ -14,6 +14,12 @@ const setup = Layer.effectDiscard(
     const sql = yield* SqlClient.SqlClient;
     yield* sql`PRAGMA foreign_keys = ON;`;
     yield* runMigrations;
+    // Initial dolt_commit after migrations — establishes HEAD so subsequent
+    // dolt_commit calls have a parent to diff against.
+    yield* sql`SELECT dolt_add('-A')`.pipe(
+      Effect.flatMap(() => sql`SELECT dolt_commit('-m', 'schema: migrations')`),
+      Effect.catch(() => Effect.void),
+    );
   }),
 );
 

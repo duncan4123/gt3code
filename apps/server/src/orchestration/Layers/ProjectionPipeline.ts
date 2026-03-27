@@ -341,6 +341,11 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const eventStore = yield* OrchestrationEventStore;
   const projectionStateRepository = yield* ProjectionStateRepository;
+
+  // Skip dolt_commit during bootstrap — only commit during live operation.
+  let bootstrapComplete = false;
+  // Counter for batching high-frequency events (activities, tool calls, subagents).
+  let sinceLastCommit = 0;
   const projectionProjectRepository = yield* ProjectionProjectRepository;
   const projectionThreadRepository = yield* ProjectionThreadRepository;
   const projectionThreadMessageRepository = yield* ProjectionThreadMessageRepository;
@@ -1175,15 +1180,36 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
       };
 
       yield* sql.withTransaction(
-        projector.apply(event, attachmentSideEffects).pipe(
-          Effect.flatMap(() =>
-            projectionStateRepository.upsert({
-              projector: projector.name,
-              lastAppliedSequence: event.sequence,
-              updatedAt: event.occurredAt,
-            }),
+        projector
+          .apply(event, attachmentSideEffects)
+          .pipe(
+            Effect.catchTag("SqlError", (e) =>
+              Effect.fail(
+                toPersistenceSqlError(
+                  `ProjectionPipeline.${projector.name}:apply[${event.type}@${event.sequence}]`,
+                )(e),
+              ),
+            ),
+          )
+          .pipe(
+            Effect.flatMap(() =>
+              projectionStateRepository
+                .upsert({
+                  projector: projector.name,
+                  lastAppliedSequence: event.sequence,
+                  updatedAt: event.occurredAt,
+                })
+                .pipe(
+                  Effect.catchTag("SqlError", (e) =>
+                    Effect.fail(
+                      toPersistenceSqlError(
+                        `ProjectionPipeline.${projector.name}:upsertState[${event.type}@${event.sequence}]`,
+                      )(e),
+                    ),
+                  ),
+                ),
+            ),
           ),
-        ),
       );
 
       yield* runAttachmentSideEffects(attachmentSideEffects).pipe(
@@ -1215,16 +1241,106 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
       );
 
   const projectEvent: OrchestrationProjectionPipelineShape["projectEvent"] = (event) =>
-    Effect.forEach(projectors, (projector) => runProjectorForEvent(projector, event), {
-      concurrency: 1,
-    }).pipe(
+    Effect.forEach(
+      projectors,
+      (projector) =>
+        runProjectorForEvent(projector, event).pipe(
+          Effect.catchTag("SqlError", (sqlError) =>
+            Effect.fail(
+              toPersistenceSqlError(
+                `ProjectionPipeline.projectEvent:${projector.name}`,
+              )(sqlError),
+            ),
+          ),
+        ),
+      { concurrency: 1 },
+    ).pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
       Effect.provideService(ServerConfig, serverConfig),
       Effect.asVoid,
-      Effect.catchTag("SqlError", (sqlError) =>
-        Effect.fail(toPersistenceSqlError("ProjectionPipeline.projectEvent:query")(sqlError)),
-      ),
+      // Doltlite requires dolt_add + dolt_commit to flush the prolly-tree skip
+      // list (prolly_mutmap). Without it, pending mutations accumulate and corrupt
+      // after ~80-90 writes. Commit strategy:
+      //   1. Meaningful events → commit with descriptive message
+      //   2. High-frequency events (activities, mode changes) → commit every 20
+      //      to stay under the ~80 corruption threshold during long tool/subagent runs
+      //   3. Tagged commits at milestones (turn complete, create, delete, revert)
+      // dolt_add('-A') not implemented — stage tables explicitly.
+      // Skip during bootstrap — initial commit happens after migrations.
+      Effect.tap(() => {
+        if (!bootstrapComplete) return Effect.void;
+
+        const tid = event.aggregateId.substring(0, 8);
+        let msg: string;
+        let tag = false;
+
+        switch (event.type) {
+          // Tagged commits — milestones and destructive actions
+          case "project.created":
+            msg = `project created ${tid}`; tag = true; sinceLastCommit = 0; break;
+          case "project.deleted":
+            msg = `project deleted ${tid}`; tag = true; sinceLastCommit = 0; break;
+          case "thread.created":
+            msg = `thread created ${tid}`; tag = true; sinceLastCommit = 0; break;
+          case "thread.deleted":
+            msg = `thread deleted ${tid}`; tag = true; sinceLastCommit = 0; break;
+          case "thread.reverted":
+            msg = `thread reverted ${tid}`; tag = true; sinceLastCommit = 0; break;
+          case "thread.turn-diff-completed":
+            msg = `turn completed ${tid}`; tag = true; sinceLastCommit = 0; break;
+
+          // Untagged commits — meaningful data changes
+          case "project.meta-updated":
+            msg = `project updated ${tid}`; sinceLastCommit = 0; break;
+          case "thread.message-sent":
+            msg = `message ${tid}`; sinceLastCommit = 0; break;
+          case "thread.turn-interrupt-requested":
+            msg = `turn interrupted ${tid}`; sinceLastCommit = 0; break;
+          case "thread.checkpoint-revert-requested":
+            msg = `revert requested ${tid}`; sinceLastCommit = 0; break;
+          case "thread.session-set":
+            msg = `session changed ${tid}`; sinceLastCommit = 0; break;
+          case "thread.proposed-plan-upserted":
+            msg = `plan proposed ${tid}`; sinceLastCommit = 0; break;
+
+          // High-frequency — batch commit every 10 to stay well under corruption
+          // threshold (~80 writes). Tool calls and subagents can generate 50-100+
+          // consecutive activity events in a single turn.
+          default:
+            sinceLastCommit++;
+            if (sinceLastCommit < 10) return Effect.void;
+            msg = `batch flush (${sinceLastCommit} events)`;
+            sinceLastCommit = 0;
+            break;
+        }
+
+        const doltAddAll = Effect.all([
+          sql`SELECT dolt_add('orchestration_events')`,
+          sql`SELECT dolt_add('orchestration_command_receipts')`,
+          sql`SELECT dolt_add('projection_state')`,
+          sql`SELECT dolt_add('projection_projects')`,
+          sql`SELECT dolt_add('projection_threads')`,
+          sql`SELECT dolt_add('projection_thread_messages')`,
+          sql`SELECT dolt_add('projection_thread_activities')`,
+          sql`SELECT dolt_add('projection_thread_sessions')`,
+          sql`SELECT dolt_add('projection_thread_proposed_plans')`,
+          sql`SELECT dolt_add('projection_turns')`,
+          sql`SELECT dolt_add('projection_pending_approvals')`,
+          sql`SELECT dolt_add('checkpoint_diff_blobs')`,
+          sql`SELECT dolt_add('provider_session_runtime')`,
+        ]);
+
+        return doltAddAll.pipe(
+          Effect.flatMap(() => sql`SELECT dolt_commit('-m', ${msg})`),
+          Effect.flatMap(() =>
+            tag
+              ? sql`SELECT dolt_tag(${`${event.type}-${event.sequence}`})`
+              : Effect.void,
+          ),
+          Effect.catch(() => Effect.void),
+        );
+      }),
     );
 
   const bootstrap: OrchestrationProjectionPipelineShape["bootstrap"] = Effect.forEach(
@@ -1236,11 +1352,12 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
     Effect.provideService(Path.Path, path),
     Effect.provideService(ServerConfig, serverConfig),
     Effect.asVoid,
-    Effect.tap(() =>
-      Effect.log("orchestration projection pipeline bootstrapped").pipe(
+    Effect.tap(() => {
+      bootstrapComplete = true;
+      return Effect.log("orchestration projection pipeline bootstrapped").pipe(
         Effect.annotateLogs({ projectors: projectors.length }),
-      ),
-    ),
+      );
+    }),
     Effect.catchTag("SqlError", (sqlError) =>
       Effect.fail(toPersistenceSqlError("ProjectionPipeline.bootstrap:query")(sqlError)),
     ),
