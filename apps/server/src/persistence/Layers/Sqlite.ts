@@ -7,7 +7,7 @@ import { layer as doltliteLayer } from "../DoltliteClient.ts";
 
 const makeRuntimeSqliteLayer = (config: {
   readonly filename: string;
-}): Layer.Layer<SqlClient.SqlClient> => doltliteLayer(config);
+}): Layer.Layer<SqlClient.SqlClient> => doltliteLayer({ ...config, wal: false });
 
 const setup = Layer.effectDiscard(
   Effect.gen(function* () {
