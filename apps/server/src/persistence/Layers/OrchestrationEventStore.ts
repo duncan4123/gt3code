@@ -33,6 +33,7 @@ const AppendEventRequestSchema = Schema.Struct({
   eventId: EventId,
   aggregateKind: OrchestrationAggregateKind,
   streamId: Schema.Union([ProjectId, ThreadId]),
+  streamVersion: Schema.Number,
   type: OrchestrationEventType,
   causationEventId: Schema.NullOr(EventId),
   correlationId: Schema.NullOr(CommandId),
@@ -96,6 +97,53 @@ function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: st
 const makeEventStore = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
+  // Workaround for doltlite bugs:
+  //  - timsehn/doltlite#179: reads within a transaction don't see prior writes
+  //  - timsehn/doltlite#180: MAX(col) with WHERE returns wrong results
+  // We warm the cache at startup using GROUP BY (which works correctly), then
+  // increment locally. This avoids ever hitting the broken per-stream queries.
+  const streamVersionCache = new Map<string, number>();
+
+  // Warm cache at startup so first append never queries per-stream
+  yield* sql`
+    SELECT aggregate_kind AS "aggregateKind", stream_id AS "streamId",
+           MAX(stream_version) AS "maxVersion"
+    FROM orchestration_events
+    GROUP BY aggregate_kind, stream_id
+  `.pipe(
+    Effect.map((rows) => {
+      for (const row of rows as Array<{ aggregateKind: string; streamId: string; maxVersion: number }>) {
+        streamVersionCache.set(`${row.aggregateKind}:${row.streamId}`, row.maxVersion);
+      }
+    }),
+  );
+
+  const nextStreamVersion = (aggregateKind: string, streamId: string) => {
+    const key = `${aggregateKind}:${streamId}`;
+    const cached = streamVersionCache.get(key);
+    if (cached !== undefined) {
+      const next = cached + 1;
+      streamVersionCache.set(key, next);
+      return Effect.succeed(next);
+    }
+    // Workaround for doltlite bug: MAX(col) with WHERE clause returns wrong
+    // results (only scans first matching row). GROUP BY … HAVING works correctly.
+    return sql`
+      SELECT COALESCE(MAX(stream_version) + 1, 0) AS "nextVersion"
+      FROM orchestration_events
+      GROUP BY aggregate_kind, stream_id
+      HAVING aggregate_kind = ${aggregateKind}
+        AND stream_id = ${streamId}
+    `.pipe(
+      Effect.map((rows) => {
+        // No rows when the stream has no events yet → start at version 0
+        const next = rows.length > 0 ? (rows[0] as { nextVersion: number }).nextVersion : 0;
+        streamVersionCache.set(key, next);
+        return next;
+      }),
+    );
+  };
+
   const appendEventRow = SqlSchema.findOne({
     Request: AppendEventRequestSchema,
     Result: OrchestrationEventPersistedRowSchema,
@@ -119,17 +167,7 @@ const makeEventStore = Effect.gen(function* () {
           ${request.eventId},
           ${request.aggregateKind},
           ${request.streamId},
-          COALESCE(
-            (
-              SELECT stream_version + 1
-              FROM orchestration_events
-              WHERE aggregate_kind = ${request.aggregateKind}
-                AND stream_id = ${request.streamId}
-              ORDER BY stream_version DESC
-              LIMIT 1
-            ),
-            0
-          ),
+          ${request.streamVersion},
           ${request.type},
           ${request.occurredAt},
           ${request.commandId},
@@ -179,19 +217,24 @@ const makeEventStore = Effect.gen(function* () {
   });
 
   const append: OrchestrationEventStoreShape["append"] = (event) =>
-    appendEventRow({
-      eventId: event.eventId,
-      aggregateKind: event.aggregateKind,
-      streamId: event.aggregateId,
-      type: event.type,
-      causationEventId: event.causationEventId,
-      correlationId: event.correlationId,
-      actorKind: inferActorKind(event),
-      occurredAt: event.occurredAt,
-      commandId: event.commandId,
-      payloadJson: event.payload,
-      metadataJson: event.metadata,
-    }).pipe(
+    Effect.flatMap(
+      nextStreamVersion(event.aggregateKind, event.aggregateId),
+      (version) =>
+        appendEventRow({
+          eventId: event.eventId,
+          aggregateKind: event.aggregateKind,
+          streamId: event.aggregateId,
+          streamVersion: version,
+          type: event.type,
+          causationEventId: event.causationEventId,
+          correlationId: event.correlationId,
+          actorKind: inferActorKind(event),
+          occurredAt: event.occurredAt,
+          commandId: event.commandId,
+          payloadJson: event.payload,
+          metadataJson: event.metadata,
+        }),
+    ).pipe(
       Effect.mapError(
         toPersistenceSqlOrDecodeError(
           "OrchestrationEventStore.append:insert",
