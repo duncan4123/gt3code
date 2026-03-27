@@ -41,7 +41,7 @@ Platforms are grouped by install complexity. Hook-capable platforms get automati
 
 Restart Claude Code (or run `/reload-plugins`).
 
-**Doltlite (optional):** To enable git-like version control on the knowledge base, build `libdoltlite.a` and run the patch script. See **[Building with Doltlite](docs/BUILD-DOLTLITE.md)** for the full pipeline. If skipped, standard SQLite works fine — doltlite is opt-in.
+**Doltlite (required):** This fork uses doltlite for all database operations — there is no SQLite fallback. Build `libdoltlite.a` and run the patch script before first use. See **[Building with Doltlite](docs/BUILD-DOLTLITE.md)** for the full pipeline.
 
 **Verify:**
 
