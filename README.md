@@ -51,7 +51,7 @@ Restart Claude Code (or run `/reload-plugins`).
 
 All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, plugin registration, and doltlite patch status.
 
-**Routing:** Automatic. The SessionStart hook injects routing instructions at runtime — no file is written to your project. The plugin registers all hooks (PreToolUse, PostToolUse, PreCompact, SessionStart) and 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`).
+**Routing:** Automatic. The SessionStart hook injects routing instructions at runtime — no file is written to your project. The plugin registers all hooks (PreToolUse, PostToolUse, PreCompact, SessionStart) and 19 tools: 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`), 3 utility tools, 2 database management tools, 4 doltlite version control tools, and 4 convoy/work-tracking tools. See [Tools](#tools) for the full list.
 
 | Slash Command | What it does |
 |---|---|
@@ -597,15 +597,30 @@ npm install -g context-mode
 
 | Tool | What it does | Context saved |
 |---|---|---|
+| **Sandbox** | | |
 | `ctx_batch_execute` | Run multiple commands + search multiple queries in ONE call. | 986 KB → 62 KB |
 | `ctx_execute` | Run code in 11 languages. Only stdout enters context. | 56 KB → 299 B |
 | `ctx_execute_file` | Process files in sandbox. Raw content never leaves. | 45 KB → 155 B |
 | `ctx_index` | Chunk markdown into FTS5 with BM25 ranking. | 60 KB → 40 B |
 | `ctx_search` | Query indexed content with multiple queries in one call. | On-demand retrieval |
 | `ctx_fetch_and_index` | Fetch URL, detect content type (HTML/JSON/text), chunk and index. | 60 KB → 40 B |
+| **Utility** | | |
 | `ctx_stats` | Show context savings, call counts, and session statistics. | — |
 | `ctx_doctor` | Diagnose installation: runtimes, hooks, FTS5, versions. | — |
 | `ctx_upgrade` | Upgrade to latest version from GitHub, rebuild, reconfigure hooks. | — |
+| **Database Management** | | |
+| `list_databases` | List all named persistent FTS5 databases. | — |
+| `delete_database` | Permanently delete a named persistent database. | — |
+| **Version Control** *(doltlite)* | | |
+| `ctx_commit` | Save a versioned snapshot of the knowledge base. | — |
+| `ctx_log` | View commit history for the current knowledge base. | — |
+| `ctx_diff` | Show changes since the last commit. | — |
+| `ctx_status` | Show current knowledge base state (uncommitted changes). | — |
+| **Convoy / Work Tracking** | | |
+| `ctx_convoy_create` | Create a parent convoy grouping related tasks. | — |
+| `ctx_bead_create` | Create a work bead (issue) in the knowledge base. | — |
+| `ctx_dep_add` | Add a dependency relationship between two beads. | — |
+| `ctx_convoy_list` | List all draft convoys and their beads. | — |
 
 ## How the Sandbox Works
 
