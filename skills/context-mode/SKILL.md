@@ -16,6 +16,7 @@ description: |
   Also triggers on ANY MCP tool output that may exceed 20 lines.
   Subagent routing is handled automatically via PreToolUse hook.
   Powered by doltlite — versioned knowledge bases with ctx_commit, ctx_log, ctx_diff, ctx_status.
+  Named persistent databases with database parameter on index/search/batch_execute, list_databases, delete_database.
   Draft convoy creation with ctx_convoy_create, ctx_bead_create, ctx_dep_add, ctx_convoy_list.
 ---
 
@@ -110,6 +111,11 @@ About to run a command / read a file / call an API?
 | Create draft bead | `ctx_bead_create` | Add a task/gate to a draft convoy |
 | Add bead dependency | `ctx_dep_add` | Wire sequential blocking between beads |
 | List draft convoys | `ctx_convoy_list` | Review staged convoys before deploy |
+| Index into named DB | `ctx_index(..., database: "name")` | Persistent KB that survives restarts |
+| Search named DB | `ctx_search(..., database: "name")` | Query a persistent knowledge base |
+| Batch into named DB | `ctx_batch_execute(..., database: "name")` | Research into persistent KB |
+| List persistent DBs | `list_databases` | See all named knowledge bases |
+| Delete persistent DB | `delete_database` | Remove a named knowledge base |
 
 ## Automatic Triggers
 
