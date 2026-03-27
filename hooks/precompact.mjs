@@ -2,7 +2,7 @@
 import "./suppress-stderr.mjs";
 import "./ensure-deps.mjs";
 /**
- * PreCompact hook for context-mode session continuity.
+ * PreCompact hook for context-mode-doltlite session continuity.
  *
  * Triggered when Claude Code is about to compact the conversation.
  * Reads all captured session events, builds a priority-sorted resume
@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 // Resolve absolute path for imports
 const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
 const { loadSessionDB, loadSnapshot } = createSessionLoaders(HOOK_DIR);
-const DEBUG_LOG = join(homedir(), ".claude", "context-mode", "precompact-debug.log");
+const DEBUG_LOG = join(homedir(), ".claude", "context-mode-doltlite", "precompact-debug.log");
 
 try {
   const raw = await readStdin();

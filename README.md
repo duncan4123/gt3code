@@ -1,9 +1,8 @@
-# Context Mode
+# Context Mode (Doltlite Fork)
 
-**The other half of the context problem.**
+> Fork of [mksglu/context-mode](https://github.com/mksglu/context-mode) with doltlite-specific extensions.
 
-[![users](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fcdn.jsdelivr.net%2Fgh%2Fmksglu%2Fcontext-mode%40main%2Fstats.json&query=%24.message&label=users&color=brightgreen)](https://www.npmjs.com/package/context-mode) [![npm](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fcdn.jsdelivr.net%2Fgh%2Fmksglu%2Fcontext-mode%40main%2Fstats.json&query=%24.npm&label=npm&color=blue)](https://www.npmjs.com/package/context-mode) [![marketplace](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fcdn.jsdelivr.net%2Fgh%2Fmksglu%2Fcontext-mode%40main%2Fstats.json&query=%24.marketplace&label=marketplace&color=blue)](https://github.com/mksglu/context-mode) [![GitHub stars](https://img.shields.io/github/stars/mksglu/context-mode?style=flat&color=yellow)](https://github.com/mksglu/context-mode/stargazers) [![GitHub forks](https://img.shields.io/github/forks/mksglu/context-mode?style=flat&color=blue)](https://github.com/mksglu/context-mode/network/members) [![Last commit](https://img.shields.io/github/last-commit/mksglu/context-mode?color=green)](https://github.com/mksglu/context-mode/commits) [![License: ELv2](https://img.shields.io/badge/License-ELv2-blue.svg)](LICENSE)
-[![Discord](https://img.shields.io/discord/1478479412700909750?label=Discord&logo=discord&color=5865f2)](https://discord.gg/DCN9jUgN5v)
+[![Last commit](https://img.shields.io/github/last-commit/sfncore/claude-context-mode?color=green)](https://github.com/sfncore/claude-context-mode/commits) [![License: ELv2](https://img.shields.io/badge/License-ELv2-blue.svg)](LICENSE)
 
 ## Privacy & Architecture
 
@@ -36,8 +35,8 @@ Platforms are grouped by install complexity. Hook-capable platforms get automati
 **Install:**
 
 ```bash
-/plugin marketplace add mksglu/context-mode
-/plugin install context-mode@context-mode
+/plugin marketplace add https://github.com/sfncore/claude-context-mode
+/plugin install context-mode-doltlite@context-mode-doltlite
 ```
 
 Restart Claude Code (or run `/reload-plugins`).
@@ -45,7 +44,7 @@ Restart Claude Code (or run `/reload-plugins`).
 **Verify:**
 
 ```
-/context-mode:ctx-doctor
+/context-mode-doltlite:ctx-doctor
 ```
 
 All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, and plugin registration.
@@ -54,9 +53,9 @@ All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, and pl
 
 | Slash Command | What it does |
 |---|---|
-| `/context-mode:ctx-stats` | Context savings — per-tool breakdown, tokens consumed, savings ratio. |
-| `/context-mode:ctx-doctor` | Diagnostics — runtimes, hooks, FTS5, plugin registration, versions. |
-| `/context-mode:ctx-upgrade` | Pull latest, rebuild, migrate cache, fix hooks. |
+| `/context-mode-doltlite:ctx-stats` | Context savings — per-tool breakdown, tokens consumed, savings ratio. |
+| `/context-mode-doltlite:ctx-doctor` | Diagnostics — runtimes, hooks, FTS5, plugin registration, versions. |
+| `/context-mode-doltlite:ctx-upgrade` | Pull latest, rebuild, migrate cache, fix hooks. |
 
 > **Note:** Slash commands are a Claude Code plugin feature. On other platforms, type `ctx stats`, `ctx doctor`, or `ctx upgrade` in the chat — the model calls the MCP tool automatically. See [Utility Commands](#utility-commands).
 
@@ -64,7 +63,7 @@ All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, and pl
 <summary>Alternative — MCP-only install (no hooks or slash commands)</summary>
 
 ```bash
-claude mcp add context-mode -- npx -y context-mode
+claude mcp add context-mode-doltlite -- npx -y context-mode-doltlite
 ```
 
 This gives you the 6 sandbox tools without automatic routing. The model can still use them — it just won't be nudged to prefer them over raw Bash/Read/WebFetch. Good for trying it out before committing to the full plugin.
@@ -314,7 +313,7 @@ context-mode runs as a native [OpenClaw](https://github.com/openclaw) gateway pl
 1. Clone and install:
 
    ```bash
-   git clone https://github.com/mksglu/context-mode.git
+   git clone https://github.com/sfncore/claude-context-mode.git
    cd context-mode
    npm run install:openclaw
    ```
@@ -529,7 +528,7 @@ Full configs: [`configs/kiro/mcp.json`](configs/kiro/mcp.json) | [`configs/kiro/
 1. Clone the extension:
 
    ```bash
-   git clone https://github.com/mksglu/context-mode.git ~/.pi/extensions/context-mode
+   git clone https://github.com/sfncore/claude-context-mode.git ~/.pi/extensions/context-mode
    cd ~/.pi/extensions/context-mode
    npm install
    npm run build
@@ -787,7 +786,7 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 
 Hooks intercept tool calls programmatically — they can block dangerous commands and redirect them to the sandbox before execution. Instruction files guide the model via prompt instructions but cannot block anything. **Always enable hooks where supported.**
 
-> **Note:** Routing instruction files were previously auto-written to project directories on first session start. This was disabled to prevent git tree pollution ([#158](https://github.com/mksglu/context-mode/issues/158), [#164](https://github.com/mksglu/context-mode/issues/164)). Hook-capable platforms (Claude Code, Gemini CLI, VS Code Copilot, OpenCode, OpenClaw) inject routing via hooks and need no file. Non-hook platforms (Codex, Zed, Cursor, Kiro, Antigravity) require a one-time manual copy — see each platform's install section.
+> **Note:** Routing instruction files were previously auto-written to project directories on first session start. This was disabled to prevent git tree pollution ([#158](https://github.com/sfncore/claude-context-mode/issues/158), [#164](https://github.com/sfncore/claude-context-mode/issues/164)). Hook-capable platforms (Claude Code, Gemini CLI, VS Code Copilot, OpenCode, OpenClaw) inject routing via hooks and need no file. Non-hook platforms (Codex, Zed, Cursor, Kiro, Antigravity) require a one-time manual copy — see each platform's install section.
 
 | Platform | Hooks | Instruction File | With Hooks | Without Hooks |
 |---|:---:|---|:---:|:---:|
@@ -845,38 +844,38 @@ Over a full session: 315 KB of raw output becomes 5.4 KB. Session time extends f
 
 ## Try It
 
-These prompts work out of the box. Run `/context-mode:ctx-stats` after each to see the savings.
+These prompts work out of the box. Run `/context-mode-doltlite:ctx-stats` after each to see the savings.
 
 **Deep repo research** — 5 calls, 62 KB context (raw: 986 KB, 94% saved)
 ```
 Research https://github.com/modelcontextprotocol/servers — architecture, tech stack,
-top contributors, open issues, and recent activity. Then run /context-mode:ctx-stats.
+top contributors, open issues, and recent activity. Then run /context-mode-doltlite:ctx-stats.
 ```
 
 **Git history analysis** — 1 call, 5.6 KB context
 ```
 Clone https://github.com/facebook/react and analyze the last 500 commits:
 top contributors, commit frequency by month, and most changed files.
-Then run /context-mode:ctx-stats.
+Then run /context-mode-doltlite:ctx-stats.
 ```
 
 **Web scraping** — 1 call, 3.2 KB context
 ```
 Fetch the Hacker News front page, extract all posts with titles, scores,
-and domains. Group by domain. Then run /context-mode:ctx-stats.
+and domains. Group by domain. Then run /context-mode-doltlite:ctx-stats.
 ```
 
 **Large JSON API** — 7.5 MB raw → 0.9 KB context (99% saved)
 ```
 Create a local server that returns a 7.5 MB JSON with 20,000 records and a secret
 hidden at index 13000. Fetch the endpoint, find the hidden record, and show me
-exactly what's in it. Then run /context-mode:ctx-stats.
+exactly what's in it. Then run /context-mode-doltlite:ctx-stats.
 ```
 
 **Documentation search** — 2 calls, 1.8 KB context
 ```
 Fetch the React useEffect docs, index them, and find the cleanup pattern
-with code examples. Then run /context-mode:ctx-stats.
+with code examples. Then run /context-mode-doltlite:ctx-stats.
 ```
 
 **Session continuity** — compaction recovery with full state
@@ -923,7 +922,7 @@ Commands chained with `&&`, `;`, or `|` are split — each part is checked separ
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and TDD guidelines.
 
 ```bash
-git clone https://github.com/mksglu/context-mode.git
+git clone https://github.com/sfncore/claude-context-mode.git
 cd context-mode && npm install && npm test
 ```
 

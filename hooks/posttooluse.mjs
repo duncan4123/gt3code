@@ -2,7 +2,7 @@
 import "./suppress-stderr.mjs";
 import "./ensure-deps.mjs";
 /**
- * PostToolUse hook for context-mode session continuity.
+ * PostToolUse hook for context-mode-doltlite session continuity.
  *
  * Captures session events from tool calls (13 categories) and stores
  * them in the per-project SessionDB for later resume snapshot building.

@@ -1,10 +1,10 @@
-# Contributing to context-mode
+# Contributing to context-mode-doltlite
 
 This project is licensed under the Elastic License 2.0 (ELv2) and moves forward with your support. Every issue, every PR, every idea matters.
 
 Don't overthink it. Don't ask yourself "is my PR good enough?" or "is this issue too small?" -- just send it. A rough draft beats a perfect plan that never ships. If you found a bug, report it. If you have an idea, open an issue. If you wrote a fix, submit the PR.
 
-That said, I'm a solo maintainer with limited time. The best way to help me help you: follow the templates, include your `/context-mode:doctor` output, and write tests for your changes. The more context you give me, the faster I can review.
+That said, I'm a solo maintainer with limited time. The best way to help me help you: follow the templates, include your `/context-mode-doltlite:doctor` output, and write tests for your changes. The more context you give me, the faster I can review.
 
 I genuinely love open source and I'm grateful to have you here. Don't hesitate to reach out -- whether it's a question, a suggestion, or just to say hi. Let's build this together.
 
@@ -14,7 +14,7 @@ This guide covers the local development workflow so you can test changes in a li
 
 ## Architecture Overview
 
-context-mode uses a flat `src/` structure:
+context-mode-doltlite uses a flat `src/` structure:
 
 ```
 src/
@@ -57,12 +57,12 @@ configs/             → Per-platform install files (settings.json, mcp.json, CL
 
 Session events flow through a two-database system:
 
-1. **SessionDB** (persistent, per-project): `~/.claude/context-mode/sessions/<hash>.db`
+1. **SessionDB** (persistent, per-project): `~/.claude/context-mode-doltlite/sessions/<hash>.db`
    - PostToolUse hook captures events in real-time
    - PreCompact hook builds resume snapshots
    - UserPromptSubmit hook captures user prompts
 
-2. **ContentStore** (ephemeral, per-process): `/tmp/context-mode-<PID>.db`
+2. **ContentStore** (ephemeral, per-process): `/tmp/context-mode-doltlite-<PID>.db`
    - FTS5 full-text search index for tool outputs
    - Auto-indexes session events file written by SessionStart hook
    - Dies when MCP server process exits
@@ -82,15 +82,15 @@ Raw session events are **never injected into context**. Only a compact summary t
 
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed
 - Node.js 20+ or [Bun](https://bun.sh/) (recommended for speed)
-- context-mode plugin installed via marketplace
+- context-mode-doltlite plugin installed via marketplace
 
 ## Local Development Setup
 
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/mksglu/context-mode.git
-cd context-mode
+git clone https://github.com/sfncore/claude-context-mode-doltlite.git
+cd context-mode-doltlite
 npm install
 npm run build  # tsc compiles src/ → build/
 ```
@@ -102,7 +102,7 @@ Claude Code's plugin system manages `~/.claude/plugins/installed_plugins.json` a
 First, find your cached version:
 
 ```bash
-ls ~/.claude/plugins/cache/context-mode/context-mode/
+ls ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/
 # Example output: 0.9.23
 ```
 
@@ -110,15 +110,15 @@ Then replace it with a symlink:
 
 ```bash
 # Back up the cache (use your actual version number)
-mv ~/.claude/plugins/cache/context-mode/context-mode/0.9.23 \
-   ~/.claude/plugins/cache/context-mode/context-mode/0.9.23.bak
+mv ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/0.9.23 \
+   ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/0.9.23.bak
 
 # Symlink to your local clone
-ln -s /path/to/your/clone/context-mode \
-   ~/.claude/plugins/cache/context-mode/context-mode/0.9.23
+ln -s /path/to/your/clone/context-mode-doltlite \
+   ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/0.9.23
 ```
 
-Replace `/path/to/your/clone/context-mode` with your actual local path.
+Replace `/path/to/your/clone/context-mode-doltlite` with your actual local path.
 
 > **Why symlink?** The plugin system overwrites `installed_plugins.json` on every session start, reverting any manual path changes. A symlink lets the plugin system keep its managed path while the actual code resolves to your local clone.
 
@@ -133,11 +133,11 @@ The symlink in step 2 ensures `hooks.json` (which registers PostToolUse, PreComp
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Read|Grep|WebFetch|Agent|Task|mcp__plugin_context-mode_context-mode__ctx_execute|mcp__plugin_context-mode_context-mode__ctx_execute_file|mcp__plugin_context-mode_context-mode__ctx_batch_execute",
+        "matcher": "Bash|Read|Grep|WebFetch|Agent|Task|mcp__plugin_context-mode-doltlite_context-mode-doltlite__ctx_execute|mcp__plugin_context-mode-doltlite_context-mode-doltlite__ctx_execute_file|mcp__plugin_context-mode-doltlite_context-mode-doltlite__ctx_batch_execute",
         "hooks": [
           {
             "type": "command",
-            "command": "node /path/to/your/clone/context-mode/hooks/pretooluse.mjs"
+            "command": "node /path/to/your/clone/context-mode-doltlite/hooks/pretooluse.mjs"
           }
         ]
       }
@@ -146,7 +146,7 @@ The symlink in step 2 ensures `hooks.json` (which registers PostToolUse, PreComp
 }
 ```
 
-Replace `/path/to/your/clone/context-mode` with your actual local path.
+Replace `/path/to/your/clone/context-mode-doltlite` with your actual local path.
 
 > **Important:** Do NOT add PostToolUse, PreCompact, SessionStart, or UserPromptSubmit to `settings.json` — they are already registered in `hooks.json` and the symlink makes them resolve to your local clone. Adding them to both causes double invocations, split session IDs, and SQLite locking errors.
 
@@ -171,11 +171,11 @@ npm run build
 ### 5. Kill cached MCP processes and restart
 
 ```bash
-# Kill any running context-mode processes
-pkill -f "context-mode.*start.mjs"
+# Kill any running context-mode-doltlite processes
+pkill -f "context-mode-doltlite.*start.mjs"
 
 # Verify no processes remain
-ps aux | grep context-mode | grep -v grep
+ps aux | grep context-mode-doltlite | grep -v grep
 # Should return nothing
 ```
 
@@ -183,7 +183,7 @@ Restart Claude Code (`/exit` then `claude`).
 
 ### 6. Verify local dev mode
 
-Run `/context-mode:ctx-doctor` in Claude Code. You should see your dev version:
+Run `/context-mode-doltlite:ctx-doctor` in Claude Code. You should see your dev version:
 
 ```
 npm (MCP): WARN — local v0.9.23-dev, latest v0.9.23
@@ -197,9 +197,9 @@ To switch back to the marketplace version:
 
 ```bash
 # Remove symlink and restore backup
-rm ~/.claude/plugins/cache/context-mode/context-mode/0.9.23
-mv ~/.claude/plugins/cache/context-mode/context-mode/0.9.23.bak \
-   ~/.claude/plugins/cache/context-mode/context-mode/0.9.23
+rm ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/0.9.23
+mv ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/0.9.23.bak \
+   ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/0.9.23
 ```
 
 Then revert hooks in `~/.claude/settings.json` and restart Claude Code.
@@ -337,7 +337,7 @@ See [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md) for hook registrati
 When filing a bug, **always include your prompt**. The exact message you sent to Claude Code is critical for reproduction. Without it, we can't debug the issue.
 
 Required information:
-- `/context-mode:doctor` output (must be latest version)
+- `/context-mode-doltlite:doctor` output (must be latest version)
 - The prompt that triggered the bug
 - Debug logs from `Ctrl+O` (background tool calls and MCP communication)
 
@@ -356,11 +356,11 @@ Required information:
 
 | Task | Command |
 |---|---|
-| Check version | `/context-mode:doctor` |
-| Upgrade plugin | `/context-mode:upgrade` |
-| View session stats | `/context-mode:stats` |
+| Check version | `/context-mode-doltlite:doctor` |
+| Upgrade plugin | `/context-mode-doltlite:upgrade` |
+| View session stats | `/context-mode-doltlite:stats` |
 | See background steps | `Ctrl+O` |
-| Kill cached server | `pkill -f "context-mode.*start.mjs"` |
+| Kill cached server | `pkill -f "context-mode-doltlite.*start.mjs"` |
 | Rebuild after changes | `npm run build` |
 | Run all tests | `npm test` |
 | Watch mode | `npm run test:watch` |

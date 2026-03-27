@@ -13,7 +13,7 @@ export function formatDecision(decision) {
     case "deny":
       return {
         permission: "deny",
-        user_message: decision.reason ?? "Blocked by context-mode",
+        user_message: decision.reason ?? "Blocked by context-mode-doltlite",
       };
 
     case "ask":

@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
 const PKG_SESSION = join(HOOK_DIR, "..", "..", "build", "session");
 const OPTS = GEMINI_OPTS;
-const DEBUG_LOG = join(homedir(), ".gemini", "context-mode", "aftertool-debug.log");
+const DEBUG_LOG = join(homedir(), ".gemini", "context-mode-doltlite", "aftertool-debug.log");
 
 try {
   const raw = await readStdin();

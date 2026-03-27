@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import "./suppress-stderr.mjs";
 /**
- * Unified PreToolUse hook for context-mode (Claude Code)
- * Redirects data-fetching tools to context-mode MCP tools
+ * Unified PreToolUse hook for context-mode-doltlite (Claude Code)
+ * Redirects data-fetching tools to context-mode-doltlite MCP tools
  *
  * Cross-platform (Windows/macOS/Linux) — no bash/jq dependency.
  *
@@ -38,7 +38,7 @@ try {
   const myVersion = myPkg.version ?? "unknown";
   const myDirName = basename(myRoot);
   const cacheParent = dirname(myRoot);
-  const marker = resolve(tmpdir(), `context-mode-healed-${myVersion}`);
+  const marker = resolve(tmpdir(), `context-mode-doltlite-healed-${myVersion}`);
 
   // Only self-heal inside plugin cache dirs — skip in dev/CI environments
   const isInPluginCache = myRoot.includes("/plugins/cache/") || myRoot.includes("\\plugins\\cache\\");
@@ -77,7 +77,7 @@ try {
     if (existsSync(ipPath)) {
       const ip = JSON.parse(readFileSync(ipPath, "utf-8"));
       for (const [key, entries] of Object.entries(ip.plugins || {})) {
-        if (!key.toLowerCase().includes("context-mode")) continue;
+        if (!key.toLowerCase().includes("context-mode-doltlite")) continue;
         for (const entry of entries) {
           entry.installPath = targetDir;
           entry.version = myVersion;

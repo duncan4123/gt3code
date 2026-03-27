@@ -416,8 +416,8 @@ export function buildSessionDirective(source, eventMeta) {
 
   // Search on demand — detailed data lives in FTS5
   block += `\n<session_search>`;
-  block += `\nDetailed session data is indexed in context-mode FTS5 (source: "session-events").`;
-  block += `\nUse mcp__plugin_context-mode_context-mode__ctx_search(queries: [...], source: "session-events") when you need specifics.`;
+  block += `\nDetailed session data is indexed in context-mode-doltlite FTS5 (source: "session-events").`;
+  block += `\nUse mcp__plugin_context-mode-doltlite_context-mode-doltlite__ctx_search(queries: [...], source: "session-events") when you need specifics.`;
   block += `\nDo NOT call ctx_index() — data is already indexed.`;
   block += `\n</session_search>`;
 

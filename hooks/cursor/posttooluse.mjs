@@ -16,13 +16,13 @@ const OPTS = CURSOR_OPTS;
 function normalizeToolName(toolName) {
   if (toolName === "Shell") return "Bash";
   if (toolName === "MCP:ctx_execute") {
-    return "mcp__plugin_context-mode_context-mode__ctx_execute";
+    return "mcp__plugin_context-mode-doltlite_context-mode-doltlite__ctx_execute";
   }
   if (toolName === "MCP:ctx_execute_file") {
-    return "mcp__plugin_context-mode_context-mode__ctx_execute_file";
+    return "mcp__plugin_context-mode-doltlite_context-mode-doltlite__ctx_execute_file";
   }
   if (toolName === "MCP:ctx_batch_execute") {
-    return "mcp__plugin_context-mode_context-mode__ctx_batch_execute";
+    return "mcp__plugin_context-mode-doltlite_context-mode-doltlite__ctx_batch_execute";
   }
   return toolName;
 }

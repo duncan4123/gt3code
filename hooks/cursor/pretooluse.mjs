@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import "../suppress-stderr.mjs";
 /**
- * Cursor preToolUse hook for context-mode.
+ * Cursor preToolUse hook for context-mode-doltlite.
  */
 
 import { dirname, resolve } from "node:path";

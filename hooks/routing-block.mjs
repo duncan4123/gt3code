@@ -1,5 +1,5 @@
 /**
- * Shared routing block for context-mode hooks.
+ * Shared routing block for context-mode-doltlite hooks.
  * Single source of truth — imported by pretooluse.mjs and sessionstart.mjs.
  *
  * Factory functions accept a tool namer `t(bareTool) => platformSpecificName`
@@ -17,7 +17,7 @@ export function createRoutingBlock(t) {
   return `
 <context_window_protection>
   <priority_instructions>
-    Raw tool output floods your context window. You MUST use context-mode MCP tools to keep raw data in the sandbox.
+    Raw tool output floods your context window. You MUST use context-mode-doltlite MCP tools to keep raw data in the sandbox.
   </priority_instructions>
 
   <tool_selection_hierarchy>
@@ -56,10 +56,10 @@ export function createRoutingBlock(t) {
     When the user says "ctx stats", "ctx-stats", "/ctx-stats", or asks about context savings:
     → Call the stats MCP tool and display the full output verbatim.
 
-    When the user says "ctx doctor", "ctx-doctor", "/ctx-doctor", or asks to diagnose context-mode:
+    When the user says "ctx doctor", "ctx-doctor", "/ctx-doctor", or asks to diagnose context-mode-doltlite:
     → Call the doctor MCP tool, execute the returned shell command, display results as a checklist.
 
-    When the user says "ctx upgrade", "ctx-upgrade", "/ctx-upgrade", or asks to update context-mode:
+    When the user says "ctx upgrade", "ctx-upgrade", "/ctx-upgrade", or asks to update context-mode-doltlite:
     → Call the upgrade MCP tool, execute the returned shell command, display results as a checklist.
   </ctx_commands>
 </context_window_protection>`;

@@ -1,5 +1,5 @@
 {
-  "id": "context-mode",
+  "id": "context-mode-doltlite",
   "name": "Context Mode",
   "kind": "tool",
   "description": "OpenClaw plugin that saves 98% of your context window. Sandboxed code execution in 11 languages, FTS5 knowledge base with BM25 ranking, and intent-driven search.",

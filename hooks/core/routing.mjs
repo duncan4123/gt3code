@@ -29,7 +29,7 @@ const _guidanceShown = new Set();
 const _guidanceId = process.env.VITEST_WORKER_ID
   ? `${process.ppid}-w${process.env.VITEST_WORKER_ID}`
   : String(process.ppid);
-const _guidanceDir = resolve(tmpdir(), `context-mode-guidance-${_guidanceId}`);
+const _guidanceDir = resolve(tmpdir(), `context-mode-doltlite-guidance-${_guidanceId}`);
 
 function guidanceOnce(type, content) {
   // Fast path: in-memory (same process)
@@ -220,7 +220,7 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
         return {
           action: "modify",
           updatedInput: {
-            command: `echo "context-mode: curl/wget blocked. You MUST use ${t("ctx_fetch_and_index")}(url, source) to fetch URLs, or ${t("ctx_execute")}(language, code) to run HTTP calls in sandbox. Do NOT retry with curl/wget."`,
+            command: `echo "context-mode-doltlite: curl/wget blocked. You MUST use ${t("ctx_fetch_and_index")}(url, source) to fetch URLs, or ${t("ctx_execute")}(language, code) to run HTTP calls in sandbox. Do NOT retry with curl/wget."`,
           },
         };
       }
@@ -242,7 +242,7 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
       return {
         action: "modify",
         updatedInput: {
-          command: `echo "context-mode: Inline HTTP blocked. Use ${t("ctx_execute")}(language, code) to run HTTP calls in sandbox, or ${t("ctx_fetch_and_index")}(url, source) for web pages. Do NOT retry with Bash."`,
+          command: `echo "context-mode-doltlite: Inline HTTP blocked. Use ${t("ctx_execute")}(language, code) to run HTTP calls in sandbox, or ${t("ctx_fetch_and_index")}(url, source) for web pages. Do NOT retry with Bash."`,
         },
       };
     }
@@ -254,7 +254,7 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
       return {
         action: "modify",
         updatedInput: {
-          command: `echo "context-mode: Build tool redirected to sandbox. Use ${t("ctx_execute")}(language: \\"shell\\", code: \\"${safeCmd}\\") to run this command. Do NOT retry with Bash."`,
+          command: `echo "context-mode-doltlite: Build tool redirected to sandbox. Use ${t("ctx_execute")}(language: \\"shell\\", code: \\"${safeCmd}\\") to run this command. Do NOT retry with Bash."`,
         },
       };
     }
@@ -278,11 +278,11 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
     const url = toolInput.url ?? "";
     return {
       action: "deny",
-      reason: `context-mode: WebFetch blocked. Use ${t("ctx_fetch_and_index")}(url: "${url}", source: "...") to fetch this URL in sandbox. Then use ${t("ctx_search")}(queries: [...]) to query results. Do NOT use curl, wget, mcp_web_fetch, or mcp_fetch_tool.`,
+      reason: `context-mode-doltlite: WebFetch blocked. Use ${t("ctx_fetch_and_index")}(url: "${url}", source: "...") to fetch this URL in sandbox. Then use ${t("ctx_search")}(queries: [...]) to query results. Do NOT use curl, wget, mcp_web_fetch, or mcp_fetch_tool.`,
     };
   }
 
-  // ─── Agent/Task: inject context-mode routing into subagent prompts ───
+  // ─── Agent/Task: inject context-mode-doltlite routing into subagent prompts ───
   if (canonical === "Agent" || canonical === "Task") {
     const subagentType = toolInput.subagent_type ?? "";
     // Detect the correct field name for the prompt/request/objective/question/query
@@ -301,7 +301,7 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
   // Match both __execute and __ctx_execute (prefixed tool names)
   // Cursor can also surface the tool as MCP:ctx_execute_file.
   if (
-    (toolName.includes("context-mode") && /(?:__|\/)(ctx_)?execute$/.test(toolName)) ||
+    (toolName.includes("context-mode-doltlite") && /(?:__|\/)(ctx_)?execute$/.test(toolName)) ||
     /^MCP:(ctx_)?execute$/.test(toolName)
   ) {
     if (security && toolInput.language === "shell") {
@@ -323,7 +323,7 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
   // ─── MCP execute_file: check file path + code against deny patterns ───
   // Cursor can also surface the tool as MCP:ctx_execute_file.
   if (
-    (toolName.includes("context-mode") && /(?:__|\/)(ctx_)?execute_file$/.test(toolName)) ||
+    (toolName.includes("context-mode-doltlite") && /(?:__|\/)(ctx_)?execute_file$/.test(toolName)) ||
     /^MCP:(ctx_)?execute_file$/.test(toolName)
   ) {
     if (security) {
@@ -355,7 +355,7 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
   }
 
   // ─── MCP batch_execute: check each command individually ───
-  if (toolName.includes("context-mode") && /(?:__|\/)(ctx_)?batch_execute$/.test(toolName)) {
+  if (toolName.includes("context-mode-doltlite") && /(?:__|\/)(ctx_)?batch_execute$/.test(toolName)) {
     if (security) {
       const commands = toolInput.commands ?? [];
       const policies = security.readBashPolicies(projectDir);

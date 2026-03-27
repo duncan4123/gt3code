@@ -1,5 +1,5 @@
 {
-  "name": "context-mode",
+  "name": "context-mode-doltlite",
   "version": "1.0.53",
   "type": "module",
   "description": "MCP plugin that saves 98% of your context window. Works with Claude Code, Gemini CLI, VS Code Copilot, OpenCode, and Codex CLI. Sandboxed code execution, FTS5 knowledge base, and intent-driven search.",
@@ -23,15 +23,15 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/mksglu/context-mode"
+    "url": "https://github.com/sfncore/claude-context-mode"
   },
-  "homepage": "https://github.com/mksglu/context-mode#readme",
+  "homepage": "https://github.com/sfncore/claude-context-mode#readme",
   "openclaw": {
     "extensions": [
       "./build/openclaw-plugin.js"
     ]
   },
-  "bugs": "https://github.com/mksglu/context-mode/issues",
+  "bugs": "https://github.com/sfncore/claude-context-mode/issues",
   "main": "./build/opencode-plugin.js",
   "exports": {
     ".": "./build/opencode-plugin.js",
@@ -40,7 +40,7 @@
     "./cli": "./cli.bundle.mjs"
   },
   "bin": {
-    "context-mode": "./cli.bundle.mjs"
+    "context-mode-doltlite": "./cli.bundle.mjs"
   },
   "files": [
     "build",

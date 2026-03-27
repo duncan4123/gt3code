@@ -23,7 +23,7 @@ export function formatDecision(decision) {
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
-          reason: decision.reason ?? "Blocked by context-mode",
+          reason: decision.reason ?? "Blocked by context-mode-doltlite",
         },
       };
 

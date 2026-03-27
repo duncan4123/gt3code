@@ -2,7 +2,7 @@
 import "./suppress-stderr.mjs";
 import "./ensure-deps.mjs";
 /**
- * UserPromptSubmit hook for context-mode session continuity.
+ * UserPromptSubmit hook for context-mode-doltlite session continuity.
  *
  * Captures every user prompt so the LLM can continue from the exact
  * point where the user left off after compact or session restart.

@@ -1,6 +1,6 @@
-# context-mode
+# context-mode-doltlite
 
-Raw tool output floods your context window. Use context-mode MCP tools to keep raw data in the sandbox.
+Raw tool output floods your context window. Use context-mode-doltlite MCP tools to keep raw data in the sandbox.
 
 ## Tool Selection
 

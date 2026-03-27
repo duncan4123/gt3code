@@ -19,7 +19,7 @@ import { homedir } from "node:os";
 const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
 const { loadSessionDB, loadSnapshot } = createSessionLoaders(HOOK_DIR);
 const OPTS = VSCODE_OPTS;
-const DEBUG_LOG = join(homedir(), ".vscode", "context-mode", "precompact-debug.log");
+const DEBUG_LOG = join(homedir(), ".vscode", "context-mode-doltlite", "precompact-debug.log");
 
 try {
   const raw = await readStdin();

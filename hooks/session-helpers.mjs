@@ -1,5 +1,5 @@
 /**
- * Shared session helpers for context-mode hooks.
+ * Shared session helpers for context-mode-doltlite hooks.
  * Used by posttooluse.mjs, precompact.mjs, sessionstart.mjs,
  * and platform-specific hooks (Gemini CLI, VS Code Copilot).
  *
@@ -135,12 +135,12 @@ export function getSessionId(input, opts = CLAUDE_OPTS) {
 /**
  * Return the per-project session DB path.
  * Creates the directory if it doesn't exist.
- * Path: ~/<configDir>/context-mode/sessions/<SHA256(projectDir)[:16]>.db
+ * Path: ~/<configDir>/context-mode-doltlite/sessions/<SHA256(projectDir)[:16]>.db
  */
 export function getSessionDBPath(opts = CLAUDE_OPTS) {
   const projectDir = getProjectDir(opts);
   const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
-  const dir = join(homedir(), opts.configDir, "context-mode", "sessions");
+  const dir = join(homedir(), opts.configDir, "context-mode-doltlite", "sessions");
   mkdirSync(dir, { recursive: true });
   return join(dir, `${hash}${getWorktreeSuffix()}.db`);
 }
@@ -148,12 +148,12 @@ export function getSessionDBPath(opts = CLAUDE_OPTS) {
 /**
  * Return the per-project session events file path.
  * Used by sessionstart hook (write) and MCP server (read + auto-index).
- * Path: ~/<configDir>/context-mode/sessions/<SHA256(projectDir)[:16]>-events.md
+ * Path: ~/<configDir>/context-mode-doltlite/sessions/<SHA256(projectDir)[:16]>-events.md
  */
 export function getSessionEventsPath(opts = CLAUDE_OPTS) {
   const projectDir = getProjectDir(opts);
   const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
-  const dir = join(homedir(), opts.configDir, "context-mode", "sessions");
+  const dir = join(homedir(), opts.configDir, "context-mode-doltlite", "sessions");
   mkdirSync(dir, { recursive: true });
   return join(dir, `${hash}${getWorktreeSuffix()}-events.md`);
 }
@@ -161,12 +161,12 @@ export function getSessionEventsPath(opts = CLAUDE_OPTS) {
 /**
  * Return the per-project cleanup flag path.
  * Used to detect true fresh starts vs --continue (which fires startup+resume).
- * Path: ~/<configDir>/context-mode/sessions/<SHA256(projectDir)[:16]>.cleanup
+ * Path: ~/<configDir>/context-mode-doltlite/sessions/<SHA256(projectDir)[:16]>.cleanup
  */
 export function getCleanupFlagPath(opts = CLAUDE_OPTS) {
   const projectDir = getProjectDir(opts);
   const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
-  const dir = join(homedir(), opts.configDir, "context-mode", "sessions");
+  const dir = join(homedir(), opts.configDir, "context-mode-doltlite", "sessions");
   mkdirSync(dir, { recursive: true });
   return join(dir, `${hash}${getWorktreeSuffix()}.cleanup`);
 }

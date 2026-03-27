@@ -63,7 +63,7 @@ if (!process.env.CLAUDE_PROJECT_DIR) {
 // Routing is handled by:
 //   - Hook-capable platforms: SessionStart hook injects ROUTING_BLOCK
 //   - Non-hook platforms: server.ts writeRoutingInstructions() on MCP connect
-//   - Future: explicit `context-mode init` command
+//   - Future: explicit `context-mode-doltlite init` command
 
 // Self-heal: if a newer version dir exists, update registry so next session uses it
 const cacheMatch = __dirname.match(
@@ -96,7 +96,7 @@ if (cacheMatch) {
         );
         const ip = JSON.parse(readFileSync(ipPath, "utf-8"));
         for (const [key, entries] of Object.entries(ip.plugins || {})) {
-          if (!key.toLowerCase().includes("context-mode")) continue;
+          if (!key.toLowerCase().includes("context-mode-doltlite")) continue;
           for (const entry of entries) {
             entry.installPath = resolve(cacheParent, newest);
             entry.version = newest;

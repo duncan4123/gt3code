@@ -8,7 +8,7 @@
  * hook that needs native modules. Fast path: existsSync check (~0.1ms).
  * Slow path: npm install (first run only, ~5-30s).
  *
- * @see https://github.com/mksglu/context-mode/issues/172
+ * @see https://github.com/sfncore/claude-context-mode-doltlite/issues/172
  */
 
 import { existsSync } from "node:fs";

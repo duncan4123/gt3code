@@ -2,7 +2,7 @@
 import "../suppress-stderr.mjs";
 import "../ensure-deps.mjs";
 /**
- * Gemini CLI SessionStart hook for context-mode
+ * Gemini CLI SessionStart hook for context-mode-doltlite
  *
  * Session lifecycle management:
  * - "startup"  → Cleanup old sessions, capture GEMINI.md rules
@@ -119,7 +119,7 @@ try {
     const { join: pjoin } = await import("node:path");
     const { homedir: hd } = await import("node:os");
     appendFileSync(
-      pjoin(hd(), ".gemini", "context-mode", "sessionstart-debug.log"),
+      pjoin(hd(), ".gemini", "context-mode-doltlite", "sessionstart-debug.log"),
       `[${new Date().toISOString()}] ${err?.message || err}\n${err?.stack || ""}\n`,
     );
   } catch { /* ignore logging failure */ }
