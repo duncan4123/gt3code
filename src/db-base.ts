@@ -152,6 +152,11 @@ export function loadDatabase(): typeof DatabaseConstructor {
  * transaction.
  */
 export function applyWALPragmas(db: DatabaseInstance): void {
+  // Skip WAL under doltlite — it manages its own journal (#131)
+  try {
+    (db as any).prepare("SELECT doltlite_engine()").get();
+    return; // doltlite active, skip WAL
+  } catch { /* standard SQLite — apply WAL below */ }
   db.pragma("journal_mode = WAL");
   db.pragma("synchronous = NORMAL");
 }

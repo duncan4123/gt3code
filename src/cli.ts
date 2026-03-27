@@ -202,12 +202,12 @@ async function doctor(): Promise<number> {
   if (hasBunRuntime()) {
     p.log.success(
       color.green("Performance: FAST") +
-        " — Bun detected for JS/TS execution",
+        " — Bun detected for JS/TS execution (ctx_execute)",
     );
   } else {
     p.log.warn(
       color.yellow("Performance: NORMAL") +
-        " — Using Node.js (install Bun for 3-5x speed boost)",
+        " — Using Node.js for execution (install Bun for 3-5x speed boost)",
     );
   }
 
@@ -299,21 +299,30 @@ async function doctor(): Promise<number> {
     );
   }
 
-  // FTS5 / SQLite
+  // FTS5 / SQLite — always tests better-sqlite3 directly (MCP server runtime)
   p.log.step("Checking FTS5 / SQLite...");
   try {
-    const Database = (await import("./db-base.js")).loadDatabase();
+    const { createRequire } = await import("node:module");
+    const req = createRequire(import.meta.url);
+    const Database = req("better-sqlite3") as typeof import("better-sqlite3");
     const db = new Database(":memory:");
     db.exec("CREATE VIRTUAL TABLE fts_test USING fts5(content)");
     db.exec("INSERT INTO fts_test(content) VALUES ('hello world')");
     const row = db.prepare("SELECT * FROM fts_test WHERE fts_test MATCH 'hello'").get() as { content: string } | undefined;
-    db.close();
     if (row && row.content === "hello world") {
       p.log.success(color.green("FTS5 / SQLite: PASS") + " — native module works");
     } else {
       criticalFails++;
       p.log.error(color.red("FTS5 / SQLite: FAIL") + " — query returned unexpected result");
     }
+    // Doltlite check — MCP server uses Node.js + better-sqlite3, doltlite must be patched in
+    try {
+      const result = db.prepare("SELECT doltlite_engine() AS engine").get() as { engine: string } | undefined;
+      p.log.success(color.green("Doltlite: PASS") + ` — engine: ${result?.engine ?? "unknown"}`);
+    } catch {
+      p.log.warn(color.yellow("Doltlite: not patched") + color.dim(" — run: node scripts/patch-doltlite.mjs"));
+    }
+    db.close();
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.includes("Cannot find module") || message.includes("MODULE_NOT_FOUND")) {

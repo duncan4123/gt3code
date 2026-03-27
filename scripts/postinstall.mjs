@@ -29,7 +29,12 @@ if (process.env.OPENCLAW_STATE_DIR) {
   console.log("\n  OpenClaw detected. Run: npm run install:openclaw\n");
 }
 
-// ── 2. Windows global install — nvm4w junction fix ───────────────────
+// ── 2. Doltlite patch (opt-in — skips silently if libdoltlite.a not found) ──
+try {
+  execSync(`node "${join(pkgRoot, "scripts", "patch-doltlite.mjs")}"`, { stdio: "inherit" });
+} catch { /* best effort */ }
+
+// ── 3. Windows global install — nvm4w junction fix ───────────────────
 // npm's .cmd shim resolves modules via %~dp0\node_modules\<pkg>\...
 // On nvm4w the shim lives at C:\nvm4w\nodejs\ but node_modules is at
 // C:\Users\<USER>\AppData\Roaming\npm\node_modules\. The relative path
