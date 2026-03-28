@@ -39,11 +39,8 @@ interface CommandAvailabilityOptions {
 
 const LINE_COLUMN_SUFFIX_PATTERN = /:\d+(?::\d+)?$/;
 
-function shouldUseGotoFlag(editorId: EditorId, target: string): boolean {
-  return (
-    (editorId === "cursor" || editorId === "vscode" || editorId === "zed") &&
-    LINE_COLUMN_SUFFIX_PATTERN.test(target)
-  );
+function shouldUseGotoFlag(editor: (typeof EDITORS)[number], target: string): boolean {
+  return editor.supportsGoto && LINE_COLUMN_SUFFIX_PATTERN.test(target);
 }
 
 /** Neovim/Neovide use `+line` flag instead of `--goto path:line:col`. */
@@ -225,10 +222,7 @@ export const resolveEditorLaunch = Effect.fnUntraced(function* (
   }
 
   if (editorDef.command) {
-    if (editorDef.id === "neovim" || editorDef.id === "neovide") {
-      return { command: editorDef.command, args: resolveNeovimArgs(input.cwd) };
-    }
-    return shouldUseGotoFlag(editorDef.id, input.cwd)
+    return shouldUseGotoFlag(editorDef, input.cwd)
       ? { command: editorDef.command, args: ["--goto", input.cwd] }
       : { command: editorDef.command, args: [input.cwd] };
   }

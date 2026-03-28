@@ -10,6 +10,7 @@
  * @module ProviderServiceLive
  */
 import {
+  ModelSelection,
   NonNegativeInt,
   ThreadId,
   ProviderInterruptTurnInput,
@@ -33,6 +34,7 @@ import {
 } from "../Services/ProviderSessionDirectory.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
 
 export interface ProviderServiceLiveOptions {
   readonly canonicalEventLogPath?: string;
@@ -90,8 +92,7 @@ function toRuntimeStatus(session: ProviderSession): "starting" | "running" | "st
 function toRuntimePayloadFromSession(
   session: ProviderSession,
   extra?: {
-    readonly modelOptions?: unknown;
-    readonly providerOptions?: unknown;
+    readonly modelSelection?: unknown;
     readonly lastRuntimeEvent?: string;
     readonly lastRuntimeEventAt?: string;
   },
@@ -101,8 +102,7 @@ function toRuntimePayloadFromSession(
     model: session.model ?? null,
     activeTurnId: session.activeTurnId ?? null,
     lastError: session.lastError ?? null,
-    ...(extra?.modelOptions !== undefined ? { modelOptions: extra.modelOptions } : {}),
-    ...(extra?.providerOptions !== undefined ? { providerOptions: extra.providerOptions } : {}),
+    ...(extra?.modelSelection !== undefined ? { modelSelection: extra.modelSelection } : {}),
     ...(extra?.lastRuntimeEvent !== undefined ? { lastRuntimeEvent: extra.lastRuntimeEvent } : {}),
     ...(extra?.lastRuntimeEventAt !== undefined
       ? { lastRuntimeEventAt: extra.lastRuntimeEventAt }
@@ -110,26 +110,14 @@ function toRuntimePayloadFromSession(
   };
 }
 
-function readPersistedModelOptions(
+function readPersistedModelSelection(
   runtimePayload: ProviderRuntimeBinding["runtimePayload"],
-): Record<string, unknown> | undefined {
+): ModelSelection | undefined {
   if (!runtimePayload || typeof runtimePayload !== "object" || Array.isArray(runtimePayload)) {
     return undefined;
   }
-  const raw = "modelOptions" in runtimePayload ? runtimePayload.modelOptions : undefined;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
-  return raw as Record<string, unknown>;
-}
-
-function readPersistedProviderOptions(
-  runtimePayload: ProviderRuntimeBinding["runtimePayload"],
-): Record<string, unknown> | undefined {
-  if (!runtimePayload || typeof runtimePayload !== "object" || Array.isArray(runtimePayload)) {
-    return undefined;
-  }
-  const raw = "providerOptions" in runtimePayload ? runtimePayload.providerOptions : undefined;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
-  return raw as Record<string, unknown>;
+  const raw = "modelSelection" in runtimePayload ? runtimePayload.modelSelection : undefined;
+  return Schema.is(ModelSelection)(raw) ? raw : undefined;
 }
 
 function readPersistedCwd(
@@ -147,6 +135,7 @@ function readPersistedCwd(
 const makeProviderService = (options?: ProviderServiceLiveOptions) =>
   Effect.gen(function* () {
     const analytics = yield* Effect.service(AnalyticsService);
+    const serverSettings = yield* ServerSettingsService;
     const canonicalEventLogger =
       options?.canonicalEventLogger ??
       (options?.canonicalEventLogPath !== undefined
@@ -173,8 +162,7 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
       session: ProviderSession,
       threadId: ThreadId,
       extra?: {
-        readonly modelOptions?: unknown;
-        readonly providerOptions?: unknown;
+        readonly modelSelection?: unknown;
         readonly lastRuntimeEvent?: string;
         readonly lastRuntimeEventAt?: string;
       },
@@ -239,15 +227,13 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
         }
 
         const persistedCwd = readPersistedCwd(input.binding.runtimePayload);
-        const persistedModelOptions = readPersistedModelOptions(input.binding.runtimePayload);
-        const persistedProviderOptions = readPersistedProviderOptions(input.binding.runtimePayload);
+        const persistedModelSelection = readPersistedModelSelection(input.binding.runtimePayload);
 
         const resumed = yield* adapter.startSession({
           threadId: input.binding.threadId,
           provider: input.binding.provider,
           ...(persistedCwd ? { cwd: persistedCwd } : {}),
-          ...(persistedModelOptions ? { modelOptions: persistedModelOptions } : {}),
-          ...(persistedProviderOptions ? { providerOptions: persistedProviderOptions } : {}),
+          ...(persistedModelSelection ? { modelSelection: persistedModelSelection } : {}),
           ...(hasResumeCursor ? { resumeCursor: input.binding.resumeCursor } : {}),
           runtimeMode: input.binding.runtimeMode ?? "full-access",
         });
@@ -309,6 +295,21 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
           threadId,
           provider: parsed.provider ?? DEFAULT_PROVIDER_KIND,
         };
+        const settings = yield* serverSettings.getSettings.pipe(
+          Effect.mapError((error) =>
+            toValidationError(
+              "ProviderService.startSession",
+              `Failed to load provider settings: ${error.message}`,
+              error,
+            ),
+          ),
+        );
+        if (!settings.providers[input.provider].enabled) {
+          return yield* toValidationError(
+            "ProviderService.startSession",
+            `Provider '${input.provider}' is disabled in T3 Code settings.`,
+          );
+        }
         const persistedBinding = Option.getOrUndefined(yield* directory.getBinding(threadId));
         const effectiveResumeCursor =
           input.resumeCursor ??
@@ -329,15 +330,16 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
         }
 
         yield* upsertSessionBinding(session, threadId, {
-          modelOptions: input.modelOptions,
-          providerOptions: input.providerOptions,
+          modelSelection: input.modelSelection,
         });
         yield* analytics.record("provider.session.started", {
           provider: session.provider,
           runtimeMode: input.runtimeMode,
           hasResumeCursor: session.resumeCursor !== undefined,
           hasCwd: typeof input.cwd === "string" && input.cwd.trim().length > 0,
-          hasModel: typeof input.model === "string" && input.model.trim().length > 0,
+          hasModel:
+            typeof input.modelSelection?.model === "string" &&
+            input.modelSelection.model.trim().length > 0,
         });
 
         return session;
@@ -373,6 +375,7 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
           status: "running",
           ...(turn.resumeCursor !== undefined ? { resumeCursor: turn.resumeCursor } : {}),
           runtimePayload: {
+            ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
             activeTurnId: turn.turnId,
             lastRuntimeEvent: "provider.sendTurn",
             lastRuntimeEventAt: new Date().toISOString(),
@@ -380,7 +383,7 @@ const makeProviderService = (options?: ProviderServiceLiveOptions) =>
         });
         yield* analytics.record("provider.turn.sent", {
           provider: routed.adapter.provider,
-          model: input.model,
+          model: input.modelSelection?.model,
           interactionMode: input.interactionMode,
           attachmentCount: input.attachments.length,
           hasInput: typeof input.input === "string" && input.input.trim().length > 0,
