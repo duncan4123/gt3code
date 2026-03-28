@@ -359,6 +359,7 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
   const path = yield* Path.Path;
   const serverConfig = yield* ServerConfig;
 
+
   const applyProjectsProjection: ProjectorDefinition["apply"] = (event, _attachmentSideEffects) =>
     Effect.gen(function* () {
       switch (event.type) {
@@ -1180,36 +1181,15 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
       };
 
       yield* sql.withTransaction(
-        projector
-          .apply(event, attachmentSideEffects)
-          .pipe(
-            Effect.catchTag("SqlError", (e) =>
-              Effect.fail(
-                toPersistenceSqlError(
-                  `ProjectionPipeline.${projector.name}:apply[${event.type}@${event.sequence}]`,
-                )(e),
-              ),
-            ),
-          )
-          .pipe(
-            Effect.flatMap(() =>
-              projectionStateRepository
-                .upsert({
-                  projector: projector.name,
-                  lastAppliedSequence: event.sequence,
-                  updatedAt: event.occurredAt,
-                })
-                .pipe(
-                  Effect.catchTag("SqlError", (e) =>
-                    Effect.fail(
-                      toPersistenceSqlError(
-                        `ProjectionPipeline.${projector.name}:upsertState[${event.type}@${event.sequence}]`,
-                      )(e),
-                    ),
-                  ),
-                ),
-            ),
+        projector.apply(event, attachmentSideEffects).pipe(
+          Effect.flatMap(() =>
+            projectionStateRepository.upsert({
+              projector: projector.name,
+              lastAppliedSequence: event.sequence,
+              updatedAt: event.occurredAt,
+            }),
           ),
+        ),
       );
 
       yield* runAttachmentSideEffects(attachmentSideEffects).pipe(
@@ -1259,15 +1239,9 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
       Effect.provideService(Path.Path, path),
       Effect.provideService(ServerConfig, serverConfig),
       Effect.asVoid,
-      // Doltlite requires dolt_add + dolt_commit to flush the prolly-tree skip
-      // list (prolly_mutmap). Without it, pending mutations accumulate and corrupt
-      // after ~80-90 writes. Commit strategy:
-      //   1. Meaningful events → commit with descriptive message
-      //   2. High-frequency events (activities, mode changes) → commit every 20
-      //      to stay under the ~80 corruption threshold during long tool/subagent runs
-      //   3. Tagged commits at milestones (turn complete, create, delete, revert)
-      // dolt_add('-A') not implemented — stage tables explicitly.
-      // Skip during bootstrap — initial commit happens after migrations.
+      // Dolt version control — flush prolly-tree skip list to prevent corruption.
+      // Commits at meaningful state boundaries, tags milestones, batch flushes
+      // every 10 high-frequency events. Skip during bootstrap.
       Effect.tap(() => {
         if (!bootstrapComplete) return Effect.void;
 
@@ -1276,7 +1250,6 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
         let tag = false;
 
         switch (event.type) {
-          // Tagged commits — milestones and destructive actions
           case "project.created":
             msg = `project created ${tid}`; tag = true; sinceLastCommit = 0; break;
           case "project.deleted":
@@ -1289,8 +1262,6 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
             msg = `thread reverted ${tid}`; tag = true; sinceLastCommit = 0; break;
           case "thread.turn-diff-completed":
             msg = `turn completed ${tid}`; tag = true; sinceLastCommit = 0; break;
-
-          // Untagged commits — meaningful data changes
           case "project.meta-updated":
             msg = `project updated ${tid}`; sinceLastCommit = 0; break;
           case "thread.message-sent":
@@ -1303,10 +1274,6 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
             msg = `session changed ${tid}`; sinceLastCommit = 0; break;
           case "thread.proposed-plan-upserted":
             msg = `plan proposed ${tid}`; sinceLastCommit = 0; break;
-
-          // High-frequency — batch commit every 10 to stay well under corruption
-          // threshold (~80 writes). Tool calls and subagents can generate 50-100+
-          // consecutive activity events in a single turn.
           default:
             sinceLastCommit++;
             if (sinceLastCommit < 10) return Effect.void;
@@ -1315,7 +1282,8 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
             break;
         }
 
-        const doltAddAll = Effect.all([
+        // Sequential dolt_add — concurrent calls deadlock on single SQLite connection
+        return Effect.all([
           sql`SELECT dolt_add('orchestration_events')`,
           sql`SELECT dolt_add('orchestration_command_receipts')`,
           sql`SELECT dolt_add('projection_state')`,
@@ -1329,16 +1297,23 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
           sql`SELECT dolt_add('projection_pending_approvals')`,
           sql`SELECT dolt_add('checkpoint_diff_blobs')`,
           sql`SELECT dolt_add('provider_session_runtime')`,
-        ]);
-
-        return doltAddAll.pipe(
+          sql`SELECT dolt_add('messages_fts_data')`,
+          sql`SELECT dolt_add('messages_fts_idx')`,
+          sql`SELECT dolt_add('messages_fts_docsize')`,
+          sql`SELECT dolt_add('messages_fts_config')`,
+        ], { concurrency: 1 }).pipe(
           Effect.flatMap(() => sql`SELECT dolt_commit('-m', ${msg})`),
           Effect.flatMap(() =>
             tag
               ? sql`SELECT dolt_tag(${`${event.type}-${event.sequence}`})`
               : Effect.void,
           ),
-          Effect.catch(() => Effect.void),
+          Effect.flatMap(() =>
+            event.type === "thread.turn-start-requested"
+              ? sql`SELECT dolt_gc()`.pipe(Effect.catchAll(() => Effect.void))
+              : Effect.void,
+          ),
+          Effect.catchAll(() => Effect.void),
         );
       }),
     );
