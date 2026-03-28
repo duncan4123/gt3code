@@ -5,8 +5,10 @@ import {
   getVisibleThreadsForProject,
   getProjectSortTimestamp,
   hasUnseenCompletion,
+  normalizeThreadSearchQuery,
   resolveProjectStatusIndicator,
   resolveSidebarNewThreadEnvMode,
+  resolveSidebarThreadSearch,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
@@ -93,6 +95,59 @@ describe("resolveSidebarNewThreadEnvMode", () => {
         defaultEnvMode: "worktree",
       }),
     ).toBe("local");
+  });
+});
+
+describe("normalizeThreadSearchQuery", () => {
+  it("returns null for blank input", () => {
+    expect(normalizeThreadSearchQuery("   ")).toBeNull();
+  });
+
+  it("quotes each term so plain text is safe for FTS MATCH", () => {
+    expect(normalizeThreadSearchQuery('alpha beta "gamma"')).toBe('"alpha" "beta" "gamma"');
+  });
+});
+
+describe("resolveSidebarThreadSearch", () => {
+  it("combines title matches with FTS message hits", () => {
+    const result = resolveSidebarThreadSearch({
+      query: "release",
+      threads: [
+        makeThread({
+          id: ThreadId.makeUnsafe("thread-title"),
+          projectId: ProjectId.makeUnsafe("project-a"),
+          title: "Release checklist",
+        }),
+        makeThread({
+          id: ThreadId.makeUnsafe("thread-fts"),
+          projectId: ProjectId.makeUnsafe("project-b"),
+          title: "Bug bash",
+        }),
+      ],
+      ftsHits: [
+        {
+          threadId: ThreadId.makeUnsafe("thread-fts"),
+          snippet: "ship the release build tonight",
+        },
+      ],
+    });
+
+    expect(result.isFiltering).toBe(true);
+    expect([...result.matchingThreadIds]).toEqual(["thread-fts", "thread-title"]);
+    expect(result.snippetByThreadId.get("thread-fts")).toBe("ship the release build tonight");
+    expect([...result.matchingProjectIds]).toEqual(["project-b", "project-a"]);
+  });
+
+  it("returns an inert state when no query is present", () => {
+    const result = resolveSidebarThreadSearch({
+      query: " ",
+      threads: [makeThread()],
+      ftsHits: [],
+    });
+
+    expect(result.isFiltering).toBe(false);
+    expect(result.matchingThreadIds.size).toBe(0);
+    expect(result.matchingProjectIds.size).toBe(0);
   });
 });
 

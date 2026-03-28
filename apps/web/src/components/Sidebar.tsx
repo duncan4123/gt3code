@@ -14,7 +14,15 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import { autoAnimate } from "@formkit/auto-animate";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 import {
   DndContext,
   type DragCancelEvent,
@@ -46,11 +54,12 @@ import {
 } from "@t3tools/contracts/settings";
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
-import { isLinuxPlatform, isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
+import { cn, isLinuxPlatform, isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
 import { useStore } from "../store";
 import { shortcutLabelForCommand } from "../keybindings";
 import { derivePendingApprovals, derivePendingUserInputs } from "../session-logic";
 import { gitRemoveWorktreeMutationOptions, gitStatusQueryOptions } from "../lib/gitReactQuery";
+import { orchestrationSearchThreadMessagesQueryOptions } from "../lib/orchestrationReactQuery";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
 import { readNativeApi } from "../nativeApi";
 import { useComposerDraftStore } from "../composerDraftStore";
@@ -71,6 +80,7 @@ import {
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { Input } from "./ui/input";
 import { Menu, MenuGroup, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import {
@@ -96,8 +106,10 @@ import {
   getVisibleThreadsForProject,
   resolveProjectStatusIndicator,
   resolveSidebarNewThreadEnvMode,
+  resolveSidebarThreadSearch,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
+  normalizeThreadSearchQuery,
   shouldClearThreadSelectionOnMouseDown,
   getGcMetadata,
   countGcAgents,
@@ -394,10 +406,22 @@ export default function Sidebar() {
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
   });
+  const [threadSearchQuery, setThreadSearchQuery] = useState("");
+  const deferredThreadSearchQuery = useDeferredValue(threadSearchQuery);
+  const normalizedThreadSearchQuery = useMemo(
+    () => normalizeThreadSearchQuery(deferredThreadSearchQuery),
+    [deferredThreadSearchQuery],
+  );
   const { data: keybindings = EMPTY_KEYBINDINGS } = useQuery({
     ...serverConfigQueryOptions(),
     select: (config) => config.keybindings,
   });
+  const { data: threadSearchResult, isFetching: isThreadSearchFetching } = useQuery(
+    orchestrationSearchThreadMessagesQueryOptions({
+      query: normalizedThreadSearchQuery,
+      enabled: normalizedThreadSearchQuery !== null,
+    }),
+  );
   const queryClient = useQueryClient();
   const removeWorktreeMutation = useMutation(gitRemoveWorktreeMutationOptions({ queryClient }));
   const [addingProject, setAddingProject] = useState(false);
@@ -1125,16 +1149,36 @@ export default function Sidebar() {
     () => sortProjectsForSidebar(projects, threads, appSettings.sidebarProjectSortOrder),
     [appSettings.sidebarProjectSortOrder, projects, threads],
   );
+  const threadSearchState = useMemo(
+    () =>
+      resolveSidebarThreadSearch({
+        query: deferredThreadSearchQuery,
+        threads,
+        ftsHits: threadSearchResult?.results ?? [],
+      }),
+    [deferredThreadSearchQuery, threadSearchResult?.results, threads],
+  );
+  const isThreadSearchActive = threadSearchState.isFiltering;
+  const visibleProjects = useMemo(() => {
+    if (!isThreadSearchActive) {
+      return sortedProjects;
+    }
+    return sortedProjects.filter((project) => threadSearchState.matchingProjectIds.has(project.id));
+  }, [isThreadSearchActive, sortedProjects, threadSearchState.matchingProjectIds]);
+  const matchingThreadCount = threadSearchState.matchingThreadIds.size;
   const isManualProjectSorting = appSettings.sidebarProjectSortOrder === "manual";
 
   function renderProjectItem(
-    project: (typeof sortedProjects)[number],
+    project: (typeof visibleProjects)[number],
     dragHandleProps: SortableProjectHandleProps | null,
   ) {
-    const projectThreads = sortThreadsForSidebar(
+    const allProjectThreads = sortThreadsForSidebar(
       threads.filter((thread) => thread.projectId === project.id),
       appSettings.sidebarThreadSortOrder,
     );
+    const projectThreads = isThreadSearchActive
+      ? allProjectThreads.filter((thread) => threadSearchState.matchingThreadIds.has(thread.id))
+      : allProjectThreads;
     const projectStatus = resolveProjectStatusIndicator(
       projectThreads.map((thread) => {
         const gcMeta = getGcMetadata(thread.customMetadata);
@@ -1149,24 +1193,22 @@ export default function Sidebar() {
     const activeThreadId = routeThreadId ?? undefined;
     const isThreadListExpanded = expandedThreadListsByProject.has(project.id);
     const pinnedCollapsedThread =
-      !project.expanded && activeThreadId
+      !isThreadSearchActive && !project.expanded && activeThreadId
         ? (projectThreads.find((thread) => thread.id === activeThreadId) ?? null)
         : null;
-    const shouldShowThreadPanel = project.expanded || pinnedCollapsedThread !== null;
+    const shouldShowThreadPanel =
+      isThreadSearchActive || project.expanded || pinnedCollapsedThread !== null;
     const { hasHiddenThreads, visibleThreads } = getVisibleThreadsForProject({
       threads: projectThreads,
       activeThreadId,
-      isThreadListExpanded,
+      isThreadListExpanded: isThreadSearchActive || isThreadListExpanded,
       previewLimit: THREAD_PREVIEW_LIMIT,
     });
     const orderedProjectThreadIds = projectThreads.map((thread) => thread.id);
     const renderedThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : visibleThreads;
-    const activeThreads = projectThreads.filter(
-      (t) => !isThreadArchived(t.customMetadata),
-    );
-    const archivedThreads = projectThreads.filter((t) =>
-      isThreadArchived(t.customMetadata),
-    );
+    const archivedThreads = isThreadSearchActive
+      ? []
+      : projectThreads.filter((t) => isThreadArchived(t.customMetadata));
     const { standaloneThreads, convoyGroups } = groupThreadsByVirtualConvoy(renderedThreads);
     const renderThreadRow = (thread: (typeof projectThreads)[number]) => {
       const isActive = routeThreadId === thread.id;
@@ -1183,6 +1225,9 @@ export default function Sidebar() {
       const terminalStatus = terminalStatusFromRunningIds(
         selectThreadTerminalState(terminalStateByThreadId, thread.id).runningTerminalIds,
       );
+      const searchSnippet = isThreadSearchActive
+        ? (threadSearchState.snippetByThreadId.get(thread.id)?.trim() ?? null)
+        : null;
 
       return (
         <SidebarMenuSubItem key={thread.id} className="w-full" data-thread-item>
@@ -1190,10 +1235,14 @@ export default function Sidebar() {
             render={<div role="button" tabIndex={0} />}
             size="sm"
             isActive={isActive}
-            className={resolveThreadRowClassName({
-              isActive,
-              isSelected,
-            })}
+            className={cn(
+              resolveThreadRowClassName({
+                isActive,
+                isSelected,
+              }),
+              searchSnippet ? "ring-1 ring-transparent" : null,
+            )}
+            title={searchSnippet ?? undefined}
             onClick={(event) => {
               handleThreadClick(event, thread.id, orderedProjectThreadIds);
             }}
@@ -1342,7 +1391,9 @@ export default function Sidebar() {
                       <TooltipTrigger
                         render={
                           <span className="mr-1 inline-flex items-center rounded bg-violet-500/15 px-1 py-0 text-[8px] font-semibold uppercase tracking-wide text-violet-600 dark:bg-violet-400/15 dark:text-violet-400/80">
-                            {gcMeta.agent && /\-\d+$/.test(gcMeta.agent) ? "pool" : (gcMeta.agent ?? "GC")}
+                            {gcMeta.agent && /\-\d+$/.test(gcMeta.agent)
+                              ? "pool"
+                              : (gcMeta.agent ?? "GC")}
                           </span>
                         }
                       />
@@ -1423,7 +1474,9 @@ export default function Sidebar() {
                             {gcMeta.molecule && (
                               <div className="flex justify-between">
                                 <span>Molecule</span>
-                                <span className="font-mono text-foreground/80">{gcMeta.molecule}</span>
+                                <span className="font-mono text-foreground/80">
+                                  {gcMeta.molecule}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -1609,16 +1662,12 @@ export default function Sidebar() {
                   <ChevronRightIcon className="size-2.5 shrink-0 transition-transform group-data-[state=open]/convoy:rotate-90" />
                   <FolderIcon className="size-3 shrink-0" />
                   <Tooltip>
-                    <TooltipTrigger
-                      render={<span className="truncate">{group.label}</span>}
-                    />
+                    <TooltipTrigger render={<span className="truncate">{group.label}</span>} />
                     <TooltipPopup side="right" sideOffset={8}>
                       <div className="min-w-[200px] max-w-[280px] space-y-2 text-xs">
                         {/* Header */}
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-foreground">
-                            {group.label}
-                          </span>
+                          <span className="font-semibold text-foreground">{group.label}</span>
                           {group.status && (
                             <span
                               className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium ${
@@ -1672,7 +1721,10 @@ export default function Sidebar() {
                               const tMeta = (t.customMetadata ?? {}) as Record<string, string>;
                               const status = tMeta["gc.beadStatus"];
                               return (
-                                <div key={t.id} className="flex items-center justify-between gap-2 text-muted-foreground">
+                                <div
+                                  key={t.id}
+                                  className="flex items-center justify-between gap-2 text-muted-foreground"
+                                >
                                   <span className="truncate">{t.title}</span>
                                   {status && (
                                     <span
@@ -1796,18 +1848,12 @@ export default function Sidebar() {
                     const gcMeta = getGcMetadata(thread.customMetadata);
                     const threadStatus = resolveThreadStatusPill({
                       thread,
-                      hasPendingApprovals:
-                        derivePendingApprovals(thread.activities).length > 0,
-                      hasPendingUserInput:
-                        derivePendingUserInputs(thread.activities).length > 0,
+                      hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
+                      hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
                       gcState: gcMeta.state,
                     });
                     return (
-                      <SidebarMenuSubItem
-                        key={thread.id}
-                        className="w-full"
-                        data-thread-item
-                      >
+                      <SidebarMenuSubItem key={thread.id} className="w-full" data-thread-item>
                         <SidebarMenuSubButton
                           render={<div role="button" tabIndex={0} />}
                           size="sm"
@@ -1817,11 +1863,7 @@ export default function Sidebar() {
                             isSelected,
                           })}
                           onClick={(event) => {
-                            handleThreadClick(
-                              event,
-                              thread.id,
-                              orderedProjectThreadIds,
-                            );
+                            handleThreadClick(event, thread.id, orderedProjectThreadIds);
                           }}
                           onContextMenu={(event) => {
                             event.preventDefault();
@@ -1834,12 +1876,12 @@ export default function Sidebar() {
                           <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
                             {gcMeta.isGcManaged && (
                               <span className="mr-1 inline-flex shrink-0 items-center rounded bg-violet-500/15 px-1 py-0 text-[8px] font-semibold uppercase tracking-wide text-violet-600 dark:bg-violet-400/15 dark:text-violet-400/80">
-                                {gcMeta.agent && /\-\d+$/.test(gcMeta.agent) ? "pool" : (gcMeta.agent ?? "GC")}
+                                {gcMeta.agent && /\-\d+$/.test(gcMeta.agent)
+                                  ? "pool"
+                                  : (gcMeta.agent ?? "GC")}
                               </span>
                             )}
-                            <span className="truncate text-xs">
-                              {thread.title}
-                            </span>
+                            <span className="truncate text-xs">{thread.title}</span>
                             {threadStatus && (
                               <span
                                 className={`flex shrink-0 items-center gap-0.5 text-[10px] ${threadStatus.colorClass}`}
@@ -2177,6 +2219,35 @@ export default function Sidebar() {
             </div>
           </div>
 
+          <div className="mb-2 px-1">
+            <Input
+              nativeInput
+              type="search"
+              size="sm"
+              value={threadSearchQuery}
+              placeholder="Search threads..."
+              aria-label="Search threads"
+              onChange={(event) => {
+                setThreadSearchQuery(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && threadSearchQuery.length > 0) {
+                  event.preventDefault();
+                  setThreadSearchQuery("");
+                }
+              }}
+            />
+            {isThreadSearchActive ? (
+              <div className="mt-1 px-1 text-[10px] text-muted-foreground/60">
+                {isThreadSearchFetching
+                  ? "Searching thread messages..."
+                  : matchingThreadCount === 0
+                    ? "No matching threads"
+                    : `${matchingThreadCount} matching thread${matchingThreadCount === 1 ? "" : "s"}`}
+              </div>
+            ) : null}
+          </div>
+
           {shouldShowProjectPathEntry && (
             <div className="mb-2 px-1">
               {isElectron && (
@@ -2242,7 +2313,7 @@ export default function Sidebar() {
             </div>
           )}
 
-          {isManualProjectSorting ? (
+          {isManualProjectSorting && !isThreadSearchActive ? (
             <DndContext
               sensors={projectDnDSensors}
               collisionDetection={projectCollisionDetection}
@@ -2253,10 +2324,10 @@ export default function Sidebar() {
             >
               <SidebarMenu>
                 <SortableContext
-                  items={sortedProjects.map((project) => project.id)}
+                  items={visibleProjects.map((project) => project.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  {sortedProjects.map((project) => (
+                  {visibleProjects.map((project) => (
                     <SortableProjectItem key={project.id} projectId={project.id}>
                       {(dragHandleProps) => renderProjectItem(project, dragHandleProps)}
                     </SortableProjectItem>
@@ -2266,7 +2337,7 @@ export default function Sidebar() {
             </DndContext>
           ) : (
             <SidebarMenu ref={attachProjectListAutoAnimateRef}>
-              {sortedProjects.map((project) => (
+              {visibleProjects.map((project) => (
                 <SidebarMenuItem key={project.id} className="rounded-md">
                   {renderProjectItem(project, null)}
                 </SidebarMenuItem>
@@ -2274,6 +2345,11 @@ export default function Sidebar() {
             </SidebarMenu>
           )}
 
+          {isThreadSearchActive && visibleProjects.length === 0 && (
+            <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
+              No threads found
+            </div>
+          )}
           {projects.length === 0 && !shouldShowProjectPathEntry && (
             <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
               No projects yet

@@ -406,6 +406,22 @@ describe("wsNativeApi", () => {
     });
   });
 
+  it("forwards thread message search requests to the orchestration websocket method", async () => {
+    requestMock.mockResolvedValue({ results: [] });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+    await api.orchestration.searchThreadMessages({
+      query: "release plan",
+      limit: 10,
+    });
+
+    expect(requestMock).toHaveBeenCalledWith(ORCHESTRATION_WS_METHODS.searchThreadMessages, {
+      query: "release plan",
+      limit: 10,
+    });
+  });
+
   it("forwards context menu metadata to desktop bridge", async () => {
     const showContextMenu = vi.fn().mockResolvedValue("delete");
     Object.defineProperty(getWindowForTest(), "desktopBridge", {
