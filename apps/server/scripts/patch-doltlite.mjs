@@ -10,7 +10,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, writeFileSync, readdirSync } from "node:fs";
+import { existsSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -107,8 +107,27 @@ if (existsSync(addonPath)) {
           { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
         ).trim();
         if (result === "prolly") {
-          console.log("[patch-doltlite] Addon already linked against doltlite — skipping rebuild.");
-          process.exit(0);
+          // Check if libdoltlite.a is newer than the addon — force rebuild if so
+          const addonMtime = statSync(addonPath).mtimeMs;
+          const libMtime = statSync(libPath).mtimeMs;
+          if (libMtime > addonMtime) {
+            console.log("[patch-doltlite] libdoltlite.a is newer than addon — rebuilding.");
+          } else {
+            console.log("[patch-doltlite] Addon already linked against doltlite — skipping rebuild.");
+            // Ensure version file exists even when skipping rebuild
+            try {
+              const versionFile = join(pkgDir, "build", "Release", ".doltlite-version");
+              if (!existsSync(versionFile)) {
+                const gitHash = execSync("git rev-parse --short HEAD", {
+                  cwd: doltliteBuildDir.replace("/build", ""),
+                  encoding: "utf8",
+                }).trim();
+                writeFileSync(versionFile, JSON.stringify({ commit: gitHash, libBuilt: new Date(libMtime).toISOString(), addonBuilt: new Date(addonMtime).toISOString() }) + "\n");
+                console.log(`[patch-doltlite] Recorded doltlite version: ${gitHash}`);
+              }
+            } catch {}
+            process.exit(0);
+          }
         }
       } catch {
         // Fall through to rebuild
@@ -129,6 +148,22 @@ try {
     env: { ...process.env, npm_config_nodedir: undefined },
   });
   console.log("[patch-doltlite] Rebuild complete.");
+
+  // Record doltlite version for runtime verification
+  try {
+    const gitHash = execSync("git rev-parse --short HEAD", {
+      cwd: doltliteBuildDir.replace("/build", ""),
+      encoding: "utf8",
+    }).trim();
+    const libMtime = new Date(execSync(`stat -c %Y "${libPath}"`, { encoding: "utf8" }).trim() * 1000).toISOString();
+    writeFileSync(
+      join(pkgDir, "build", "Release", ".doltlite-version"),
+      JSON.stringify({ commit: gitHash, libBuilt: libMtime, addonBuilt: new Date().toISOString() }) + "\n",
+    );
+    console.log(`[patch-doltlite] Recorded doltlite version: ${gitHash}`);
+  } catch {
+    console.log("[patch-doltlite] Could not record doltlite version (non-fatal).");
+  }
 } catch (err) {
   console.error("[patch-doltlite] Rebuild failed:", err.message);
   console.error("[patch-doltlite] Install node-gyp: npm i -g node-gyp");

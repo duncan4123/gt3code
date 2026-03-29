@@ -18,6 +18,7 @@ node scripts/doltlite-rebuild.ts --path ~/.t3/userdata/state.sqlite
 t3code stores all orchestration events, thread projections, and session state in a doltlite database (`~/.t3/dev/state.sqlite` in dev mode). Doltlite replaces SQLite's B-tree storage with a prolly-tree engine that supports git-like versioning (`dolt_commit`, `dolt_log`, `dolt_branch`, etc.).
 
 The file format is a single file containing:
+
 - Manifest header (168 bytes)
 - Compacted chunks + index
 - WAL region (appended at EOF)
@@ -52,12 +53,12 @@ The `dolt_commit` cycle in `ProjectionPipeline.ts` previously used `Effect.catch
 
 ## Diagnosis Checklist
 
-| Check | Command | Healthy |
-|-------|---------|---------|
-| SQLite integrity | `PRAGMA integrity_check` | Returns `ok` |
-| Engine type | `SELECT doltlite_engine()` | Returns `prolly` |
-| GC works | `SELECT dolt_gc()` | Returns `N chunks removed, M chunks kept` |
-| File size | `ls -lh state.sqlite` | Proportional to data, not commit count |
+| Check            | Command                    | Healthy                                   |
+| ---------------- | -------------------------- | ----------------------------------------- |
+| SQLite integrity | `PRAGMA integrity_check`   | Returns `ok`                              |
+| Engine type      | `SELECT doltlite_engine()` | Returns `prolly`                          |
+| GC works         | `SELECT dolt_gc()`         | Returns `N chunks removed, M chunks kept` |
+| File size        | `ls -lh state.sqlite`      | Proportional to data, not commit count    |
 
 Run `node scripts/doltlite-rebuild.ts` to check all of these automatically.
 

@@ -38,6 +38,18 @@ const makeSetup = (dbPath: string) =>
       const sql = yield* SqlClient.SqlClient;
       yield* sql`PRAGMA foreign_keys = ON;`;
 
+      // Log doltlite version for debugging
+      {
+        let version = "unknown";
+        try {
+          const versionPath = require.resolve("better-sqlite3")
+            .replace(/lib\/index\.js$/, "build/Release/.doltlite-version");
+          const info = JSON.parse(require("fs").readFileSync(versionPath, "utf8"));
+          version = `${info.commit} (lib: ${info.libBuilt}, addon: ${info.addonBuilt})`;
+        } catch {}
+        yield* Effect.logInfo(`doltlite version: ${version}`);
+      }
+
       // Attach the FTS btree sidecar before migrations — migration 017/018
       // creates FTS5 tables in the fts.* schema.
       const ftsPath = ftsDbPath(dbPath);
@@ -71,7 +83,10 @@ const memorySetup = Layer.effectDiscard(
     const tempDir = mkdtempSync(join(tmpdir(), "t3-fts-"));
     const ftsPath = join(tempDir, "fts.sqlite");
     ensureFtsBtreeFile(ftsPath);
-    yield* Scope.addFinalizer(scope, Effect.sync(() => rmSync(tempDir, { recursive: true, force: true })));
+    yield* Scope.addFinalizer(
+      scope,
+      Effect.sync(() => rmSync(tempDir, { recursive: true, force: true })),
+    );
     yield* sql.unsafe(`ATTACH DATABASE '${ftsPath}' AS fts`);
     yield* runMigrations();
   }),

@@ -19,14 +19,19 @@ import { execSync } from "node:child_process";
 
 // Use the doltlite-linked better-sqlite3 from apps/server
 const require_ = createRequire(resolve(import.meta.dirname, "../apps/server/package.json"));
-const Database = require_("better-sqlite3") as new (filename: string, opts?: { readonly?: boolean }) => any;
+const Database = require_("better-sqlite3") as new (
+  filename: string,
+  opts?: { readonly?: boolean },
+) => any;
 
 // ── Args ────────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
 const pathIdx = args.indexOf("--path");
 const dbPath = resolve(
-  pathIdx >= 0 && args[pathIdx + 1] ? args[pathIdx + 1] : `${process.env.HOME}/.t3/dev/state.sqlite`,
+  pathIdx >= 0 && args[pathIdx + 1]
+    ? args[pathIdx + 1]
+    : `${process.env.HOME}/.t3/dev/state.sqlite`,
 );
 const ftsPath = dbPath.replace(/\.sqlite$/, "-fts.sqlite");
 const doRebuild = args.includes("--rebuild");
@@ -130,7 +135,9 @@ if (!needsRebuild) {
 console.log(`\n--- Diagnosis ---`);
 if (!integrityOk) console.log(`  Index corruption detected (fixable with REINDEX)`);
 if (!gcWorks) console.log(`  GC broken: ${gcError}`);
-console.log(`  File bloat: ${sizeMB(dbPath)} MB for ${totalRows} rows across ${commitCount} commits`);
+console.log(
+  `  File bloat: ${sizeMB(dbPath)} MB for ${totalRows} rows across ${commitCount} commits`,
+);
 
 if (!doRebuild) {
   console.log(`\nRun with --rebuild to fix:`);
@@ -250,7 +257,9 @@ for (const { name } of tables) {
     newTotal += newDb.prepare(`SELECT count(*) as n FROM "${name}"`).get().n;
   } catch {}
 }
-console.log(`Rows:       ${newTotal} / ${totalRows} (${newTotal === totalRows ? "match" : "MISMATCH"})`);
+console.log(
+  `Rows:       ${newTotal} / ${totalRows} (${newTotal === totalRows ? "match" : "MISMATCH"})`,
+);
 console.log(`Size:       ${sizeMB(dbPath)} MB (was ${sizeMB(bakPath)} MB)`);
 
 newDb.close();
