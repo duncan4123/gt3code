@@ -1706,6 +1706,18 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           role: "assistant",
         },
       ]);
+
+      const removedMatches = yield* sql.unsafe<{ readonly rowid: number }>(
+        `SELECT rowid FROM fts.messages_fts WHERE messages_fts MATCH ? ORDER BY rowid ASC`,
+        ["removed"],
+      );
+      assert.deepEqual(removedMatches, []);
+
+      const keptMatches = yield* sql.unsafe<{ readonly rowid: number }>(
+        `SELECT rowid FROM fts.messages_fts WHERE messages_fts MATCH ? ORDER BY rowid ASC`,
+        ["kept"],
+      );
+      assert.equal(keptMatches.length, 1);
     }),
   );
 });

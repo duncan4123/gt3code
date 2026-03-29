@@ -10,6 +10,7 @@ import {
   OrchestrationGetSnapshotInput,
   OrchestrationGetTurnDiffInput,
   OrchestrationReplayEventsInput,
+  OrchestrationSearchThreadMessagesInput,
 } from "./orchestration";
 import {
   GitActionProgressEvent,
@@ -118,6 +119,10 @@ const WebSocketRequestBody = Schema.Union([
   tagRequestBody(ORCHESTRATION_WS_METHODS.getTurnDiff, OrchestrationGetTurnDiffInput),
   tagRequestBody(ORCHESTRATION_WS_METHODS.getFullThreadDiff, OrchestrationGetFullThreadDiffInput),
   tagRequestBody(ORCHESTRATION_WS_METHODS.replayEvents, OrchestrationReplayEventsInput),
+  tagRequestBody(
+    ORCHESTRATION_WS_METHODS.searchThreadMessages,
+    OrchestrationSearchThreadMessagesInput,
+  ),
 
   // Project Search
   tagRequestBody(WS_METHODS.projectsSearchEntries, ProjectSearchEntriesInput),

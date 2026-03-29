@@ -38,9 +38,7 @@ switch (decision.action) {
     // Kiro CLI cannot modify tool input — deny with redirect message
     // The updatedInput.command contains an echo "..." wrapper — extract inner message
     if (typeof decision.updatedInput?.command === "string") {
-      const msg = decision.updatedInput.command
-        .replace(/^echo\s+"?/, "")
-        .replace(/"?\s*$/, "");
+      const msg = decision.updatedInput.command.replace(/^echo\s+"?/, "").replace(/"?\s*$/, "");
       process.stderr.write(msg);
     } else {
       process.stderr.write(decision.reason ?? "Blocked by context-mode routing");

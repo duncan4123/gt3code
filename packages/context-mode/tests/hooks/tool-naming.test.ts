@@ -67,15 +67,11 @@ describe("getToolName", () => {
   });
 
   it("returns correct name for antigravity", () => {
-    expect(getToolName("antigravity", "ctx_execute")).toBe(
-      "mcp__context-mode__ctx_execute",
-    );
+    expect(getToolName("antigravity", "ctx_execute")).toBe("mcp__context-mode__ctx_execute");
   });
 
   it("returns correct name for opencode", () => {
-    expect(getToolName("opencode", "ctx_search")).toBe(
-      "context-mode_ctx_search",
-    );
+    expect(getToolName("opencode", "ctx_search")).toBe("context-mode_ctx_search");
   });
 
   it("returns correct name for vscode-copilot", () => {
@@ -85,21 +81,15 @@ describe("getToolName", () => {
   });
 
   it("returns correct name for kiro", () => {
-    expect(getToolName("kiro", "ctx_execute_file")).toBe(
-      "@context-mode/ctx_execute_file",
-    );
+    expect(getToolName("kiro", "ctx_execute_file")).toBe("@context-mode/ctx_execute_file");
   });
 
   it("returns correct name for zed", () => {
-    expect(getToolName("zed", "ctx_index")).toBe(
-      "mcp:context-mode:ctx_index",
-    );
+    expect(getToolName("zed", "ctx_index")).toBe("mcp:context-mode:ctx_index");
   });
 
   it("returns bare name for cursor", () => {
-    expect(getToolName("cursor", "ctx_fetch_and_index")).toBe(
-      "ctx_fetch_and_index",
-    );
+    expect(getToolName("cursor", "ctx_fetch_and_index")).toBe("ctx_fetch_and_index");
   });
 
   it("returns bare name for codex", () => {
@@ -202,30 +192,20 @@ describe("createBashGuidance", () => {
 
 describe("backward compat static exports", () => {
   it("ROUTING_BLOCK uses claude-code naming", () => {
-    expect(ROUTING_BLOCK).toContain(
-      "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
-    );
-    expect(ROUTING_BLOCK).toContain(
-      "mcp__plugin_context-mode_context-mode__ctx_search",
-    );
+    expect(ROUTING_BLOCK).toContain("mcp__plugin_context-mode_context-mode__ctx_batch_execute");
+    expect(ROUTING_BLOCK).toContain("mcp__plugin_context-mode_context-mode__ctx_search");
   });
 
   it("READ_GUIDANCE uses claude-code naming", () => {
-    expect(READ_GUIDANCE).toContain(
-      "mcp__plugin_context-mode_context-mode__ctx_execute_file",
-    );
+    expect(READ_GUIDANCE).toContain("mcp__plugin_context-mode_context-mode__ctx_execute_file");
   });
 
   it("GREP_GUIDANCE uses claude-code naming", () => {
-    expect(GREP_GUIDANCE).toContain(
-      "mcp__plugin_context-mode_context-mode__ctx_execute",
-    );
+    expect(GREP_GUIDANCE).toContain("mcp__plugin_context-mode_context-mode__ctx_execute");
   });
 
   it("BASH_GUIDANCE uses claude-code naming", () => {
-    expect(BASH_GUIDANCE).toContain(
-      "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
-    );
+    expect(BASH_GUIDANCE).toContain("mcp__plugin_context-mode_context-mode__ctx_batch_execute");
   });
 });
 
@@ -235,7 +215,12 @@ describe("backward compat static exports", () => {
 
 describe("routePreToolUse with platform parameter", () => {
   it("curl block message uses gemini-cli tool names when platform=gemini-cli", () => {
-    const result = routePreToolUse("Bash", { command: "curl https://example.com" }, "/tmp", "gemini-cli");
+    const result = routePreToolUse(
+      "Bash",
+      { command: "curl https://example.com" },
+      "/tmp",
+      "gemini-cli",
+    );
     expect(result).not.toBeNull();
     expect(result!.action).toBe("modify");
     const cmd = (result!.updatedInput as Record<string, string>).command;
@@ -252,9 +237,14 @@ describe("routePreToolUse with platform parameter", () => {
   });
 
   it("inline HTTP block uses cursor bare names when platform=cursor", () => {
-    const result = routePreToolUse("Bash", {
-      command: 'python -c "requests.get(\'http://example.com\')"',
-    }, "/tmp", "cursor");
+    const result = routePreToolUse(
+      "Bash",
+      {
+        command: "python -c \"requests.get('http://example.com')\"",
+      },
+      "/tmp",
+      "cursor",
+    );
     expect(result).not.toBeNull();
     const cmd = (result!.updatedInput as Record<string, string>).command;
     expect(cmd).toContain("ctx_execute(language, code)");
@@ -271,9 +261,14 @@ describe("routePreToolUse with platform parameter", () => {
   });
 
   it("Task routing block uses opencode tool names when platform=opencode", () => {
-    const result = routePreToolUse("Task", {
-      prompt: "Analyze the code",
-    }, "/tmp", "opencode");
+    const result = routePreToolUse(
+      "Task",
+      {
+        prompt: "Analyze the code",
+      },
+      "/tmp",
+      "opencode",
+    );
     expect(result).not.toBeNull();
     const prompt = (result!.updatedInput as Record<string, string>).prompt;
     expect(prompt).toContain("context-mode_ctx_batch_execute");

@@ -38,9 +38,10 @@ try {
   const events = extractEvents({
     tool_name: input.tool_name,
     tool_input: input.tool_input ?? {},
-    tool_response: typeof input.tool_response === "string"
-      ? input.tool_response
-      : JSON.stringify(input.tool_response ?? ""),
+    tool_response:
+      typeof input.tool_response === "string"
+        ? input.tool_response
+        : JSON.stringify(input.tool_response ?? ""),
     tool_output: input.tool_output,
   });
 

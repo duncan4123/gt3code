@@ -19,7 +19,12 @@ const input = JSON.parse(raw);
 const tool = input.tool_name ?? "";
 const toolInput = input.tool_input ?? {};
 
-const decision = routePreToolUse(tool, toolInput, process.env.GEMINI_PROJECT_DIR || process.env.CLAUDE_PROJECT_DIR, "gemini-cli");
+const decision = routePreToolUse(
+  tool,
+  toolInput,
+  process.env.GEMINI_PROJECT_DIR || process.env.CLAUDE_PROJECT_DIR,
+  "gemini-cli",
+);
 const response = formatDecision("gemini-cli", decision);
 if (response !== null) {
   process.stdout.write(JSON.stringify(response) + "\n");

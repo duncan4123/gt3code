@@ -32,15 +32,11 @@ export function getWorktreeSuffix(): string {
 
   try {
     const cwd = process.cwd();
-    const mainWorktree = execFileSync(
-      "git",
-      ["worktree", "list", "--porcelain"],
-      {
-        encoding: "utf-8",
-        timeout: 2000,
-        stdio: ["ignore", "pipe", "ignore"],
-      },
-    )
+    const mainWorktree = execFileSync("git", ["worktree", "list", "--porcelain"], {
+      encoding: "utf-8",
+      timeout: 2000,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
       .split(/\r?\n/)
       .find((l) => l.startsWith("worktree "))
       ?.replace("worktree ", "")
@@ -142,7 +138,7 @@ export class SessionDB extends SQLiteBase {
    * after super() returns, wiping what prepareStatements() stored. The Map
    * is created inside prepareStatements() instead.
    */
-  private declare stmts: Map<string, PreparedStatement>;
+  declare private stmts: Map<string, PreparedStatement>;
 
   constructor(opts?: { dbPath?: string }) {
     super(opts?.dbPath ?? defaultDBPath("session"));
@@ -160,13 +156,18 @@ export class SessionDB extends SQLiteBase {
     // Old schema had data_hash as GENERATED ALWAYS AS — new schema uses explicit INSERT.
     // Detect and recreate table if needed (session data is ephemeral, safe to drop).
     try {
-      const colInfo = this.db.pragma("table_xinfo(session_events)") as Array<{ name: string; hidden: number }>;
+      const colInfo = this.db.pragma("table_xinfo(session_events)") as Array<{
+        name: string;
+        hidden: number;
+      }>;
       const hashCol = colInfo.find((c) => c.name === "data_hash");
       if (hashCol && hashCol.hidden !== 0) {
         // hidden != 0 means generated column — must recreate
         this.db.exec("DROP TABLE session_events");
       }
-    } catch { /* table doesn't exist yet — fine */ }
+    } catch {
+      /* table doesn't exist yet — fine */
+    }
 
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS session_events (
@@ -203,7 +204,6 @@ export class SessionDB extends SQLiteBase {
         consumed INTEGER NOT NULL DEFAULT 0
       );
     `);
-
   }
 
   protected prepareStatements(): void {
@@ -214,74 +214,98 @@ export class SessionDB extends SQLiteBase {
     };
 
     // ── Events ──
-    p(S.insertEvent,
+    p(
+      S.insertEvent,
       `INSERT INTO session_events (session_id, type, category, priority, data, source_hook, data_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`);
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
 
-    p(S.getEvents,
+    p(
+      S.getEvents,
       `SELECT id, session_id, type, category, priority, data, source_hook, created_at, data_hash
-       FROM session_events WHERE session_id = ? ORDER BY id ASC LIMIT ?`);
+       FROM session_events WHERE session_id = ? ORDER BY id ASC LIMIT ?`,
+    );
 
-    p(S.getEventsByType,
+    p(
+      S.getEventsByType,
       `SELECT id, session_id, type, category, priority, data, source_hook, created_at, data_hash
-       FROM session_events WHERE session_id = ? AND type = ? ORDER BY id ASC LIMIT ?`);
+       FROM session_events WHERE session_id = ? AND type = ? ORDER BY id ASC LIMIT ?`,
+    );
 
-    p(S.getEventsByPriority,
+    p(
+      S.getEventsByPriority,
       `SELECT id, session_id, type, category, priority, data, source_hook, created_at, data_hash
-       FROM session_events WHERE session_id = ? AND priority >= ? ORDER BY id ASC LIMIT ?`);
+       FROM session_events WHERE session_id = ? AND priority >= ? ORDER BY id ASC LIMIT ?`,
+    );
 
-    p(S.getEventsByTypeAndPriority,
+    p(
+      S.getEventsByTypeAndPriority,
       `SELECT id, session_id, type, category, priority, data, source_hook, created_at, data_hash
-       FROM session_events WHERE session_id = ? AND type = ? AND priority >= ? ORDER BY id ASC LIMIT ?`);
+       FROM session_events WHERE session_id = ? AND type = ? AND priority >= ? ORDER BY id ASC LIMIT ?`,
+    );
 
-    p(S.getEventCount,
-      `SELECT COUNT(*) AS cnt FROM session_events WHERE session_id = ?`);
+    p(S.getEventCount, `SELECT COUNT(*) AS cnt FROM session_events WHERE session_id = ?`);
 
-    p(S.checkDuplicate,
+    p(
+      S.checkDuplicate,
       `SELECT 1 FROM (
          SELECT type, data_hash FROM session_events
          WHERE session_id = ? ORDER BY id DESC LIMIT ?
        ) AS recent
        WHERE recent.type = ? AND recent.data_hash = ?
-       LIMIT 1`);
+       LIMIT 1`,
+    );
 
-    p(S.evictLowestPriority,
+    p(
+      S.evictLowestPriority,
       `DELETE FROM session_events WHERE id = (
          SELECT id FROM session_events WHERE session_id = ?
          ORDER BY priority ASC, id ASC LIMIT 1
-       )`);
+       )`,
+    );
 
-    p(S.updateMetaLastEvent,
+    p(
+      S.updateMetaLastEvent,
       `UPDATE session_meta
        SET last_event_at = datetime('now'), event_count = event_count + 1
-       WHERE session_id = ?`);
+       WHERE session_id = ?`,
+    );
 
     // ── Meta ──
-    p(S.ensureSession,
-      `INSERT OR IGNORE INTO session_meta (session_id, project_dir) VALUES (?, ?)`);
+    p(
+      S.ensureSession,
+      `INSERT OR IGNORE INTO session_meta (session_id, project_dir) VALUES (?, ?)`,
+    );
 
-    p(S.getSessionStats,
+    p(
+      S.getSessionStats,
       `SELECT session_id, project_dir, started_at, last_event_at, event_count, compact_count
-       FROM session_meta WHERE session_id = ?`);
+       FROM session_meta WHERE session_id = ?`,
+    );
 
-    p(S.incrementCompactCount,
-      `UPDATE session_meta SET compact_count = compact_count + 1 WHERE session_id = ?`);
+    p(
+      S.incrementCompactCount,
+      `UPDATE session_meta SET compact_count = compact_count + 1 WHERE session_id = ?`,
+    );
 
     // ── Resume ──
-    p(S.upsertResume,
+    p(
+      S.upsertResume,
       `INSERT INTO session_resume (session_id, snapshot, event_count)
        VALUES (?, ?, ?)
        ON CONFLICT(session_id) DO UPDATE SET
          snapshot = excluded.snapshot,
          event_count = excluded.event_count,
          created_at = datetime('now'),
-         consumed = 0`);
+         consumed = 0`,
+    );
 
-    p(S.getResume,
-      `SELECT snapshot, event_count, consumed FROM session_resume WHERE session_id = ?`);
+    p(
+      S.getResume,
+      `SELECT snapshot, event_count, consumed FROM session_resume WHERE session_id = ?`,
+    );
 
-    p(S.markResumeConsumed,
-      `UPDATE session_resume SET consumed = 1 WHERE session_id = ?`);
+    p(S.markResumeConsumed, `UPDATE session_resume SET consumed = 1 WHERE session_id = ?`);
 
     // ── Delete ──
     p(S.deleteEvents, `DELETE FROM session_events WHERE session_id = ?`);
@@ -289,9 +313,10 @@ export class SessionDB extends SQLiteBase {
     p(S.deleteResume, `DELETE FROM session_resume WHERE session_id = ?`);
 
     // ── Cleanup ──
-    p(S.getOldSessions,
-      `SELECT session_id FROM session_meta WHERE started_at < datetime('now', ? || ' days')`);
-
+    p(
+      S.getOldSessions,
+      `SELECT session_id FROM session_meta WHERE started_at < datetime('now', ? || ' days')`,
+    );
   }
 
   // ═══════════════════════════════════════════
@@ -358,7 +383,12 @@ export class SessionDB extends SQLiteBase {
     const minPriority = opts?.minPriority;
 
     if (type && minPriority !== undefined) {
-      return this.stmt(S.getEventsByTypeAndPriority).all(sessionId, type, minPriority, limit) as StoredEvent[];
+      return this.stmt(S.getEventsByTypeAndPriority).all(
+        sessionId,
+        type,
+        minPriority,
+        limit,
+      ) as StoredEvent[];
     }
     if (type) {
       return this.stmt(S.getEventsByType).all(sessionId, type, limit) as StoredEvent[];

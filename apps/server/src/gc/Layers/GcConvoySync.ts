@@ -106,9 +106,7 @@ const makeGcConvoySync = Effect.gen(function* () {
       })
       .pipe(
         Effect.tapError((error) =>
-          Effect.sync(() =>
-            log.warn(`Failed to update thread ${threadId}: ${String(error)}`),
-          ),
+          Effect.sync(() => log.warn(`Failed to update thread ${threadId}: ${String(error)}`)),
         ),
         Effect.catch(() => Effect.void),
       );
@@ -123,9 +121,9 @@ const makeGcConvoySync = Effect.gen(function* () {
 
       // --- Bead events: subject is the bead ID ---
       if (event.type.startsWith("bead.") && event.subject) {
-        const bead = yield* gcApi.getBead(event.subject).pipe(
-          Effect.catch(() => Effect.succeed(null)),
-        );
+        const bead = yield* gcApi
+          .getBead(event.subject)
+          .pipe(Effect.catch(() => Effect.succeed(null)));
 
         if (bead) {
           // Update threads assigned to this specific bead.
@@ -138,9 +136,9 @@ const makeGcConvoySync = Effect.gen(function* () {
 
           // If this bead has a convoy parent, refresh convoy on ALL its threads.
           if (bead.parentId) {
-            const convoy = yield* gcApi.getConvoy(bead.parentId).pipe(
-              Effect.catch(() => Effect.succeed(null)),
-            );
+            const convoy = yield* gcApi
+              .getConvoy(bead.parentId)
+              .pipe(Effect.catch(() => Effect.succeed(null)));
             if (convoy) {
               const cMeta = convoyMetadata(convoy);
               const convoyThreads = findThreadsByMeta(allThreads, "gc.convoy", convoy.id);
@@ -158,9 +156,9 @@ const makeGcConvoySync = Effect.gen(function* () {
 
       // --- Convoy events: subject is the convoy ID ---
       if (event.type.startsWith("convoy.") && event.subject) {
-        const convoy = yield* gcApi.getConvoy(event.subject).pipe(
-          Effect.catch(() => Effect.succeed(null)),
-        );
+        const convoy = yield* gcApi
+          .getConvoy(event.subject)
+          .pipe(Effect.catch(() => Effect.succeed(null)));
         if (convoy) {
           const cMeta = convoyMetadata(convoy);
           const convoyThreads = findThreadsByMeta(allThreads, "gc.convoy", convoy.id);
@@ -175,10 +173,7 @@ const makeGcConvoySync = Effect.gen(function* () {
       }
 
       // --- Session events: find thread by agent and update gc.state ---
-      if (
-        (event.type === "session.archived" || event.type === "session.drained") &&
-        event.actor
-      ) {
+      if ((event.type === "session.archived" || event.type === "session.drained") && event.actor) {
         const agentThreads = findThreadsByMeta(allThreads, "gc.agent", event.actor);
         const stateMeta = {
           "gc.state": event.type === "session.archived" ? "archived" : "drained",

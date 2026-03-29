@@ -3,3 +3,5 @@
 {"prefix":"t3","path":"."}
 {"prefix":"ga","path":"../gascity"}
 {"prefix":"be","path":"../beads"}
+{"prefix":"do","path":"../doltlite"}
+{"prefix":"ccm","path":"../claude-context-mode"}

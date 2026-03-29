@@ -19,10 +19,7 @@ export function classifyNonZeroExit(params: {
   stderr: string;
 }): ExitClassification {
   const { language, exitCode, stdout, stderr } = params;
-  const isSoftFail =
-    language === "shell" &&
-    exitCode === 1 &&
-    stdout.trim().length > 0;
+  const isSoftFail = language === "shell" && exitCode === 1 && stdout.trim().length > 0;
 
   return {
     isError: !isSoftFail,

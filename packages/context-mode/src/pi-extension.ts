@@ -75,9 +75,7 @@ function getOrCreateDB(): SessionDB {
 /** Derive a stable session ID from Pi's session file path (SHA256, 16 hex chars). */
 function deriveSessionId(ctx: Record<string, unknown>): string {
   try {
-    const sessionManager = ctx.sessionManager as
-      | { getSessionFile?: () => string }
-      | undefined;
+    const sessionManager = ctx.sessionManager as { getSessionFile?: () => string } | undefined;
     const sessionFile = sessionManager?.getSessionFile?.();
     if (sessionFile && typeof sessionFile === "string") {
       return createHash("sha256").update(sessionFile).digest("hex").slice(0, 16);
@@ -184,8 +182,7 @@ export default function piExtension(pi: any): void {
       if (!_sessionId) return;
 
       const rawToolName = String(event?.toolName ?? event?.tool_name ?? "");
-      const mappedToolName =
-        PI_TOOL_MAP[rawToolName.toLowerCase()] ?? rawToolName;
+      const mappedToolName = PI_TOOL_MAP[rawToolName.toLowerCase()] ?? rawToolName;
 
       // Normalize result to string
       const rawResult = event?.result ?? event?.output;
@@ -225,10 +222,7 @@ export default function piExtension(pi: any): void {
             category: "pi",
             data,
             priority: 1,
-            data_hash: createHash("sha256")
-              .update(data)
-              .digest("hex")
-              .slice(0, 16),
+            data_hash: createHash("sha256").update(data).digest("hex").slice(0, 16),
           },
           "PostToolUse",
         );

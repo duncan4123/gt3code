@@ -68,7 +68,7 @@ describe("Rule Events", () => {
     };
 
     const events = extractEvents(input);
-    const ruleEvents = events.filter(e => e.type === "rule");
+    const ruleEvents = events.filter((e) => e.type === "rule");
     assert.equal(ruleEvents.length, 1);
     assert.equal(ruleEvents[0].priority, 1);
     assert.ok(ruleEvents[0].data.includes("CLAUDE.md"));
@@ -82,7 +82,7 @@ describe("Rule Events", () => {
     };
 
     const events = extractEvents(input);
-    const ruleEvents = events.filter(e => e.type === "rule");
+    const ruleEvents = events.filter((e) => e.type === "rule");
     assert.equal(ruleEvents.length, 1);
   });
 
@@ -94,7 +94,7 @@ describe("Rule Events", () => {
     };
 
     const events = extractEvents(input);
-    const types = events.map(e => e.type);
+    const types = events.map((e) => e.type);
     assert.ok(types.includes("rule"), "should include rule event");
     assert.ok(types.includes("file_read"), "should include file_read event");
   });
@@ -113,7 +113,7 @@ describe("CWD Events", () => {
     };
 
     const events = extractEvents(input);
-    const cwdEvents = events.filter(e => e.type === "cwd");
+    const cwdEvents = events.filter((e) => e.type === "cwd");
     assert.equal(cwdEvents.length, 1);
     assert.equal(cwdEvents[0].data, "/project/subdir");
     assert.equal(cwdEvents[0].priority, 2);
@@ -127,7 +127,7 @@ describe("CWD Events", () => {
     };
 
     const events = extractEvents(input);
-    const cwdEvents = events.filter(e => e.type === "cwd");
+    const cwdEvents = events.filter((e) => e.type === "cwd");
     assert.equal(cwdEvents.length, 1);
     assert.equal(cwdEvents[0].data, "/path with spaces/dir");
   });
@@ -140,7 +140,7 @@ describe("CWD Events", () => {
     };
 
     const events = extractEvents(input);
-    const cwdEvents = events.filter(e => e.type === "cwd");
+    const cwdEvents = events.filter((e) => e.type === "cwd");
     assert.equal(cwdEvents.length, 1);
     assert.equal(cwdEvents[0].data, "/path with spaces/dir");
   });
@@ -153,7 +153,7 @@ describe("CWD Events", () => {
     };
 
     const events = extractEvents(input);
-    const cwdEvents = events.filter(e => e.type === "cwd");
+    const cwdEvents = events.filter((e) => e.type === "cwd");
     assert.equal(cwdEvents.length, 0);
   });
 });
@@ -171,7 +171,7 @@ describe("Error Events", () => {
     };
 
     const events = extractEvents(input);
-    const errorEvents = events.filter(e => e.type === "error_tool");
+    const errorEvents = events.filter((e) => e.type === "error_tool");
     assert.equal(errorEvents.length, 1);
     assert.equal(errorEvents[0].priority, 2);
     assert.ok(errorEvents[0].data.includes("FAIL"));
@@ -186,7 +186,7 @@ describe("Error Events", () => {
     };
 
     const events = extractEvents(input);
-    const errorEvents = events.filter(e => e.type === "error_tool");
+    const errorEvents = events.filter((e) => e.type === "error_tool");
     assert.equal(errorEvents.length, 1);
   });
 
@@ -198,7 +198,7 @@ describe("Error Events", () => {
     };
 
     const events = extractEvents(input);
-    const errorEvents = events.filter(e => e.type === "error_tool");
+    const errorEvents = events.filter((e) => e.type === "error_tool");
     assert.equal(errorEvents.length, 0);
   });
 });
@@ -216,7 +216,7 @@ describe("Git Events", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.type === "git");
+    const gitEvents = events.filter((e) => e.type === "git");
     assert.equal(gitEvents.length, 1);
     assert.equal(gitEvents[0].data, "branch");
     assert.equal(gitEvents[0].priority, 2);
@@ -230,7 +230,7 @@ describe("Git Events", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.type === "git");
+    const gitEvents = events.filter((e) => e.type === "git");
     assert.equal(gitEvents.length, 1);
     assert.equal(gitEvents[0].data, "commit");
   });
@@ -243,7 +243,7 @@ describe("Git Events", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.type === "git");
+    const gitEvents = events.filter((e) => e.type === "git");
     assert.equal(gitEvents.length, 1);
     assert.equal(gitEvents[0].data, "push");
   });
@@ -256,7 +256,7 @@ describe("Git Events", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.type === "git");
+    const gitEvents = events.filter((e) => e.type === "git");
     assert.equal(gitEvents.length, 0);
   });
 });
@@ -274,7 +274,7 @@ describe("Task Events", () => {
     };
 
     const events = extractEvents(input);
-    const taskEvents = events.filter(e => e.type === "task");
+    const taskEvents = events.filter((e) => e.type === "task");
     assert.equal(taskEvents.length, 1);
     assert.equal(taskEvents[0].priority, 1);
   });
@@ -287,7 +287,7 @@ describe("Task Events", () => {
     };
 
     const events = extractEvents(input);
-    const taskEvents = events.filter(e => e.type === "task_create");
+    const taskEvents = events.filter((e) => e.type === "task_create");
     assert.equal(taskEvents.length, 1);
     assert.equal(taskEvents[0].priority, 1);
     assert.equal(taskEvents[0].category, "task");
@@ -301,7 +301,7 @@ describe("Task Events", () => {
     };
 
     const events = extractEvents(input);
-    const taskEvents = events.filter(e => e.type === "task_update");
+    const taskEvents = events.filter((e) => e.type === "task_update");
     assert.equal(taskEvents.length, 1);
     assert.equal(taskEvents[0].category, "task");
   });
@@ -320,7 +320,7 @@ describe("Plan Mode Events", () => {
     };
 
     const events = extractEvents(input);
-    const planEvents = events.filter(e => e.category === "plan");
+    const planEvents = events.filter((e) => e.category === "plan");
     assert.equal(planEvents.length, 1);
     assert.equal(planEvents[0].type, "plan_enter");
     assert.equal(planEvents[0].data, "entered plan mode");
@@ -335,7 +335,7 @@ describe("Plan Mode Events", () => {
     };
 
     const events = extractEvents(input);
-    const planEvents = events.filter(e => e.category === "plan");
+    const planEvents = events.filter((e) => e.category === "plan");
     assert.equal(planEvents.length, 1);
     assert.equal(planEvents[0].type, "plan_exit");
     assert.equal(planEvents[0].data, "exited plan mode");
@@ -354,7 +354,7 @@ describe("Plan Mode Events", () => {
     };
 
     const events = extractEvents(input);
-    const planEvents = events.filter(e => e.category === "plan");
+    const planEvents = events.filter((e) => e.category === "plan");
     assert.equal(planEvents.length, 1);
     assert.equal(planEvents[0].type, "plan_exit");
     assert.ok(planEvents[0].data.includes("run tests"));
@@ -369,7 +369,7 @@ describe("Plan Mode Events", () => {
     };
 
     const events = extractEvents(input);
-    const planEvents = events.filter(e => e.category === "plan");
+    const planEvents = events.filter((e) => e.category === "plan");
     assert.equal(planEvents.length, 2); // plan_exit + plan_approved
     assert.equal(planEvents[0].type, "plan_exit");
     assert.equal(planEvents[1].type, "plan_approved");
@@ -384,7 +384,7 @@ describe("Plan Mode Events", () => {
     };
 
     const events = extractEvents(input);
-    const planEvents = events.filter(e => e.category === "plan");
+    const planEvents = events.filter((e) => e.category === "plan");
     assert.equal(planEvents.length, 2); // plan_exit + plan_rejected
     assert.equal(planEvents[0].type, "plan_exit");
     assert.equal(planEvents[1].type, "plan_rejected");
@@ -399,7 +399,7 @@ describe("Plan Mode Events", () => {
     };
 
     const events = extractEvents(input);
-    const planEvents = events.filter(e => e.category === "plan");
+    const planEvents = events.filter((e) => e.category === "plan");
     assert.equal(planEvents.length, 1);
     assert.equal(planEvents[0].type, "plan_file_write");
     assert.ok(planEvents[0].data.includes("jaunty-nebula.md"));
@@ -408,12 +408,16 @@ describe("Plan Mode Events", () => {
   test("extracts plan_file_write from Edit to ~/.claude/plans/", () => {
     const input = {
       tool_name: "Edit",
-      tool_input: { file_path: "/Users/test/.claude/plans/my-plan.md", old_string: "a", new_string: "b" },
+      tool_input: {
+        file_path: "/Users/test/.claude/plans/my-plan.md",
+        old_string: "a",
+        new_string: "b",
+      },
       tool_response: "ok",
     };
 
     const events = extractEvents(input);
-    const planEvents = events.filter(e => e.category === "plan");
+    const planEvents = events.filter((e) => e.category === "plan");
     assert.equal(planEvents.length, 1);
     assert.equal(planEvents[0].type, "plan_file_write");
   });
@@ -426,7 +430,7 @@ describe("Plan Mode Events", () => {
     };
 
     const events = extractEvents(input);
-    const planEvents = events.filter(e => e.category === "plan");
+    const planEvents = events.filter((e) => e.category === "plan");
     assert.equal(planEvents.length, 0);
   });
 
@@ -438,7 +442,7 @@ describe("Plan Mode Events", () => {
     };
 
     const events = extractEvents(input);
-    const planEvents = events.filter(e => e.category === "plan");
+    const planEvents = events.filter((e) => e.category === "plan");
     assert.equal(planEvents.length, 0);
   });
 });
@@ -450,26 +454,26 @@ describe("Plan Mode Events", () => {
 describe("Decision Events", () => {
   test("extracts decision from user correction", () => {
     const events = extractUserEvents("no, use ctx- prefix instead of cm-");
-    const decisionEvents = events.filter(e => e.type === "decision");
+    const decisionEvents = events.filter((e) => e.type === "decision");
     assert.equal(decisionEvents.length, 1);
     assert.ok(decisionEvents[0].data.includes("ctx-"));
   });
 
   test("extracts decision from 'always/never' directives", () => {
     const events = extractUserEvents("never push to main without asking me first");
-    const decisionEvents = events.filter(e => e.type === "decision");
+    const decisionEvents = events.filter((e) => e.type === "decision");
     assert.equal(decisionEvents.length, 1);
   });
 
   test("extracts decision from Turkish corrections", () => {
     const events = extractUserEvents("hayır, böyle değil, yerine ctx- kullan");
-    const decisionEvents = events.filter(e => e.type === "decision");
+    const decisionEvents = events.filter((e) => e.type === "decision");
     assert.equal(decisionEvents.length, 1);
   });
 
   test("does not extract decision from regular messages", () => {
     const events = extractUserEvents("Can you read the server.ts file?");
-    const decisionEvents = events.filter(e => e.type === "decision");
+    const decisionEvents = events.filter((e) => e.type === "decision");
     assert.equal(decisionEvents.length, 0);
   });
 });
@@ -481,14 +485,14 @@ describe("Decision Events", () => {
 describe("Role Events", () => {
   test("extracts role from persona directive", () => {
     const events = extractUserEvents("Act as a senior staff engineer for this review");
-    const roleEvents = events.filter(e => e.type === "role");
+    const roleEvents = events.filter((e) => e.type === "role");
     assert.equal(roleEvents.length, 1);
     assert.ok(roleEvents[0].data.includes("senior staff engineer"));
   });
 
   test("extracts role from 'you are' pattern", () => {
     const events = extractUserEvents("You are a principal architect. Review this design.");
-    const roleEvents = events.filter(e => e.type === "role");
+    const roleEvents = events.filter((e) => e.type === "role");
     assert.equal(roleEvents.length, 1);
   });
 });
@@ -506,7 +510,7 @@ describe("Env Events", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.type === "env");
+    const envEvents = events.filter((e) => e.type === "env");
     assert.equal(envEvents.length, 1);
     assert.equal(envEvents[0].priority, 2);
   });
@@ -519,7 +523,7 @@ describe("Env Events", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.type === "env");
+    const envEvents = events.filter((e) => e.type === "env");
     assert.equal(envEvents.length, 1);
   });
 
@@ -531,7 +535,7 @@ describe("Env Events", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.type === "env");
+    const envEvents = events.filter((e) => e.type === "env");
     assert.equal(envEvents.length, 1);
   });
 
@@ -543,7 +547,7 @@ describe("Env Events", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.type === "env");
+    const envEvents = events.filter((e) => e.type === "env");
     assert.equal(envEvents.length, 0);
   });
 });
@@ -561,7 +565,7 @@ describe("Skill Events", () => {
     };
 
     const events = extractEvents(input);
-    const skillEvents = events.filter(e => e.type === "skill");
+    const skillEvents = events.filter((e) => e.type === "skill");
     assert.equal(skillEvents.length, 1);
     assert.equal(skillEvents[0].data, "tdd");
     assert.equal(skillEvents[0].priority, 3);
@@ -575,7 +579,7 @@ describe("Skill Events", () => {
     };
 
     const events = extractEvents(input);
-    const skillEvents = events.filter(e => e.type === "skill");
+    const skillEvents = events.filter((e) => e.type === "skill");
     assert.equal(skillEvents.length, 1);
     assert.equal(skillEvents[0].data, "commit");
   });
@@ -589,12 +593,15 @@ describe("Subagent Events", () => {
   test("extracts subagent event from Agent tool call", () => {
     const input = {
       tool_name: "Agent",
-      tool_input: { prompt: "Research the best approach for session continuity", description: "Research agent" },
+      tool_input: {
+        prompt: "Research the best approach for session continuity",
+        description: "Research agent",
+      },
       tool_response: "Agent completed. Found 3 approaches.",
     };
 
     const events = extractEvents(input);
-    const subagentEvents = events.filter(e => e.category === "subagent");
+    const subagentEvents = events.filter((e) => e.category === "subagent");
     assert.equal(subagentEvents.length, 1);
     // Has tool_response → completed → priority 2
     assert.equal(subagentEvents[0].priority, 2);
@@ -606,15 +613,17 @@ describe("Subagent Events", () => {
     const input = {
       tool_name: "Agent",
       tool_input: { prompt: "Research Cursor env vars" },
-      tool_response: "Found CURSOR_TRACE_DIR and CURSOR_CHANNEL env vars. Cursor also sets VSCODE_PID.",
+      tool_response:
+        "Found CURSOR_TRACE_DIR and CURSOR_CHANNEL env vars. Cursor also sets VSCODE_PID.",
     };
 
     const events = extractEvents(input);
-    const subagentEvents = events.filter(e => e.category === "subagent");
+    const subagentEvents = events.filter((e) => e.category === "subagent");
     assert.equal(subagentEvents.length, 1);
     // The event data MUST include the response, not just the prompt
     assert.ok(
-      subagentEvents[0].data.includes("CURSOR_TRACE_DIR") || subagentEvents[0].data.includes("Found"),
+      subagentEvents[0].data.includes("CURSOR_TRACE_DIR") ||
+        subagentEvents[0].data.includes("Found"),
       `subagent event data should include tool_response content, got: "${subagentEvents[0].data}"`,
     );
   });
@@ -635,8 +644,8 @@ describe("Subagent Events", () => {
     const completedEvents = extractEvents(completedInput);
     const launchedEvents = extractEvents(launchedInput);
 
-    const completed = completedEvents.filter(e => e.category === "subagent");
-    const launched = launchedEvents.filter(e => e.category === "subagent");
+    const completed = completedEvents.filter((e) => e.category === "subagent");
+    const launched = launchedEvents.filter((e) => e.category === "subagent");
 
     assert.equal(completed.length, 1);
     assert.equal(launched.length, 1);
@@ -652,11 +661,12 @@ describe("Subagent Events", () => {
     const input = {
       tool_name: "Agent",
       tool_input: { prompt: "Audit all adapter env vars" },
-      tool_response: "Completed audit. Gemini CLI sets GEMINI_PROJECT_DIR. Codex has no env detection.",
+      tool_response:
+        "Completed audit. Gemini CLI sets GEMINI_PROJECT_DIR. Codex has no env detection.",
     };
 
     const events = extractEvents(input);
-    const subagentEvents = events.filter(e => e.category === "subagent");
+    const subagentEvents = events.filter((e) => e.category === "subagent");
     assert.equal(subagentEvents.length, 1);
 
     // Event type must distinguish completed from launched
@@ -674,28 +684,28 @@ describe("Subagent Events", () => {
 describe("Intent Events", () => {
   test("extracts investigation intent", () => {
     const events = extractUserEvents("Why is the test failing? Can you debug this?");
-    const intentEvents = events.filter(e => e.type === "intent");
+    const intentEvents = events.filter((e) => e.type === "intent");
     assert.equal(intentEvents.length, 1);
     assert.equal(intentEvents[0].data, "investigate");
   });
 
   test("extracts implementation intent", () => {
     const events = extractUserEvents("Create a new PostToolUse hook for event extraction");
-    const intentEvents = events.filter(e => e.type === "intent");
+    const intentEvents = events.filter((e) => e.type === "intent");
     assert.equal(intentEvents.length, 1);
     assert.equal(intentEvents[0].data, "implement");
   });
 
   test("extracts review intent", () => {
     const events = extractUserEvents("Review this code and check for security issues");
-    const intentEvents = events.filter(e => e.type === "intent");
+    const intentEvents = events.filter((e) => e.type === "intent");
     assert.equal(intentEvents.length, 1);
     assert.equal(intentEvents[0].data, "review");
   });
 
   test("extracts discussion intent", () => {
     const events = extractUserEvents("Think about the pros and cons of this approach");
-    const intentEvents = events.filter(e => e.type === "intent");
+    const intentEvents = events.filter((e) => e.type === "intent");
     assert.equal(intentEvents.length, 1);
     assert.equal(intentEvents[0].data, "discuss");
   });
@@ -709,7 +719,7 @@ describe("Data Events", () => {
   test("extracts data event from large user message", () => {
     const largeMessage = "Here is the config:\n" + "x".repeat(2000);
     const events = extractUserEvents(largeMessage);
-    const dataEvents = events.filter(e => e.type === "data");
+    const dataEvents = events.filter((e) => e.type === "data");
     assert.equal(dataEvents.length, 1);
     assert.equal(dataEvents[0].priority, 4);
     // data field is the preview, truncated to 300 chars
@@ -718,7 +728,7 @@ describe("Data Events", () => {
 
   test("does not extract data event from short message", () => {
     const events = extractUserEvents("Fix the bug please");
-    const dataEvents = events.filter(e => e.type === "data");
+    const dataEvents = events.filter((e) => e.type === "data");
     assert.equal(dataEvents.length, 0);
   });
 });
@@ -736,7 +746,7 @@ describe("Cross-Platform (Windows)", () => {
     };
 
     const events = extractEvents(input);
-    const ruleEvents = events.filter(e => e.type === "rule");
+    const ruleEvents = events.filter((e) => e.type === "rule");
     assert.equal(ruleEvents.length, 1);
     assert.ok(ruleEvents[0].data.includes(".claude\\"));
   });
@@ -749,7 +759,7 @@ describe("Cross-Platform (Windows)", () => {
     };
 
     const events = extractEvents(input);
-    const ruleEvents = events.filter(e => e.type === "rule");
+    const ruleEvents = events.filter((e) => e.type === "rule");
     assert.equal(ruleEvents.length, 1);
   });
 
@@ -778,7 +788,7 @@ describe("Cross-Platform (Windows)", () => {
     };
 
     const events = extractEvents(input);
-    const cwdEvents = events.filter(e => e.type === "cwd");
+    const cwdEvents = events.filter((e) => e.type === "cwd");
     assert.equal(cwdEvents.length, 1);
     assert.equal(cwdEvents[0].data, "C:\\Users\\dev\\project");
   });
@@ -791,7 +801,7 @@ describe("Cross-Platform (Windows)", () => {
     };
 
     const events = extractEvents(input);
-    const cwdEvents = events.filter(e => e.type === "cwd");
+    const cwdEvents = events.filter((e) => e.type === "cwd");
     assert.equal(cwdEvents.length, 1);
     assert.equal(cwdEvents[0].data, "\\\\server\\share\\project");
   });
@@ -815,7 +825,7 @@ describe("NotebookEdit Events", () => {
     };
 
     const events = extractEvents(input);
-    const fileEvents = events.filter(e => e.category === "file");
+    const fileEvents = events.filter((e) => e.category === "file");
     assert.equal(fileEvents.length, 1);
     assert.equal(fileEvents[0].type, "file_edit");
     assert.equal(fileEvents[0].data, "/project/analysis.ipynb");
@@ -835,7 +845,7 @@ describe("NotebookEdit Events", () => {
     };
 
     const events = extractEvents(input);
-    const fileEvents = events.filter(e => e.category === "file");
+    const fileEvents = events.filter((e) => e.category === "file");
     assert.equal(fileEvents.length, 1);
     assert.equal(fileEvents[0].type, "file_edit");
   });
@@ -866,7 +876,7 @@ describe("AskUserQuestion Events", () => {
     };
 
     const events = extractEvents(input);
-    const decisionEvents = events.filter(e => e.type === "decision_question");
+    const decisionEvents = events.filter((e) => e.type === "decision_question");
     assert.equal(decisionEvents.length, 1);
     assert.equal(decisionEvents[0].category, "decision");
     assert.equal(decisionEvents[0].priority, 2);
@@ -881,7 +891,7 @@ describe("AskUserQuestion Events", () => {
     };
 
     const events = extractEvents(input);
-    const decisionEvents = events.filter(e => e.type === "decision_question");
+    const decisionEvents = events.filter((e) => e.type === "decision_question");
     assert.equal(decisionEvents.length, 0);
   });
 });
@@ -899,7 +909,7 @@ describe("EnterWorktree Events", () => {
     };
 
     const events = extractEvents(input);
-    const wtEvents = events.filter(e => e.type === "worktree");
+    const wtEvents = events.filter((e) => e.type === "worktree");
     assert.equal(wtEvents.length, 1);
     assert.equal(wtEvents[0].category, "env");
     assert.equal(wtEvents[0].priority, 2);
@@ -914,7 +924,7 @@ describe("EnterWorktree Events", () => {
     };
 
     const events = extractEvents(input);
-    const wtEvents = events.filter(e => e.type === "worktree");
+    const wtEvents = events.filter((e) => e.type === "worktree");
     assert.equal(wtEvents.length, 1);
     assert.ok(wtEvents[0].data.length > 0, "should have data even without name");
   });
@@ -933,7 +943,7 @@ describe("New Git Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.category === "git");
+    const gitEvents = events.filter((e) => e.category === "git");
     assert.equal(gitEvents.length, 1);
     assert.ok(gitEvents[0].data.includes("add"), "should include add operation");
   });
@@ -946,7 +956,7 @@ describe("New Git Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.category === "git");
+    const gitEvents = events.filter((e) => e.category === "git");
     assert.equal(gitEvents.length, 1);
     assert.ok(gitEvents[0].data.includes("cherry-pick"), "should include cherry-pick");
   });
@@ -959,7 +969,7 @@ describe("New Git Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.category === "git");
+    const gitEvents = events.filter((e) => e.category === "git");
     assert.equal(gitEvents.length, 1);
     assert.ok(gitEvents[0].data.includes("tag"), "should include tag");
   });
@@ -972,7 +982,7 @@ describe("New Git Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.category === "git");
+    const gitEvents = events.filter((e) => e.category === "git");
     assert.equal(gitEvents.length, 1);
     assert.ok(gitEvents[0].data.includes("fetch"), "should include fetch");
   });
@@ -985,7 +995,7 @@ describe("New Git Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.category === "git");
+    const gitEvents = events.filter((e) => e.category === "git");
     assert.equal(gitEvents.length, 1);
     assert.ok(gitEvents[0].data.includes("clone"), "should include clone");
   });
@@ -1004,7 +1014,7 @@ describe("New Env Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.category === "env");
+    const envEvents = events.filter((e) => e.category === "env");
     assert.ok(envEvents.length >= 1, "should extract env event for cargo install");
   });
 
@@ -1016,7 +1026,7 @@ describe("New Env Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.category === "env");
+    const envEvents = events.filter((e) => e.category === "env");
     assert.ok(envEvents.length >= 1, "should extract env event for go install");
   });
 
@@ -1028,7 +1038,7 @@ describe("New Env Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.category === "env");
+    const envEvents = events.filter((e) => e.category === "env");
     assert.ok(envEvents.length >= 1, "should extract env event for rustup");
   });
 
@@ -1040,7 +1050,7 @@ describe("New Env Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.category === "env");
+    const envEvents = events.filter((e) => e.category === "env");
     assert.ok(envEvents.length >= 1, "should extract env event for volta");
   });
 
@@ -1052,7 +1062,7 @@ describe("New Env Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.category === "env");
+    const envEvents = events.filter((e) => e.category === "env");
     assert.ok(envEvents.length >= 1, "should extract env event for deno install");
   });
 });
@@ -1070,7 +1080,7 @@ describe("Env Secret Sanitization", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.category === "env");
+    const envEvents = events.filter((e) => e.category === "env");
     assert.ok(envEvents.length >= 1, "should extract env event");
     assert.ok(!envEvents[0].data.includes("sk-secret"), "should NOT contain the secret value");
     assert.ok(envEvents[0].data.includes("API_KEY"), "should contain the key name");
@@ -1085,7 +1095,7 @@ describe("Env Secret Sanitization", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.category === "env");
+    const envEvents = events.filter((e) => e.category === "env");
     assert.ok(envEvents.length >= 1, "should extract env event");
     assert.ok(envEvents[0].data.includes("npm install express"), "should contain full command");
   });
@@ -1105,7 +1115,7 @@ describe("Multi-Event & Edge Cases", () => {
 
     const events = extractEvents(input);
     assert.ok(events.length >= 2, `Expected >=2 events, got ${events.length}`);
-    const types = events.map(e => e.type);
+    const types = events.map((e) => e.type);
     assert.ok(types.includes("cwd"), "should include cwd");
     assert.ok(types.includes("git"), "should include git");
   });
@@ -1159,7 +1169,7 @@ describe("Truncation & Safety", () => {
     };
 
     const events = extractEvents(input);
-    const errorEvents = events.filter(e => e.type === "error_tool");
+    const errorEvents = events.filter((e) => e.type === "error_tool");
     assert.equal(errorEvents.length, 1);
     assert.ok(errorEvents[0].data.length <= 300, `data.length = ${errorEvents[0].data.length}`);
   });
@@ -1178,7 +1188,10 @@ describe("Truncation & Safety", () => {
     const events = extractEvents(input);
     for (const event of events) {
       assert.equal(typeof event.data, "string", `event.type=${event.type} data should be string`);
-      assert.ok(event.data.length <= 300, `event.type=${event.type} data.length=${event.data.length} exceeds 300`);
+      assert.ok(
+        event.data.length <= 300,
+        `event.type=${event.type} data.length=${event.data.length} exceeds 300`,
+      );
     }
   });
 });
@@ -1262,7 +1275,7 @@ describe("Expanded Git Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.type === "git");
+    const gitEvents = events.filter((e) => e.type === "git");
     assert.equal(gitEvents.length, 1);
     assert.equal(gitEvents[0].data, "log");
   });
@@ -1275,7 +1288,7 @@ describe("Expanded Git Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.type === "git");
+    const gitEvents = events.filter((e) => e.type === "git");
     assert.equal(gitEvents.length, 1);
     assert.equal(gitEvents[0].data, "diff");
   });
@@ -1288,7 +1301,7 @@ describe("Expanded Git Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.type === "git");
+    const gitEvents = events.filter((e) => e.type === "git");
     assert.equal(gitEvents.length, 1);
     assert.equal(gitEvents[0].data, "status");
   });
@@ -1301,7 +1314,7 @@ describe("Expanded Git Patterns", () => {
     };
 
     const events = extractEvents(input);
-    const gitEvents = events.filter(e => e.type === "git");
+    const gitEvents = events.filter((e) => e.type === "git");
     assert.equal(gitEvents.length, 1);
     assert.equal(gitEvents[0].data, "pull");
   });
@@ -1320,7 +1333,7 @@ describe("Dependency Install Events", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.type === "env");
+    const envEvents = events.filter((e) => e.type === "env");
     assert.equal(envEvents.length, 1);
   });
 
@@ -1332,7 +1345,7 @@ describe("Dependency Install Events", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.type === "env");
+    const envEvents = events.filter((e) => e.type === "env");
     assert.equal(envEvents.length, 1);
   });
 
@@ -1344,7 +1357,7 @@ describe("Dependency Install Events", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.type === "env");
+    const envEvents = events.filter((e) => e.type === "env");
     assert.equal(envEvents.length, 1);
   });
 
@@ -1356,7 +1369,7 @@ describe("Dependency Install Events", () => {
     };
 
     const events = extractEvents(input);
-    const envEvents = events.filter(e => e.type === "env");
+    const envEvents = events.filter((e) => e.type === "env");
     assert.equal(envEvents.length, 1);
   });
 });

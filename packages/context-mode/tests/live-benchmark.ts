@@ -45,13 +45,8 @@ function benchmark(opts: {
   for (const q of opts.queries) {
     const results = store.search(q, 1);
     if (results.length > 0) {
-      totalSearchBytes += Buffer.byteLength(
-        results[0].title + "\n" + results[0].content,
-      );
-      if (
-        results[0].contentType === "code" &&
-        !results[0].content.includes("```")
-      ) {
+      totalSearchBytes += Buffer.byteLength(results[0].title + "\n" + results[0].content);
+      if (results[0].contentType === "code" && !results[0].content.includes("```")) {
         hasExactCode = false;
       }
     }
@@ -59,10 +54,7 @@ function benchmark(opts: {
 
   store.close();
 
-  const savings =
-    totalSearchBytes > 0
-      ? ((1 - totalSearchBytes / rawBytes) * 100)
-      : 0;
+  const savings = totalSearchBytes > 0 ? (1 - totalSearchBytes / rawBytes) * 100 : 0;
 
   return {
     scenario: opts.scenario,
@@ -107,15 +99,8 @@ async function main() {
     benchmark({
       scenario: "React useEffect docs",
       source: "Context7: React",
-      content: readFileSync(
-        join(fixtureDir, "context7-react-docs.md"),
-        "utf-8",
-      ),
-      queries: [
-        "useEffect cleanup function",
-        "fetch data ignore stale",
-        "dependency array rules",
-      ],
+      content: readFileSync(join(fixtureDir, "context7-react-docs.md"), "utf-8"),
+      queries: ["useEffect cleanup function", "fetch data ignore stale", "dependency array rules"],
     }),
   );
 
@@ -124,15 +109,8 @@ async function main() {
     benchmark({
       scenario: "Next.js App Router docs",
       source: "Context7: Next.js",
-      content: readFileSync(
-        join(fixtureDir, "context7-nextjs-docs.md"),
-        "utf-8",
-      ),
-      queries: [
-        "App Router data fetching",
-        "server components",
-        "route handlers",
-      ],
+      content: readFileSync(join(fixtureDir, "context7-nextjs-docs.md"), "utf-8"),
+      queries: ["App Router data fetching", "server components", "route handlers"],
     }),
   );
 
@@ -141,14 +119,8 @@ async function main() {
     benchmark({
       scenario: "Tailwind CSS docs",
       source: "Context7: Tailwind",
-      content: readFileSync(
-        join(fixtureDir, "context7-tailwind-docs.md"),
-        "utf-8",
-      ),
-      queries: [
-        "responsive breakpoints",
-        "custom colors theme",
-      ],
+      content: readFileSync(join(fixtureDir, "context7-tailwind-docs.md"), "utf-8"),
+      queries: ["responsive breakpoints", "custom colors theme"],
     }),
   );
 
@@ -209,34 +181,20 @@ async function main() {
       scenario: "MCP tools/list (40 tools)",
       source: "MCP: tools/list",
       content: (() => {
-        const raw = readFileSync(
-          join(fixtureDir, "mcp-tools.json"),
-          "utf-8",
-        );
+        const raw = readFileSync(join(fixtureDir, "mcp-tools.json"), "utf-8");
         const tools = JSON.parse(raw);
         return tools
-          .map(
-            (t: { name: string; description: string }) =>
-              `### ${t.name}\n\n${t.description}`,
-          )
+          .map((t: { name: string; description: string }) => `### ${t.name}\n\n${t.description}`)
           .join("\n\n---\n\n");
       })(),
-      queries: [
-        "browser screenshot tool",
-        "file search glob",
-        "git commit tool",
-      ],
+      queries: ["browser screenshot tool", "file search glob", "git commit tool"],
     }),
   );
 
   // ===== RESULTS =====
   console.log("--- Results ---\n");
-  console.log(
-    "| Scenario | Source | Raw | Search (3q) | Savings | Chunks | Code |",
-  );
-  console.log(
-    "|----------|--------|-----|-------------|---------|--------|------|",
-  );
+  console.log("| Scenario | Source | Raw | Search (3q) | Savings | Chunks | Code |");
+  console.log("|----------|--------|-----|-------------|---------|--------|------|");
 
   let totalRaw = 0;
   let totalSearch = 0;
@@ -254,12 +212,8 @@ async function main() {
   console.log("");
   console.log(`Total raw: ${(totalRaw / 1024).toFixed(1)}KB`);
   console.log(`Total search results: ${(totalSearch / 1024).toFixed(1)}KB`);
-  console.log(
-    `Overall savings: ${((1 - totalSearch / totalRaw) * 100).toFixed(0)}%`,
-  );
-  console.log(
-    `Multiplier: ${(totalRaw / totalSearch).toFixed(1)}x less context`,
-  );
+  console.log(`Overall savings: ${((1 - totalSearch / totalRaw) * 100).toFixed(0)}%`);
+  console.log(`Multiplier: ${(totalRaw / totalSearch).toFixed(1)}x less context`);
 
   // Token estimation
   const rawTokens = Math.ceil(totalRaw / 4);

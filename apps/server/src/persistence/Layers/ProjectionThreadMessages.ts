@@ -136,10 +136,39 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
       ),
     );
 
+  const searchByText: ProjectionThreadMessageRepositoryShape["searchByText"] = ({ query, limit }) =>
+    Effect.gen(function* () {
+      // Fetch more rows than needed so we can deduplicate by threadId.
+      const rawLimit = Math.min(limit * 10, 500);
+      const rows = yield* sql.unsafe(
+        `SELECT ptm.thread_id AS "threadId", SUBSTR(ptm.text, 1, 120) AS "snippet"
+         FROM fts.messages_fts
+         JOIN projection_thread_messages ptm ON fts.messages_fts.rowid = ptm.rowid
+         WHERE messages_fts MATCH ?
+         LIMIT ?`,
+        [query, rawLimit],
+      );
+
+      // Deduplicate: keep first (highest-ranked) hit per thread.
+      const seen = new Set<string>();
+      const results: Array<{ threadId: string; snippet: string }> = [];
+      for (const row of rows as ReadonlyArray<{ threadId: string; snippet: string }>) {
+        if (!seen.has(row.threadId)) {
+          seen.add(row.threadId);
+          results.push(row);
+          if (results.length >= limit) break;
+        }
+      }
+      return results;
+    }).pipe(
+      Effect.mapError(toPersistenceSqlError("ProjectionThreadMessageRepository.searchByText")),
+    );
+
   return {
     upsert,
     listByThreadId,
     deleteByThreadId,
+    searchByText,
   } satisfies ProjectionThreadMessageRepositoryShape;
 });
 

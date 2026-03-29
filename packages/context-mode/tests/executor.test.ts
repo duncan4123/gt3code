@@ -16,10 +16,7 @@ const executor = new PolyglotExecutor({ runtimes });
 
 describe("Runtime Detection", () => {
   test("detects JavaScript runtime (bun or node)", async () => {
-    assert.ok(
-      ["bun", "node"].includes(runtimes.javascript),
-      `Got: ${runtimes.javascript}`,
-    );
+    assert.ok(["bun", "node"].includes(runtimes.javascript), `Got: ${runtimes.javascript}`);
   });
 
   test("detects Shell runtime (non-empty string)", async () => {
@@ -42,12 +39,19 @@ describe("Runtime Detection", () => {
       const { mkdirSync, rmSync } = await import("node:fs");
       const { tmpdir } = await import("node:os");
       const chineseDir = join(tmpdir(), "测试目录");
-      try { mkdirSync(chineseDir, { recursive: true }); } catch {}
+      try {
+        mkdirSync(chineseDir, { recursive: true });
+      } catch {}
       const chineseExecutor = new PolyglotExecutor({ runtimes, projectRoot: chineseDir });
-      const r = await chineseExecutor.execute({ language: "shell", code: 'echo "chinese path ok"' });
+      const r = await chineseExecutor.execute({
+        language: "shell",
+        code: 'echo "chinese path ok"',
+      });
       assert.equal(r.exitCode, 0, `Failed with stderr: ${r.stderr}`);
       assert.ok(r.stdout.includes("chinese path ok"), `Got: ${r.stdout}`);
-      try { rmSync(chineseDir, { recursive: true, force: true }); } catch {}
+      try {
+        rmSync(chineseDir, { recursive: true, force: true });
+      } catch {}
     });
   }
 
@@ -83,18 +87,9 @@ describe("Runtime Detection", () => {
       () => buildCommand(noRuntimes, "typescript", "/tmp/t.ts"),
       /No TypeScript runtime/,
     );
-    assert.throws(
-      () => buildCommand(noRuntimes, "python", "/tmp/t.py"),
-      /No Python runtime/,
-    );
-    assert.throws(
-      () => buildCommand(noRuntimes, "ruby", "/tmp/t.rb"),
-      /Ruby not available/,
-    );
-    assert.throws(
-      () => buildCommand(noRuntimes, "elixir", "/tmp/t.exs"),
-      /Elixir not available/,
-    );
+    assert.throws(() => buildCommand(noRuntimes, "python", "/tmp/t.py"), /No Python runtime/);
+    assert.throws(() => buildCommand(noRuntimes, "ruby", "/tmp/t.rb"), /Ruby not available/);
+    assert.throws(() => buildCommand(noRuntimes, "elixir", "/tmp/t.exs"), /Elixir not available/);
   });
 });
 
@@ -175,19 +170,19 @@ describe("JavaScript Execution", () => {
 });
 
 describe.runIf(runtimes.typescript)("TypeScript Execution", () => {
-    test("TS: hello world with type annotation", async () => {
-      const r = await executor.execute({
-        language: "typescript",
-        code: 'const msg: string = "hello from ts"; console.log(msg);',
-      });
-      assert.equal(r.exitCode, 0);
-      assert.ok(r.stdout.includes("hello from ts"));
+  test("TS: hello world with type annotation", async () => {
+    const r = await executor.execute({
+      language: "typescript",
+      code: 'const msg: string = "hello from ts"; console.log(msg);',
     });
+    assert.equal(r.exitCode, 0);
+    assert.ok(r.stdout.includes("hello from ts"));
+  });
 
-    test("TS: interface + generics", async () => {
-      const r = await executor.execute({
-        language: "typescript",
-        code: `
+  test("TS: interface + generics", async () => {
+    const r = await executor.execute({
+      language: "typescript",
+      code: `
           interface Item<T> { id: number; value: T; }
           const items: Item<string>[] = [
             { id: 1, value: "apple" },
@@ -196,15 +191,15 @@ describe.runIf(runtimes.typescript)("TypeScript Execution", () => {
           function first<T>(arr: T[]): T | undefined { return arr[0]; }
           console.log(first(items)?.value);
         `,
-      });
-      assert.equal(r.exitCode, 0);
-      assert.ok(r.stdout.includes("apple"));
     });
+    assert.equal(r.exitCode, 0);
+    assert.ok(r.stdout.includes("apple"));
+  });
 
-    test("TS: enum + switch", async () => {
-      const r = await executor.execute({
-        language: "typescript",
-        code: `
+  test("TS: enum + switch", async () => {
+    const r = await executor.execute({
+      language: "typescript",
+      code: `
           enum Color { Red = "red", Blue = "blue", Green = "green" }
           function describe(c: Color): string {
             switch (c) {
@@ -215,15 +210,15 @@ describe.runIf(runtimes.typescript)("TypeScript Execution", () => {
           }
           console.log(describe(Color.Blue));
         `,
-      });
-      assert.equal(r.exitCode, 0);
-      assert.ok(r.stdout.includes("cool"));
     });
+    assert.equal(r.exitCode, 0);
+    assert.ok(r.stdout.includes("cool"));
+  });
 
-    test("TS: async + Promise.all", async () => {
-      const r = await executor.execute({
-        language: "typescript",
-        code: `
+  test("TS: async + Promise.all", async () => {
+    const r = await executor.execute({
+      language: "typescript",
+      code: `
           async function fetchNum(n: number): Promise<number> {
             return new Promise(resolve => setTimeout(() => resolve(n * 2), 10));
           }
@@ -231,10 +226,10 @@ describe.runIf(runtimes.typescript)("TypeScript Execution", () => {
             console.log("doubled:", results.join(", "));
           });
         `,
-      });
-      assert.equal(r.exitCode, 0);
-      assert.ok(r.stdout.includes("doubled: 2, 4, 6"));
     });
+    assert.equal(r.exitCode, 0);
+    assert.ok(r.stdout.includes("doubled: 2, 4, 6"));
+  });
 });
 
 describe.runIf(runtimes.python)("Python Execution", () => {
@@ -591,7 +586,7 @@ describe("Error Handling", () => {
     assert.ok(r.stderr.includes("intentional"));
   });
 
-    test.runIf(runtimes.python)("Python: syntax error", async () => {
+  test.runIf(runtimes.python)("Python: syntax error", async () => {
     const r = await executor.execute({
       language: "python",
       code: "def foo(\n  pass",
@@ -599,7 +594,7 @@ describe("Error Handling", () => {
     assert.notEqual(r.exitCode, 0);
   });
 
-    test.runIf(runtimes.python)("Python: runtime error (ValueError)", async () => {
+  test.runIf(runtimes.python)("Python: runtime error (ValueError)", async () => {
     const r = await executor.execute({
       language: "python",
       code: 'raise ValueError("test error")',
@@ -646,12 +641,14 @@ describe("Timeout Handling", () => {
     const pid = parseInt(r.stdout.trim(), 10);
     assert.ok(pid > 0, `Expected valid PID in stdout, got: "${r.stdout}"`);
     // Give OS a moment to reap
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 200));
     let alive = false;
     try {
       process.kill(pid, 0); // signal 0 = check if alive
       alive = true;
-    } catch { /* ESRCH = not found = good */ }
+    } catch {
+      /* ESRCH = not found = good */
+    }
     assert.equal(alive, false, `Process ${pid} should be dead after timeout kill`);
   }, 10_000);
 
@@ -679,10 +676,13 @@ describe("Timeout Handling", () => {
     const childPid = parseInt(r.stderr.trim(), 10);
     assert.ok(parentPid > 0, `Expected parent PID, got: "${r.stdout}"`);
     assert.ok(childPid > 0, `Expected child PID, got: "${r.stderr}"`);
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 200));
     for (const pid of [parentPid, childPid]) {
       let alive = false;
-      try { process.kill(pid, 0); alive = true; } catch {}
+      try {
+        process.kill(pid, 0);
+        alive = true;
+      } catch {}
       assert.equal(alive, false, `Process ${pid} should be dead after group kill`);
     }
   }, 10_000);
@@ -696,7 +696,7 @@ describe("Timeout Handling", () => {
     assert.equal(r.timedOut, true);
   }, 10_000);
 
-    test.runIf(runtimes.python)("Python: infinite sleep times out", async () => {
+  test.runIf(runtimes.python)("Python: infinite sleep times out", async () => {
     const r = await executor.execute({
       language: "python",
       code: "import time; time.sleep(5)",
@@ -771,7 +771,7 @@ describe("execute_file (FILE_CONTENT)", () => {
     assert.ok(r.stdout.includes("admins: Alice, Charlie"));
   });
 
-    test.runIf(runtimes.python)("execute_file: Python reads FILE_CONTENT", async () => {
+  test.runIf(runtimes.python)("execute_file: Python reads FILE_CONTENT", async () => {
     const r = await executor.executeFile({
       path: testFile,
       language: "python",
@@ -795,7 +795,7 @@ print(f"Users: {len(data['users'])}")
     assert.ok(r.stdout.includes("bytes"));
   });
 
-    test.runIf(runtimes.ruby)("execute_file: Ruby reads FILE_CONTENT", async () => {
+  test.runIf(runtimes.ruby)("execute_file: Ruby reads FILE_CONTENT", async () => {
     const r = await executor.executeFile({
       path: testFile,
       language: "ruby",
@@ -909,7 +909,7 @@ puts "Users: #{data['users'].length}"
     );
   });
 
-    test.runIf(runtimes.elixir)("execute_file: Elixir reads file_content", async () => {
+  test.runIf(runtimes.elixir)("execute_file: Elixir reads file_content", async () => {
     const r = await executor.executeFile({
       path: testFile,
       language: "elixir",
@@ -960,7 +960,7 @@ console.log("has_emoji: " + FILE_CONTENT.includes('🔒'));
     assert.ok(r.stdout.includes("has_emoji: true"));
   });
 
-    test.runIf(runtimes.ruby)("execute_file: Ruby reads UTF-8 non-ASCII content", async () => {
+  test.runIf(runtimes.ruby)("execute_file: Ruby reads UTF-8 non-ASCII content", async () => {
     const r = await executor.executeFile({
       path: utf8File,
       language: "ruby",
@@ -988,20 +988,23 @@ puts "has_emoji: #{FILE_CONTENT.include?('🔒')}"
 
   // --- execute_file: file_path alias ---
 
-  test.runIf(runtimes.python)("execute_file: Python exposes 'file_path' as alias for FILE_CONTENT_PATH", async () => {
-    const r = await executor.executeFile({
-      path: testFile,
-      language: "python",
-      code: `
+  test.runIf(runtimes.python)(
+    "execute_file: Python exposes 'file_path' as alias for FILE_CONTENT_PATH",
+    async () => {
+      const r = await executor.executeFile({
+        path: testFile,
+        language: "python",
+        code: `
 import json
 with open(file_path) as f:
     data = json.load(f)
 print(f"Users via file_path: {len(data['users'])}")
       `,
-    });
-    assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
-    assert.ok(r.stdout.includes("Users via file_path: 3"), `Got: ${r.stdout}`);
-  });
+      });
+      assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
+      assert.ok(r.stdout.includes("Users via file_path: 3"), `Got: ${r.stdout}`);
+    },
+  );
 
   test("execute_file: JS exposes 'file_path' as alias for FILE_CONTENT_PATH", async () => {
     const r = await executor.executeFile({
@@ -1033,79 +1036,100 @@ print(f"Users via file_path: {len(data['users'])}")
     assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
   });
 
-  test.runIf(runtimes.ruby)("execute_file: Ruby exposes 'file_path' as alias for FILE_CONTENT_PATH", async () => {
-    const r = await executor.executeFile({
-      path: testFile,
-      language: "ruby",
-      code: `
+  test.runIf(runtimes.ruby)(
+    "execute_file: Ruby exposes 'file_path' as alias for FILE_CONTENT_PATH",
+    async () => {
+      const r = await executor.executeFile({
+        path: testFile,
+        language: "ruby",
+        code: `
 require 'json'
 data = JSON.parse(File.read(file_path))
 puts "Users via file_path: #{data['users'].length}"
       `,
-    });
-    assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
-    assert.ok(r.stdout.includes("Users via file_path: 3"), `Got: ${r.stdout}`);
-  });
+      });
+      assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
+      assert.ok(r.stdout.includes("Users via file_path: 3"), `Got: ${r.stdout}`);
+    },
+  );
 
-  test.runIf(runtimes.go)("execute_file: Go exposes 'file_path' as alias for FILE_CONTENT_PATH", async () => {
-    const r = await executor.executeFile({
-      path: testFile,
-      language: "go",
-      code: `fmt.Println("file_path alias: " + file_path)`,
-    });
-    assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
-    assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
-  });
+  test.runIf(runtimes.go)(
+    "execute_file: Go exposes 'file_path' as alias for FILE_CONTENT_PATH",
+    async () => {
+      const r = await executor.executeFile({
+        path: testFile,
+        language: "go",
+        code: `fmt.Println("file_path alias: " + file_path)`,
+      });
+      assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
+      assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
+    },
+  );
 
-  test.runIf(runtimes.rust)("execute_file: Rust exposes 'file_path' as alias for file_content_path", async () => {
-    const r = await executor.executeFile({
-      path: testFile,
-      language: "rust",
-      code: `println!("file_path alias: {}", file_path);`,
-    });
-    assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
-    assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
-  });
+  test.runIf(runtimes.rust)(
+    "execute_file: Rust exposes 'file_path' as alias for file_content_path",
+    async () => {
+      const r = await executor.executeFile({
+        path: testFile,
+        language: "rust",
+        code: `println!("file_path alias: {}", file_path);`,
+      });
+      assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
+      assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
+    },
+  );
 
-  test.runIf(runtimes.php)("execute_file: PHP exposes '$file_path' as alias for $FILE_CONTENT_PATH", async () => {
-    const r = await executor.executeFile({
-      path: testFile,
-      language: "php",
-      code: `echo "file_path alias: " . $file_path . "\\n";`,
-    });
-    assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
-    assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
-  });
+  test.runIf(runtimes.php)(
+    "execute_file: PHP exposes '$file_path' as alias for $FILE_CONTENT_PATH",
+    async () => {
+      const r = await executor.executeFile({
+        path: testFile,
+        language: "php",
+        code: `echo "file_path alias: " . $file_path . "\\n";`,
+      });
+      assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
+      assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
+    },
+  );
 
-  test.runIf(runtimes.perl)("execute_file: Perl exposes '$file_path' as alias for $FILE_CONTENT_PATH", async () => {
-    const r = await executor.executeFile({
-      path: testFile,
-      language: "perl",
-      code: `print "file_path alias: $file_path\\n";`,
-    });
-    assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
-    assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
-  });
+  test.runIf(runtimes.perl)(
+    "execute_file: Perl exposes '$file_path' as alias for $FILE_CONTENT_PATH",
+    async () => {
+      const r = await executor.executeFile({
+        path: testFile,
+        language: "perl",
+        code: `print "file_path alias: $file_path\\n";`,
+      });
+      assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
+      assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
+    },
+  );
 
-  test.runIf(runtimes.r)("execute_file: R exposes 'file_path' as alias for FILE_CONTENT_PATH", async () => {
-    const r = await executor.executeFile({
-      path: testFile,
-      language: "r",
-      code: `cat(paste0("file_path alias: ", file_path, "\\n"))`,
-    });
-    assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
-    assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
-  });
+  test.runIf(runtimes.r)(
+    "execute_file: R exposes 'file_path' as alias for FILE_CONTENT_PATH",
+    async () => {
+      const r = await executor.executeFile({
+        path: testFile,
+        language: "r",
+        code: `cat(paste0("file_path alias: ", file_path, "\\n"))`,
+      });
+      assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
+      assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
+    },
+  );
 
-  test.runIf(runtimes.elixir)("execute_file: Elixir exposes 'file_path' as alias for file_content_path", async () => {
-    const r = await executor.executeFile({
-      path: testFile,
-      language: "elixir",
-      code: `IO.puts("file_path alias: " <> file_path)`,
-    });
-    assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
-    assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
-  });
+  test.runIf(runtimes.elixir)(
+    "execute_file: Elixir exposes 'file_path' as alias for file_content_path",
+    async () => {
+      const r = await executor.executeFile({
+        path: testFile,
+        language: "elixir",
+        code: `IO.puts("file_path alias: " <> file_path)`,
+      });
+      assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
+      assert.ok(r.stdout.includes(testFile), `Got: ${r.stdout}`);
+    },
+  );
 
   afterAll(() => {
     rmSync(testDir, { recursive: true, force: true });
@@ -1182,8 +1206,14 @@ describe("Environment Denylist", () => {
         code: 'echo "BASH_ENV=${BASH_ENV:-unset}" && echo "NODE_OPTIONS=${NODE_OPTIONS:-unset}"',
       });
       assert.equal(r.exitCode, 0);
-      assert.ok(r.stdout.includes("BASH_ENV=unset"), `BASH_ENV should be stripped, got: ${r.stdout}`);
-      assert.ok(r.stdout.includes("NODE_OPTIONS=unset"), `NODE_OPTIONS should be stripped, got: ${r.stdout}`);
+      assert.ok(
+        r.stdout.includes("BASH_ENV=unset"),
+        `BASH_ENV should be stripped, got: ${r.stdout}`,
+      );
+      assert.ok(
+        r.stdout.includes("NODE_OPTIONS=unset"),
+        `NODE_OPTIONS should be stripped, got: ${r.stdout}`,
+      );
     } finally {
       if (origBash === undefined) delete process.env.BASH_ENV;
       else process.env.BASH_ENV = origBash;
@@ -1205,9 +1235,15 @@ describe("Environment Denylist", () => {
         code: 'echo "PERL5OPT=${PERL5OPT:-unset}" && echo "RUBYOPT=${RUBYOPT:-unset}" && echo "LD_PRELOAD=${LD_PRELOAD:-unset}"',
       });
       assert.equal(r.exitCode, 0);
-      assert.ok(r.stdout.includes("PERL5OPT=unset"), `PERL5OPT should be stripped, got: ${r.stdout}`);
+      assert.ok(
+        r.stdout.includes("PERL5OPT=unset"),
+        `PERL5OPT should be stripped, got: ${r.stdout}`,
+      );
       assert.ok(r.stdout.includes("RUBYOPT=unset"), `RUBYOPT should be stripped, got: ${r.stdout}`);
-      assert.ok(r.stdout.includes("LD_PRELOAD=unset"), `LD_PRELOAD should be stripped, got: ${r.stdout}`);
+      assert.ok(
+        r.stdout.includes("LD_PRELOAD=unset"),
+        `LD_PRELOAD should be stripped, got: ${r.stdout}`,
+      );
     } finally {
       if (origPerl === undefined) delete process.env.PERL5OPT;
       else process.env.PERL5OPT = origPerl;
@@ -1229,8 +1265,14 @@ describe("Environment Denylist", () => {
         code: 'echo "SLACK=$SLACK_BOT_TOKEN" && echo "CUSTOM=$MY_CUSTOM_API_KEY"',
       });
       assert.equal(r.exitCode, 0);
-      assert.ok(r.stdout.includes("SLACK=xoxb-test-token"), `SLACK_BOT_TOKEN should pass through, got: ${r.stdout}`);
-      assert.ok(r.stdout.includes("CUSTOM=custom-12345"), `MY_CUSTOM_API_KEY should pass through, got: ${r.stdout}`);
+      assert.ok(
+        r.stdout.includes("SLACK=xoxb-test-token"),
+        `SLACK_BOT_TOKEN should pass through, got: ${r.stdout}`,
+      );
+      assert.ok(
+        r.stdout.includes("CUSTOM=custom-12345"),
+        `MY_CUSTOM_API_KEY should pass through, got: ${r.stdout}`,
+      );
     } finally {
       if (origSlack === undefined) delete process.env.SLACK_BOT_TOKEN;
       else process.env.SLACK_BOT_TOKEN = origSlack;
@@ -1246,7 +1288,10 @@ describe("Environment Denylist", () => {
     });
     assert.equal(r.exitCode, 0);
     assert.ok(r.stdout.includes("NO_COLOR=1"), `NO_COLOR should be forced to 1, got: ${r.stdout}`);
-    assert.ok(r.stdout.includes("PYTHONUNBUFFERED=1"), `PYTHONUNBUFFERED should be forced to 1, got: ${r.stdout}`);
+    assert.ok(
+      r.stdout.includes("PYTHONUNBUFFERED=1"),
+      `PYTHONUNBUFFERED should be forced to 1, got: ${r.stdout}`,
+    );
   });
 
   test("ERL_AFLAGS and ERL_FLAGS are stripped", async () => {
@@ -1260,8 +1305,14 @@ describe("Environment Denylist", () => {
         code: 'echo "ERL_AFLAGS=${ERL_AFLAGS:-unset}" && echo "ERL_FLAGS=${ERL_FLAGS:-unset}"',
       });
       assert.equal(r.exitCode, 0);
-      assert.ok(r.stdout.includes("ERL_AFLAGS=unset"), `ERL_AFLAGS should be stripped, got: ${r.stdout}`);
-      assert.ok(r.stdout.includes("ERL_FLAGS=unset"), `ERL_FLAGS should be stripped, got: ${r.stdout}`);
+      assert.ok(
+        r.stdout.includes("ERL_AFLAGS=unset"),
+        `ERL_AFLAGS should be stripped, got: ${r.stdout}`,
+      );
+      assert.ok(
+        r.stdout.includes("ERL_FLAGS=unset"),
+        `ERL_FLAGS should be stripped, got: ${r.stdout}`,
+      );
     } finally {
       if (origA === undefined) delete process.env.ERL_AFLAGS;
       else process.env.ERL_AFLAGS = origA;
@@ -1294,9 +1345,7 @@ describe("Concurrent Execution", () => {
       }),
       executor.execute({ language: "shell", code: 'echo "sh"' }),
     ];
-    promises.push(
-      executor.execute({ language: "python", code: 'print("py")' }),
-    );
+    promises.push(executor.execute({ language: "python", code: 'print("py")' }));
     const all = await Promise.all(promises);
     for (const r of all) {
       assert.equal(r.exitCode, 0);
@@ -1386,7 +1435,7 @@ describe("Temp Cleanup Resilience", () => {
   test("PATH-dependent tools accessible from executor shell", async () => {
     const r = await executor.execute({
       language: "shell",
-      code: 'node --version',
+      code: "node --version",
     });
     assert.equal(r.exitCode, 0, `node not found in executor env, stderr: ${r.stderr}`);
     assert.ok(r.stdout.trim().startsWith("v"), `Expected version string, got: ${r.stdout}`);
@@ -1404,7 +1453,10 @@ describe("Windows Shell Support", () => {
   test("getAvailableLanguages always includes shell", async () => {
     const { getAvailableLanguages } = await import("../src/runtime.js");
     const langs = getAvailableLanguages(runtimes);
-    assert.ok(langs.includes("shell"), `shell should always be in available languages, got: ${langs}`);
+    assert.ok(
+      langs.includes("shell"),
+      `shell should always be in available languages, got: ${langs}`,
+    );
   });
 
   test("buildCommand returns shell command array", async () => {

@@ -8,7 +8,16 @@
  */
 import { describe, it, test, expect, beforeEach, afterEach } from "vitest";
 import { strict as assert } from "node:assert";
-import { readFileSync, existsSync, accessSync, constants, mkdirSync, writeFileSync, rmSync, readdirSync } from "node:fs";
+import {
+  readFileSync,
+  existsSync,
+  accessSync,
+  constants,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  readdirSync,
+} from "node:fs";
 import { resolve, join } from "node:path";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -47,7 +56,7 @@ describe("cli.bundle.mjs — marketplace install support", () => {
     const lines = content.split("\n");
     expect(lines[0].startsWith("#!")).toBe(true);
     // No shebang on any other line (would cause SyntaxError)
-    const shebangsAfterLine1 = lines.slice(1).filter(l => l.startsWith("#!"));
+    const shebangsAfterLine1 = lines.slice(1).filter((l) => l.startsWith("#!"));
     expect(shebangsAfterLine1).toHaveLength(0);
   });
 
@@ -154,14 +163,8 @@ describe("CLI Hook Path Tests", () => {
   test("toUnixPath: converts backslashes to forward slashes", () => {
     const input = "C:\\Users\\xxx\\AppData\\Local\\npm-cache\\_npx\\hooks\\pretooluse.mjs";
     const result = toUnixPath(input);
-    assert.ok(
-      !result.includes("\\"),
-      `Expected no backslashes, got: ${result}`,
-    );
-    assert.equal(
-      result,
-      "C:/Users/xxx/AppData/Local/npm-cache/_npx/hooks/pretooluse.mjs",
-    );
+    assert.ok(!result.includes("\\"), `Expected no backslashes, got: ${result}`);
+    assert.equal(result, "C:/Users/xxx/AppData/Local/npm-cache/_npx/hooks/pretooluse.mjs");
   });
 
   test("toUnixPath: leaves forward-slash paths unchanged", () => {
@@ -179,16 +182,15 @@ describe("CLI Hook Path Tests", () => {
   test("toUnixPath: hook command string has no backslashes", () => {
     // Simulate what upgrade() does: "node " + resolve(...)
     // On Windows, resolve() returns backslashes — toUnixPath must normalize them
-    const windowsPath = "C:\\Users\\xxx\\.claude\\plugins\\cache\\context-mode\\hooks\\pretooluse.mjs";
+    const windowsPath =
+      "C:\\Users\\xxx\\.claude\\plugins\\cache\\context-mode\\hooks\\pretooluse.mjs";
     const command = "node " + toUnixPath(windowsPath);
-    assert.ok(
-      !command.includes("\\"),
-      `Hook command must not contain backslashes: ${command}`,
-    );
+    assert.ok(!command.includes("\\"), `Hook command must not contain backslashes: ${command}`);
   });
 
   test("toUnixPath: sessionstart path has no backslashes", () => {
-    const windowsPath = "C:\\Users\\xxx\\.claude\\plugins\\cache\\context-mode\\hooks\\sessionstart.mjs";
+    const windowsPath =
+      "C:\\Users\\xxx\\.claude\\plugins\\cache\\context-mode\\hooks\\sessionstart.mjs";
     const command = "node " + toUnixPath(windowsPath);
     assert.ok(
       !command.includes("\\"),
@@ -211,13 +213,16 @@ async function loadEnsureNativeCompat(): Promise<(pluginRoot: string) => void> {
   if (!match) throw new Error("ensureNativeCompat not found in start.mjs");
 
   const tmpFile = join(tmpdir(), `abi-test-${Date.now()}.mjs`);
-  writeFileSync(tmpFile, [
-    'import { existsSync, copyFileSync } from "node:fs";',
-    'import { resolve } from "node:path";',
-    'import { createRequire } from "node:module";',
-    'import { execSync } from "node:child_process";',
-    `export ${match[0]}`,
-  ].join("\n"));
+  writeFileSync(
+    tmpFile,
+    [
+      'import { existsSync, copyFileSync } from "node:fs";',
+      'import { resolve } from "node:path";',
+      'import { createRequire } from "node:module";',
+      'import { execSync } from "node:child_process";',
+      `export ${match[0]}`,
+    ].join("\n"),
+  );
 
   try {
     const mod = await import(tmpFile);
@@ -299,7 +304,7 @@ describe("ABI-aware native binary caching (#148)", () => {
     ensureNativeCompat(tempDir);
 
     const files = readdirSync(releaseDir);
-    const cacheFiles = files.filter(f => f.match(/^better_sqlite3\.abi\d+\.node$/));
+    const cacheFiles = files.filter((f) => f.match(/^better_sqlite3\.abi\d+\.node$/));
     // Probe fails on fake binary, so no cache file is created — that's correct behavior
     expect(cacheFiles.length).toBeLessThanOrEqual(1);
   });
@@ -312,7 +317,8 @@ describe("ABI-aware native binary caching (#148)", () => {
 
     ensureNativeCompat(tempDir);
 
-    const expected = currentAbi === "115" ? "node20-binary" : currentAbi === "137" ? "node24-binary" : undefined;
+    const expected =
+      currentAbi === "115" ? "node20-binary" : currentAbi === "137" ? "node24-binary" : undefined;
     if (expected) {
       expect(readFileSync(binaryPath, "utf-8")).toBe(expected);
     }
@@ -456,7 +462,10 @@ describe("bun:sqlite adapter (#45)", () => {
     // Bun's require("better-sqlite3") returns a non-functional stub.
     // loadDatabase() must check globalThis.Bun FIRST and use bun:sqlite directly.
     const src = readFileSync(resolve(ROOT, "src", "db-base.ts"), "utf-8");
-    const loadDbSection = src.slice(src.indexOf("function loadDatabase"), src.indexOf("return _Database"));
+    const loadDbSection = src.slice(
+      src.indexOf("function loadDatabase"),
+      src.indexOf("return _Database"),
+    );
     // Must check Bun runtime before loading any driver
     expect(loadDbSection).toContain("globalThis");
     expect(loadDbSection).toContain("Bun");
@@ -541,7 +550,7 @@ describe("Cross-OS compatibility", () => {
   it("cli.ts chmod in setup/upgrade is guarded by platform check", () => {
     // execSync('chmod +x ...') must only run on non-Windows
     // Find the chmod +x line and check for win32 guard nearby
-    const chmodIdx = src.indexOf('chmod +x');
+    const chmodIdx = src.indexOf("chmod +x");
     expect(chmodIdx).toBeGreaterThan(-1);
     // Must have a platform guard before the chmod call
     const contextBefore = src.slice(Math.max(0, chmodIdx - 300), chmodIdx);
@@ -622,8 +631,8 @@ describe("start.mjs CLI self-heal", () => {
   test("start.mjs CLI self-heal is after ensureNativeCompat and before server import", () => {
     const src = readFileSync(resolve(ROOT, "start.mjs"), "utf-8");
     const nativeCompatIdx = src.indexOf("ensureNativeCompat(__dirname)");
-    const selfHealIdx = src.indexOf('cli.bundle.mjs');
-    const serverImportIdx = src.indexOf('server.bundle.mjs');
+    const selfHealIdx = src.indexOf("cli.bundle.mjs");
+    const serverImportIdx = src.indexOf("server.bundle.mjs");
     expect(nativeCompatIdx).toBeGreaterThan(-1);
     expect(selfHealIdx).toBeGreaterThan(-1);
     expect(serverImportIdx).toBeGreaterThan(-1);

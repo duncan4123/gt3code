@@ -26,10 +26,11 @@ try {
   const trimmed = (prompt || "").trim();
 
   // Skip system-generated messages — only capture genuine user prompts
-  const isSystemMessage = trimmed.startsWith("<task-notification>")
-    || trimmed.startsWith("<system-reminder>")
-    || trimmed.startsWith("<context_guidance>")
-    || trimmed.startsWith("<tool-result>");
+  const isSystemMessage =
+    trimmed.startsWith("<task-notification>") ||
+    trimmed.startsWith("<system-reminder>") ||
+    trimmed.startsWith("<context_guidance>") ||
+    trimmed.startsWith("<tool-result>");
 
   if (trimmed.length > 0 && !isSystemMessage) {
     const { SessionDB } = await loadSessionDB();
@@ -41,12 +42,16 @@ try {
     db.ensureSession(sessionId, process.env.CLAUDE_PROJECT_DIR || process.cwd());
 
     // 1. Always save the raw prompt
-    db.insertEvent(sessionId, {
-      type: "user_prompt",
-      category: "prompt",
-      data: prompt,
-      priority: 1,
-    }, "UserPromptSubmit");
+    db.insertEvent(
+      sessionId,
+      {
+        type: "user_prompt",
+        category: "prompt",
+        data: prompt,
+        priority: 1,
+      },
+      "UserPromptSubmit",
+    );
 
     // 2. Extract decision/role/intent/data from user message
     const userEvents = extractUserEvents(trimmed);

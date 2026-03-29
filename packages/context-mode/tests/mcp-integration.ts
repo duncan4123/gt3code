@@ -78,10 +78,7 @@ function assert(condition: boolean, msg: string): void {
   if (!condition) throw new Error(msg);
 }
 
-async function test(
-  name: string,
-  fn: () => Promise<void>,
-): Promise<void> {
+async function test(name: string, fn: () => Promise<void>): Promise<void> {
   try {
     await fn();
     passed++;
@@ -117,14 +114,8 @@ async function main() {
     const responses = await collectResponses(proc, 2000);
     const init = responses.find((r) => r.id === 1);
     assert(!!init, "No init response");
-    assert(
-      init!.result?.serverInfo?.name === "context-mode",
-      "Wrong server name",
-    );
-    assert(
-      init!.result?.serverInfo?.version === "0.4.0",
-      "Wrong server version",
-    );
+    assert(init!.result?.serverInfo?.name === "context-mode", "Wrong server name");
+    assert(init!.result?.serverInfo?.version === "0.4.0", "Wrong server version");
   });
 
   await test("tools/list returns execute and execute_file", async () => {
@@ -229,10 +220,7 @@ async function main() {
       assert(!!result, "No response for " + lt.name);
       const text = result!.result?.content?.[0]?.text || "";
       assert(!result!.result?.isError, "Tool returned error: " + text);
-      assert(
-        text.includes(lt.expect),
-        `Expected "${lt.expect}" in output, got: "${text.trim()}"`,
-      );
+      assert(text.includes(lt.expect), `Expected "${lt.expect}" in output, got: "${text.trim()}"`);
     });
   }
 
@@ -341,10 +329,7 @@ async function main() {
     assert(!!result, "No response");
     const text = result!.result?.content?.[0]?.text || "";
     assert(!result!.result?.isError, "Error: " + text);
-    assert(
-      text.includes("Events: 500"),
-      "Expected 500 events, got: " + text.trim(),
-    );
+    assert(text.includes("Events: 500"), "Expected 500 events, got: " + text.trim());
   });
 
   // ===== Test 4: Index + Search tools =====
@@ -439,8 +424,11 @@ async function main() {
           .split("\n")
           .filter((l) => l.trim())
           .map((l) => {
-            try { return JSON.parse(l) as JsonRpcResponse; }
-            catch { return null; }
+            try {
+              return JSON.parse(l) as JsonRpcResponse;
+            } catch {
+              return null;
+            }
           })
           .filter((r): r is JsonRpcResponse => r !== null);
         resolve(responses);
@@ -452,10 +440,7 @@ async function main() {
     const text = searchResult!.result?.content?.[0]?.text || "";
     assert(!searchResult!.result?.isError, "Search returned error: " + text);
     assert(text.includes("OAuth"), "Should find OAuth content: " + text);
-    assert(
-      text.includes("Auth Guide"),
-      "Should include source label: " + text,
-    );
+    assert(text.includes("Auth Guide"), "Should include source label: " + text);
   });
 
   await test("search: returns no-results message for empty store", async () => {
@@ -588,10 +573,7 @@ async function main() {
     const responses = await collectResponses(proc, 10000);
     const result = responses.find((r) => r.id === 61);
     assert(!!result, "No response");
-    assert(
-      result!.result?.isError === true,
-      "Should return error for invalid URL",
-    );
+    assert(result!.result?.isError === true, "Should return error for invalid URL");
   });
 
   // ===== Test 6: Context savings measurement =====

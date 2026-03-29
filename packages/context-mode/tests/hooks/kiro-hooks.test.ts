@@ -55,8 +55,16 @@ describe("Kiro hooks", () => {
   });
 
   afterAll(() => {
-    try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* best effort */ }
-    try { if (existsSync(dbPath)) unlinkSync(dbPath); } catch { /* best effort */ }
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+    try {
+      if (existsSync(dbPath)) unlinkSync(dbPath);
+    } catch {
+      /* best effort */
+    }
   });
 
   describe("pretooluse.mjs", () => {
@@ -118,32 +126,44 @@ describe("Kiro hooks", () => {
 
   describe("posttooluse.mjs", () => {
     test("exits 0 and produces no stdout (non-blocking)", () => {
-      const result = runHook("posttooluse.mjs", {
-        hook_event_name: "postToolUse",
-        tool_name: "fs_read",
-        tool_input: { path: "/src/app.ts" },
-        tool_response: "export default {}",
-      }, tempDir);
+      const result = runHook(
+        "posttooluse.mjs",
+        {
+          hook_event_name: "postToolUse",
+          tool_name: "fs_read",
+          tool_input: { path: "/src/app.ts" },
+          tool_response: "export default {}",
+        },
+        tempDir,
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe("");
     });
 
     test("captures git events without error", () => {
-      const result = runHook("posttooluse.mjs", {
-        hook_event_name: "postToolUse",
-        tool_name: "execute_bash",
-        tool_input: { command: "git status" },
-        tool_response: "On branch main\nnothing to commit",
-      }, tempDir);
+      const result = runHook(
+        "posttooluse.mjs",
+        {
+          hook_event_name: "postToolUse",
+          tool_name: "execute_bash",
+          tool_input: { command: "git status" },
+          tool_response: "On branch main\nnothing to commit",
+        },
+        tempDir,
+      );
 
       expect(result.exitCode).toBe(0);
     });
 
     test("handles malformed input without crashing", () => {
-      const result = runHook("posttooluse.mjs", {
-        hook_event_name: "postToolUse",
-      }, tempDir);
+      const result = runHook(
+        "posttooluse.mjs",
+        {
+          hook_event_name: "postToolUse",
+        },
+        tempDir,
+      );
 
       expect(result.exitCode).toBe(0);
     });

@@ -70,9 +70,7 @@ describe("KiroAdapter", () => {
     });
 
     it("parsePreCompactInput throws", () => {
-      expect(() => adapter.parsePreCompactInput({})).toThrow(
-        /Kiro does not support PreCompact/,
-      );
+      expect(() => adapter.parsePreCompactInput({})).toThrow(/Kiro does not support PreCompact/);
     });
 
     it("parseSessionStartInput throws", () => {
@@ -151,16 +149,12 @@ describe("KiroAdapter", () => {
 
   describe("config paths", () => {
     it("settings path is ~/.kiro/settings/mcp.json", () => {
-      expect(adapter.getSettingsPath()).toBe(
-        resolve(homedir(), ".kiro", "settings", "mcp.json"),
-      );
+      expect(adapter.getSettingsPath()).toBe(resolve(homedir(), ".kiro", "settings", "mcp.json"));
     });
 
     it("session dir is under ~/.kiro/context-mode/sessions/", () => {
       const sessionDir = adapter.getSessionDir();
-      expect(sessionDir).toBe(
-        join(homedir(), ".kiro", "context-mode", "sessions"),
-      );
+      expect(sessionDir).toBe(join(homedir(), ".kiro", "context-mode", "sessions"));
     });
 
     it("session DB path contains project hash", () => {
@@ -186,9 +180,7 @@ describe("KiroAdapter", () => {
 
     it("globalPath is ~/.kiro/KIRO.md", () => {
       const config = adapter.getRoutingInstructionsConfig();
-      expect(config.globalPath).toBe(
-        resolve(homedir(), ".kiro", "KIRO.md"),
-      );
+      expect(config.globalPath).toBe(resolve(homedir(), ".kiro", "KIRO.md"));
     });
 
     it("projectRelativePath is KIRO.md", () => {

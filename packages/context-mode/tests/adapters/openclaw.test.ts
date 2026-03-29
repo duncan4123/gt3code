@@ -242,9 +242,7 @@ describe("OpenClawAdapter", () => {
 
     it("session dir is under ~/.openclaw/context-mode/sessions/", () => {
       const sessionDir = adapter.getSessionDir();
-      expect(sessionDir).toBe(
-        join(homedir(), ".openclaw", "context-mode", "sessions"),
-      );
+      expect(sessionDir).toBe(join(homedir(), ".openclaw", "context-mode", "sessions"));
     });
 
     it("session DB path includes project hash", () => {

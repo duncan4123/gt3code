@@ -21,6 +21,7 @@ export const ORCHESTRATION_WS_METHODS = {
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
   replayEvents: "orchestration.replayEvents",
+  searchThreadMessages: "orchestration.searchThreadMessages",
 } as const;
 
 export const ORCHESTRATION_WS_CHANNELS = {
@@ -304,6 +305,29 @@ export const OrchestrationReadModel = Schema.Struct({
   updatedAt: IsoDateTime,
 });
 export type OrchestrationReadModel = typeof OrchestrationReadModel.Type;
+
+const SEARCH_THREAD_MESSAGES_MAX_LIMIT = 25;
+
+export const OrchestrationSearchThreadMessagesInput = Schema.Struct({
+  query: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
+  limit: Schema.optional(NonNegativeInt),
+});
+export type OrchestrationSearchThreadMessagesInput =
+  typeof OrchestrationSearchThreadMessagesInput.Type;
+
+export const OrchestrationThreadMessageSearchHit = Schema.Struct({
+  threadId: ThreadId,
+  snippet: Schema.String,
+});
+export type OrchestrationThreadMessageSearchHit = typeof OrchestrationThreadMessageSearchHit.Type;
+
+export const OrchestrationSearchThreadMessagesResult = Schema.Struct({
+  results: Schema.Array(OrchestrationThreadMessageSearchHit),
+});
+export type OrchestrationSearchThreadMessagesResult =
+  typeof OrchestrationSearchThreadMessagesResult.Type;
+
+export { SEARCH_THREAD_MESSAGES_MAX_LIMIT };
 
 export const ProjectCreateCommand = Schema.Struct({
   type: Schema.Literal("project.create"),

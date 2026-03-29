@@ -1,45 +1,32 @@
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
+/**
+ * FTS5 full-text search index for conversation messages.
+ *
+ * The FTS5 virtual table lives in the attached `fts` schema (standard SQLite
+ * btree file) because doltlite's prolly-tree storage corrupts FTS5 blob
+ * storage after ~100 inserts. The btree sidecar is attached in Sqlite.ts
+ * before migrations run.
+ *
+ * Sync is application-level (ProjectionPipeline), not trigger-based, because
+ * SQLite forbids qualified table names in trigger INSERT/UPDATE/DELETE.
+ */
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
-  yield* sql`
-    CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+  // FTS5 virtual table in the attached btree database.
+  // content-less — the projector syncs rows after each message upsert/delete.
+  yield* sql.unsafe(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS fts.messages_fts USING fts5(
       text,
-      content=projection_thread_messages,
-      content_rowid=rowid
+      content=''
     )
-  `;
-
-  yield* sql`
-    CREATE TRIGGER IF NOT EXISTS messages_fts_insert
-    AFTER INSERT ON projection_thread_messages
-    BEGIN
-      INSERT INTO messages_fts(rowid, text) VALUES (NEW.rowid, NEW.text);
-    END
-  `;
-
-  yield* sql`
-    CREATE TRIGGER IF NOT EXISTS messages_fts_update
-    AFTER UPDATE ON projection_thread_messages
-    BEGIN
-      INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', OLD.rowid, OLD.text);
-      INSERT INTO messages_fts(rowid, text) VALUES (NEW.rowid, NEW.text);
-    END
-  `;
-
-  yield* sql`
-    CREATE TRIGGER IF NOT EXISTS messages_fts_delete
-    AFTER DELETE ON projection_thread_messages
-    BEGIN
-      INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', OLD.rowid, OLD.text);
-    END
-  `;
+  `);
 
   // Backfill existing messages into the FTS index
-  yield* sql`
-    INSERT INTO messages_fts(rowid, text)
+  yield* sql.unsafe(`
+    INSERT INTO fts.messages_fts(rowid, text)
     SELECT rowid, text FROM projection_thread_messages
-  `;
+  `);
 });

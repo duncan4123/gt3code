@@ -183,7 +183,9 @@ export function closeDB(db: DatabaseInstance): void {
   try {
     // Checkpoint WAL before close to prevent contention on restart (#103)
     db.pragma("wal_checkpoint(TRUNCATE)");
-  } catch { /* WAL may not be active */ }
+  } catch {
+    /* WAL may not be active */
+  }
   try {
     db.close();
   } catch {
@@ -192,6 +194,39 @@ export function closeDB(db: DatabaseInstance): void {
 }
 
 // ─────────────────────────────────────────────────────────
+// FTS btree sidecar
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Derive the FTS btree sidecar path from a main DB path.
+ * e.g. `foo.db` → `foo-fts.db`
+ */
+export function ftsSidecarPath(mainDbPath: string): string {
+  return mainDbPath.replace(/\.db$/, "-fts.db");
+}
+
+/**
+ * Ensure a btree sidecar file exists with a standard SQLite header.
+ * Doltlite's ATTACH auto-detects the file format from the header.
+ * A file seeded by sqlite3 CLI gets the btree pager, keeping FTS5
+ * blobs safe from prolly-tree corruption.
+ */
+export function ensureFtsBtreeFile(ftsPath: string): void {
+  if (existsSync(ftsPath)) return;
+  const { execSync } = require("node:child_process");
+  execSync(`sqlite3 ${JSON.stringify(ftsPath)} "CREATE TABLE _seed(x INTEGER); DROP TABLE _seed;"`);
+}
+
+/**
+ * ATTACH a btree sidecar as the `fts` schema on an open database connection.
+ * Call before creating FTS5 virtual tables.
+ */
+export function attachFtsBtree(db: DatabaseInstance, mainDbPath: string): void {
+  const ftsPath = ftsSidecarPath(mainDbPath);
+  ensureFtsBtreeFile(ftsPath);
+  db.exec(`ATTACH DATABASE '${ftsPath}' AS fts`);
+}
+
 // Default path helper
 // ─────────────────────────────────────────────────────────
 

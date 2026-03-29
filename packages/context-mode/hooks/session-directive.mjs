@@ -20,7 +20,7 @@ export function groupEvents(events) {
     grouped[ev.category].push(ev);
   }
   const fileNames = new Set();
-  for (const ev of (grouped.file || [])) {
+  for (const ev of grouped.file || []) {
     const path = ev.data.includes(" in ") ? ev.data.split(" in ").pop() : ev.data;
     const base = path?.split(/[/\\]/).pop()?.trim();
     if (base && !base.includes("*")) fileNames.add(base);
@@ -51,7 +51,10 @@ export function writeSessionEventsFile(events, eventsPath) {
     lines.push("");
     for (const ev of grouped.rule) {
       if (ev.type === "rule_content") {
-        const downgraded = ev.data.replace(/^(#{1,3}) /gm, (_, hashes) => "#".repeat(hashes.length + 3) + " ");
+        const downgraded = ev.data.replace(
+          /^(#{1,3}) /gm,
+          (_, hashes) => "#".repeat(hashes.length + 3) + " ",
+        );
         lines.push(downgraded);
         lines.push("");
       } else {
@@ -72,7 +75,8 @@ export function writeSessionEventsFile(events, eventsPath) {
         } else if (parsed.taskId && parsed.status) {
           updates[parsed.taskId] = parsed.status;
         }
-      } catch { /* not JSON — dump as-is */
+      } catch {
+        /* not JSON — dump as-is */
         creates.push(ev.data);
       }
     }
@@ -82,7 +86,7 @@ export function writeSessionEventsFile(events, eventsPath) {
     const completed = [];
     for (let i = 0; i < creates.length; i++) {
       const matchedId = sortedIds[i];
-      const status = matchedId ? (updates[matchedId] || "pending") : "pending";
+      const status = matchedId ? updates[matchedId] || "pending" : "pending";
       if (DONE.has(status)) {
         completed.push(creates[i]);
       } else {
@@ -123,7 +127,7 @@ export function writeSessionEventsFile(events, eventsPath) {
     if (grouped.cwd?.length > 0) {
       lines.push(`- cwd: ${grouped.cwd[grouped.cwd.length - 1].data}`);
     }
-    for (const ev of (grouped.env || [])) lines.push(`- ${ev.data}`);
+    for (const ev of grouped.env || []) lines.push(`- ${ev.data}`);
     lines.push("");
   }
 
@@ -156,7 +160,7 @@ export function writeSessionEventsFile(events, eventsPath) {
   }
 
   if (grouped.skill?.length > 0) {
-    const uniqueSkills = new Set(grouped.skill.map(e => e.data));
+    const uniqueSkills = new Set(grouped.skill.map((e) => e.data));
     lines.push("## Active Skills");
     lines.push("");
     lines.push(`- ${[...uniqueSkills].join(", ")}`);
@@ -185,8 +189,8 @@ export function writeSessionEventsFile(events, eventsPath) {
   }
 
   if (grouped.plan?.length > 0) {
-    const hasApproved = grouped.plan.some(e => e.type === "plan_approved");
-    const hasRejected = grouped.plan.some(e => e.type === "plan_rejected");
+    const hasApproved = grouped.plan.some((e) => e.type === "plan_approved");
+    const hasRejected = grouped.plan.some((e) => e.type === "plan_rejected");
     const lastPlan = grouped.plan[grouped.plan.length - 1];
     const isActive = lastPlan.type === "plan_enter" || lastPlan.type === "plan_file_write";
     lines.push("## Plan Mode");
@@ -221,9 +225,8 @@ export function buildSessionDirective(source, eventMeta) {
   // 1. Last request — most critical for continuation
   if (lastPrompt) {
     // Truncate overly long prompts — keep first 300 chars as summary
-    const displayPrompt = lastPrompt.length > 300
-      ? lastPrompt.substring(0, 297) + "..."
-      : lastPrompt;
+    const displayPrompt =
+      lastPrompt.length > 300 ? lastPrompt.substring(0, 297) + "..." : lastPrompt;
     block += `\n## Last Request`;
     block += `\n${displayPrompt}`;
     block += `\n`;
@@ -246,7 +249,9 @@ export function buildSessionDirective(source, eventMeta) {
         } else if (parsed.taskId && parsed.status) {
           updates[parsed.taskId] = parsed.status;
         }
-      } catch { /* not JSON */ }
+      } catch {
+        /* not JSON */
+      }
     }
 
     if (creates.length > 0) {
@@ -255,7 +260,7 @@ export function buildSessionDirective(source, eventMeta) {
       const pending = [];
       for (let i = 0; i < creates.length; i++) {
         const matchedId = sortedIds[i];
-        const status = matchedId ? (updates[matchedId] || "pending") : "pending";
+        const status = matchedId ? updates[matchedId] || "pending" : "pending";
         if (!DONE.has(status)) {
           pending.push(creates[i]);
         }
@@ -299,7 +304,7 @@ export function buildSessionDirective(source, eventMeta) {
 
   // 6. Git state
   if (grouped.git?.length > 0) {
-    const uniqueOps = [...new Set(grouped.git.map(e => e.data))];
+    const uniqueOps = [...new Set(grouped.git.map((e) => e.data))];
     block += `\n## Git`;
     block += `\n${uniqueOps.join(", ")}`;
     block += `\n`;
@@ -308,8 +313,8 @@ export function buildSessionDirective(source, eventMeta) {
   // 7. Project rules (paths only)
   if (grouped.rule?.length > 0) {
     const rPaths = grouped.rule
-      .filter(e => e.type !== "rule_content")
-      .map(e => {
+      .filter((e) => e.type !== "rule_content")
+      .map((e) => {
         const parts = e.data.split(/[/\\]/);
         return parts.slice(-2).join("/");
       });
@@ -329,7 +334,9 @@ export function buildSessionDirective(source, eventMeta) {
       toolCounts[tool] = (toolCounts[tool] || 0) + 1;
     }
     block += `\n## MCP Tools Used`;
-    block += `\n${Object.entries(toolCounts).map(([t, c]) => `${t}(${c})`).join(", ")}`;
+    block += `\n${Object.entries(toolCounts)
+      .map(([t, c]) => `${t}(${c})`)
+      .join(", ")}`;
     block += `\n`;
   }
 
@@ -345,7 +352,7 @@ export function buildSessionDirective(source, eventMeta) {
 
   // 10. Skills invoked
   if (grouped.skill?.length > 0) {
-    const uniqueSkills = [...new Set(grouped.skill.map(e => e.data))];
+    const uniqueSkills = [...new Set(grouped.skill.map((e) => e.data))];
     block += `\n## Skills Used`;
     block += `\n${uniqueSkills.join(", ")}`;
     block += `\n`;
@@ -357,7 +364,7 @@ export function buildSessionDirective(source, eventMeta) {
     if (grouped.cwd?.length > 0) {
       block += `\ncwd: ${grouped.cwd[grouped.cwd.length - 1].data}`;
     }
-    for (const ev of (grouped.env || [])) {
+    for (const ev of grouped.env || []) {
       block += `\n${ev.data}`;
     }
     block += `\n`;
@@ -387,9 +394,9 @@ export function buildSessionDirective(source, eventMeta) {
 
   // 14. Plan mode state — critical for preventing stale plan restoration
   if (grouped.plan?.length > 0) {
-    const hasApproved = grouped.plan.some(e => e.type === "plan_approved");
-    const hasRejected = grouped.plan.some(e => e.type === "plan_rejected");
-    const hasFileWrite = grouped.plan.some(e => e.type === "plan_file_write");
+    const hasApproved = grouped.plan.some((e) => e.type === "plan_approved");
+    const hasRejected = grouped.plan.some((e) => e.type === "plan_rejected");
+    const hasFileWrite = grouped.plan.some((e) => e.type === "plan_file_write");
     const lastPlan = grouped.plan[grouped.plan.length - 1];
     const isActive = lastPlan.type === "plan_enter" || lastPlan.type === "plan_file_write";
 
@@ -432,20 +439,24 @@ export function buildSessionDirective(source, eventMeta) {
 
 // ── Get events for a specific session (used by compact) ──
 export function getSessionEvents(db, sessionId) {
-  return db.db.prepare(
-    `SELECT session_id, type, category, priority, data, source_hook, created_at
-     FROM session_events WHERE session_id = ? ORDER BY created_at ASC`
-  ).all(sessionId);
+  return db.db
+    .prepare(
+      `SELECT session_id, type, category, priority, data, source_hook, created_at
+     FROM session_events WHERE session_id = ? ORDER BY created_at ASC`,
+    )
+    .all(sessionId);
 }
 
 // ── Get events from the most recent session that has events (used by resume) ──
 export function getLatestSessionEvents(db) {
-  const latest = db.db.prepare(
-    `SELECT m.session_id FROM session_meta m
+  const latest = db.db
+    .prepare(
+      `SELECT m.session_id FROM session_meta m
      JOIN session_events e ON m.session_id = e.session_id
      GROUP BY m.session_id
-     ORDER BY m.started_at DESC LIMIT 1`
-  ).get();
+     ORDER BY m.started_at DESC LIMIT 1`,
+    )
+    .get();
   if (!latest) return [];
   return getSessionEvents(db, latest.session_id);
 }

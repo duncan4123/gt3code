@@ -115,7 +115,7 @@ describe("2. User Decisions Preserved in Resume", () => {
     const decisionEvents = extractUserEvents("never push to main without asking");
     assert.ok(decisionEvents.length >= 1, "should extract at least 1 decision event");
 
-    const decisionEvent = decisionEvents.find(e => e.type === "decision");
+    const decisionEvent = decisionEvents.find((e) => e.type === "decision");
     assert.ok(decisionEvent, "should have a decision event");
 
     // Insert the decision event
@@ -186,12 +186,16 @@ describe("4. SessionStart Lifecycle", () => {
     // --- Phase 1: Create an "old" session with events and resume ---
     const oldSid = "old-session";
     db.ensureSession(oldSid, "/project/old");
-    db.insertEvent(oldSid, {
-      type: "file",
-      category: "file",
-      data: "/project/old/legacy.ts",
-      priority: 1,
-    }, "PostToolUse");
+    db.insertEvent(
+      oldSid,
+      {
+        type: "file",
+        category: "file",
+        data: "/project/old/legacy.ts",
+        priority: 1,
+      },
+      "PostToolUse",
+    );
     db.upsertResume(oldSid, "<session_resume>old data</session_resume>", 1);
 
     // Verify old session exists
@@ -210,18 +214,26 @@ describe("4. SessionStart Lifecycle", () => {
     const currentSid = "current-session";
     db.ensureSession(currentSid, "/project/current");
 
-    db.insertEvent(currentSid, {
-      type: "file",
-      category: "file",
-      data: "/project/current/app.ts",
-      priority: 1,
-    }, "PostToolUse");
-    db.insertEvent(currentSid, {
-      type: "cwd",
-      category: "cwd",
-      data: "/project/current",
-      priority: 2,
-    }, "PostToolUse");
+    db.insertEvent(
+      currentSid,
+      {
+        type: "file",
+        category: "file",
+        data: "/project/current/app.ts",
+        priority: 1,
+      },
+      "PostToolUse",
+    );
+    db.insertEvent(
+      currentSid,
+      {
+        type: "cwd",
+        category: "cwd",
+        data: "/project/current",
+        priority: 2,
+      },
+      "PostToolUse",
+    );
 
     // --- Phase 4: Simulate compact -- build snapshot and upsert resume ---
     const currentEvents = db.getEvents(currentSid);
@@ -253,12 +265,16 @@ describe("4. SessionStart Lifecycle", () => {
     const db = createTestDB();
     const sid = "to-delete";
     db.ensureSession(sid, "/project");
-    db.insertEvent(sid, {
-      type: "file",
-      category: "file",
-      data: "/project/file.ts",
-      priority: 1,
-    }, "PostToolUse");
+    db.insertEvent(
+      sid,
+      {
+        type: "file",
+        category: "file",
+        data: "/project/file.ts",
+        priority: 1,
+      },
+      "PostToolUse",
+    );
     db.upsertResume(sid, "<session_resume>snapshot</session_resume>", 1);
 
     // Delete it
@@ -284,59 +300,95 @@ describe("5. Budget Constraint Under Stress", () => {
     // Insert 50 file events -- data_hash is first 16 hex chars (= first 8 bytes of data),
     // so each data string must differ in its first 8 characters to avoid dedup.
     for (let i = 0; i < 50; i++) {
-      db.insertEvent(sid, {
-        type: "file",
-        category: "file",
-        data: `${randomUUID()}/component.tsx`,
-        priority: 1,
-      }, "PostToolUse");
+      db.insertEvent(
+        sid,
+        {
+          type: "file",
+          category: "file",
+          data: `${randomUUID()}/component.tsx`,
+          priority: 1,
+        },
+        "PostToolUse",
+      );
     }
 
     // Insert 20 task events -- UUID prefix ensures unique hash
     for (let i = 0; i < 20; i++) {
-      db.insertEvent(sid, {
-        type: "task",
-        category: "task",
-        data: `${randomUUID()} implement feature`,
-        priority: 1,
-      }, "PostToolUse");
+      db.insertEvent(
+        sid,
+        {
+          type: "task",
+          category: "task",
+          data: `${randomUUID()} implement feature`,
+          priority: 1,
+        },
+        "PostToolUse",
+      );
     }
 
     // Insert 15 rule events -- UUID prefix ensures unique hash
     for (let i = 0; i < 15; i++) {
-      db.insertEvent(sid, {
-        type: "rule",
-        category: "rule",
-        data: `${randomUUID()} always follow convention`,
-        priority: 1,
-      }, "PostToolUse");
+      db.insertEvent(
+        sid,
+        {
+          type: "rule",
+          category: "rule",
+          data: `${randomUUID()} always follow convention`,
+          priority: 1,
+        },
+        "PostToolUse",
+      );
     }
 
     // Insert 10 error events -- UUID prefix ensures unique hash
     for (let i = 0; i < 10; i++) {
-      db.insertEvent(sid, {
-        type: "error_tool",
-        category: "error",
-        data: `${randomUUID()} module not found`,
-        priority: 2,
-      }, "PostToolUse");
+      db.insertEvent(
+        sid,
+        {
+          type: "error_tool",
+          category: "error",
+          data: `${randomUUID()} module not found`,
+          priority: 2,
+        },
+        "PostToolUse",
+      );
     }
 
     // Insert 5 decision events -- UUID prefix ensures unique hash
     for (let i = 0; i < 5; i++) {
-      db.insertEvent(sid, {
-        type: "decision",
-        category: "decision",
-        data: `${randomUUID()} use approach`,
-        priority: 2,
-      }, "PostToolUse");
+      db.insertEvent(
+        sid,
+        {
+          type: "decision",
+          category: "decision",
+          data: `${randomUUID()} use approach`,
+          priority: 2,
+        },
+        "PostToolUse",
+      );
     }
 
     // Insert env, cwd, git events
-    db.insertEvent(sid, { type: "cwd", category: "cwd", data: "/project/src", priority: 2 }, "PostToolUse");
-    db.insertEvent(sid, { type: "git", category: "git", data: "branch", priority: 2 }, "PostToolUse");
-    db.insertEvent(sid, { type: "env", category: "env", data: "nvm use 20", priority: 2 }, "PostToolUse");
-    db.insertEvent(sid, { type: "intent", category: "intent", data: "implement", priority: 4 }, "PostToolUse");
+    db.insertEvent(
+      sid,
+      { type: "cwd", category: "cwd", data: "/project/src", priority: 2 },
+      "PostToolUse",
+    );
+    db.insertEvent(
+      sid,
+      { type: "git", category: "git", data: "branch", priority: 2 },
+      "PostToolUse",
+    );
+    db.insertEvent(
+      sid,
+      { type: "env", category: "env", data: "nvm use 20", priority: 2 },
+      "PostToolUse",
+    );
+    db.insertEvent(
+      sid,
+      { type: "intent", category: "intent", data: "implement", priority: 4 },
+      "PostToolUse",
+    );
 
     // Total: 50 + 20 + 15 + 10 + 5 + 3 + 1 = 104 events
     const totalEvents = db.getEventCount(sid);
@@ -366,7 +418,10 @@ describe("6. Empty Session Snapshot", () => {
     const snapshot = buildResumeSnapshot([]);
 
     // Verify events_captured="0"
-    assert.ok(snapshot.includes('events_captured="0"'), `expected events_captured="0", got: ${snapshot}`);
+    assert.ok(
+      snapshot.includes('events_captured="0"'),
+      `expected events_captured="0", got: ${snapshot}`,
+    );
 
     // Verify valid XML wrapper
     assert.ok(snapshot.startsWith("<session_resume"), "should start with <session_resume");

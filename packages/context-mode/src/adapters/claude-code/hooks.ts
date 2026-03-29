@@ -72,10 +72,7 @@ export const HOOK_SCRIPTS: Record<HookType, string> = {
 // ─────────────────────────────────────────────────────────
 
 /** Required hooks that must be configured for context-mode to function. */
-export const REQUIRED_HOOKS: HookType[] = [
-  HOOK_TYPES.PRE_TOOL_USE,
-  HOOK_TYPES.SESSION_START,
-];
+export const REQUIRED_HOOKS: HookType[] = [HOOK_TYPES.PRE_TOOL_USE, HOOK_TYPES.SESSION_START];
 
 /** Optional hooks that enhance functionality but aren't critical. */
 export const OPTIONAL_HOOKS: HookType[] = [
@@ -96,9 +93,8 @@ export function isContextModeHook(
   const scriptName = HOOK_SCRIPTS[hookType];
   const cliCommand = buildHookCommand(hookType);
   return (
-    entry.hooks?.some((h) =>
-      h.command?.includes(scriptName) || h.command?.includes(cliCommand),
-    ) ?? false
+    entry.hooks?.some((h) => h.command?.includes(scriptName) || h.command?.includes(cliCommand)) ??
+    false
   );
 }
 

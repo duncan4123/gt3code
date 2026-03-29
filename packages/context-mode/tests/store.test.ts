@@ -59,8 +59,7 @@ describe("Basic Indexing", () => {
   test("index content with code blocks", () => {
     const store = createStore();
     const result = store.index({
-      content:
-        "# API Guide\n\n```javascript\nconsole.log('hello');\n```\n\n## Usage\n\nSome text.",
+      content: "# API Guide\n\n```javascript\nconsole.log('hello');\n```\n\n## Usage\n\nSome text.",
       source: "api-guide",
     });
     assert.ok(result.totalChunks >= 1);
@@ -151,22 +150,15 @@ describe("Heading-Aware Chunking", () => {
     // Search should return the complete code block
     const results = store.search("hello function", 1);
     assert.ok(results.length > 0);
-    assert.ok(
-      results[0].content.includes("console.log"),
-      "Code block should be intact",
-    );
-    assert.ok(
-      results[0].content.includes("hello()"),
-      "Full code block preserved",
-    );
+    assert.ok(results[0].content.includes("console.log"), "Code block should be intact");
+    assert.ok(results[0].content.includes("hello()"), "Full code block preserved");
     store.close();
   });
 
   test("tracks heading hierarchy in titles", () => {
     const store = createStore();
     store.index({
-      content:
-        "# React\n\n## Hooks\n\n### useEffect\n\nEffect documentation here.",
+      content: "# React\n\n## Hooks\n\n### useEffect\n\nEffect documentation here.",
       source: "hierarchy",
     });
     const results = store.search("Effect documentation", 1);
@@ -189,8 +181,7 @@ describe("Heading-Aware Chunking", () => {
   test("marks chunks with code as 'code' contentType", () => {
     const store = createStore();
     store.index({
-      content:
-        "# Prose\n\nJust text.\n\n# Code\n\n```python\nprint('hello')\n```",
+      content: "# Prose\n\nJust text.\n\n# Code\n\n```python\nprint('hello')\n```",
       source: "mixed",
     });
 
@@ -216,10 +207,7 @@ describe("BM25 Search", () => {
     });
     const results = store.search("JWT authentication", 2);
     assert.ok(results.length > 0, "Should find results");
-    assert.ok(
-      results[0].content.includes("JWT"),
-      "First result should be about JWT",
-    );
+    assert.ok(results[0].content.includes("JWT"), "First result should be about JWT");
     store.close();
   });
 
@@ -251,8 +239,7 @@ describe("BM25 Search", () => {
     const results = store.search("connect", 1);
     assert.ok(results.length > 0);
     assert.ok(
-      results[0].content.includes("connections") ||
-        results[0].title.includes("Connecting"),
+      results[0].content.includes("connections") || results[0].title.includes("Connecting"),
       "Stemming should match variants",
     );
     store.close();
@@ -272,8 +259,7 @@ describe("BM25 Search", () => {
   test("limit parameter controls result count", () => {
     const store = createStore();
     store.index({
-      content:
-        "# A\n\nApple.\n\n# B\n\nBanana.\n\n# C\n\nCherry.\n\n# D\n\nDate.",
+      content: "# A\n\nApple.\n\n# B\n\nBanana.\n\n# C\n\nCherry.\n\n# D\n\nDate.",
       source: "fruits",
     });
     const results1 = store.search("fruit", 1);
@@ -363,10 +349,7 @@ describe("Multi-Source Indexing", () => {
 describe("Fixture-Based Tests (Real MCP Output)", () => {
   test("Context7 React docs: index and search code examples", () => {
     const store = createStore();
-    const content = readFileSync(
-      join(fixtureDir, "context7-react-docs.md"),
-      "utf-8",
-    );
+    const content = readFileSync(join(fixtureDir, "context7-react-docs.md"), "utf-8");
     const result = store.index({
       content,
       source: "Context7: React useEffect",
@@ -377,28 +360,19 @@ describe("Fixture-Based Tests (Real MCP Output)", () => {
     // Search for specific code patterns
     const cleanup = store.search("cleanup function disconnect", 2);
     assert.ok(cleanup.length > 0, "Should find cleanup pattern");
-    assert.ok(
-      cleanup[0].content.includes("disconnect"),
-      "Should contain exact disconnect code",
-    );
+    assert.ok(cleanup[0].content.includes("disconnect"), "Should contain exact disconnect code");
 
     // Search for fetch pattern
     const fetch = store.search("fetch data ignore stale", 2);
     assert.ok(fetch.length > 0, "Should find fetch pattern");
-    assert.ok(
-      fetch[0].content.includes("ignore"),
-      "Should contain ignore flag pattern",
-    );
+    assert.ok(fetch[0].content.includes("ignore"), "Should contain ignore flag pattern");
 
     store.close();
   });
 
   test("Context7 Next.js docs: index and search", () => {
     const store = createStore();
-    const content = readFileSync(
-      join(fixtureDir, "context7-nextjs-docs.md"),
-      "utf-8",
-    );
+    const content = readFileSync(join(fixtureDir, "context7-nextjs-docs.md"), "utf-8");
     const result = store.index({
       content,
       source: "Context7: Next.js App Router",
@@ -414,10 +388,7 @@ describe("Fixture-Based Tests (Real MCP Output)", () => {
 
   test("Context7 Tailwind docs: index and search", () => {
     const store = createStore();
-    const content = readFileSync(
-      join(fixtureDir, "context7-tailwind-docs.md"),
-      "utf-8",
-    );
+    const content = readFileSync(join(fixtureDir, "context7-tailwind-docs.md"), "utf-8");
     const result = store.index({
       content,
       source: "Context7: Tailwind CSS",
@@ -437,10 +408,7 @@ describe("Fixture-Based Tests (Real MCP Output)", () => {
     const tools = JSON.parse(raw);
 
     const markdown = tools
-      .map(
-        (t: { name: string; description: string }) =>
-          `### ${t.name}\n\n${t.description}`,
-      )
+      .map((t: { name: string; description: string }) => `### ${t.name}\n\n${t.description}`)
       .join("\n\n---\n\n");
 
     const result = store.index({
@@ -499,8 +467,7 @@ describe("Edge Cases", () => {
 
   test("nested code blocks (triple backtick inside fenced)", () => {
     const store = createStore();
-    const content =
-      '# Example\n\n````markdown\n```javascript\nconsole.log("nested");\n```\n````';
+    const content = '# Example\n\n````markdown\n```javascript\nconsole.log("nested");\n```\n````';
     const result = store.index({ content, source: "nested" });
     assert.ok(result.totalChunks >= 1);
     assert.ok(result.codeChunks >= 1);
@@ -521,11 +488,7 @@ describe("Edge Cases", () => {
       content: sections,
       source: "long-doc",
     });
-    assert.equal(
-      result.totalChunks,
-      20,
-      `Expected 20 chunks, got ${result.totalChunks}`,
-    );
+    assert.equal(result.totalChunks, 20, `Expected 20 chunks, got ${result.totalChunks}`);
     store.close();
   });
 
@@ -545,11 +508,13 @@ describe("Source-Scoped Search", () => {
   test("search with source filter returns only matching source", () => {
     const store = createStore();
     store.index({
-      content: "# Zod Transform\n\nUse .transform() to map values.\n\n## Refine\n\nUse .refine() for custom validation.",
+      content:
+        "# Zod Transform\n\nUse .transform() to map values.\n\n## Refine\n\nUse .refine() for custom validation.",
       source: "Zod API docs",
     });
     store.index({
-      content: "# Security Release\n\nCVE-2025-1234: Fixed transform injection vulnerability.\n\n## Fixes\n\nRefine permission checks.",
+      content:
+        "# Security Release\n\nCVE-2025-1234: Fixed transform injection vulnerability.\n\n## Fixes\n\nRefine permission checks.",
       source: "Node.js v22 CHANGELOG",
     });
 
@@ -622,10 +587,7 @@ describe("Source-Scoped Search", () => {
 describe("Context Savings Measurement", () => {
   test("index+search uses less context than raw content", () => {
     const store = createStore();
-    const content = readFileSync(
-      join(fixtureDir, "context7-react-docs.md"),
-      "utf-8",
-    );
+    const content = readFileSync(join(fixtureDir, "context7-react-docs.md"), "utf-8");
     const rawBytes = Buffer.byteLength(content);
 
     store.index({ content, source: "React docs" });
@@ -637,10 +599,7 @@ describe("Context Savings Measurement", () => {
     const resultBytes = Buffer.byteLength(
       results.map((r) => `${r.title}\n${r.content}`).join("\n"),
     );
-    assert.ok(
-      resultBytes < rawBytes,
-      "Search result should be smaller than full doc",
-    );
+    assert.ok(resultBytes < rawBytes, "Search result should be smaller than full doc");
     store.close();
   });
 });
@@ -648,9 +607,15 @@ describe("Context Savings Measurement", () => {
 describe("Plain Text Indexing", () => {
   test("indexPlainText: chunks by line groups", () => {
     const store = createStore();
-    const lines = Array.from({ length: 100 }, (_, i) => `Log line ${i + 1}: processing request`).join("\n");
+    const lines = Array.from(
+      { length: 100 },
+      (_, i) => `Log line ${i + 1}: processing request`,
+    ).join("\n");
     const result = store.indexPlainText(lines, "build-output");
-    assert.ok(result.totalChunks >= 5, `Expected >=5 chunks for 100 lines with 20-line groups, got ${result.totalChunks}`);
+    assert.ok(
+      result.totalChunks >= 5,
+      `Expected >=5 chunks for 100 lines with 20-line groups, got ${result.totalChunks}`,
+    );
     assert.equal(result.label, "build-output");
     assert.equal(result.codeChunks, 0);
     store.close();
@@ -673,7 +638,11 @@ describe("Plain Text Indexing", () => {
       "Section C line 1\nSection C line 2",
     ].join("\n\n");
     const result = store.indexPlainText(content, "sectioned-output");
-    assert.equal(result.totalChunks, 3, `Expected 3 chunks for 3 blank-line-separated sections, got ${result.totalChunks}`);
+    assert.equal(
+      result.totalChunks,
+      3,
+      `Expected 3 chunks for 3 blank-line-separated sections, got ${result.totalChunks}`,
+    );
     store.close();
   });
 
@@ -763,10 +732,7 @@ describe("getDistinctiveTerms", () => {
     // Stopwords should never appear
     const stopwords = ["the", "this", "that", "with", "for", "and"];
     for (const sw of stopwords) {
-      assert.ok(
-        !terms.includes(sw),
-        `Stopword '${sw}' should not be in distinctive terms`,
-      );
+      assert.ok(!terms.includes(sw), `Stopword '${sw}' should not be in distinctive terms`);
     }
     // "encryption" appears in 2/5 sections — should qualify
     assert.ok(
@@ -864,7 +830,9 @@ describe("DB Cleanup", () => {
     assert.ok(existsSync(myPath), "Current process DB should NOT be removed");
 
     // Clean up manually
-    try { require("fs").unlinkSync(myPath); } catch {}
+    try {
+      require("fs").unlinkSync(myPath);
+    } catch {}
   });
 
   test("store.cleanup() removes own DB and WAL/SHM files", () => {
@@ -899,8 +867,9 @@ describe("DB Cleanup", () => {
 describe("Max Chunk Size", () => {
   test("splits oversized markdown chunk at paragraph boundaries", () => {
     const store = createStore();
-    const paragraphs = Array.from({ length: 20 }, (_, i) =>
-      `Paragraph ${i + 1}. ${"Lorem ipsum dolor sit amet. ".repeat(20)}`
+    const paragraphs = Array.from(
+      { length: 20 },
+      (_, i) => `Paragraph ${i + 1}. ${"Lorem ipsum dolor sit amet. ".repeat(20)}`,
     );
     const content = `# Big Section\n\n${paragraphs.join("\n\n")}`;
 
@@ -925,8 +894,9 @@ describe("Max Chunk Size", () => {
   test("keeps code blocks intact when splitting oversized chunks", () => {
     const store = createStore();
     const codeBlock = "```typescript\n" + "const x = 1;\n".repeat(100) + "```";
-    const prose = Array.from({ length: 10 }, (_, i) =>
-      `Paragraph ${i}. ${"Text content here. ".repeat(20)}`
+    const prose = Array.from(
+      { length: 10 },
+      (_, i) => `Paragraph ${i}. ${"Text content here. ".repeat(20)}`,
     ).join("\n\n");
     const content = `# Code Section\n\n${codeBlock}\n\n${prose}`;
 
@@ -1047,8 +1017,9 @@ describe("JSON Chunking (Arrays)", () => {
 
   test("array of primitives becomes batched chunks", () => {
     const store = createStore();
-    const longStrings = Array.from({ length: 100 }, (_, i) =>
-      `Item ${i}: ${"content ".repeat(50)}`
+    const longStrings = Array.from(
+      { length: 100 },
+      (_, i) => `Item ${i}: ${"content ".repeat(50)}`,
     );
     const json = JSON.stringify(longStrings);
 
@@ -1146,7 +1117,10 @@ describe("Source metadata (TTL cache)", () => {
     const store = createStore();
     store.index({ content: "# V1\nFirst version", source: "evolving-doc" });
     const meta1 = store.getSourceMeta("evolving-doc");
-    store.index({ content: "# V2\nSecond version\n## Extra\nMore content", source: "evolving-doc" });
+    store.index({
+      content: "# V2\nSecond version\n## Extra\nMore content",
+      source: "evolving-doc",
+    });
     const meta2 = store.getSourceMeta("evolving-doc");
     expect(meta2!.chunkCount).toBeGreaterThanOrEqual(meta1!.chunkCount);
     store.close();
@@ -1205,7 +1179,11 @@ describe("Persistent content store lifecycle", () => {
     store1.close();
 
     for (const suffix of ["", "-wal", "-shm"]) {
-      try { unlinkSync(dbPath + suffix); } catch { /* ignore */ }
+      try {
+        unlinkSync(dbPath + suffix);
+      } catch {
+        /* ignore */
+      }
     }
 
     const store2 = new ContentStore(dbPath);

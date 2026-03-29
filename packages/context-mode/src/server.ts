@@ -9,7 +9,13 @@ import { fileURLToPath } from "node:url";
 import { homedir, tmpdir } from "node:os";
 import { z } from "zod";
 import { PolyglotExecutor } from "./executor.js";
-import { ContentStore, cleanupStaleDBs, cleanupStaleContentDBs, type SearchResult, type IndexResult } from "./store.js";
+import {
+  ContentStore,
+  cleanupStaleDBs,
+  cleanupStaleContentDBs,
+  type SearchResult,
+  type IndexResult,
+} from "./store.js";
 import {
   readBashPolicies,
   evaluateCommandDenyOnly,
@@ -32,7 +38,9 @@ const VERSION: string = (() => {
   for (const rel of ["../package.json", "./package.json"]) {
     const p = resolve(__pkg_dir, rel);
     if (existsSync(p)) {
-      try { return JSON.parse(readFileSync(p, "utf8")).version; } catch {}
+      try {
+        return JSON.parse(readFileSync(p, "utf8")).version;
+      } catch {}
     }
   }
   return "unknown";
@@ -56,11 +64,20 @@ const server = new McpServer({
 // Register empty prompts/resources handlers so MCP clients don't get -32601 (#168).
 // OpenCode calls listPrompts()/listResources() unconditionally — the error can poison
 // the SDK transport layer, causing subsequent listTools() calls to fail permanently.
-import { ListPromptsRequestSchema, ListResourcesRequestSchema, ListResourceTemplatesRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-server.server.registerCapabilities({ prompts: { listChanged: false }, resources: { listChanged: false } });
+import {
+  ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
+server.server.registerCapabilities({
+  prompts: { listChanged: false },
+  resources: { listChanged: false },
+});
 server.server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: [] }));
 server.server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [] }));
-server.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates: [] }));
+server.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({
+  resourceTemplates: [],
+}));
 
 const executor = new PolyglotExecutor({
   runtimes,
@@ -82,15 +99,19 @@ function maybeIndexSessionEvents(store: ContentStore): void {
   try {
     const sessionsDir = join(homedir(), ".claude", "context-mode", "sessions");
     if (!existsSync(sessionsDir)) return;
-    const files = readdirSync(sessionsDir).filter(f => f.endsWith("-events.md"));
+    const files = readdirSync(sessionsDir).filter((f) => f.endsWith("-events.md"));
     for (const file of files) {
       const filePath = join(sessionsDir, file);
       try {
         store.index({ path: filePath, source: "session-events" });
         unlinkSync(filePath);
-      } catch { /* best-effort per file */ }
+      } catch {
+        /* best-effort per file */
+      }
     }
-  } catch { /* best-effort — session continuity never blocks tools */ }
+  } catch {
+    /* best-effort — session continuity never blocks tools */
+  }
 }
 
 /**
@@ -98,10 +119,11 @@ function maybeIndexSessionEvents(store: ContentStore): void {
  * Uses SHA256 of the project dir (normalized for Windows) to avoid collisions.
  */
 function getStorePath(): string {
-  const projectDir = process.env.CLAUDE_PROJECT_DIR
-    || process.env.GEMINI_PROJECT_DIR
-    || process.env.OPENCLAW_HOME
-    || process.cwd();
+  const projectDir =
+    process.env.CLAUDE_PROJECT_DIR ||
+    process.env.GEMINI_PROJECT_DIR ||
+    process.env.OPENCLAW_HOME ||
+    process.cwd();
   const normalized = projectDir.replace(/\\/g, "/");
   const hash = createHash("sha256").update(normalized).digest("hex").slice(0, 16);
   const dir = join(homedir(), ".context-mode", "content");
@@ -121,7 +143,9 @@ function getStore(): ContentStore {
       const contentDir = join(homedir(), ".context-mode", "content");
       cleanupStaleContentDBs(contentDir, 14);
       _store.cleanupStaleSources(14);
-    } catch { /* best-effort */ }
+    } catch {
+      /* best-effort */
+    }
 
     // Also clean old PID-based DBs from migration
     cleanupStaleDBs();
@@ -150,13 +174,9 @@ type ToolResult = {
 };
 
 function trackResponse(toolName: string, response: ToolResult): ToolResult {
-  const bytes = response.content.reduce(
-    (sum, c) => sum + Buffer.byteLength(c.text),
-    0,
-  );
+  const bytes = response.content.reduce((sum, c) => sum + Buffer.byteLength(c.text), 0);
   sessionStats.calls[toolName] = (sessionStats.calls[toolName] || 0) + 1;
-  sessionStats.bytesReturned[toolName] =
-    (sessionStats.bytesReturned[toolName] || 0) + bytes;
+  sessionStats.bytesReturned[toolName] = (sessionStats.bytesReturned[toolName] || 0) + bytes;
   return response;
 }
 
@@ -172,19 +192,18 @@ function trackIndexed(bytes: number): void {
  * Check a shell command against Bash deny patterns.
  * Returns an error ToolResult if denied, or null if allowed.
  */
-function checkDenyPolicy(
-  command: string,
-  toolName: string,
-): ToolResult | null {
+function checkDenyPolicy(command: string, toolName: string): ToolResult | null {
   try {
     const policies = readBashPolicies(process.env.CLAUDE_PROJECT_DIR);
     const result = evaluateCommandDenyOnly(command, policies);
     if (result.decision === "deny") {
       return trackResponse(toolName, {
-        content: [{
-          type: "text" as const,
-          text: `Command blocked by security policy: matches deny pattern ${result.matchedPattern}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: `Command blocked by security policy: matches deny pattern ${result.matchedPattern}`,
+          },
+        ],
         isError: true,
       });
     }
@@ -211,10 +230,12 @@ function checkNonShellDenyPolicy(
       const result = evaluateCommandDenyOnly(cmd, policies);
       if (result.decision === "deny") {
         return trackResponse(toolName, {
-          content: [{
-            type: "text" as const,
-            text: `Command blocked by security policy: embedded shell command "${cmd}" matches deny pattern ${result.matchedPattern}`,
-          }],
+          content: [
+            {
+              type: "text" as const,
+              text: `Command blocked by security policy: embedded shell command "${cmd}" matches deny pattern ${result.matchedPattern}`,
+            },
+          ],
           isError: true,
         });
       }
@@ -229,19 +250,18 @@ function checkNonShellDenyPolicy(
  * Check a file path against Read deny patterns.
  * Returns an error ToolResult if denied, or null if allowed.
  */
-function checkFilePathDenyPolicy(
-  filePath: string,
-  toolName: string,
-): ToolResult | null {
+function checkFilePathDenyPolicy(filePath: string, toolName: string): ToolResult | null {
   try {
     const denyGlobs = readToolDenyPatterns("Read", process.env.CLAUDE_PROJECT_DIR);
     const result = evaluateFilePath(filePath, denyGlobs);
     if (result.denied) {
       return trackResponse(toolName, {
-        content: [{
-          type: "text" as const,
-          text: `File access blocked by security policy: path matches Read deny pattern ${result.matchedPattern}`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text: `File access blocked by security policy: path matches Read deny pattern ${result.matchedPattern}`,
+          },
+        ],
         isError: true,
       });
     }
@@ -253,9 +273,7 @@ function checkFilePathDenyPolicy(
 
 // Build description dynamically based on detected runtimes
 const langList = available.join(", ");
-const bunNote = hasBunRuntime()
-  ? " (Bun detected — JS/TS runs 3-5x faster)"
-  : "";
+const bunNote = hasBunRuntime() ? " (Bun detected — JS/TS runs 3-5x faster)" : "";
 
 // ─────────────────────────────────────────────────────────
 // Helper: smart snippet extraction — returns windows around
@@ -368,9 +386,7 @@ export function extractSnippet(
   for (const [start, end] of windows) {
     if (total >= maxLen) break;
     const part = content.slice(start, Math.min(end, start + (maxLen - total)));
-    parts.push(
-      (start > 0 ? "…" : "") + part + (end < content.length ? "…" : ""),
-    );
+    parts.push((start > 0 ? "…" : "") + part + (end < content.length ? "…" : ""));
     total += part.length;
   }
 
@@ -407,24 +423,22 @@ server.registerTool(
         .describe(
           "Source code to execute. Use console.log (JS/TS), print (Python/Ruby/Perl/R), echo (Shell), echo (PHP), fmt.Println (Go), or IO.puts (Elixir) to output a summary to context.",
         ),
-      timeout: z
-        .number()
-        .optional()
-        .default(30000)
-        .describe("Max execution time in ms"),
+      timeout: z.number().optional().default(30000).describe("Max execution time in ms"),
       background: z
         .boolean()
         .optional()
         .default(false)
-        .describe("Keep process running after timeout (for servers/daemons). Returns partial output without killing the process. IMPORTANT: Do NOT add setTimeout/self-close timers in background scripts — the process must stay alive until the timeout detaches it. For server+fetch patterns, prefer putting both server and fetch in ONE ctx_execute call instead of using background."),
+        .describe(
+          "Keep process running after timeout (for servers/daemons). Returns partial output without killing the process. IMPORTANT: Do NOT add setTimeout/self-close timers in background scripts — the process must stay alive until the timeout detaches it. For server+fetch patterns, prefer putting both server and fetch in ONE ctx_execute call instead of using background.",
+        ),
       intent: z
         .string()
         .optional()
         .describe(
           "What you're looking for in the output. When provided and output is large (>5KB), " +
-          "indexes output into knowledge base and returns section titles + previews — not full content. " +
-          "Use search(queries: [...]) to retrieve specific sections. Example: 'failing tests', 'HTTP 500 errors'." +
-          "\n\nTIP: Use specific technical terms, not just concepts. Check 'Searchable terms' in the response for available vocabulary.",
+            "indexes output into knowledge base and returns section titles + previews — not full content. " +
+            "Use search(queries: [...]) to retrieve specific sections. Example: 'failing tests', 'HTTP 500 errors'." +
+            "\n\nTIP: Use specific technical terms, not just concepts. Check 'Searchable terms' in the response for available vocabulary.",
         ),
     }),
   },
@@ -490,10 +504,15 @@ if(__cm_req.cache)require.cache=__cm_req.cache;}
 async function __cm_main(){
 ${code}
 }
-__cm_main().catch(e=>{console.error(e);process.exitCode=1});${background ? '\nsetInterval(()=>{},2147483647);' : ''}
+__cm_main().catch(e=>{console.error(e);process.exitCode=1});${background ? "\nsetInterval(()=>{},2147483647);" : ""}
 })(typeof require!=='undefined'?require:null);`;
       }
-      const result = await executor.execute({ language, code: instrumentedCode, timeout, background });
+      const result = await executor.execute({
+        language,
+        code: instrumentedCode,
+        timeout,
+        background,
+      });
 
       // Parse sandbox network metrics from stderr
       const netMatch = result.stderr?.match(/__CM_NET__:(\d+)/);
@@ -540,21 +559,33 @@ __cm_main().catch(e=>{console.error(e);process.exitCode=1});${background ? '\nse
 
       if (result.exitCode !== 0) {
         const { isError, output } = classifyNonZeroExit({
-          language, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr,
+          language,
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
         });
-        if (intent && intent.trim().length > 0 && Buffer.byteLength(output) > INTENT_SEARCH_THRESHOLD) {
+        if (
+          intent &&
+          intent.trim().length > 0 &&
+          Buffer.byteLength(output) > INTENT_SEARCH_THRESHOLD
+        ) {
           trackIndexed(Buffer.byteLength(output));
           return trackResponse("ctx_execute", {
             content: [
-              { type: "text" as const, text: intentSearch(output, intent, isError ? `execute:${language}:error` : `execute:${language}`) },
+              {
+                type: "text" as const,
+                text: intentSearch(
+                  output,
+                  intent,
+                  isError ? `execute:${language}:error` : `execute:${language}`,
+                ),
+              },
             ],
             isError,
           });
         }
         return trackResponse("ctx_execute", {
-          content: [
-            { type: "text" as const, text: output },
-          ],
+          content: [{ type: "text" as const, text: output }],
           isError,
         });
       }
@@ -562,7 +593,11 @@ __cm_main().catch(e=>{console.error(e);process.exitCode=1});${background ? '\nse
       const stdout = result.stdout || "(no output)";
 
       // Intent-driven search: if intent provided and output is large enough
-      if (intent && intent.trim().length > 0 && Buffer.byteLength(stdout) > INTENT_SEARCH_THRESHOLD) {
+      if (
+        intent &&
+        intent.trim().length > 0 &&
+        Buffer.byteLength(stdout) > INTENT_SEARCH_THRESHOLD
+      ) {
         trackIndexed(Buffer.byteLength(stdout));
         return trackResponse("ctx_execute", {
           content: [
@@ -572,16 +607,12 @@ __cm_main().catch(e=>{console.error(e);process.exitCode=1});${background ? '\nse
       }
 
       return trackResponse("ctx_execute", {
-        content: [
-          { type: "text" as const, text: stdout },
-        ],
+        content: [{ type: "text" as const, text: stdout }],
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return trackResponse("ctx_execute", {
-        content: [
-          { type: "text" as const, text: `Runtime error: ${message}` },
-        ],
+        content: [{ type: "text" as const, text: `Runtime error: ${message}` }],
         isError: true,
       });
     }
@@ -682,9 +713,7 @@ server.registerTool(
     description:
       "Read a file and process it without loading contents into context. The file is read into a FILE_CONTENT variable inside the sandbox. Only your printed summary enters context.\n\nPREFER THIS OVER Read/cat for: log files, data files (CSV, JSON, XML), large source files for analysis, and any file where you need to extract specific information rather than read the entire content.",
     inputSchema: z.object({
-      path: z
-        .string()
-        .describe("Absolute file path or relative to project root"),
+      path: z.string().describe("Absolute file path or relative to project root"),
       language: z
         .enum([
           "javascript",
@@ -705,17 +734,13 @@ server.registerTool(
         .describe(
           "Code to process FILE_CONTENT (file_content in Elixir). Print summary via console.log/print/echo/IO.puts.",
         ),
-      timeout: z
-        .number()
-        .optional()
-        .default(30000)
-        .describe("Max execution time in ms"),
+      timeout: z.number().optional().default(30000).describe("Max execution time in ms"),
       intent: z
         .string()
         .optional()
         .describe(
           "What you're looking for in the output. When provided and output is large (>5KB), " +
-          "returns only matching sections via BM25 search instead of truncated output.",
+            "returns only matching sections via BM25 search instead of truncated output.",
         ),
     }),
   },
@@ -755,47 +780,53 @@ server.registerTool(
 
       if (result.exitCode !== 0) {
         const { isError, output } = classifyNonZeroExit({
-          language, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr,
+          language,
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
         });
-        if (intent && intent.trim().length > 0 && Buffer.byteLength(output) > INTENT_SEARCH_THRESHOLD) {
+        if (
+          intent &&
+          intent.trim().length > 0 &&
+          Buffer.byteLength(output) > INTENT_SEARCH_THRESHOLD
+        ) {
           trackIndexed(Buffer.byteLength(output));
           return trackResponse("ctx_execute_file", {
             content: [
-              { type: "text" as const, text: intentSearch(output, intent, isError ? `file:${path}:error` : `file:${path}`) },
+              {
+                type: "text" as const,
+                text: intentSearch(output, intent, isError ? `file:${path}:error` : `file:${path}`),
+              },
             ],
             isError,
           });
         }
         return trackResponse("ctx_execute_file", {
-          content: [
-            { type: "text" as const, text: output },
-          ],
+          content: [{ type: "text" as const, text: output }],
           isError,
         });
       }
 
       const stdout = result.stdout || "(no output)";
 
-      if (intent && intent.trim().length > 0 && Buffer.byteLength(stdout) > INTENT_SEARCH_THRESHOLD) {
+      if (
+        intent &&
+        intent.trim().length > 0 &&
+        Buffer.byteLength(stdout) > INTENT_SEARCH_THRESHOLD
+      ) {
         trackIndexed(Buffer.byteLength(stdout));
         return trackResponse("ctx_execute_file", {
-          content: [
-            { type: "text" as const, text: intentSearch(stdout, intent, `file:${path}`) },
-          ],
+          content: [{ type: "text" as const, text: intentSearch(stdout, intent, `file:${path}`) }],
         });
       }
 
       return trackResponse("ctx_execute_file", {
-        content: [
-          { type: "text" as const, text: stdout },
-        ],
+        content: [{ type: "text" as const, text: stdout }],
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return trackResponse("ctx_execute_file", {
-        content: [
-          { type: "text" as const, text: `Runtime error: ${message}` },
-        ],
+        content: [{ type: "text" as const, text: `Runtime error: ${message}` }],
         isError: true,
       });
     }
@@ -827,9 +858,7 @@ server.registerTool(
       content: z
         .string()
         .optional()
-        .describe(
-          "Raw text/markdown to index. Provide this OR path, not both.",
-        ),
+        .describe("Raw text/markdown to index. Provide this OR path, not both."),
       path: z
         .string()
         .optional()
@@ -864,7 +893,9 @@ server.registerTool(
         try {
           const fs = await import("fs");
           trackIndexed(fs.readFileSync(path).byteLength);
-        } catch { /* ignore — file read errors handled by store */ }
+        } catch {
+          /* ignore — file read errors handled by store */
+        }
       }
       const store = getStore();
       const result = store.index({ content, path, source });
@@ -880,9 +911,7 @@ server.registerTool(
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return trackResponse("ctx_index", {
-        content: [
-          { type: "text" as const, text: `Index error: ${message}` },
-        ],
+        content: [{ type: "text" as const, text: `Index error: ${message}` }],
         isError: true,
       });
     }
@@ -911,7 +940,9 @@ function coerceJsonArray(val: unknown): unknown {
     try {
       const parsed = JSON.parse(val);
       if (Array.isArray(parsed)) return parsed;
-    } catch { /* not valid JSON, let zod handle the error */ }
+    } catch {
+      /* not valid JSON, let zod handle the error */
+    }
   }
   return val;
 }
@@ -924,7 +955,7 @@ function coerceCommandsArray(val: unknown): unknown {
   const arr = coerceJsonArray(val);
   if (Array.isArray(arr)) {
     return arr.map((item, i) =>
-      typeof item === "string" ? { label: `cmd_${i + 1}`, command: item } : item
+      typeof item === "string" ? { label: `cmd_${i + 1}`, command: item } : item,
     );
   }
   return arr;
@@ -939,15 +970,14 @@ server.registerTool(
       "Pass ALL search questions as queries array in ONE call.\n\n" +
       "TIPS: 2-4 specific terms per query. Use 'source' to scope results.",
     inputSchema: z.object({
-      queries: z.preprocess(coerceJsonArray, z
-        .array(z.string())
-        .optional()
-        .describe("Array of search queries. Batch ALL questions in one call.")),
-      limit: z
-        .number()
-        .optional()
-        .default(3)
-        .describe("Results per query (default: 3)"),
+      queries: z.preprocess(
+        coerceJsonArray,
+        z
+          .array(z.string())
+          .optional()
+          .describe("Array of search queries. Batch ALL questions in one call."),
+      ),
+      limit: z.number().optional().default(3).describe("Results per query (default: 3)"),
       source: z
         .string()
         .optional()
@@ -966,16 +996,19 @@ server.registerTool(
       // tool that requires prior indexing. Guide the model to the right tool.
       if (store.getStats().chunks === 0) {
         return trackResponse("ctx_search", {
-          content: [{
-            type: "text" as const,
-            text: "Knowledge base is empty — no content has been indexed yet.\n\n" +
-              "ctx_search is a follow-up tool that queries previously indexed content. " +
-              "To gather and index content first, use:\n" +
-              "  • ctx_batch_execute(commands, queries) — run commands, auto-index output, and search in one call\n" +
-              "  • ctx_fetch_and_index(url) — fetch a URL, index it, then search with ctx_search\n" +
-              "  • ctx_index(content, source) — manually index text content\n\n" +
-              "After indexing, ctx_search becomes available for follow-up queries.",
-          }],
+          content: [
+            {
+              type: "text" as const,
+              text:
+                "Knowledge base is empty — no content has been indexed yet.\n\n" +
+                "ctx_search is a follow-up tool that queries previously indexed content. " +
+                "To gather and index content first, use:\n" +
+                "  • ctx_batch_execute(commands, queries) — run commands, auto-index output, and search in one call\n" +
+                "  • ctx_fetch_and_index(url) — fetch a URL, index it, then search with ctx_search\n" +
+                "  • ctx_index(content, source) — manually index text content\n\n" +
+                "After indexing, ctx_search becomes available for follow-up queries.",
+            },
+          ],
           isError: true,
         });
       }
@@ -997,7 +1030,11 @@ server.registerTool(
         });
       }
 
-      const { limit = 3, source, contentType } = params as { limit?: number; source?: string; contentType?: "code" | "prose" };
+      const {
+        limit = 3,
+        source,
+        contentType,
+      } = params as { limit?: number; source?: string; contentType?: "code" | "prose" };
 
       // Progressive throttling: track calls in time window
       const now = Date.now();
@@ -1010,20 +1047,24 @@ server.registerTool(
       // After SEARCH_BLOCK_AFTER calls: refuse
       if (searchCallCount > SEARCH_BLOCK_AFTER) {
         return trackResponse("ctx_search", {
-          content: [{
-            type: "text" as const,
-            text: `BLOCKED: ${searchCallCount} search calls in ${Math.round((now - searchWindowStart) / 1000)}s. ` +
-              "You're flooding context. STOP making individual search calls. " +
-              "Use batch_execute(commands, queries) for your next research step.",
-          }],
+          content: [
+            {
+              type: "text" as const,
+              text:
+                `BLOCKED: ${searchCallCount} search calls in ${Math.round((now - searchWindowStart) / 1000)}s. ` +
+                "You're flooding context. STOP making individual search calls. " +
+                "Use batch_execute(commands, queries) for your next research step.",
+            },
+          ],
           isError: true,
         });
       }
 
       // Determine per-query result limit based on throttle level
-      const effectiveLimit = searchCallCount > SEARCH_MAX_RESULTS_AFTER
-        ? 1 // after 3 calls: only 1 result per query
-        : Math.min(limit, 2); // normal: max 2
+      const effectiveLimit =
+        searchCallCount > SEARCH_MAX_RESULTS_AFTER
+          ? 1 // after 3 calls: only 1 result per query
+          : Math.min(limit, 2); // normal: max 2
 
       const MAX_TOTAL = 40 * 1024; // 40KB total cap
       let totalSize = 0;
@@ -1059,16 +1100,18 @@ server.registerTool(
 
       // Add throttle warning after threshold
       if (searchCallCount >= SEARCH_MAX_RESULTS_AFTER) {
-        output += `\n\n⚠ search call #${searchCallCount}/${SEARCH_BLOCK_AFTER} in this window. ` +
+        output +=
+          `\n\n⚠ search call #${searchCallCount}/${SEARCH_BLOCK_AFTER} in this window. ` +
           `Results limited to ${effectiveLimit}/query. ` +
           `Batch queries: search(queries: ["q1","q2","q3"]) or use batch_execute.`;
       }
 
       if (output.trim().length === 0) {
         const sources = store.listSources();
-        const sourceList = sources.length > 0
-          ? `\nIndexed sources: ${sources.map((s) => `"${s.label}" (${s.chunkCount} sections)`).join(", ")}`
-          : "";
+        const sourceList =
+          sources.length > 0
+            ? `\nIndexed sources: ${sources.map((s) => `"${s.label}" (${s.chunkCount} sections)`).join(", ")}`
+            : "";
         return trackResponse("ctx_search", {
           content: [{ type: "text" as const, text: `No results found.${sourceList}` }],
         });
@@ -1206,17 +1249,20 @@ server.registerTool(
         if (ageMs < TTL_MS) {
           const ageHours = Math.floor(ageMs / (60 * 60 * 1000));
           const ageMin = Math.floor(ageMs / (60 * 1000));
-          const ageStr = ageHours > 0 ? `${ageHours}h ago` : ageMin > 0 ? `${ageMin}m ago` : "just now";
+          const ageStr =
+            ageHours > 0 ? `${ageHours}h ago` : ageMin > 0 ? `${ageMin}m ago` : "just now";
           // Track cache savings — estimate ~1.6KB per chunk (average indexed content size)
           const estimatedBytes = meta.chunkCount * 1600;
           sessionStats.cacheHits++;
           sessionStats.cacheBytesSaved += estimatedBytes;
 
           return trackResponse("ctx_fetch_and_index", {
-            content: [{
-              type: "text" as const,
-              text: `Cached: **${meta.label}** — ${meta.chunkCount} sections, indexed ${ageStr} (fresh, TTL: 24h).\nTo refresh: call ctx_fetch_and_index again with \`force: true\`.\n\nYou MUST call search() to answer questions about this content — this cached response contains no content.\nUse: search(queries: [...], source: "${meta.label}")`,
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: `Cached: **${meta.label}** — ${meta.chunkCount} sections, indexed ${ageStr} (fresh, TTL: 24h).\nTo refresh: call ctx_fetch_and_index again with \`force: true\`.\n\nYou MUST call search() to answer questions about this content — this cached response contains no content.\nUse: search(queries: [...], source: "${meta.label}")`,
+              },
+            ],
           });
         }
         // Stale (>24h) — fall through to re-fetch silently
@@ -1224,7 +1270,10 @@ server.registerTool(
     }
     // Generate a unique temp file path for the subprocess to write fetched content.
     // This bypasses the executor's 100KB stdout truncation — content goes file→handler directly.
-    const outputPath = join(tmpdir(), `ctx-fetch-${Date.now()}-${Math.random().toString(36).slice(2)}.dat`);
+    const outputPath = join(
+      tmpdir(),
+      `ctx-fetch-${Date.now()}-${Math.random().toString(36).slice(2)}.dat`,
+    );
 
     try {
       const fetchCode = buildFetchCode(url, outputPath);
@@ -1293,9 +1342,10 @@ server.registerTool(
 
       // Build preview — first ~3KB of markdown for immediate use
       const PREVIEW_LIMIT = 3072;
-      const preview = markdown.length > PREVIEW_LIMIT
-        ? markdown.slice(0, PREVIEW_LIMIT) + "\n\n…[truncated — use search() for full content]"
-        : markdown;
+      const preview =
+        markdown.length > PREVIEW_LIMIT
+          ? markdown.slice(0, PREVIEW_LIMIT) + "\n\n…[truncated — use search() for full content]"
+          : markdown;
       const totalKB = (Buffer.byteLength(markdown) / 1024).toFixed(1);
 
       const text = [
@@ -1313,14 +1363,16 @@ server.registerTool(
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return trackResponse("ctx_fetch_and_index", {
-        content: [
-          { type: "text" as const, text: `Fetch error: ${message}` },
-        ],
+        content: [{ type: "text" as const, text: `Fetch error: ${message}` }],
         isError: true,
       });
     } finally {
       // Clean up temp file
-      try { rmSync(outputPath); } catch { /* already gone */ }
+      try {
+        rmSync(outputPath);
+      } catch {
+        /* already gone */
+      }
     }
   },
 );
@@ -1340,31 +1392,35 @@ server.registerTool(
       "One batch_execute call replaces 30+ execute calls + 10+ search calls.\n" +
       "Provide all commands to run and all queries to search — everything happens in one round trip.",
     inputSchema: z.object({
-      commands: z.preprocess(coerceCommandsArray, z
-        .array(
-          z.object({
-            label: z
-              .string()
-              .describe(
-                "Section header for this command's output (e.g., 'README', 'Package.json', 'Source Tree')",
-              ),
-            command: z
-              .string()
-              .describe("Shell command to execute"),
-          }),
-        )
-        .min(1)
-        .describe(
-          "Commands to execute as a batch. Each runs sequentially, output is labeled with the section header.",
-        )),
-      queries: z.preprocess(coerceJsonArray, z
-        .array(z.string())
-        .min(1)
-        .describe(
-          "Search queries to extract information from indexed output. Use 5-8 comprehensive queries. " +
-          "Each returns top 5 matching sections with full content. " +
-          "This is your ONLY chance — put ALL your questions here. No follow-up calls needed.",
-        )),
+      commands: z.preprocess(
+        coerceCommandsArray,
+        z
+          .array(
+            z.object({
+              label: z
+                .string()
+                .describe(
+                  "Section header for this command's output (e.g., 'README', 'Package.json', 'Source Tree')",
+                ),
+              command: z.string().describe("Shell command to execute"),
+            }),
+          )
+          .min(1)
+          .describe(
+            "Commands to execute as a batch. Each runs sequentially, output is labeled with the section header.",
+          ),
+      ),
+      queries: z.preprocess(
+        coerceJsonArray,
+        z
+          .array(z.string())
+          .min(1)
+          .describe(
+            "Search queries to extract information from indexed output. Use 5-8 comprehensive queries. " +
+              "Each returns top 5 matching sections with full content. " +
+              "This is your ONLY chance — put ALL your questions here. No follow-up calls needed.",
+          ),
+      ),
       timeout: z
         .number()
         .optional()
@@ -1392,9 +1448,7 @@ server.registerTool(
         const elapsed = Date.now() - startTime;
         const remaining = timeout - elapsed;
         if (remaining <= 0) {
-          perCommandOutputs.push(
-            `# ${cmd.label}\n\n(skipped — batch timeout exceeded)\n`,
-          );
+          perCommandOutputs.push(`# ${cmd.label}\n\n(skipped — batch timeout exceeded)\n`);
           timedOut = true;
           continue;
         }
@@ -1466,7 +1520,9 @@ server.registerTool(
 
       for (const query of queries) {
         if (outputSize > MAX_OUTPUT) {
-          queryResults.push(`## ${query}\n(output cap reached — use search(queries: ["${query}"]) for details)\n`);
+          queryResults.push(
+            `## ${query}\n(output cap reached — use search(queries: ["${query}"]) for details)\n`,
+          );
           continue;
         }
 
@@ -1557,10 +1613,7 @@ server.registerTool(
       (sum, b) => sum + b,
       0,
     );
-    const totalCalls = Object.values(sessionStats.calls).reduce(
-      (sum, c) => sum + c,
-      0,
-    );
+    const totalCalls = Object.values(sessionStats.calls).reduce((sum, c) => sum + c, 0);
     const uptimeMs = Date.now() - sessionStats.sessionStart;
     const uptimeMin = (uptimeMs / 60_000).toFixed(1);
 
@@ -1568,9 +1621,8 @@ server.registerTool(
     const keptOut = sessionStats.bytesIndexed + sessionStats.bytesSandboxed;
     const totalProcessed = keptOut + totalBytesReturned;
     const savingsRatio = totalProcessed / Math.max(totalBytesReturned, 1);
-    const reductionPct = totalProcessed > 0
-      ? ((1 - totalBytesReturned / totalProcessed) * 100).toFixed(0)
-      : "0";
+    const reductionPct =
+      totalProcessed > 0 ? ((1 - totalBytesReturned / totalProcessed) * 100).toFixed(0) : "0";
 
     const kb = (b: number) => {
       if (b >= 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)}MB`;
@@ -1578,19 +1630,15 @@ server.registerTool(
     };
 
     // ── Header ──
-    const lines: string[] = [
-      `## context-mode — Session Report (${uptimeMin} min)`,
-    ];
+    const lines: string[] = [`## context-mode — Session Report (${uptimeMin} min)`];
 
     // ── Feature 1: Context Window Protection ──
-    lines.push(
-      "",
-      `### Context Window Protection`,
-      "",
-    );
+    lines.push("", `### Context Window Protection`, "");
 
     if (totalCalls === 0) {
-      lines.push(`No context-mode tool calls yet. Use \`batch_execute\`, \`execute\`, or \`fetch_and_index\` to keep raw output out of your context window.`);
+      lines.push(
+        `No context-mode tool calls yet. Use \`batch_execute\`, \`execute\`, or \`fetch_and_index\` to keep raw output out of your context window.`,
+      );
     } else {
       lines.push(
         `| Metric | Value |`,
@@ -1620,18 +1668,26 @@ server.registerTool(
           const tokens = Math.round(bytes / 4);
           lines.push(`| ${tool} | ${calls} | ${kb(bytes)} | ~${tokens.toLocaleString()} |`);
         }
-        lines.push(`| **Total** | **${totalCalls}** | **${kb(totalBytesReturned)}** | **~${Math.round(totalBytesReturned / 4).toLocaleString()}** |`);
+        lines.push(
+          `| **Total** | **${totalCalls}** | **${kb(totalBytesReturned)}** | **~${Math.round(totalBytesReturned / 4).toLocaleString()}** |`,
+        );
       }
 
       if (keptOut > 0) {
-        lines.push("", `Without context-mode, **${kb(totalProcessed)}** of raw output would flood your context window. Instead, **${reductionPct}%** stayed in sandbox.`);
+        lines.push(
+          "",
+          `Without context-mode, **${kb(totalProcessed)}** of raw output would flood your context window. Instead, **${reductionPct}%** stayed in sandbox.`,
+        );
       }
 
       // Cache savings section
       if (sessionStats.cacheHits > 0 || sessionStats.cacheBytesSaved > 0) {
         const totalWithCache = totalProcessed + sessionStats.cacheBytesSaved;
         const totalSavingsRatio = totalWithCache / Math.max(totalBytesReturned, 1);
-        const ttlHoursLeft = Math.max(0, 24 - Math.floor((Date.now() - sessionStats.sessionStart) / (60 * 60 * 1000)));
+        const ttlHoursLeft = Math.max(
+          0,
+          24 - Math.floor((Date.now() - sessionStats.sessionStart) / (60 * 60 * 1000)),
+        );
         lines.push(
           "",
           `### TTL Cache`,
@@ -1648,7 +1704,10 @@ server.registerTool(
 
         // Update total savings to include cache
         if (totalSavingsRatio > savingsRatio) {
-          lines.push("", `**Total context savings (sandbox + cache): ${totalSavingsRatio.toFixed(1)}x** — ${kb(totalWithCache)} processed, only ${kb(totalBytesReturned)} entered context.`);
+          lines.push(
+            "",
+            `**Total context savings (sandbox + cache): ${totalSavingsRatio.toFixed(1)}x** — ${kb(totalWithCache)} processed, only ${kb(totalBytesReturned)} entered context.`,
+          );
         }
       }
     }
@@ -1659,32 +1718,41 @@ server.registerTool(
       const dbHash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
       const worktreeSuffix = getWorktreeSuffix();
       const sessionDbPath = join(
-        homedir(), ".claude", "context-mode", "sessions",
-        `${dbHash}${worktreeSuffix}.db`
+        homedir(),
+        ".claude",
+        "context-mode",
+        "sessions",
+        `${dbHash}${worktreeSuffix}.db`,
       );
 
       if (existsSync(sessionDbPath)) {
         const Database = loadDatabase();
         const sdb = new Database(sessionDbPath, { readonly: true });
 
-        const eventTotal = sdb.prepare("SELECT COUNT(*) as cnt FROM session_events").get() as { cnt: number };
-        const byCategory = sdb.prepare(
-          "SELECT category, COUNT(*) as cnt FROM session_events GROUP BY category ORDER BY cnt DESC",
-        ).all() as Array<{ category: string; cnt: number }>;
-        const meta = sdb.prepare(
-          "SELECT compact_count FROM session_meta ORDER BY started_at DESC LIMIT 1",
-        ).get() as { compact_count: number } | undefined;
-        const resume = sdb.prepare(
-          "SELECT event_count, consumed FROM session_resume ORDER BY created_at DESC LIMIT 1",
-        ).get() as { event_count: number; consumed: number } | undefined;
+        const eventTotal = sdb.prepare("SELECT COUNT(*) as cnt FROM session_events").get() as {
+          cnt: number;
+        };
+        const byCategory = sdb
+          .prepare(
+            "SELECT category, COUNT(*) as cnt FROM session_events GROUP BY category ORDER BY cnt DESC",
+          )
+          .all() as Array<{ category: string; cnt: number }>;
+        const meta = sdb
+          .prepare("SELECT compact_count FROM session_meta ORDER BY started_at DESC LIMIT 1")
+          .get() as { compact_count: number } | undefined;
+        const resume = sdb
+          .prepare(
+            "SELECT event_count, consumed FROM session_resume ORDER BY created_at DESC LIMIT 1",
+          )
+          .get() as { event_count: number; consumed: number } | undefined;
 
         if (eventTotal.cnt > 0) {
           const compacts = meta?.compact_count ?? 0;
 
           // Query actual data per category for preview
-          const previewRows = sdb.prepare(
-            `SELECT category, type, data FROM session_events ORDER BY id DESC`,
-          ).all() as Array<{ category: string; type: string; data: string }>;
+          const previewRows = sdb
+            .prepare(`SELECT category, type, data FROM session_events ORDER BY id DESC`)
+            .all() as Array<{ category: string; type: string; data: string }>;
 
           // Build previews: unique values per category
           const previews = new Map<string, Set<string>>();
@@ -1749,20 +1817,30 @@ server.registerTool(
             const hint = categoryHints[row.category] || "Survives context resets";
             lines.push(`| ${label} | ${row.cnt} | ${previewStr} | ${hint} |`);
           }
-          lines.push(`| **Total** | **${eventTotal.cnt}** | | **Zero knowledge lost on compact** |`);
+          lines.push(
+            `| **Total** | **${eventTotal.cnt}** | | **Zero knowledge lost on compact** |`,
+          );
 
           lines.push("");
           if (compacts > 0) {
-            lines.push(`Context has been compacted **${compacts} time(s)** — session knowledge was preserved each time.`);
+            lines.push(
+              `Context has been compacted **${compacts} time(s)** — session knowledge was preserved each time.`,
+            );
           } else {
-            lines.push(`When your context compacts, all of this will restore Claude's awareness — no starting from scratch.`);
+            lines.push(
+              `When your context compacts, all of this will restore Claude's awareness — no starting from scratch.`,
+            );
           }
           if (resume && !resume.consumed) {
-            lines.push(`Resume snapshot ready (${resume.event_count} events) for the next compaction.`);
+            lines.push(
+              `Resume snapshot ready (${resume.event_count} events) for the next compaction.`,
+            );
           }
 
           lines.push("");
-          lines.push(`> **Note:** Previous session data is loaded when you start a new session. Without \`--continue\`, old session history is cleaned up to keep the database lean.`);
+          lines.push(
+            `> **Note:** Previous session data is loaded when you start a new session. Without \`--continue\`, old session history is cleaned up to keep the database lean.`,
+          );
         }
 
         sdb.close();
@@ -1800,7 +1878,9 @@ server.registerTool(
   async () => {
     const lines: string[] = ["## context-mode doctor", ""];
     // __pkg_dir is build/ for tsc, plugin root for bundle — resolve to plugin root
-    const pluginRoot = existsSync(resolve(__pkg_dir, "package.json")) ? __pkg_dir : dirname(__pkg_dir);
+    const pluginRoot = existsSync(resolve(__pkg_dir, "package.json"))
+      ? __pkg_dir
+      : dirname(__pkg_dir);
 
     // Runtimes
     const total = 11;
@@ -1817,7 +1897,11 @@ server.registerTool(
     // Server test
     try {
       const testExecutor = new PolyglotExecutor({ runtimes });
-      const result = await testExecutor.execute({ language: "javascript", code: 'console.log("ok");', timeout: 5000 });
+      const result = await testExecutor.execute({
+        language: "javascript",
+        code: 'console.log("ok");',
+        timeout: 5000,
+      });
       if (result.exitCode === 0 && result.stdout.trim() === "ok") {
         lines.push("- [x] Server test: PASS");
       } else {
@@ -1833,7 +1917,9 @@ server.registerTool(
       const db = new Database(":memory:");
       db.exec("CREATE VIRTUAL TABLE fts_test USING fts5(content)");
       db.exec("INSERT INTO fts_test(content) VALUES ('hello world')");
-      const row = db.prepare("SELECT * FROM fts_test WHERE fts_test MATCH 'hello'").get() as { content: string } | undefined;
+      const row = db.prepare("SELECT * FROM fts_test WHERE fts_test MATCH 'hello'").get() as
+        | { content: string }
+        | undefined;
       db.close();
       if (row && row.content === "hello world") {
         lines.push("- [x] FTS5 / SQLite: PASS — native module works");
@@ -1875,7 +1961,9 @@ server.registerTool(
   },
   async () => {
     // __pkg_dir is build/ for tsc, plugin root for bundle — resolve to plugin root
-    const pluginRoot = existsSync(resolve(__pkg_dir, "package.json")) ? __pkg_dir : dirname(__pkg_dir);
+    const pluginRoot = existsSync(resolve(__pkg_dir, "package.json"))
+      ? __pkg_dir
+      : dirname(__pkg_dir);
     const bundlePath = resolve(pluginRoot, "cli.bundle.mjs");
     const fallbackPath = resolve(pluginRoot, "build", "cli.js");
 
@@ -1985,7 +2073,9 @@ server.registerTool(
     const store = getStore();
     try {
       store.exec(`SELECT dolt_add('-A')`);
-      const result = store.queryOne(`SELECT dolt_commit('-m', ?)`, message) as Record<string, string> | undefined;
+      const result = store.queryOne(`SELECT dolt_commit('-m', ?)`, message) as
+        | Record<string, string>
+        | undefined;
       const hash = result ? Object.values(result)[0] : "unknown";
       return trackResponse("ctx_commit", {
         content: [{ type: "text" as const, text: `Committed: ${hash}\nMessage: ${message}` }],
@@ -1994,7 +2084,12 @@ server.registerTool(
       // No changes to commit is not an error
       if (e.message?.includes("nothing to commit")) {
         return trackResponse("ctx_commit", {
-          content: [{ type: "text" as const, text: "Nothing to commit — knowledge base unchanged since last commit." }],
+          content: [
+            {
+              type: "text" as const,
+              text: "Nothing to commit — knowledge base unchanged since last commit.",
+            },
+          ],
         });
       }
       return trackResponse("ctx_commit", {
@@ -2021,21 +2116,25 @@ server.registerTool(
     const store = getStore();
     try {
       const rows = store.queryAll(
-        `SELECT commit_hash, committer, date, message FROM dolt_log LIMIT ?`, limit
+        `SELECT commit_hash, committer, date, message FROM dolt_log LIMIT ?`,
+        limit,
       ) as Array<Record<string, string>>;
 
       if (!rows.length) {
         return trackResponse("ctx_log", {
-          content: [{ type: "text" as const, text: "No commits yet. Use ctx_commit to save a snapshot." }],
+          content: [
+            { type: "text" as const, text: "No commits yet. Use ctx_commit to save a snapshot." },
+          ],
         });
       }
 
-      const lines = rows.map((r) =>
-        `${(r.commit_hash || "").slice(0, 10)} | ${r.date || ""} | ${r.message || ""}`
+      const lines = rows.map(
+        (r) => `${(r.commit_hash || "").slice(0, 10)} | ${r.date || ""} | ${r.message || ""}`,
       );
-      const text = `## Knowledge Base History (${rows.length} commits)\n\n` +
+      const text =
+        `## Knowledge Base History (${rows.length} commits)\n\n` +
         `| Hash | Date | Message |\n|------|------|---------|\n` +
-        lines.map(l => `| ${l.split(" | ").join(" | ")} |`).join("\n");
+        lines.map((l) => `| ${l.split(" | ").join(" | ")} |`).join("\n");
 
       return trackResponse("ctx_log", {
         content: [{ type: "text" as const, text }],
@@ -2044,7 +2143,12 @@ server.registerTool(
       // dolt_log doesn't exist if no commits yet
       if (e.message?.includes("dolt_log")) {
         return trackResponse("ctx_log", {
-          content: [{ type: "text" as const, text: "No version history — doltlite not initialized or no commits yet." }],
+          content: [
+            {
+              type: "text" as const,
+              text: "No version history — doltlite not initialized or no commits yet.",
+            },
+          ],
         });
       }
       return trackResponse("ctx_log", {
@@ -2068,18 +2172,21 @@ server.registerTool(
   async () => {
     const store = getStore();
     try {
-      const status = store.queryAll(
-        `SELECT table_name, staged, status FROM dolt_status`
-      ) as Array<Record<string, string>>;
+      const status = store.queryAll(`SELECT table_name, staged, status FROM dolt_status`) as Array<
+        Record<string, string>
+      >;
 
       if (!status.length) {
         return trackResponse("ctx_diff", {
-          content: [{ type: "text" as const, text: "No changes — knowledge base matches last commit." }],
+          content: [
+            { type: "text" as const, text: "No changes — knowledge base matches last commit." },
+          ],
         });
       }
 
-      const lines = status.map((r) =>
-        `- **${r.table_name}**: ${r.status}${r.staged === "1" || r.staged === "true" ? " (staged)" : ""}`
+      const lines = status.map(
+        (r) =>
+          `- **${r.table_name}**: ${r.status}${r.staged === "1" || r.staged === "true" ? " (staged)" : ""}`,
       );
       const text = `## Knowledge Base Changes\n\n${lines.join("\n")}`;
 
@@ -2089,7 +2196,12 @@ server.registerTool(
     } catch (e: any) {
       if (e.message?.includes("dolt_status")) {
         return trackResponse("ctx_diff", {
-          content: [{ type: "text" as const, text: "No version history — doltlite not initialized or no commits yet." }],
+          content: [
+            {
+              type: "text" as const,
+              text: "No version history — doltlite not initialized or no commits yet.",
+            },
+          ],
         });
       }
       return trackResponse("ctx_diff", {
@@ -2116,7 +2228,9 @@ server.registerTool(
 
     // Engine check
     try {
-      const engine = store.queryOne("SELECT doltlite_engine()") as Record<string, string> | undefined;
+      const engine = store.queryOne("SELECT doltlite_engine()") as
+        | Record<string, string>
+        | undefined;
       lines.push(`- **Engine**: ${engine ? Object.values(engine)[0] : "unknown"}`);
     } catch {
       lines.push("- **Engine**: sqlite (no doltlite versioning)");
@@ -2124,19 +2238,29 @@ server.registerTool(
 
     // Source count
     try {
-      const sources = store.queryOne("SELECT COUNT(*) as n FROM sources") as { n: number } | undefined;
+      const sources = store.queryOne("SELECT COUNT(*) as n FROM sources") as
+        | { n: number }
+        | undefined;
       lines.push(`- **Sources indexed**: ${sources?.n ?? 0}`);
-    } catch { /* table may not exist */ }
+    } catch {
+      /* table may not exist */
+    }
 
     // Chunk count
     try {
-      const chunks = store.queryOne("SELECT COUNT(*) as n FROM chunks") as { n: number } | undefined;
+      const chunks = store.queryOne("SELECT COUNT(*) as n FROM fts.chunks") as
+        | { n: number }
+        | undefined;
       lines.push(`- **Chunks**: ${chunks?.n ?? 0}`);
-    } catch { /* table may not exist */ }
+    } catch {
+      /* table may not exist */
+    }
 
     // Commit count
     try {
-      const commits = store.queryOne("SELECT COUNT(*) as n FROM dolt_log") as { n: number } | undefined;
+      const commits = store.queryOne("SELECT COUNT(*) as n FROM dolt_log") as
+        | { n: number }
+        | undefined;
       lines.push(`- **Commits**: ${commits?.n ?? 0}`);
     } catch {
       lines.push("- **Commits**: 0 (no history yet)");
@@ -2144,7 +2268,9 @@ server.registerTool(
 
     // Uncommitted changes
     try {
-      const changes = store.queryOne("SELECT COUNT(*) as n FROM dolt_status") as { n: number } | undefined;
+      const changes = store.queryOne("SELECT COUNT(*) as n FROM dolt_status") as
+        | { n: number }
+        | undefined;
       lines.push(`- **Uncommitted changes**: ${changes?.n ?? 0} tables modified`);
     } catch {
       lines.push("- **Uncommitted changes**: n/a");
@@ -2188,11 +2314,16 @@ server.registerTool(
         `INSERT INTO issues (id, title, description, issue_type, status, rig, created_at, updated_at, metadata)
          VALUES ('${id.replace(/'/g, "''")}', '${title.replace(/'/g, "''")}', '${description.replace(/'/g, "''")}',
                  'convoy', 'open', '${rig.replace(/'/g, "''")}', '${now}', '${now}',
-                 '${JSON.stringify(metadata ?? {}).replace(/'/g, "''")}')`
+                 '${JSON.stringify(metadata ?? {}).replace(/'/g, "''")}')`,
       );
       store.exec(`INSERT INTO labels (issue_id, label) VALUES ('${id}', 'draft')`);
       return trackResponse("ctx_convoy_create", {
-        content: [{ type: "text" as const, text: `Created convoy: ${id}\nTitle: ${title}\nRig: ${rig || "(any)"}` }],
+        content: [
+          {
+            type: "text" as const,
+            text: `Created convoy: ${id}\nTitle: ${title}\nRig: ${rig || "(any)"}`,
+          },
+        ],
       });
     } catch (e: any) {
       return trackResponse("ctx_convoy_create", {
@@ -2216,7 +2347,11 @@ server.registerTool(
       title: z.string().describe("Bead title"),
       description: z.string().optional().default("").describe("What this bead requires"),
       rig: z.string().optional().default("").describe("Target rig (e.g. gascity, t3code)"),
-      convoy_id: z.string().optional().default("").describe("Parent convoy ID from ctx_convoy_create"),
+      convoy_id: z
+        .string()
+        .optional()
+        .default("")
+        .describe("Parent convoy ID from ctx_convoy_create"),
       issue_type: z.string().optional().default("task").describe("task | gate | formula | session"),
       priority: z.number().optional().default(2).describe("Priority 1-4 (1=highest)"),
       assignee: z.string().optional().describe("Agent assignee"),
@@ -2233,17 +2368,22 @@ server.registerTool(
         `INSERT INTO issues (id, title, description, issue_type, status, rig, priority, assignee, created_at, updated_at, metadata)
          VALUES ('${id}', '${title.replace(/'/g, "''")}', '${description.replace(/'/g, "''")}',
                  '${issue_type}', 'open', '${rig.replace(/'/g, "''")}', ${priority},
-                 '${assigneeVal.replace(/'/g, "''")}', '${now}', '${now}', '{}')`
+                 '${assigneeVal.replace(/'/g, "''")}', '${now}', '${now}', '{}')`,
       );
       store.exec(`INSERT INTO labels (issue_id, label) VALUES ('${id}', 'draft')`);
       if (convoy_id) {
         store.exec(
           `INSERT INTO dependencies (issue_id, depends_on_id, type, created_at, created_by)
-           VALUES ('${id}', '${convoy_id.replace(/'/g, "''")}', 'child-of', '${now}', 'ctx_bead_create')`
+           VALUES ('${id}', '${convoy_id.replace(/'/g, "''")}', 'child-of', '${now}', 'ctx_bead_create')`,
         );
       }
       return trackResponse("ctx_bead_create", {
-        content: [{ type: "text" as const, text: `Created bead: ${id}\nTitle: ${title}\nType: ${issue_type} | Rig: ${rig || "(any)"}${convoy_id ? `\nConvoy: ${convoy_id}` : ""}` }],
+        content: [
+          {
+            type: "text" as const,
+            text: `Created bead: ${id}\nTitle: ${title}\nType: ${issue_type} | Rig: ${rig || "(any)"}${convoy_id ? `\nConvoy: ${convoy_id}` : ""}`,
+          },
+        ],
       });
     } catch (e: any) {
       return trackResponse("ctx_bead_create", {
@@ -2265,7 +2405,11 @@ server.registerTool(
     inputSchema: z.object({
       issue_id: z.string().describe("ID of the dependent bead (the one that is blocked)"),
       depends_on_id: z.string().describe("ID of the bead it depends on (the blocker)"),
-      type: z.string().optional().default("blocks").describe("Relationship type: blocks | child-of | relates-to"),
+      type: z
+        .string()
+        .optional()
+        .default("blocks")
+        .describe("Relationship type: blocks | child-of | relates-to"),
     }),
   },
   async ({ issue_id, depends_on_id, type }) => {
@@ -2275,10 +2419,12 @@ server.registerTool(
       store.exec(
         `INSERT OR REPLACE INTO dependencies (issue_id, depends_on_id, type, created_at, created_by)
          VALUES ('${issue_id.replace(/'/g, "''")}', '${depends_on_id.replace(/'/g, "''")}',
-                 '${type.replace(/'/g, "''")}', '${now}', 'ctx_dep_add')`
+                 '${type.replace(/'/g, "''")}', '${now}', 'ctx_dep_add')`,
       );
       return trackResponse("ctx_dep_add", {
-        content: [{ type: "text" as const, text: `Dependency added: ${issue_id} ${type} ${depends_on_id}` }],
+        content: [
+          { type: "text" as const, text: `Dependency added: ${issue_id} ${type} ${depends_on_id}` },
+        ],
       });
     } catch (e: any) {
       return trackResponse("ctx_dep_add", {
@@ -2298,7 +2444,11 @@ server.registerTool(
       "Shows convoy structure with child beads, rig assignments, and dependency counts. " +
       "Use to review staged work before deploying to production GC.",
     inputSchema: z.object({
-      include_beads: z.boolean().optional().default(true).describe("Include child beads under each convoy"),
+      include_beads: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe("Include child beads under each convoy"),
     }),
   },
   async ({ include_beads }) => {
@@ -2307,19 +2457,26 @@ server.registerTool(
       const convoys = store.queryAll(
         `SELECT id, title, description, rig, status, created_at FROM issues
          WHERE issue_type = 'convoy' AND id IN (SELECT issue_id FROM labels WHERE label = 'draft')
-         ORDER BY created_at DESC`
+         ORDER BY created_at DESC`,
       ) as Array<Record<string, string>>;
 
       if (!convoys.length) {
         return trackResponse("ctx_convoy_list", {
-          content: [{ type: "text" as const, text: "No draft convoys. Use ctx_convoy_create to start one." }],
+          content: [
+            {
+              type: "text" as const,
+              text: "No draft convoys. Use ctx_convoy_create to start one.",
+            },
+          ],
         });
       }
 
       const lines: string[] = [`## Draft Convoys (${convoys.length})\n`];
       for (const convoy of convoys) {
         lines.push(`### ${convoy.title}`);
-        lines.push(`ID: \`${convoy.id}\` | Rig: ${convoy.rig || "(any)"} | Status: ${convoy.status}`);
+        lines.push(
+          `ID: \`${convoy.id}\` | Rig: ${convoy.rig || "(any)"} | Status: ${convoy.status}`,
+        );
         if (convoy.description) lines.push(convoy.description);
 
         if (include_beads) {
@@ -2329,16 +2486,19 @@ server.registerTool(
              JOIN dependencies d ON d.issue_id = i.id AND d.depends_on_id = ? AND d.type = 'child-of'
              WHERE i.issue_type != 'convoy'
              ORDER BY i.priority, i.created_at`,
-            convoy.id
+            convoy.id,
           ) as Array<Record<string, string>>;
 
           if (beads.length) {
             lines.push(`\n**Beads (${beads.length}):**`);
             for (const b of beads) {
               const deps = store.queryOne(
-                `SELECT COUNT(*) as n FROM dependencies WHERE issue_id = ? AND type = 'blocks'`, b.id
+                `SELECT COUNT(*) as n FROM dependencies WHERE issue_id = ? AND type = 'blocks'`,
+                b.id,
               ) as { n: number } | undefined;
-              lines.push(`- [${b.issue_type}] ${b.title} | rig:${b.rig || "any"} | assignee:${b.assignee || "-"} | blockers:${deps?.n ?? 0} | \`${b.id}\``);
+              lines.push(
+                `- [${b.issue_type}] ${b.title} | rig:${b.rig || "any"} | assignee:${b.assignee || "-"} | blockers:${deps?.n ?? 0} | \`${b.id}\``,
+              );
             }
           } else {
             lines.push("*(no beads yet — use ctx_bead_create with convoy_id)*");
@@ -2380,8 +2540,12 @@ async function main() {
     process.exit(0);
   };
   process.on("exit", shutdown);
-  process.on("SIGINT", () => { gracefulShutdown(); });
-  process.on("SIGTERM", () => { gracefulShutdown(); });
+  process.on("SIGINT", () => {
+    gracefulShutdown();
+  });
+  process.on("SIGTERM", () => {
+    gracefulShutdown();
+  });
 
   // Lifecycle guard: detect parent death + stdin close to prevent orphaned processes (#103)
   startLifecycleGuard({ onShutdown: () => gracefulShutdown() });
@@ -2409,14 +2573,14 @@ async function main() {
     //   const written = adapter.writeRoutingInstructions(projectDir, pluginRoot);
     //   if (written) console.error(`Wrote routing instructions: ${written}`);
     // }
-  } catch { /* best effort — don't block server startup */ }
+  } catch {
+    /* best effort — don't block server startup */
+  }
 
   console.error(`Context Mode MCP server v${VERSION} running on stdio`);
   console.error(`Detected runtimes:\n${getRuntimeSummary(runtimes)}`);
   if (!hasBunRuntime()) {
-    console.error(
-      "\nPerformance tip: Install Bun for 3-5x faster JS/TS execution",
-    );
+    console.error("\nPerformance tip: Install Bun for 3-5x faster JS/TS execution");
     console.error("  curl -fsSL https://bun.sh/install | bash");
   }
 }

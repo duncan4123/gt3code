@@ -8,7 +8,13 @@ import "../ensure-deps.mjs";
  * Source: https://kiro.dev/docs/cli/hooks/
  */
 
-import { readStdin, getSessionId, getSessionDBPath, getInputProjectDir, KIRO_OPTS } from "../session-helpers.mjs";
+import {
+  readStdin,
+  getSessionId,
+  getSessionDBPath,
+  getInputProjectDir,
+  KIRO_OPTS,
+} from "../session-helpers.mjs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -33,9 +39,10 @@ try {
   const events = extractEvents({
     tool_name: input.tool_name,
     tool_input: input.tool_input ?? {},
-    tool_response: typeof input.tool_response === "string"
-      ? input.tool_response
-      : JSON.stringify(input.tool_response ?? ""),
+    tool_response:
+      typeof input.tool_response === "string"
+        ? input.tool_response
+        : JSON.stringify(input.tool_response ?? ""),
     tool_output: input.tool_output,
   });
 

@@ -163,9 +163,7 @@ describe("VSCodeCopilotAdapter", () => {
 
   describe("config paths", () => {
     it("settings path is .github/hooks/context-mode.json", () => {
-      expect(adapter.getSettingsPath()).toBe(
-        resolve(".github", "hooks", "context-mode.json"),
-      );
+      expect(adapter.getSettingsPath()).toBe(resolve(".github", "hooks", "context-mode.json"));
     });
 
     it("session dir is under ~/.vscode/context-mode/sessions/ or .github/", () => {

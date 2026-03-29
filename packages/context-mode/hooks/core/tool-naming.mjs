@@ -16,17 +16,17 @@
  */
 
 const TOOL_PREFIXES = {
-  "claude-code":    (tool) => `mcp__plugin_context-mode_context-mode__${tool}`,
-  "gemini-cli":     (tool) => `mcp__context-mode__${tool}`,
-  "antigravity":    (tool) => `mcp__context-mode__${tool}`,
-  "opencode":       (tool) => `context-mode_${tool}`,
+  "claude-code": (tool) => `mcp__plugin_context-mode_context-mode__${tool}`,
+  "gemini-cli": (tool) => `mcp__context-mode__${tool}`,
+  antigravity: (tool) => `mcp__context-mode__${tool}`,
+  opencode: (tool) => `context-mode_${tool}`,
   "vscode-copilot": (tool) => `context-mode_${tool}`,
-  "kiro":           (tool) => `@context-mode/${tool}`,
-  "zed":            (tool) => `mcp:context-mode:${tool}`,
-  "cursor":         (tool) => tool,
-  "codex":          (tool) => tool,
-  "openclaw":       (tool) => tool,
-  "pi":             (tool) => tool,
+  kiro: (tool) => `@context-mode/${tool}`,
+  zed: (tool) => `mcp:context-mode:${tool}`,
+  cursor: (tool) => tool,
+  codex: (tool) => tool,
+  openclaw: (tool) => tool,
+  pi: (tool) => tool,
 };
 
 /**

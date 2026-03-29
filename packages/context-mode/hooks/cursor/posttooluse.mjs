@@ -5,7 +5,13 @@ import "../ensure-deps.mjs";
  * Cursor postToolUse hook — session event capture.
  */
 
-import { readStdin, getSessionId, getSessionDBPath, getInputProjectDir, CURSOR_OPTS } from "../session-helpers.mjs";
+import {
+  readStdin,
+  getSessionId,
+  getSessionDBPath,
+  getInputProjectDir,
+  CURSOR_OPTS,
+} from "../session-helpers.mjs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -48,12 +54,11 @@ try {
   const normalizedInput = {
     tool_name: normalizeToolName(input.tool_name ?? ""),
     tool_input: input.tool_input ?? {},
-    tool_response: typeof input.tool_output === "string"
-      ? input.tool_output
-      : JSON.stringify(input.tool_output ?? input.error_message ?? ""),
-    tool_output: input.error_message
-      ? { isError: true }
-      : undefined,
+    tool_response:
+      typeof input.tool_output === "string"
+        ? input.tool_output
+        : JSON.stringify(input.tool_output ?? input.error_message ?? ""),
+    tool_output: input.error_message ? { isError: true } : undefined,
   };
 
   const events = extractEvents(normalizedInput);

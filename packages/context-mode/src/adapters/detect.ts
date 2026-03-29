@@ -46,8 +46,16 @@ export function detectPlatform(clientInfo?: { name: string; version?: string }):
   const platformOverride = process.env.CONTEXT_MODE_PLATFORM;
   if (platformOverride) {
     const validPlatforms: PlatformId[] = [
-      "claude-code", "gemini-cli", "opencode", "codex",
-      "vscode-copilot", "cursor", "antigravity", "kiro", "pi", "zed",
+      "claude-code",
+      "gemini-cli",
+      "opencode",
+      "codex",
+      "vscode-copilot",
+      "cursor",
+      "antigravity",
+      "kiro",
+      "pi",
+      "zed",
     ];
     if (validPlatforms.includes(platformOverride as PlatformId)) {
       return {

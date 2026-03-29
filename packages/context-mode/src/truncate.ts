@@ -93,11 +93,7 @@ export function smartTruncate(raw: string, maxBytes: number): string {
  * @param maxBytes - Maximum byte length of the returned string.
  * @param indent   - JSON indentation spaces (default 2). Pass 0 for compact.
  */
-export function truncateJSON(
-  value: unknown,
-  maxBytes: number,
-  indent: number = 2,
-): string {
+export function truncateJSON(value: unknown, maxBytes: number, indent: number = 2): string {
   const serialized = JSON.stringify(value, null, indent) ?? "null";
   if (Buffer.byteLength(serialized) <= maxBytes) return serialized;
 

@@ -51,9 +51,15 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  try { rmSync(fakePluginDir, { recursive: true, force: true }); } catch {}
-  try { rmSync(fakeProjectDir, { recursive: true, force: true }); } catch {}
-  try { rmSync(fakeHomeDir, { recursive: true, force: true }); } catch {}
+  try {
+    rmSync(fakePluginDir, { recursive: true, force: true });
+  } catch {}
+  try {
+    rmSync(fakeProjectDir, { recursive: true, force: true });
+  } catch {}
+  try {
+    rmSync(fakeHomeDir, { recursive: true, force: true });
+  } catch {}
 });
 
 function runHook(hookFile: string, input: Record<string, unknown>, env?: Record<string, string>) {
@@ -82,9 +88,7 @@ function runHook(hookFile: string, input: Record<string, unknown>, env?: Record<
 
 /** Check if any .db files were created in the isolated session directory */
 function getDBFiles(): string[] {
-  return existsSync(sessionDBDir)
-    ? readdirSync(sessionDBDir).filter(f => f.endsWith(".db"))
-    : [];
+  return existsSync(sessionDBDir) ? readdirSync(sessionDBDir).filter((f) => f.endsWith(".db")) : [];
 }
 
 describe("Issue #117 — Session hooks without build/session/", () => {

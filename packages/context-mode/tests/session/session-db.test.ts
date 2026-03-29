@@ -26,13 +26,15 @@ function createTestDB(): SessionDB {
 }
 
 /** Create a minimal session event for testing. */
-function makeEvent(overrides: Partial<{
-  type: string;
-  category: string;
-  data: string;
-  priority: number;
-  data_hash: string;
-}> = {}) {
+function makeEvent(
+  overrides: Partial<{
+    type: string;
+    category: string;
+    data: string;
+    priority: number;
+    data_hash: string;
+  }> = {},
+) {
   return {
     type: overrides.type ?? "file",
     category: overrides.category ?? "file",
@@ -97,7 +99,7 @@ describe("Filter by type", () => {
 
     const fileEvents = db.getEvents(sid, { type: "file" });
     assert.equal(fileEvents.length, 2);
-    assert.ok(fileEvents.every(e => e.type === "file"));
+    assert.ok(fileEvents.every((e) => e.type === "file"));
 
     const gitEvents = db.getEvents(sid, { type: "git" });
     assert.equal(gitEvents.length, 1);
@@ -121,7 +123,7 @@ describe("Filter by minPriority", () => {
 
     const highAndAbove = db.getEvents(sid, { minPriority: 3 });
     assert.equal(highAndAbove.length, 2);
-    assert.ok(highAndAbove.every(e => e.priority >= 3));
+    assert.ok(highAndAbove.every((e) => e.priority >= 3));
 
     const allEvents = db.getEvents(sid, { minPriority: 1 });
     assert.equal(allEvents.length, 4);
@@ -183,8 +185,12 @@ describe("Deduplication", () => {
     db.insertEvent(sid, dupEvent);
 
     const events = db.getEvents(sid);
-    const dupEvents = events.filter(e => e.data === "dup.ts");
-    assert.equal(dupEvents.length, 2, `Expected 2 dup.ts events (original + re-insert), got ${dupEvents.length}`);
+    const dupEvents = events.filter((e) => e.data === "dup.ts");
+    assert.equal(
+      dupEvents.length,
+      2,
+      `Expected 2 dup.ts events (original + re-insert), got ${dupEvents.length}`,
+    );
   });
 });
 
@@ -214,7 +220,7 @@ describe("Max Events & FIFO Eviction", () => {
 
     // The evicted event should be the lowest priority + oldest (file-0.ts)
     const allEvents = db.getEvents(sid);
-    const hasFile0 = allEvents.some(e => e.data === "file-0.ts");
+    const hasFile0 = allEvents.some((e) => e.data === "file-0.ts");
     assert.equal(hasFile0, false, "file-0.ts should have been evicted");
   });
 });

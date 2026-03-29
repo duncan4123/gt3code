@@ -66,15 +66,29 @@ export function createRoutingBlock(t) {
 }
 
 export function createReadGuidance(t) {
-  return '<context_guidance>\n  <tip>\n    If you are reading this file to Edit it, Read is the correct tool — Edit needs file content in context.\n    If you are reading to analyze or explore, use ' + t("ctx_execute_file") + '(path, language, code) instead — only your printed summary will enter the context.\n  </tip>\n</context_guidance>';
+  return (
+    "<context_guidance>\n  <tip>\n    If you are reading this file to Edit it, Read is the correct tool — Edit needs file content in context.\n    If you are reading to analyze or explore, use " +
+    t("ctx_execute_file") +
+    "(path, language, code) instead — only your printed summary will enter the context.\n  </tip>\n</context_guidance>"
+  );
 }
 
 export function createGrepGuidance(t) {
-  return '<context_guidance>\n  <tip>\n    This operation may flood your context window. To stay efficient:\n    - Use ' + t("ctx_execute") + '(language: "shell", code: "...") to run searches in the sandbox.\n    - Only your final printed summary will enter the context.\n  </tip>\n</context_guidance>';
+  return (
+    "<context_guidance>\n  <tip>\n    This operation may flood your context window. To stay efficient:\n    - Use " +
+    t("ctx_execute") +
+    '(language: "shell", code: "...") to run searches in the sandbox.\n    - Only your final printed summary will enter the context.\n  </tip>\n</context_guidance>'
+  );
 }
 
 export function createBashGuidance(t) {
-  return '<context_guidance>\n  <tip>\n    This Bash command may produce large output. To stay efficient:\n    - Use ' + t("ctx_batch_execute") + '(commands, queries) for multiple commands\n    - Use ' + t("ctx_execute") + '(language: "shell", code: "...") to run in sandbox\n    - Only your final printed summary will enter the context.\n    - Bash is best for: git, mkdir, rm, mv, navigation, and short-output commands only.\n  </tip>\n</context_guidance>';
+  return (
+    "<context_guidance>\n  <tip>\n    This Bash command may produce large output. To stay efficient:\n    - Use " +
+    t("ctx_batch_execute") +
+    "(commands, queries) for multiple commands\n    - Use " +
+    t("ctx_execute") +
+    '(language: "shell", code: "...") to run in sandbox\n    - Only your final printed summary will enter the context.\n    - Bash is best for: git, mkdir, rm, mv, navigation, and short-output commands only.\n  </tip>\n</context_guidance>'
+  );
 }
 
 // ── Backward compat: static exports defaulting to claude-code ──

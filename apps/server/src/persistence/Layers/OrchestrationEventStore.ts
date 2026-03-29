@@ -116,7 +116,11 @@ const makeEventStore = Effect.gen(function* () {
     GROUP BY aggregate_kind, stream_id
   `.pipe(
     Effect.map((rows) => {
-      for (const row of rows as Array<{ aggregateKind: string; streamId: string; maxVersion: number }>) {
+      for (const row of rows as Array<{
+        aggregateKind: string;
+        streamId: string;
+        maxVersion: number;
+      }>) {
         streamVersionCache.set(`${row.aggregateKind}:${row.streamId}`, row.maxVersion);
       }
     }),
@@ -221,23 +225,21 @@ const makeEventStore = Effect.gen(function* () {
   });
 
   const append: OrchestrationEventStoreShape["append"] = (event) =>
-    Effect.flatMap(
-      nextStreamVersion(event.aggregateKind, event.aggregateId),
-      (version) =>
-        appendEventRow({
-          eventId: event.eventId,
-          aggregateKind: event.aggregateKind,
-          streamId: event.aggregateId,
-          streamVersion: version,
-          type: event.type,
-          causationEventId: event.causationEventId,
-          correlationId: event.correlationId,
-          actorKind: inferActorKind(event),
-          occurredAt: event.occurredAt,
-          commandId: event.commandId,
-          payloadJson: event.payload,
-          metadataJson: event.metadata,
-        }),
+    Effect.flatMap(nextStreamVersion(event.aggregateKind, event.aggregateId), (version) =>
+      appendEventRow({
+        eventId: event.eventId,
+        aggregateKind: event.aggregateKind,
+        streamId: event.aggregateId,
+        streamVersion: version,
+        type: event.type,
+        causationEventId: event.causationEventId,
+        correlationId: event.correlationId,
+        actorKind: inferActorKind(event),
+        occurredAt: event.occurredAt,
+        commandId: event.commandId,
+        payloadJson: event.payload,
+        metadataJson: event.metadata,
+      }),
     ).pipe(
       Effect.mapError(
         toPersistenceSqlOrDecodeError(

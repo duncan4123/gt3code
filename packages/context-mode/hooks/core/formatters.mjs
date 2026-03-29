@@ -69,7 +69,7 @@ export const formatters = {
     }),
   },
 
-  "cursor": {
+  cursor: {
     deny: (reason) => ({
       permission: "deny",
       user_message: reason,
@@ -97,10 +97,15 @@ export function formatDecision(platform, decision) {
   if (!fmt) return null;
 
   switch (decision.action) {
-    case "deny": return fmt.deny(decision.reason);
-    case "ask": return fmt.ask();
-    case "modify": return fmt.modify(decision.updatedInput);
-    case "context": return fmt.context(decision.additionalContext);
-    default: return null;
+    case "deny":
+      return fmt.deny(decision.reason);
+    case "ask":
+      return fmt.ask();
+    case "modify":
+      return fmt.modify(decision.updatedInput);
+    case "context":
+      return fmt.context(decision.additionalContext);
+    default:
+      return null;
   }
 }

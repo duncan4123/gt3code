@@ -11,7 +11,15 @@ import "./suppress-stderr.mjs";
  * uses core/formatters.mjs for Claude Code output format.
  */
 
-import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, copyFileSync, readdirSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  rmSync,
+  mkdirSync,
+  copyFileSync,
+  readdirSync,
+} from "node:fs";
 import { resolve, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir, tmpdir } from "node:os";
@@ -41,7 +49,8 @@ try {
   const marker = resolve(tmpdir(), `context-mode-healed-${myVersion}`);
 
   // Only self-heal inside plugin cache dirs — skip in dev/CI environments
-  const isInPluginCache = myRoot.includes("/plugins/cache/") || myRoot.includes("\\plugins\\cache\\");
+  const isInPluginCache =
+    myRoot.includes("/plugins/cache/") || myRoot.includes("\\plugins\\cache\\");
   if (myVersion !== "unknown" && isInPluginCache && !existsSync(marker)) {
     // 1. If dir name doesn't match version (e.g. "0.7.0" but code is "0.9.12"),
     //    create correct dir, copy files, update registry + hooks
@@ -52,20 +61,24 @@ try {
       // Create start.mjs in new dir if missing
       const startMjs = resolve(correctDir, "start.mjs");
       if (!existsSync(startMjs)) {
-        writeFileSync(startMjs, [
-          '#!/usr/bin/env node',
-          'import { existsSync } from "node:fs";',
-          'import { dirname, resolve } from "node:path";',
-          'import { fileURLToPath } from "node:url";',
-          'const __dirname = dirname(fileURLToPath(import.meta.url));',
-          'process.chdir(__dirname);',
-          'if (!process.env.CLAUDE_PROJECT_DIR) process.env.CLAUDE_PROJECT_DIR = process.cwd();',
-          'if (existsSync(resolve(__dirname, "server.bundle.mjs"))) {',
-          '  await import("./server.bundle.mjs");',
-          '} else if (existsSync(resolve(__dirname, "build", "server.js"))) {',
-          '  await import("./build/server.js");',
-          '}',
-        ].join("\n"), "utf-8");
+        writeFileSync(
+          startMjs,
+          [
+            "#!/usr/bin/env node",
+            'import { existsSync } from "node:fs";',
+            'import { dirname, resolve } from "node:path";',
+            'import { fileURLToPath } from "node:url";',
+            "const __dirname = dirname(fileURLToPath(import.meta.url));",
+            "process.chdir(__dirname);",
+            "if (!process.env.CLAUDE_PROJECT_DIR) process.env.CLAUDE_PROJECT_DIR = process.cwd();",
+            'if (existsSync(resolve(__dirname, "server.bundle.mjs"))) {',
+            '  await import("./server.bundle.mjs");',
+            '} else if (existsSync(resolve(__dirname, "build", "server.js"))) {',
+            '  await import("./build/server.js");',
+            "}",
+          ].join("\n"),
+          "utf-8",
+        );
       }
     }
 
@@ -100,7 +113,7 @@ try {
             entry.matcher = entry.matcher.replace("Task", "Agent|Task");
             changed = true;
           }
-          for (const h of (entry.hooks || [])) {
+          for (const h of entry.hooks || []) {
             if (h.command?.includes("pretooluse.mjs") && !h.command.includes(targetDir)) {
               h.command = "node " + resolve(targetDir, "hooks", "pretooluse.mjs");
               changed = true;
@@ -109,21 +122,31 @@ try {
         }
         if (changed) writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
       }
-    } catch { /* skip settings update */ }
+    } catch {
+      /* skip settings update */
+    }
 
     // 4. Nuke stale version dirs (keep only targetDir and current running dir)
     try {
       const keepDirs = new Set([basename(targetDir), myDirName]);
       for (const d of readdirSync(cacheParent)) {
         if (!keepDirs.has(d)) {
-          try { rmSync(resolve(cacheParent, d), { recursive: true, force: true }); } catch { /* skip */ }
+          try {
+            rmSync(resolve(cacheParent, d), { recursive: true, force: true });
+          } catch {
+            /* skip */
+          }
         }
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
 
     writeFileSync(marker, Date.now().toString(), "utf-8");
   }
-} catch { /* best effort — don't block hook */ }
+} catch {
+  /* best effort — don't block hook */
+}
 
 // ─── Init security from compiled build ───
 const __hookDir = dirname(fileURLToPath(import.meta.url));

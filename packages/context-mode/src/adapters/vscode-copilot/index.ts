@@ -240,12 +240,7 @@ export class VSCodeCopilotAdapter implements HookAdapter {
     // Prefer .github/context-mode/sessions/ if .github exists,
     // otherwise fall back to ~/.vscode/context-mode/sessions/
     const githubDir = resolve(".github", "context-mode", "sessions");
-    const fallbackDir = join(
-      homedir(),
-      ".vscode",
-      "context-mode",
-      "sessions",
-    );
+    const fallbackDir = join(homedir(), ".vscode", "context-mode", "sessions");
 
     const dir = existsSync(resolve(".github")) ? githubDir : fallbackDir;
     mkdirSync(dir, { recursive: true });
@@ -253,18 +248,12 @@ export class VSCodeCopilotAdapter implements HookAdapter {
   }
 
   getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}.db`);
   }
 
   getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}-events.md`);
   }
 
@@ -319,10 +308,7 @@ export class VSCodeCopilotAdapter implements HookAdapter {
 
   readSettings(): Record<string, unknown> | null {
     // Try .github/hooks/context-mode.json first, then .claude/settings.json
-    const paths = [
-      this.getSettingsPath(),
-      resolve(".claude", "settings.json"),
-    ];
+    const paths = [this.getSettingsPath(), resolve(".claude", "settings.json")];
     for (const configPath of paths) {
       try {
         const raw = readFileSync(configPath, "utf-8");
@@ -338,11 +324,7 @@ export class VSCodeCopilotAdapter implements HookAdapter {
     const configPath = this.getSettingsPath();
     const dir = resolve(".github", "hooks");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      configPath,
-      JSON.stringify(settings, null, 2) + "\n",
-      "utf-8",
-    );
+    writeFileSync(configPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
   }
 
   // ── Diagnostics (doctor) ─────────────────────────────────
@@ -415,16 +397,14 @@ export class VSCodeCopilotAdapter implements HookAdapter {
     results.push({
       check: "API stability",
       status: "warn",
-      message:
-        "VS Code Copilot hooks are in preview — API may change without notice",
+      message: "VS Code Copilot hooks are in preview — API may change without notice",
     });
 
     // Warn about matcher behavior
     results.push({
       check: "Matcher support",
       status: "warn",
-      message:
-        "Matchers are parsed but IGNORED — all hooks fire on all tools",
+      message: "Matchers are parsed but IGNORED — all hooks fire on all tools",
     });
 
     return results;
@@ -439,9 +419,7 @@ export class VSCodeCopilotAdapter implements HookAdapter {
 
       const servers = config.servers as Record<string, unknown> | undefined;
       if (servers) {
-        const hasPlugin = Object.keys(servers).some((k) =>
-          k.includes("context-mode"),
-        );
+        const hasPlugin = Object.keys(servers).some((k) => k.includes("context-mode"));
         if (hasPlugin) {
           return {
             check: "MCP registration",
@@ -475,18 +453,13 @@ export class VSCodeCopilotAdapter implements HookAdapter {
 
     for (const extDir of extensionDirs) {
       try {
-        const entries = readFileSync(
-          join(extDir, "extensions.json"),
-          "utf-8",
-        );
+        const entries = readFileSync(join(extDir, "extensions.json"), "utf-8");
         const exts = JSON.parse(entries) as Array<Record<string, unknown>>;
         const contextMode = exts.find(
           (e) =>
             typeof e.identifier === "object" &&
             e.identifier !== null &&
-            (
-              e.identifier as Record<string, unknown>
-            ).id?.toString().includes("context-mode"),
+            (e.identifier as Record<string, unknown>).id?.toString().includes("context-mode"),
         );
         if (contextMode && typeof contextMode.version === "string") {
           return contextMode.version;
@@ -534,11 +507,7 @@ export class VSCodeCopilotAdapter implements HookAdapter {
     const outputDir = resolve(".github", "hooks");
     mkdirSync(outputDir, { recursive: true });
     const outputPath = resolve(outputDir, "context-mode.json");
-    writeFileSync(
-      outputPath,
-      JSON.stringify(hookConfig, null, 2) + "\n",
-      "utf-8",
-    );
+    writeFileSync(outputPath, JSON.stringify(hookConfig, null, 2) + "\n", "utf-8");
     changes.push(`Wrote hook config to ${outputPath}`);
 
     return changes;

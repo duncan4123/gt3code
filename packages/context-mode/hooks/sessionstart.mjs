@@ -19,8 +19,19 @@ import { createRoutingBlock } from "./routing-block.mjs";
 import { createToolNamer } from "./core/tool-naming.mjs";
 
 const ROUTING_BLOCK = createRoutingBlock(createToolNamer("claude-code"));
-import { readStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath } from "./session-helpers.mjs";
-import { writeSessionEventsFile, buildSessionDirective, getSessionEvents, getLatestSessionEvents } from "./session-directive.mjs";
+import {
+  readStdin,
+  getSessionId,
+  getSessionDBPath,
+  getSessionEventsPath,
+  getCleanupFlagPath,
+} from "./session-helpers.mjs";
+import {
+  writeSessionEventsFile,
+  buildSessionDirective,
+  getSessionEvents,
+  getLatestSessionEvents,
+} from "./session-directive.mjs";
 import { createSessionLoaders } from "./session-loaders.mjs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,7 +70,11 @@ try {
     db.close();
   } else if (source === "resume") {
     // User used --continue — clear cleanup flag so startup doesn't wipe data
-    try { unlinkSync(getCleanupFlagPath()); } catch { /* no flag */ }
+    try {
+      unlinkSync(getCleanupFlagPath());
+    } catch {
+      /* no flag */
+    }
 
     const { SessionDB } = await loadSessionDB();
     const dbPath = getSessionDBPath();
@@ -77,14 +92,23 @@ try {
     const { SessionDB } = await loadSessionDB();
     const dbPath = getSessionDBPath();
     const db = new SessionDB({ dbPath });
-    try { unlinkSync(getSessionEventsPath()); } catch { /* no stale file */ }
+    try {
+      unlinkSync(getSessionEventsPath());
+    } catch {
+      /* no stale file */
+    }
 
     // Detect true fresh start vs --continue (which fires startup→resume).
     // If cleanup flag exists from a PREVIOUS startup that was never followed by
     // resume, that was a true fresh start — aggressively wipe all data.
     const cleanupFlag = getCleanupFlagPath();
     let previousWasFresh = false;
-    try { readFileSync(cleanupFlag); previousWasFresh = true; } catch { /* no flag */ }
+    try {
+      readFileSync(cleanupFlag);
+      previousWasFresh = true;
+    } catch {
+      /* no flag */
+    }
 
     if (previousWasFresh) {
       // Previous session was a true fresh start (no --continue) — clean slate
@@ -93,7 +117,9 @@ try {
       // First startup or --continue will follow — only clean old sessions
       db.cleanupOldSessions(7);
     }
-    db.db.exec(`DELETE FROM session_events WHERE session_id NOT IN (SELECT session_id FROM session_meta)`);
+    db.db.exec(
+      `DELETE FROM session_events WHERE session_id NOT IN (SELECT session_id FROM session_meta)`,
+    );
 
     // Write cleanup flag — resume will delete it if --continue follows
     writeFileSync(cleanupFlag, new Date().toISOString(), "utf-8");
@@ -114,9 +140,16 @@ try {
         const content = readFileSync(p, "utf-8");
         if (content.trim()) {
           db.insertEvent(sessionId, { type: "rule", category: "rule", data: p, priority: 1 });
-          db.insertEvent(sessionId, { type: "rule_content", category: "rule", data: content, priority: 1 });
+          db.insertEvent(sessionId, {
+            type: "rule_content",
+            category: "rule",
+            data: content,
+            priority: 1,
+          });
         }
-      } catch { /* file doesn't exist — skip */ }
+      } catch {
+        /* file doesn't exist — skip */
+      }
     }
 
     db.close();
@@ -132,12 +165,16 @@ try {
       pjoin(homedir(), ".claude", "context-mode", "sessionstart-debug.log"),
       `[${new Date().toISOString()}] ${err?.message || err}\n${err?.stack || ""}\n`,
     );
-  } catch { /* ignore logging failure */ }
+  } catch {
+    /* ignore logging failure */
+  }
 }
 
-console.log(JSON.stringify({
-  hookSpecificOutput: {
-    hookEventName: "SessionStart",
-    additionalContext,
-  },
-}));
+console.log(
+  JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "SessionStart",
+      additionalContext,
+    },
+  }),
+);

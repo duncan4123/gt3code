@@ -70,14 +70,16 @@ describe("routePreToolUse", () => {
 
     it("allows curl -s --output file", () => {
       const result = routePreToolUse("Bash", {
-        command: "curl -s --output /tmp/stripe.tar.gz https://github.com/stripe/stripe-cli/releases/download/v1.38.1/stripe.tar.gz",
+        command:
+          "curl -s --output /tmp/stripe.tar.gz https://github.com/stripe/stripe-cli/releases/download/v1.38.1/stripe.tar.gz",
       });
       expect(result).toBeNull();
     });
 
     it("allows wget -q -O file (quiet + file output)", () => {
       const result = routePreToolUse("Bash", {
-        command: "wget -q -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.0.0/terraform_1.0.0_linux_amd64.zip",
+        command:
+          "wget -q -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.0.0/terraform_1.0.0_linux_amd64.zip",
       });
       expect(result).toBeNull();
     });
@@ -115,7 +117,8 @@ describe("routePreToolUse", () => {
 
     it("blocks chained: curl -sLo file && curl url (second floods)", () => {
       const result = routePreToolUse("Bash", {
-        command: "curl -sL -o /tmp/file.tar.gz https://example.com/a.tar.gz && curl https://example.com/api",
+        command:
+          "curl -sL -o /tmp/file.tar.gz https://example.com/a.tar.gz && curl https://example.com/api",
       });
       expect(result).not.toBeNull();
       expect(result!.action).toBe("modify");
@@ -123,14 +126,15 @@ describe("routePreToolUse", () => {
 
     it("allows chained: curl -sLo file && tar xzf file (both safe)", () => {
       const result = routePreToolUse("Bash", {
-        command: "curl -sL -o /tmp/file.tar.gz https://example.com/a.tar.gz && tar xzf /tmp/file.tar.gz -C /tmp",
+        command:
+          "curl -sL -o /tmp/file.tar.gz https://example.com/a.tar.gz && tar xzf /tmp/file.tar.gz -C /tmp",
       });
       expect(result).toBeNull();
     });
 
     it("denies inline fetch() with modify action", () => {
       const result = routePreToolUse("Bash", {
-        command: 'node -e "fetch(\'https://api.example.com/data\')"',
+        command: "node -e \"fetch('https://api.example.com/data')\"",
       });
       expect(result).not.toBeNull();
       expect(result!.action).toBe("modify");
@@ -141,7 +145,7 @@ describe("routePreToolUse", () => {
 
     it("denies requests.get() with modify action", () => {
       const result = routePreToolUse("Bash", {
-        command: 'python -c "import requests; requests.get(\'https://example.com\')"',
+        command: "python -c \"import requests; requests.get('https://example.com')\"",
       });
       expect(result).not.toBeNull();
       expect(result!.action).toBe("modify");
@@ -311,9 +315,9 @@ describe("routePreToolUse", () => {
       });
       expect(result).not.toBeNull();
       expect(result!.action).toBe("modify");
-      expect(
-        (result!.updatedInput as Record<string, string>).subagent_type,
-      ).toBe("general-purpose");
+      expect((result!.updatedInput as Record<string, string>).subagent_type).toBe(
+        "general-purpose",
+      );
     });
 
     it("keeps non-Bash subagent type unchanged", () => {
@@ -323,9 +327,9 @@ describe("routePreToolUse", () => {
       });
       expect(result).not.toBeNull();
       expect(result!.action).toBe("modify");
-      expect(
-        (result!.updatedInput as Record<string, string>).subagent_type,
-      ).toBe("general-purpose");
+      expect((result!.updatedInput as Record<string, string>).subagent_type).toBe(
+        "general-purpose",
+      );
     });
   });
 
@@ -333,33 +337,27 @@ describe("routePreToolUse", () => {
 
   describe("MCP execute tools", () => {
     it("passes through non-shell execute", () => {
-      const result = routePreToolUse(
-        "mcp__plugin_context-mode_context-mode__ctx_execute",
-        { language: "javascript", code: "console.log('hello')" },
-      );
+      const result = routePreToolUse("mcp__plugin_context-mode_context-mode__ctx_execute", {
+        language: "javascript",
+        code: "console.log('hello')",
+      });
       expect(result).toBeNull();
     });
 
     it("passes through execute_file without security", () => {
-      const result = routePreToolUse(
-        "mcp__plugin_context-mode_context-mode__ctx_execute_file",
-        {
-          path: "/some/file.log",
-          language: "python",
-          code: "print(len(FILE_CONTENT))",
-        },
-      );
+      const result = routePreToolUse("mcp__plugin_context-mode_context-mode__ctx_execute_file", {
+        path: "/some/file.log",
+        language: "python",
+        code: "print(len(FILE_CONTENT))",
+      });
       expect(result).toBeNull();
     });
 
     it("passes through batch_execute without security", () => {
-      const result = routePreToolUse(
-        "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
-        {
-          commands: [{ label: "test", command: "ls -la" }],
-          queries: ["file list"],
-        },
-      );
+      const result = routePreToolUse("mcp__plugin_context-mode_context-mode__ctx_batch_execute", {
+        commands: [{ label: "test", command: "ls -la" }],
+        queries: ["file list"],
+      });
       expect(result).toBeNull();
     });
   });

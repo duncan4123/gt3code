@@ -48,7 +48,9 @@ try {
 } catch (err) {
   try {
     appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] ${err?.message || err}\n`);
-  } catch { /* silent */ }
+  } catch {
+    /* silent */
+  }
 }
 
 // PreCompact — no stdout output needed

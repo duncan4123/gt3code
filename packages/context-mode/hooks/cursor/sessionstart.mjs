@@ -56,12 +56,17 @@ try {
         db.markResumeConsumed(sessionId);
       }
     } else {
-      try { unlinkSync(getCleanupFlagPath(OPTS)); } catch { /* no flag */ }
+      try {
+        unlinkSync(getCleanupFlagPath(OPTS));
+      } catch {
+        /* no flag */
+      }
     }
 
-    const events = source === "compact"
-      ? getSessionEvents(db, getSessionId(input, OPTS))
-      : getLatestSessionEvents(db);
+    const events =
+      source === "compact"
+        ? getSessionEvents(db, getSessionId(input, OPTS))
+        : getLatestSessionEvents(db);
     if (events.length > 0) {
       const eventMeta = writeSessionEventsFile(events, getSessionEventsPath(OPTS));
       additionalContext += buildSessionDirective(source, eventMeta);
@@ -72,18 +77,29 @@ try {
     const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
     const dbPath = getSessionDBPath(OPTS);
     const db = new SessionDB({ dbPath });
-    try { unlinkSync(getSessionEventsPath(OPTS)); } catch { /* no stale file */ }
+    try {
+      unlinkSync(getSessionEventsPath(OPTS));
+    } catch {
+      /* no stale file */
+    }
 
     const cleanupFlag = getCleanupFlagPath(OPTS);
     let previousWasFresh = false;
-    try { readFileSync(cleanupFlag); previousWasFresh = true; } catch { /* no flag */ }
+    try {
+      readFileSync(cleanupFlag);
+      previousWasFresh = true;
+    } catch {
+      /* no flag */
+    }
 
     if (previousWasFresh) {
       db.cleanupOldSessions(0);
     } else {
       db.cleanupOldSessions(7);
     }
-    db.db.exec(`DELETE FROM session_events WHERE session_id NOT IN (SELECT session_id FROM session_meta)`);
+    db.db.exec(
+      `DELETE FROM session_events WHERE session_id NOT IN (SELECT session_id FROM session_meta)`,
+    );
     writeFileSync(cleanupFlag, new Date().toISOString(), "utf-8");
 
     const sessionId = getSessionId(input, OPTS);

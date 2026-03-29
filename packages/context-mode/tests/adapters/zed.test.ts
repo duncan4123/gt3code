@@ -32,27 +32,19 @@ describe("ZedAdapter", () => {
 
   describe("parse methods", () => {
     it("parsePreToolUseInput throws", () => {
-      expect(() => adapter.parsePreToolUseInput({})).toThrow(
-        /Zed does not support hooks/,
-      );
+      expect(() => adapter.parsePreToolUseInput({})).toThrow(/Zed does not support hooks/);
     });
 
     it("parsePostToolUseInput throws", () => {
-      expect(() => adapter.parsePostToolUseInput({})).toThrow(
-        /Zed does not support hooks/,
-      );
+      expect(() => adapter.parsePostToolUseInput({})).toThrow(/Zed does not support hooks/);
     });
 
     it("parsePreCompactInput throws", () => {
-      expect(() => adapter.parsePreCompactInput({})).toThrow(
-        /Zed does not support hooks/,
-      );
+      expect(() => adapter.parsePreCompactInput({})).toThrow(/Zed does not support hooks/);
     });
 
     it("parseSessionStartInput throws", () => {
-      expect(() => adapter.parseSessionStartInput({})).toThrow(
-        /Zed does not support hooks/,
-      );
+      expect(() => adapter.parseSessionStartInput({})).toThrow(/Zed does not support hooks/);
     });
   });
 
@@ -112,16 +104,12 @@ describe("ZedAdapter", () => {
 
   describe("config paths", () => {
     it("settings path is ~/.config/zed/settings.json", () => {
-      expect(adapter.getSettingsPath()).toBe(
-        resolve(homedir(), ".config", "zed", "settings.json"),
-      );
+      expect(adapter.getSettingsPath()).toBe(resolve(homedir(), ".config", "zed", "settings.json"));
     });
 
     it("session dir is under ~/.config/zed/context-mode/sessions/", () => {
       const sessionDir = adapter.getSessionDir();
-      expect(sessionDir).toBe(
-        join(homedir(), ".config", "zed", "context-mode", "sessions"),
-      );
+      expect(sessionDir).toBe(join(homedir(), ".config", "zed", "context-mode", "sessions"));
     });
   });
 });

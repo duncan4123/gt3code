@@ -79,7 +79,9 @@ export function renderActiveFiles(fileEvents: StoredEvent[]): string {
     const opsStr = Array.from(ops.entries())
       .map(([k, v]) => `${k}:${v}`)
       .join(",");
-    lines.push(`    <file path="${escapeXML(path)}" ops="${escapeXML(opsStr)}" last="${escapeXML(last)}" />`);
+    lines.push(
+      `    <file path="${escapeXML(path)}" ops="${escapeXML(opsStr)}" last="${escapeXML(last)}" />`,
+    );
   }
   lines.push("  </active_files>");
   return lines.join("\n");
@@ -107,7 +109,9 @@ export function renderTaskState(taskEvents: StoredEvent[]): string {
       } else if (typeof parsed.taskId === "string" && typeof parsed.status === "string") {
         updates[parsed.taskId] = parsed.status;
       }
-    } catch { /* not JSON */ }
+    } catch {
+      /* not JSON */
+    }
   }
 
   if (creates.length === 0) return "";
@@ -248,9 +252,12 @@ export function renderSubagents(subagentEvents: StoredEvent[]): string {
 
   const lines: string[] = ["  <subagents>"];
   for (const ev of subagentEvents) {
-    const status = ev.type === "subagent_completed" ? "completed"
-      : ev.type === "subagent_launched" ? "launched"
-      : "unknown";
+    const status =
+      ev.type === "subagent_completed"
+        ? "completed"
+        : ev.type === "subagent_launched"
+          ? "launched"
+          : "unknown";
     lines.push(`    <agent status="${status}">${escapeXML(truncateString(ev.data, 200))}</agent>`);
   }
   lines.push("  </subagents>");
@@ -290,10 +297,7 @@ export function renderMcpTools(mcpEvents: StoredEvent[]): string {
  * 3. Assemble by priority tier with budget trimming
  * 4. If over maxBytes, drop lowest priority sections first
  */
-export function buildResumeSnapshot(
-  events: StoredEvent[],
-  opts?: BuildSnapshotOpts,
-): string {
+export function buildResumeSnapshot(events: StoredEvent[], opts?: BuildSnapshotOpts): string {
   const maxBytes = opts?.maxBytes ?? DEFAULT_MAX_BYTES;
   const compactCount = opts?.compactCount ?? 1;
   const now = new Date().toISOString();
@@ -314,18 +318,42 @@ export function buildResumeSnapshot(
 
   for (const ev of events) {
     switch (ev.category) {
-      case "file": fileEvents.push(ev); break;
-      case "task": taskEvents.push(ev); break;
-      case "rule": ruleEvents.push(ev); break;
-      case "decision": decisionEvents.push(ev); break;
-      case "cwd": cwdEvents.push(ev); break;
-      case "error": errorEvents.push(ev); break;
-      case "env": envEvents.push(ev); break;
-      case "git": gitEvents.push(ev); break;
-      case "subagent": subagentEvents.push(ev); break;
-      case "intent": intentEvents.push(ev); break;
-      case "mcp": mcpEvents.push(ev); break;
-      case "plan": planEvents.push(ev); break;
+      case "file":
+        fileEvents.push(ev);
+        break;
+      case "task":
+        taskEvents.push(ev);
+        break;
+      case "rule":
+        ruleEvents.push(ev);
+        break;
+      case "decision":
+        decisionEvents.push(ev);
+        break;
+      case "cwd":
+        cwdEvents.push(ev);
+        break;
+      case "error":
+        errorEvents.push(ev);
+        break;
+      case "env":
+        envEvents.push(ev);
+        break;
+      case "git":
+        gitEvents.push(ev);
+        break;
+      case "subagent":
+        subagentEvents.push(ev);
+        break;
+      case "intent":
+        intentEvents.push(ev);
+        break;
+      case "mcp":
+        mcpEvents.push(ev);
+        break;
+      case "plan":
+        planEvents.push(ev);
+        break;
     }
   }
 
@@ -351,7 +379,7 @@ export function buildResumeSnapshot(
   const errors = renderErrors(errorEvents);
   if (errors) p2Sections.push(errors);
   // Completed subagents are P2 — their results must survive budget trimming
-  const completedSubagents = subagentEvents.filter(e => e.type === "subagent_completed");
+  const completedSubagents = subagentEvents.filter((e) => e.type === "subagent_completed");
   const subagentsP2 = renderSubagents(completedSubagents);
   if (subagentsP2) p2Sections.push(subagentsP2);
   // Plan mode state — show if plan is active (last event is plan_enter)
@@ -370,7 +398,7 @@ export function buildResumeSnapshot(
   }
   const mcpTools = renderMcpTools(mcpEvents);
   if (mcpTools) p3Sections.push(mcpTools);
-  const launchedSubagents = subagentEvents.filter(e => e.type === "subagent_launched");
+  const launchedSubagents = subagentEvents.filter((e) => e.type === "subagent_launched");
   const subagentsP3 = renderSubagents(launchedSubagents);
   if (subagentsP3) p3Sections.push(subagentsP3);
 

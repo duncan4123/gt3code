@@ -271,12 +271,19 @@ async function main() {
   const reactRaw = readFileSync(reactFixturePath, "utf-8");
   const reactRawBytes = Buffer.byteLength(reactRaw);
 
-  await benchmark("index+search", "Context7 React docs → search useEffect", reactRawBytes, async () => {
-    store.index({ content: reactRaw, source: "Context7: React" });
-    const results = store.search("useEffect cleanup", 2);
-    const output = results.map((r, i) => `[${i + 1}] ${r.title}: ${r.content.substring(0, 80)}...`).join("\n");
-    return { output, details: `${results.length} results` };
-  });
+  await benchmark(
+    "index+search",
+    "Context7 React docs → search useEffect",
+    reactRawBytes,
+    async () => {
+      store.index({ content: reactRaw, source: "Context7: React" });
+      const results = store.search("useEffect cleanup", 2);
+      const output = results
+        .map((r, i) => `[${i + 1}] ${r.title}: ${r.content.substring(0, 80)}...`)
+        .join("\n");
+      return { output, details: `${results.length} results` };
+    },
+  );
 
   // Supabase Edge Functions fixture
   const supaFixturePath = join(fixtureDir, "context7-supabase-edge.md");
@@ -284,13 +291,22 @@ async function main() {
     const supaRaw = readFileSync(supaFixturePath, "utf-8");
     const supaRawBytes = Buffer.byteLength(supaRaw);
 
-    await benchmark("index+search", "Context7 Supabase Edge → search RLS", supaRawBytes, async () => {
-      store.index({ content: supaRaw, source: "Context7: Supabase" });
-      const results = store.search("edge function deploy", 2);
-      const output = results.map((r, i) => `[${i + 1}] ${r.title}: ${r.content.substring(0, 80)}...`).join("\n");
-      return { output, details: `${results.length} results` };
-    });
-  } catch { /* fixture may not exist */ }
+    await benchmark(
+      "index+search",
+      "Context7 Supabase Edge → search RLS",
+      supaRawBytes,
+      async () => {
+        store.index({ content: supaRaw, source: "Context7: Supabase" });
+        const results = store.search("edge function deploy", 2);
+        const output = results
+          .map((r, i) => `[${i + 1}] ${r.title}: ${r.content.substring(0, 80)}...`)
+          .join("\n");
+        return { output, details: `${results.length} results` };
+      },
+    );
+  } catch {
+    /* fixture may not exist */
+  }
 
   // Next.js fixture
   const nextFixturePath = join(fixtureDir, "context7-nextjs-docs.md");
@@ -298,13 +314,22 @@ async function main() {
     const nextRaw = readFileSync(nextFixturePath, "utf-8");
     const nextRawBytes = Buffer.byteLength(nextRaw);
 
-    await benchmark("index+search", "Context7 Next.js docs → search routing", nextRawBytes, async () => {
-      store.index({ content: nextRaw, source: "Context7: Next.js" });
-      const results = store.search("app router", 2);
-      const output = results.map((r, i) => `[${i + 1}] ${r.title}: ${r.content.substring(0, 80)}...`).join("\n");
-      return { output, details: `${results.length} results` };
-    });
-  } catch { /* fixture may not exist */ }
+    await benchmark(
+      "index+search",
+      "Context7 Next.js docs → search routing",
+      nextRawBytes,
+      async () => {
+        store.index({ content: nextRaw, source: "Context7: Next.js" });
+        const results = store.search("app router", 2);
+        const output = results
+          .map((r, i) => `[${i + 1}] ${r.title}: ${r.content.substring(0, 80)}...`)
+          .join("\n");
+        return { output, details: `${results.length} results` };
+      },
+    );
+  } catch {
+    /* fixture may not exist */
+  }
 
   store.close();
 
@@ -324,13 +349,24 @@ async function main() {
   const totalRaw = results.reduce((s, r) => s + r.rawBytes, 0);
   const totalCtx = results.reduce((s, r) => s + r.contextBytes, 0);
   const avgSavings = Math.round((1 - totalCtx / totalRaw) * 100);
-  console.log(`\nAggregate: ${(totalRaw / 1024).toFixed(1)}KB raw → ${(totalCtx / 1024).toFixed(1)}KB context (${avgSavings}% average savings)`);
+  console.log(
+    `\nAggregate: ${(totalRaw / 1024).toFixed(1)}KB raw → ${(totalCtx / 1024).toFixed(1)}KB context (${avgSavings}% average savings)`,
+  );
   console.log(`Total benchmarks: ${results.length}`);
 
   // Write results to JSON for README consumption
   writeFileSync(
     join(__dirname, "benchmark-results-v04.json"),
-    JSON.stringify({ version: "0.4.0", date: new Date().toISOString(), results, aggregate: { totalRaw, totalCtx, avgSavings } }, null, 2),
+    JSON.stringify(
+      {
+        version: "0.4.0",
+        date: new Date().toISOString(),
+        results,
+        aggregate: { totalRaw, totalCtx, avgSavings },
+      },
+      null,
+      2,
+    ),
   );
   console.log("\nResults saved to tests/benchmark-results-v04.json");
 

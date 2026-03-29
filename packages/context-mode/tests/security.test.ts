@@ -115,20 +115,12 @@ describe("globToRegex: case sensitivity", () => {
 
 describe("matchesAnyPattern", () => {
   test("matchesAnyPattern: returns matching pattern on hit", () => {
-    const result = matchesAnyPattern(
-      "sudo apt install",
-      ["Bash(git:*)", "Bash(sudo *)"],
-      false,
-    );
+    const result = matchesAnyPattern("sudo apt install", ["Bash(git:*)", "Bash(sudo *)"], false);
     assert.equal(result, "Bash(sudo *)");
   });
 
   test("matchesAnyPattern: returns null on miss", () => {
-    const result = matchesAnyPattern(
-      "npm install",
-      ["Bash(sudo *)", "Bash(rm -rf /*)"],
-      false,
-    );
+    const result = matchesAnyPattern("npm install", ["Bash(sudo *)", "Bash(rm -rf /*)"], false);
     assert.equal(result, null);
   });
 });
@@ -451,11 +443,7 @@ describe("evaluateFilePath", () => {
   });
 
   test("evaluateFilePath: credentials file denied by ['**/*credentials*']", () => {
-    const result = evaluateFilePath(
-      "secrets/credentials.json",
-      [["**/*credentials*"]],
-      false,
-    );
+    const result = evaluateFilePath("secrets/credentials.json", [["**/*credentials*"]], false);
     assert.equal(result.denied, true);
     assert.equal(result.matchedPattern, "**/*credentials*");
   });
@@ -466,11 +454,7 @@ describe("evaluateFilePath", () => {
   });
 
   test("evaluateFilePath: Windows path with backslashes", () => {
-    const result = evaluateFilePath(
-      "C:\\Users\\.env",
-      [["**/.env"]],
-      true,
-    );
+    const result = evaluateFilePath("C:\\Users\\.env", [["**/.env"]], true);
     assert.equal(result.denied, true);
     assert.equal(result.matchedPattern, "**/.env");
   });
@@ -478,26 +462,17 @@ describe("evaluateFilePath", () => {
 
 describe("Shell-Escape Scanner", () => {
   test("extractShellCommands: Python os.system", () => {
-    const result = extractShellCommands(
-      'os.system("sudo rm -rf /")',
-      "python",
-    );
+    const result = extractShellCommands('os.system("sudo rm -rf /")', "python");
     assert.deepEqual(result, ["sudo rm -rf /"]);
   });
 
   test("extractShellCommands: Python subprocess.run string", () => {
-    const result = extractShellCommands(
-      'subprocess.run("sudo apt install vim")',
-      "python",
-    );
+    const result = extractShellCommands('subprocess.run("sudo apt install vim")', "python");
     assert.deepEqual(result, ["sudo apt install vim"]);
   });
 
   test("extractShellCommands: Python subprocess.run list args", () => {
-    const result = extractShellCommands(
-      'subprocess.run(["rm", "-rf", "/"])',
-      "python",
-    );
+    const result = extractShellCommands('subprocess.run(["rm", "-rf", "/"])', "python");
     assert.ok(result.length > 0, "should extract commands from list form");
     assert.ok(
       result.some((cmd) => cmd.includes("rm") && cmd.includes("-rf")),
@@ -506,86 +481,56 @@ describe("Shell-Escape Scanner", () => {
   });
 
   test("extractShellCommands: Python subprocess.call list args", () => {
-    const result = extractShellCommands(
-      'subprocess.call(["sudo", "reboot"])',
-      "python",
-    );
+    const result = extractShellCommands('subprocess.call(["sudo", "reboot"])', "python");
     assert.ok(result.some((cmd) => cmd.includes("sudo") && cmd.includes("reboot")));
   });
 
   test("extractShellCommands: JS execSync", () => {
-    const cmds = extractShellCommands(
-      'const r = execSync("sudo apt update")',
-      "javascript",
-    );
+    const cmds = extractShellCommands('const r = execSync("sudo apt update")', "javascript");
     assert.deepEqual(cmds, ["sudo apt update"]);
   });
 
   test("extractShellCommands: JS spawnSync", () => {
-    const cmds = extractShellCommands(
-      'spawnSync("sudo", ["rm", "-rf"])',
-      "javascript",
-    );
+    const cmds = extractShellCommands('spawnSync("sudo", ["rm", "-rf"])', "javascript");
     assert.ok(cmds.length > 0, "should detect spawnSync");
     assert.ok(cmds[0].includes("sudo"));
   });
 
   test("extractShellCommands: Ruby system()", () => {
-    const result = extractShellCommands(
-      'system("sudo rm -rf /tmp")',
-      "ruby",
-    );
+    const result = extractShellCommands('system("sudo rm -rf /tmp")', "ruby");
     assert.deepEqual(result, ["sudo rm -rf /tmp"]);
   });
 
   test("extractShellCommands: Go exec.Command", () => {
-    const result = extractShellCommands(
-      'exec.Command("sudo", "rm", "-rf")',
-      "go",
-    );
+    const result = extractShellCommands('exec.Command("sudo", "rm", "-rf")', "go");
     assert.ok(result.length > 0, "should detect Go exec.Command");
     assert.ok(result[0].includes("sudo"));
   });
 
   test("extractShellCommands: PHP shell_exec", () => {
-    const result = extractShellCommands(
-      'shell_exec("sudo rm -rf /tmp")',
-      "php",
-    );
+    const result = extractShellCommands('shell_exec("sudo rm -rf /tmp")', "php");
     assert.ok(result.length > 0, "should detect PHP shell_exec");
     assert.ok(result[0].includes("sudo"));
   });
 
   test("extractShellCommands: PHP system()", () => {
-    const result = extractShellCommands(
-      'system("sudo reboot")',
-      "php",
-    );
+    const result = extractShellCommands('system("sudo reboot")', "php");
     assert.ok(result.length > 0, "should detect PHP system()");
   });
 
   test("extractShellCommands: Rust Command::new", () => {
-    const result = extractShellCommands(
-      'Command::new("sudo").arg("reboot")',
-      "rust",
-    );
+    const result = extractShellCommands('Command::new("sudo").arg("reboot")', "rust");
     assert.ok(result.length > 0, "should detect Rust Command::new");
     assert.ok(result[0].includes("sudo"));
   });
 
   test("extractShellCommands: safe JS code returns empty", () => {
-    const result = extractShellCommands(
-      'console.log("hello")',
-      "javascript",
-    );
+    const result = extractShellCommands('console.log("hello")', "javascript");
     assert.deepEqual(result, []);
   });
 
   test("extractShellCommands: unknown language returns empty", () => {
-    const result = extractShellCommands(
-      'os.system("rm -rf /")',
-      "haskell",
-    );
+    const result = extractShellCommands('os.system("rm -rf /")', "haskell");
     assert.deepEqual(result, []);
   });
 });

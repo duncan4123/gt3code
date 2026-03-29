@@ -16,7 +16,11 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 import { renderTaskState, type StoredEvent } from "../../src/session/snapshot.js";
-import { buildSessionDirective, writeSessionEventsFile, groupEvents } from "../../hooks/session-directive.mjs";
+import {
+  buildSessionDirective,
+  writeSessionEventsFile,
+  groupEvents,
+} from "../../hooks/session-directive.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HOOK_PATH = join(__dirname, "..", "..", "hooks", "sessionstart.mjs");
@@ -75,18 +79,9 @@ describe("SessionStart Hook", () => {
       ctx.includes("<tool_selection_hierarchy>"),
       "Expected <tool_selection_hierarchy> tag",
     );
-    assert.ok(
-      ctx.includes("<forbidden_actions>"),
-      "Expected <forbidden_actions> tag",
-    );
-    assert.ok(
-      ctx.includes("<output_constraints>"),
-      "Expected <output_constraints> tag",
-    );
-    assert.ok(
-      ctx.includes("batch_execute"),
-      "Expected batch_execute mentioned in routing block",
-    );
+    assert.ok(ctx.includes("<forbidden_actions>"), "Expected <forbidden_actions> tag");
+    assert.ok(ctx.includes("<output_constraints>"), "Expected <output_constraints> tag");
+    assert.ok(ctx.includes("batch_execute"), "Expected batch_execute mentioned in routing block");
   });
 
   test("SessionStart: routing block contains tool selection hierarchy", () => {
@@ -103,10 +98,7 @@ describe("SessionStart Hook", () => {
     const parsed = JSON.parse(result.stdout);
     const ctx = parsed.hookSpecificOutput.additionalContext;
     assert.ok(ctx.includes("500 words"), "Expected 500-word limit");
-    assert.ok(
-      ctx.includes("Write artifacts"),
-      "Expected artifact policy",
-    );
+    assert.ok(ctx.includes("Write artifacts"), "Expected artifact policy");
   });
 });
 
@@ -235,9 +227,7 @@ describe("buildSessionDirective — task completion filtering", () => {
   });
 
   it("uses heading 'Pending Tasks' not 'Tasks'", () => {
-    const events = [
-      makeEvent("task", JSON.stringify({ subject: "Incomplete task" })),
-    ];
+    const events = [makeEvent("task", JSON.stringify({ subject: "Incomplete task" }))];
     const { grouped, lastPrompt, fileNames } = groupEvents(events);
     const result = buildSessionDirective("compact", { grouped, lastPrompt, fileNames });
 

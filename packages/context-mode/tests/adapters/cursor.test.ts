@@ -89,9 +89,7 @@ describe("CursorAdapter", () => {
 
   describe("formatPreToolUseResponse", () => {
     it("formats deny with native Cursor fields", () => {
-      expect(
-        adapter.formatPreToolUseResponse({ decision: "deny", reason: "Blocked" }),
-      ).toEqual({
+      expect(adapter.formatPreToolUseResponse({ decision: "deny", reason: "Blocked" })).toEqual({
         permission: "deny",
         user_message: "Blocked",
       });
@@ -99,9 +97,9 @@ describe("CursorAdapter", () => {
 
     it("formats modify with updated_input", () => {
       const updatedInput = { command: "echo blocked" };
-      expect(
-        adapter.formatPreToolUseResponse({ decision: "modify", updatedInput }),
-      ).toEqual({ updated_input: updatedInput });
+      expect(adapter.formatPreToolUseResponse({ decision: "modify", updatedInput })).toEqual({
+        updated_input: updatedInput,
+      });
     });
 
     it("formats context with agent_message", () => {
@@ -129,9 +127,9 @@ describe("CursorAdapter", () => {
 
   describe("formatPostToolUseResponse", () => {
     it("formats additional_context", () => {
-      expect(
-        adapter.formatPostToolUseResponse({ additionalContext: "Captured." }),
-      ).toEqual({ additional_context: "Captured." });
+      expect(adapter.formatPostToolUseResponse({ additionalContext: "Captured." })).toEqual({
+        additional_context: "Captured.",
+      });
     });
 
     it("returns minimal additional_context when empty", () => {
@@ -159,9 +157,7 @@ describe("CursorAdapter", () => {
     });
 
     it("uses a dedicated Cursor session dir", () => {
-      expect(adapter.getSessionDir()).toBe(
-        join(homedir(), ".cursor", "context-mode", "sessions"),
-      );
+      expect(adapter.getSessionDir()).toBe(join(homedir(), ".cursor", "context-mode", "sessions"));
     });
   });
 
@@ -182,27 +178,32 @@ describe("CursorAdapter", () => {
 
     afterEach(() => {
       rmSync(tempDir, { recursive: true, force: true });
-      try { rmSync(resolve(".cursor", "mcp.json"), { force: true }); } catch { /* best effort */ }
+      try {
+        rmSync(resolve(".cursor", "mcp.json"), { force: true });
+      } catch {
+        /* best effort */
+      }
       if (!projectCursorDirExisted) {
-        try { rmSync(resolve(".cursor"), { recursive: true, force: true }); } catch { /* best effort */ }
+        try {
+          rmSync(resolve(".cursor"), { recursive: true, force: true });
+        } catch {
+          /* best effort */
+        }
       }
     });
 
     it("generates native Cursor hook entries for v1 hooks only", () => {
       const config = adapter.generateHookConfig(process.cwd()) as Record<string, unknown>;
-      expect(Object.keys(config).sort()).toEqual([
-        "postToolUse",
-        "preToolUse",
-        "sessionStart",
-      ]);
+      expect(Object.keys(config).sort()).toEqual(["postToolUse", "preToolUse", "sessionStart"]);
       expect(config.preCompact).toBeUndefined();
     });
 
     it("writes project hooks in native Cursor format", () => {
       const changes = adapter.configureAllHooks(process.cwd());
-      const written = JSON.parse(
-        readFileSync(join(tempDir, "hooks.json"), "utf-8"),
-      ) as Record<string, unknown>;
+      const written = JSON.parse(readFileSync(join(tempDir, "hooks.json"), "utf-8")) as Record<
+        string,
+        unknown
+      >;
 
       expect(changes).toContain(`Wrote native Cursor hooks to ${join(tempDir, "hooks.json")}`);
       expect(written.version).toBe(1);
@@ -219,13 +220,17 @@ describe("CursorAdapter", () => {
       mkdirSync(tempDir, { recursive: true });
       writeFileSync(
         join(tempDir, "hooks.json"),
-        JSON.stringify({
-          version: 1,
-          hooks: {
-            preToolUse: [{ type: "command", command: "context-mode hook cursor pretooluse" }],
-            sessionStart: [{ type: "command", command: "context-mode hook cursor sessionstart" }],
+        JSON.stringify(
+          {
+            version: 1,
+            hooks: {
+              preToolUse: [{ type: "command", command: "context-mode hook cursor pretooluse" }],
+              sessionStart: [{ type: "command", command: "context-mode hook cursor sessionstart" }],
+            },
           },
-        }, null, 2),
+          null,
+          2,
+        ),
       );
 
       const results = adapter.validateHooks(process.cwd());
@@ -235,20 +240,26 @@ describe("CursorAdapter", () => {
       expect(results.find((result) => result.check === "preToolUse")?.status).toBe("pass");
       // sessionStart is not validated — Cursor rejects it currently
       expect(results.find((result) => result.check === "postToolUse")?.status).toBe("warn");
-      expect(results.find((result) => result.check === "Claude compatibility")?.status).toBe("warn");
+      expect(results.find((result) => result.check === "Claude compatibility")?.status).toBe(
+        "warn",
+      );
     });
 
     it("detects Cursor MCP registration from project config", () => {
       mkdirSync(resolve(".cursor"), { recursive: true });
       writeFileSync(
         resolve(".cursor", "mcp.json"),
-        JSON.stringify({
-          mcpServers: {
-            "context-mode": {
-              command: "context-mode",
+        JSON.stringify(
+          {
+            mcpServers: {
+              "context-mode": {
+                command: "context-mode",
+              },
             },
           },
-        }, null, 2),
+          null,
+          2,
+        ),
       );
 
       const result = adapter.checkPluginRegistration();

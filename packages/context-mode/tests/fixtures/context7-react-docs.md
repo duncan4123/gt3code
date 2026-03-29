@@ -4,7 +4,7 @@ Source: https://react.dev/reference/react/useEffect
 
 The useEffect Hook allows you to declare side effects in functional components. It accepts a setup function and optional dependencies array, running the setup after component commits and cleanup before re-runs or unmounting.
 
-```APIDOC
+````APIDOC
 ## useEffect Hook
 
 ### Description
@@ -13,18 +13,22 @@ A React Hook that synchronizes a component with an external system by running si
 ### Syntax
 ```js
 useEffect(setup, dependencies?)
-```
+````
 
 ### Parameters
 
 #### setup (Function) - Required
+
 The function containing your Effect's logic. May optionally return a cleanup function.
+
 - Runs after component commits to DOM
 - Cleanup function runs before re-runs with new dependencies or before component unmounts
 - Receives no parameters
 
 #### dependencies (Array) - Optional
+
 List of all reactive values referenced in setup code (props, state, variables, functions declared in component body).
+
 - If omitted: Effect re-runs after every commit
 - If empty array `[]`: Effect runs once after initial mount
 - If array with values `[dep1, dep2]`: Effect re-runs when dependencies change
@@ -32,15 +36,17 @@ List of all reactive values referenced in setup code (props, state, variables, f
 - Must have constant number of items and be written inline
 
 ### Returns
+
 `undefined`
 
 ### Basic Example
+
 ```js
-import { useState, useEffect } from 'react';
-import { createConnection } from './chat.js';
+import { useState, useEffect } from "react";
+import { createConnection } from "./chat.js";
 
 function ChatRoom({ roomId }) {
-  const [serverUrl, setServerUrl] = useState('https://localhost:1234');
+  const [serverUrl, setServerUrl] = useState("https://localhost:1234");
 
   useEffect(() => {
     const connection = createConnection(serverUrl, roomId);
@@ -59,26 +65,31 @@ function ChatRoom({ roomId }) {
 ### Important Rules
 
 #### Placement
+
 - Call at top level of component or custom Hook
 - Cannot call inside loops or conditions
 - Extract to new component if conditional Effect needed
 
 #### When to Use
+
 - Synchronizing with external systems
 - Do not use if not synchronizing with external system
 
 #### Development Behavior
+
 - Strict Mode runs extra setup+cleanup cycle before first real setup
 - Stress-tests that cleanup mirrors setup logic
 - Only in development, not in production
 
 #### Performance Considerations
+
 - Object/function dependencies can cause unnecessary re-runs
 - Remove unnecessary object and function dependencies
 - Extract state updates outside Effect when possible
 - Extract non-reactive logic outside Effect
 
 #### Rendering Behavior
+
 - Effects run on client only, not during server rendering
 - Non-interaction Effects: browser paints before Effect runs
 - Interaction Effects: Effect may run before browser paints
@@ -86,12 +97,14 @@ function ChatRoom({ roomId }) {
 - Use `setTimeout` to defer work until after paint if needed
 
 ### Caveats
+
 - Effects only run on client, not during server rendering
 - Strict Mode adds extra setup+cleanup cycle in development
 - Object/function dependencies may cause excessive re-runs
 - Visual Effects may need `useLayoutEffect` instead
 - Browser repaint timing depends on Effect cause (interaction vs non-interaction)
-```
+
+````
 
 --------------------------------
 
@@ -117,9 +130,9 @@ function ChatRoom({ roomId }) {
   }, [serverUrl, roomId]);
   // ...
 }
-```
+````
 
---------------------------------
+---
 
 ### Fetch Data with Cleanup Function in React useEffect
 
@@ -152,7 +165,7 @@ Source: https://react.dev/learn/reusing-logic-with-custom-hooks
 
 Cleanup functions in `useEffect` are essential for preventing memory leaks and managing resources properly. The `useChatRoom` Hook returns a cleanup function that calls `connection.disconnect()`, ensuring that when the component unmounts or before a new effect runs, the previous connection is properly closed. This pattern is crucial when dealing with external resources like WebSocket connections, event listeners, or timers that need to be explicitly released.
 
---------------------------------
+---
 
 ### useEffect > Reference > useEffect(setup, dependencies?)
 

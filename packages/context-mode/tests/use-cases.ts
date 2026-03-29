@@ -21,11 +21,7 @@ const executor = new PolyglotExecutor({ runtimes });
 let passed = 0;
 let failed = 0;
 
-async function useCase(
-  name: string,
-  fixture: string,
-  fn: (filePath: string) => Promise<void>,
-) {
+async function useCase(name: string, fixture: string, fn: (filePath: string) => Promise<void>) {
   const filePath = join(fixtureDir, fixture);
   const rawSize = readFileSync(filePath).byteLength;
   console.log(`\n--- ${name} ---`);
@@ -46,14 +42,11 @@ async function main() {
   console.log("Runtimes:\n" + getRuntimeSummary(runtimes));
 
   // ===== UC1: Triage failing tests =====
-  await useCase(
-    "UC1: Triage failing tests from vitest output",
-    "test-output.txt",
-    async (path) => {
-      const r = await executor.executeFile({
-        path,
-        language: "javascript",
-        code: `
+  await useCase("UC1: Triage failing tests from vitest output", "test-output.txt", async (path) => {
+    const r = await executor.executeFile({
+      path,
+      language: "javascript",
+      code: `
           const lines = FILE_CONTENT.split("\\n");
           const failSuites = lines.filter(l => l.match(/^\\s*\\u2717/) && !l.match(/^\\s{4,}/));
           const failTests = lines.filter(l => l.match(/^\\s{3,}\\u2717/));
@@ -81,12 +74,11 @@ async function main() {
             });
           }
         `,
-      });
-      assert.equal(r.exitCode, 0, "Should exit 0: " + r.stderr);
-      assert.ok(r.stdout.includes("failed"), "Should report failures");
-      console.log("  Output: " + r.stdout.trim().split("\n").length + " lines");
-    },
-  );
+    });
+    assert.equal(r.exitCode, 0, "Should exit 0: " + r.stderr);
+    assert.ok(r.stdout.includes("failed"), "Should report failures");
+    console.log("  Output: " + r.stdout.trim().split("\n").length + " lines");
+  });
 
   // ===== UC2: Diagnose TypeScript errors =====
   await useCase(
@@ -123,14 +115,11 @@ async function main() {
   );
 
   // ===== UC3: Review git diff =====
-  await useCase(
-    "UC3: Summarize git diff for code review",
-    "git-diff.patch",
-    async (path) => {
-      const r = await executor.executeFile({
-        path,
-        language: "javascript",
-        code: `
+  await useCase("UC3: Summarize git diff for code review", "git-diff.patch", async (path) => {
+    const r = await executor.executeFile({
+      path,
+      language: "javascript",
+      code: `
           const content = FILE_CONTENT;
           const files = content.split("diff --git").slice(1);
           let totalAdd = 0, totalDel = 0;
@@ -153,21 +142,17 @@ async function main() {
           });
           console.log("\\nTotal: +" + totalAdd + " -" + totalDel + " (" + (totalAdd + totalDel) + " lines touched)");
         `,
-      });
-      assert.equal(r.exitCode, 0, "Should exit 0: " + r.stderr);
-      assert.ok(r.stdout.includes("files changed"), "Should list changed files");
-    },
-  );
+    });
+    assert.equal(r.exitCode, 0, "Should exit 0: " + r.stderr);
+    assert.ok(r.stdout.includes("files changed"), "Should list changed files");
+  });
 
   // ===== UC4: Analyze server access patterns =====
-  await useCase(
-    "UC4: Analyze access log for performance issues",
-    "access.log",
-    async (path) => {
-      const r = await executor.executeFile({
-        path,
-        language: "javascript",
-        code: `
+  await useCase("UC4: Analyze access log for performance issues", "access.log", async (path) => {
+    const r = await executor.executeFile({
+      path,
+      language: "javascript",
+      code: `
           const lines = FILE_CONTENT.trim().split("\\n");
           const stats = { total: lines.length, errors: 0, slow: 0, endpoints: {}, methods: {} };
           let totalMs = 0;
@@ -192,11 +177,10 @@ async function main() {
           console.log("Top endpoints:");
           Object.entries(stats.endpoints).sort((a,b)=>b[1]-a[1]).slice(0,5).forEach(([p,c]) => console.log("  " + p + ": " + c));
         `,
-      });
-      assert.equal(r.exitCode, 0, "Should exit 0: " + r.stderr);
-      assert.ok(r.stdout.includes("requests"), "Should report request count");
-    },
-  );
+    });
+    assert.equal(r.exitCode, 0, "Should exit 0: " + r.stderr);
+    assert.ok(r.stdout.includes("requests"), "Should report request count");
+  });
 
   // ===== UC5: Audit dependencies =====
   await useCase(
@@ -272,14 +256,11 @@ fi
   );
 
   // ===== UC7: MCP tool discovery =====
-  await useCase(
-    "UC7: Discover MCP server capabilities",
-    "mcp-tools.json",
-    async (path) => {
-      const r = await executor.executeFile({
-        path,
-        language: "javascript",
-        code: `
+  await useCase("UC7: Discover MCP server capabilities", "mcp-tools.json", async (path) => {
+    const r = await executor.executeFile({
+      path,
+      language: "javascript",
+      code: `
           const tools = JSON.parse(FILE_CONTENT);
           // Group by category (infer from name prefix)
           const groups = {};
@@ -298,11 +279,10 @@ fi
             });
           });
         `,
-      });
-      assert.equal(r.exitCode, 0, "Should exit 0: " + r.stderr);
-      assert.ok(r.stdout.includes("tools"), "Should list tools");
-    },
-  );
+    });
+    assert.equal(r.exitCode, 0, "Should exit 0: " + r.stderr);
+    assert.ok(r.stdout.includes("tools"), "Should list tools");
+  });
 
   // ===== UC8: Understand source code structure =====
   await useCase(
@@ -343,14 +323,11 @@ fi
   );
 
   // ===== UC9: Git history analysis =====
-  await useCase(
-    "UC9: Analyze git log for team activity",
-    "git-log.txt",
-    async (path) => {
-      const r = await executor.executeFile({
-        path,
-        language: "javascript",
-        code: `
+  await useCase("UC9: Analyze git log for team activity", "git-log.txt", async (path) => {
+    const r = await executor.executeFile({
+      path,
+      language: "javascript",
+      code: `
           const lines = FILE_CONTENT.trim().split("\\n");
           const authors = {};
           const types = {};
@@ -377,22 +354,18 @@ fi
           console.log("\\nBusiest days:");
           Object.entries(daily).sort((a,b)=>b[1]-a[1]).slice(0,3).forEach(([d,c]) => console.log("  " + d + ": " + c + " commits"));
         `,
-      });
-      assert.equal(r.exitCode, 0, "Should exit 0: " + r.stderr);
-      assert.ok(r.stdout.includes("commits"), "Should report commit count");
-    },
-  );
+    });
+    assert.equal(r.exitCode, 0, "Should exit 0: " + r.stderr);
+    assert.ok(r.stdout.includes("commits"), "Should report commit count");
+  });
 
   // ===== UC10: CSV analytics with Python =====
   if (runtimes.python) {
-    await useCase(
-      "UC10: Analyze analytics CSV with Python",
-      "analytics.csv",
-      async (path) => {
-        const r = await executor.executeFile({
-          path,
-          language: "python",
-          code: `
+    await useCase("UC10: Analyze analytics CSV with Python", "analytics.csv", async (path) => {
+      const r = await executor.executeFile({
+        path,
+        language: "python",
+        code: `
 import csv, io
 from collections import Counter
 
@@ -422,11 +395,10 @@ print(f"\\nSlowest (avg ms):")
 for a, ds in sorted(by_action_duration.items(), key=lambda x: -sum(x[1])/len(x[1])):
     print(f"  {a}: {sum(ds)/len(ds):.0f}ms")
           `,
-        });
-        assert.equal(r.exitCode, 0, "Should exit 0: " + r.stderr);
-        assert.ok(r.stdout.includes("events"), "Should report event count");
-      },
-    );
+      });
+      assert.equal(r.exitCode, 0, "Should exit 0: " + r.stderr);
+      assert.ok(r.stdout.includes("events"), "Should report event count");
+    });
   }
 
   // ===== UC11: API response processing =====
@@ -469,9 +441,7 @@ for a, ds in sorted(by_action_duration.items(), key=lambda x: -sum(x[1])/len(x[1
 
   // ===== SUMMARY =====
   console.log("\n" + "=".repeat(60));
-  console.log(
-    `Use Cases: ${passed} passed, ${failed} failed (${passed + failed} total)`,
-  );
+  console.log(`Use Cases: ${passed} passed, ${failed} failed (${passed + failed} total)`);
   console.log("=".repeat(60));
 
   if (failed > 0) process.exit(1);

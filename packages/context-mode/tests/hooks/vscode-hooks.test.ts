@@ -22,7 +22,11 @@ interface HookResult {
   stderr: string;
 }
 
-function runHook(hookFile: string, input: Record<string, unknown>, env?: Record<string, string>): HookResult {
+function runHook(
+  hookFile: string,
+  input: Record<string, unknown>,
+  env?: Record<string, string>,
+): HookResult {
   const result = spawnSync("node", [join(HOOKS_DIR, hookFile)], {
     input: JSON.stringify(input),
     encoding: "utf-8",
@@ -46,9 +50,7 @@ describe("createSessionLoaders — bundle directory resolution", () => {
     //   fileURLToPath(new URL(".", import.meta.url)) → always has trailing /
     const hookDirWithSlash = join(hooksDir, "vscode-copilot") + "/";
 
-    const { createSessionLoaders } = await import(
-      join(hooksDir, "session-loaders.mjs")
-    );
+    const { createSessionLoaders } = await import(join(hooksDir, "session-loaders.mjs"));
     const loaders = createSessionLoaders(hookDirWithSlash);
 
     // Must not throw ERR_MODULE_NOT_FOUND — bundles live in hooks/, not hooks/vscode-copilot/
@@ -56,24 +58,23 @@ describe("createSessionLoaders — bundle directory resolution", () => {
     expect(mod.SessionDB).toBeDefined();
   });
 
-  test.skipIf(process.platform !== "win32")("resolves bundles when hookDir has trailing backslash (Windows)", async () => {
-    const hookDirWithBackslash = join(hooksDir, "vscode-copilot") + "\\";
+  test.skipIf(process.platform !== "win32")(
+    "resolves bundles when hookDir has trailing backslash (Windows)",
+    async () => {
+      const hookDirWithBackslash = join(hooksDir, "vscode-copilot") + "\\";
 
-    const { createSessionLoaders } = await import(
-      join(hooksDir, "session-loaders.mjs")
-    );
-    const loaders = createSessionLoaders(hookDirWithBackslash);
+      const { createSessionLoaders } = await import(join(hooksDir, "session-loaders.mjs"));
+      const loaders = createSessionLoaders(hookDirWithBackslash);
 
-    const mod = await loaders.loadSessionDB();
-    expect(mod.SessionDB).toBeDefined();
-  });
+      const mod = await loaders.loadSessionDB();
+      expect(mod.SessionDB).toBeDefined();
+    },
+  );
 
   test("resolves bundles when hookDir has no trailing separator", async () => {
     const hookDirClean = join(hooksDir, "vscode-copilot");
 
-    const { createSessionLoaders } = await import(
-      join(hooksDir, "session-loaders.mjs")
-    );
+    const { createSessionLoaders } = await import(join(hooksDir, "session-loaders.mjs"));
     const loaders = createSessionLoaders(hookDirClean);
 
     const mod = await loaders.loadSessionDB();
@@ -81,9 +82,7 @@ describe("createSessionLoaders — bundle directory resolution", () => {
   });
 
   test("resolves bundles from root hooks dir (non-vscode path)", async () => {
-    const { createSessionLoaders } = await import(
-      join(hooksDir, "session-loaders.mjs")
-    );
+    const { createSessionLoaders } = await import(join(hooksDir, "session-loaders.mjs"));
     const loaders = createSessionLoaders(hooksDir);
 
     const mod = await loaders.loadSessionDB();
@@ -105,9 +104,21 @@ describe("VS Code Copilot hooks", () => {
   });
 
   afterAll(() => {
-    try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* best effort */ }
-    try { if (existsSync(dbPath)) unlinkSync(dbPath); } catch { /* best effort */ }
-    try { if (existsSync(eventsPath)) unlinkSync(eventsPath); } catch { /* best effort */ }
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+    try {
+      if (existsSync(dbPath)) unlinkSync(dbPath);
+    } catch {
+      /* best effort */
+    }
+    try {
+      if (existsSync(eventsPath)) unlinkSync(eventsPath);
+    } catch {
+      /* best effort */
+    }
   });
 
   // Clean file-based guidance throttle markers between tests.
@@ -117,7 +128,11 @@ describe("VS Code Copilot hooks", () => {
     const wid = process.env.VITEST_WORKER_ID;
     const suffix = wid ? `${process.pid}-w${wid}` : String(process.pid);
     const guidanceDir = resolve(tmpdir(), `context-mode-guidance-${suffix}`);
-    try { rmSync(guidanceDir, { recursive: true, force: true }); } catch { /* best effort */ }
+    try {
+      rmSync(guidanceDir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
   });
 
   const vscodeEnv = () => ({ VSCODE_CWD: tempDir });
@@ -126,10 +141,14 @@ describe("VS Code Copilot hooks", () => {
 
   describe("pretooluse.mjs", () => {
     test("run_in_terminal: injects BASH_GUIDANCE additionalContext", () => {
-      const result = runHook("pretooluse.mjs", {
-        tool_name: "run_in_terminal",
-        tool_input: { command: "npm test" },
-      }, vscodeEnv());
+      const result = runHook(
+        "pretooluse.mjs",
+        {
+          tool_name: "run_in_terminal",
+          tool_input: { command: "npm test" },
+        },
+        vscodeEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       const out = JSON.parse(result.stdout);
@@ -137,10 +156,14 @@ describe("VS Code Copilot hooks", () => {
     });
 
     test("run_in_terminal: curl is redirected to echo", () => {
-      const result = runHook("pretooluse.mjs", {
-        tool_name: "run_in_terminal",
-        tool_input: { command: "curl https://example.com" },
-      }, vscodeEnv());
+      const result = runHook(
+        "pretooluse.mjs",
+        {
+          tool_name: "run_in_terminal",
+          tool_input: { command: "curl https://example.com" },
+        },
+        vscodeEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       const out = JSON.parse(result.stdout);
@@ -149,10 +172,14 @@ describe("VS Code Copilot hooks", () => {
     });
 
     test("run_in_terminal: safe short command passes through with guidance", () => {
-      const result = runHook("pretooluse.mjs", {
-        tool_name: "run_in_terminal",
-        tool_input: { command: "git status" },
-      }, vscodeEnv());
+      const result = runHook(
+        "pretooluse.mjs",
+        {
+          tool_name: "run_in_terminal",
+          tool_input: { command: "git status" },
+        },
+        vscodeEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       const out = JSON.parse(result.stdout);
@@ -164,35 +191,47 @@ describe("VS Code Copilot hooks", () => {
 
   describe("posttooluse.mjs", () => {
     test("captures Read event silently", () => {
-      const result = runHook("posttooluse.mjs", {
-        tool_name: "Read",
-        tool_input: { file_path: "/src/main.ts" },
-        tool_response: "file contents",
-        sessionId: "test-vscode-session",
-      }, vscodeEnv());
+      const result = runHook(
+        "posttooluse.mjs",
+        {
+          tool_name: "Read",
+          tool_input: { file_path: "/src/main.ts" },
+          tool_response: "file contents",
+          sessionId: "test-vscode-session",
+        },
+        vscodeEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe("");
     });
 
     test("captures Write event silently", () => {
-      const result = runHook("posttooluse.mjs", {
-        tool_name: "Write",
-        tool_input: { file_path: "/src/new.ts", content: "code" },
-        sessionId: "test-vscode-session",
-      }, vscodeEnv());
+      const result = runHook(
+        "posttooluse.mjs",
+        {
+          tool_name: "Write",
+          tool_input: { file_path: "/src/new.ts", content: "code" },
+          sessionId: "test-vscode-session",
+        },
+        vscodeEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe("");
     });
 
     test("supports sessionId camelCase field", () => {
-      const result = runHook("posttooluse.mjs", {
-        tool_name: "Bash",
-        tool_input: { command: "git log --oneline -5" },
-        tool_response: "abc1234 feat: add feature",
-        sessionId: "test-vscode-camelcase",
-      }, vscodeEnv());
+      const result = runHook(
+        "posttooluse.mjs",
+        {
+          tool_name: "Bash",
+          tool_input: { command: "git log --oneline -5" },
+          tool_response: "abc1234 feat: add feature",
+          sessionId: "test-vscode-camelcase",
+        },
+        vscodeEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe("");
@@ -208,9 +247,13 @@ describe("VS Code Copilot hooks", () => {
 
   describe("precompact.mjs", () => {
     test("runs silently with no events", () => {
-      const result = runHook("precompact.mjs", {
-        sessionId: "test-vscode-precompact",
-      }, vscodeEnv());
+      const result = runHook(
+        "precompact.mjs",
+        {
+          sessionId: "test-vscode-precompact",
+        },
+        vscodeEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe("");
@@ -226,10 +269,14 @@ describe("VS Code Copilot hooks", () => {
 
   describe("sessionstart.mjs", () => {
     test("startup: outputs routing block", () => {
-      const result = runHook("sessionstart.mjs", {
-        source: "startup",
-        sessionId: "test-vscode-startup",
-      }, vscodeEnv());
+      const result = runHook(
+        "sessionstart.mjs",
+        {
+          source: "startup",
+          sessionId: "test-vscode-startup",
+        },
+        vscodeEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("SessionStart");
@@ -237,30 +284,42 @@ describe("VS Code Copilot hooks", () => {
     });
 
     test("compact: outputs routing block", () => {
-      const result = runHook("sessionstart.mjs", {
-        source: "compact",
-        sessionId: "test-vscode-compact",
-      }, vscodeEnv());
+      const result = runHook(
+        "sessionstart.mjs",
+        {
+          source: "compact",
+          sessionId: "test-vscode-compact",
+        },
+        vscodeEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("SessionStart");
     });
 
     test("clear: outputs routing block only", () => {
-      const result = runHook("sessionstart.mjs", {
-        source: "clear",
-        sessionId: "test-vscode-clear",
-      }, vscodeEnv());
+      const result = runHook(
+        "sessionstart.mjs",
+        {
+          source: "clear",
+          sessionId: "test-vscode-clear",
+        },
+        vscodeEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("SessionStart");
     });
 
     test("supports sessionId camelCase in session start", () => {
-      const result = runHook("sessionstart.mjs", {
-        source: "startup",
-        sessionId: "test-vscode-camelcase-start",
-      }, vscodeEnv());
+      const result = runHook(
+        "sessionstart.mjs",
+        {
+          source: "startup",
+          sessionId: "test-vscode-camelcase-start",
+        },
+        vscodeEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("SessionStart");
@@ -275,30 +334,46 @@ describe("VS Code Copilot hooks", () => {
       const env = vscodeEnv();
 
       // 1. Capture events via PostToolUse
-      runHook("posttooluse.mjs", {
-        tool_name: "Read",
-        tool_input: { file_path: "/src/app.ts" },
-        tool_response: "export default {}",
-        sessionId,
-      }, env);
+      runHook(
+        "posttooluse.mjs",
+        {
+          tool_name: "Read",
+          tool_input: { file_path: "/src/app.ts" },
+          tool_response: "export default {}",
+          sessionId,
+        },
+        env,
+      );
 
-      runHook("posttooluse.mjs", {
-        tool_name: "Edit",
-        tool_input: { file_path: "/src/app.ts", old_string: "{}", new_string: "{ foo: 1 }" },
-        sessionId,
-      }, env);
+      runHook(
+        "posttooluse.mjs",
+        {
+          tool_name: "Edit",
+          tool_input: { file_path: "/src/app.ts", old_string: "{}", new_string: "{ foo: 1 }" },
+          sessionId,
+        },
+        env,
+      );
 
       // 2. Build snapshot via PreCompact
-      const precompactResult = runHook("precompact.mjs", {
-        sessionId,
-      }, env);
+      const precompactResult = runHook(
+        "precompact.mjs",
+        {
+          sessionId,
+        },
+        env,
+      );
       expect(precompactResult.exitCode).toBe(0);
 
       // 3. SessionStart compact should include session knowledge
-      const startResult = runHook("sessionstart.mjs", {
-        source: "compact",
-        sessionId,
-      }, env);
+      const startResult = runHook(
+        "sessionstart.mjs",
+        {
+          source: "compact",
+          sessionId,
+        },
+        env,
+      );
       expect(startResult.exitCode).toBe(0);
       expect(startResult.stdout).toContain("SessionStart");
     });

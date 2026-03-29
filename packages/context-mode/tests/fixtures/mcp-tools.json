@@ -7,7 +7,10 @@
       "properties": {
         "pattern": { "type": "string", "description": "Regex pattern to search for" },
         "path": { "type": "string", "description": "Directory to search in" },
-        "fileType": { "type": "string", "description": "File extension filter (e.g. ts, tsx, json)" }
+        "fileType": {
+          "type": "string",
+          "description": "File extension filter (e.g. ts, tsx, json)"
+        }
       },
       "required": ["pattern"]
     }
@@ -131,7 +134,11 @@
       "type": "object",
       "properties": {
         "message": { "type": "string", "description": "Commit message" },
-        "files": { "type": "array", "items": { "type": "string" }, "description": "Files to stage before committing" }
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Files to stage before committing"
+        }
       },
       "required": ["message"]
     }
@@ -143,7 +150,11 @@
       "type": "object",
       "properties": {
         "name": { "type": "string", "description": "Branch name" },
-        "action": { "type": "string", "enum": ["list", "create", "delete", "checkout"], "description": "Branch operation" }
+        "action": {
+          "type": "string",
+          "enum": ["list", "create", "delete", "checkout"],
+          "description": "Branch operation"
+        }
       }
     }
   },
@@ -188,7 +199,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "environment": { "type": "string", "enum": ["staging", "production"], "description": "Target environment" },
+        "environment": {
+          "type": "string",
+          "enum": ["staging", "production"],
+          "description": "Target environment"
+        },
         "dryRun": { "type": "boolean", "description": "Preview the deployment without executing" }
       },
       "required": ["environment"]
@@ -200,7 +215,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "action": { "type": "string", "enum": ["up", "down", "status", "reset"], "description": "Migration action" },
+        "action": {
+          "type": "string",
+          "enum": ["up", "down", "status", "reset"],
+          "description": "Migration action"
+        },
         "name": { "type": "string", "description": "Migration name for creating new migrations" }
       },
       "required": ["action"]
@@ -212,7 +231,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "environment": { "type": "string", "enum": ["development", "test"], "description": "Target environment" },
+        "environment": {
+          "type": "string",
+          "enum": ["development", "test"],
+          "description": "Target environment"
+        },
         "truncate": { "type": "boolean", "description": "Clear existing data before seeding" }
       }
     }
@@ -224,7 +247,11 @@
       "type": "object",
       "properties": {
         "path": { "type": "string", "description": "Path for the new file" },
-        "template": { "type": "string", "enum": ["component", "hook", "api-route", "test", "service"], "description": "Template to use" },
+        "template": {
+          "type": "string",
+          "enum": ["component", "hook", "api-route", "test", "service"],
+          "description": "Template to use"
+        },
         "name": { "type": "string", "description": "Name for the generated entity" }
       },
       "required": ["path", "template", "name"]
@@ -263,7 +290,11 @@
       "type": "object",
       "properties": {
         "path": { "type": "string", "description": "File path to get diagnostics for" },
-        "severity": { "type": "string", "enum": ["error", "warning", "info"], "description": "Minimum severity level" }
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning", "info"],
+          "description": "Minimum severity level"
+        }
       }
     }
   },
@@ -273,7 +304,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "packages": { "type": "array", "items": { "type": "string" }, "description": "Package names to install" },
+        "packages": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Package names to install"
+        },
         "dev": { "type": "boolean", "description": "Install as dev dependency" }
       },
       "required": ["packages"]
@@ -285,7 +320,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "packages": { "type": "array", "items": { "type": "string" }, "description": "Package names to remove" }
+        "packages": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Package names to remove"
+        }
       },
       "required": ["packages"]
     }
@@ -296,9 +335,17 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "source": { "type": "string", "enum": ["app", "server", "database", "worker"], "description": "Log source" },
+        "source": {
+          "type": "string",
+          "enum": ["app", "server", "database", "worker"],
+          "description": "Log source"
+        },
         "lines": { "type": "number", "description": "Number of lines to show" },
-        "level": { "type": "string", "enum": ["debug", "info", "warn", "error"], "description": "Minimum log level" },
+        "level": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "description": "Minimum log level"
+        },
         "since": { "type": "string", "description": "Show logs since timestamp" }
       }
     }
@@ -335,7 +382,11 @@
       "type": "object",
       "properties": {
         "url": { "type": "string", "description": "API endpoint URL" },
-        "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"], "description": "HTTP method" },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+          "description": "HTTP method"
+        },
         "headers": { "type": "object", "description": "Request headers" },
         "body": { "type": "string", "description": "Request body as JSON string" }
       },
@@ -348,7 +399,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "source": { "type": "string", "enum": ["prisma", "openapi", "graphql", "json-schema"], "description": "Source to generate types from" },
+        "source": {
+          "type": "string",
+          "enum": ["prisma", "openapi", "graphql", "json-schema"],
+          "description": "Source to generate types from"
+        },
         "input": { "type": "string", "description": "Input file or URL" },
         "output": { "type": "string", "description": "Output file path" }
       },
@@ -361,7 +416,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "format": { "type": "string", "enum": ["tree", "json", "html"], "description": "Output format" },
+        "format": {
+          "type": "string",
+          "enum": ["tree", "json", "html"],
+          "description": "Output format"
+        },
         "limit": { "type": "string", "description": "Size limit (e.g. '500kb')" }
       }
     }
@@ -372,7 +431,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "check": { "type": "string", "enum": ["outdated", "unused", "vulnerabilities", "licenses"], "description": "Type of check" }
+        "check": {
+          "type": "string",
+          "enum": ["outdated", "unused", "vulnerabilities", "licenses"],
+          "description": "Type of check"
+        }
       },
       "required": ["check"]
     }
@@ -408,7 +471,11 @@
       "type": "object",
       "properties": {
         "query": { "type": "string", "description": "Search query" },
-        "scope": { "type": "string", "enum": ["api", "guides", "changelog", "all"], "description": "Documentation scope" }
+        "scope": {
+          "type": "string",
+          "enum": ["api", "guides", "changelog", "all"],
+          "description": "Documentation scope"
+        }
       },
       "required": ["query"]
     }
@@ -419,10 +486,18 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "action": { "type": "string", "enum": ["list", "get", "set", "delete"], "description": "Action to perform" },
+        "action": {
+          "type": "string",
+          "enum": ["list", "get", "set", "delete"],
+          "description": "Action to perform"
+        },
         "key": { "type": "string", "description": "Environment variable key" },
         "value": { "type": "string", "description": "Environment variable value" },
-        "environment": { "type": "string", "enum": ["development", "staging", "production"], "description": "Target environment" }
+        "environment": {
+          "type": "string",
+          "enum": ["development", "staging", "production"],
+          "description": "Target environment"
+        }
       },
       "required": ["action"]
     }
@@ -455,7 +530,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "action": { "type": "string", "enum": ["up", "down", "restart", "logs", "ps"], "description": "Docker Compose action" },
+        "action": {
+          "type": "string",
+          "enum": ["up", "down", "restart", "logs", "ps"],
+          "description": "Docker Compose action"
+        },
         "service": { "type": "string", "description": "Specific service to target" },
         "detach": { "type": "boolean", "description": "Run in detached mode" }
       },
@@ -468,7 +547,11 @@
     "inputSchema": {
       "type": "object",
       "properties": {
-        "format": { "type": "string", "enum": ["openapi", "markdown", "html"], "description": "Output format" },
+        "format": {
+          "type": "string",
+          "enum": ["openapi", "markdown", "html"],
+          "description": "Output format"
+        },
         "output": { "type": "string", "description": "Output file path" },
         "title": { "type": "string", "description": "API documentation title" }
       }

@@ -179,12 +179,14 @@ function extractCwd(input: HookInput): SessionEvent[] {
   if (!cdMatch) return [];
 
   const dir = cdMatch[2] ?? cdMatch[3] ?? cdMatch[4] ?? "";
-  return [{
-    type: "cwd",
-    category: "cwd",
-    data: truncate(dir),
-    priority: 2,
-  }];
+  return [
+    {
+      type: "cwd",
+      category: "cwd",
+      data: truncate(dir),
+      priority: 2,
+    },
+  ];
 }
 
 /**
@@ -199,17 +201,18 @@ function extractError(input: HookInput): SessionEvent[] {
   const isErrorFlag = tool_output?.isError === true;
 
   const isBashError =
-    tool_name === "Bash" &&
-    /exit code [1-9]|error:|Error:|FAIL|failed/i.test(response);
+    tool_name === "Bash" && /exit code [1-9]|error:|Error:|FAIL|failed/i.test(response);
 
   if (!isBashError && !isErrorFlag) return [];
 
-  return [{
-    type: "error_tool",
-    category: "error",
-    data: truncate(response, 300),
-    priority: 2,
-  }];
+  return [
+    {
+      type: "error_tool",
+      category: "error",
+      data: truncate(response, 300),
+      priority: 2,
+    },
+  ];
 }
 
 /**
@@ -242,15 +245,17 @@ function extractGit(input: HookInput): SessionEvent[] {
   if (input.tool_name !== "Bash") return [];
 
   const cmd = String(input.tool_input["command"] ?? "");
-  const match = GIT_PATTERNS.find(p => p.pattern.test(cmd));
+  const match = GIT_PATTERNS.find((p) => p.pattern.test(cmd));
   if (!match) return [];
 
-  return [{
-    type: "git",
-    category: "git",
-    data: truncate(match.operation),
-    priority: 2,
-  }];
+  return [
+    {
+      type: "git",
+      category: "git",
+      data: truncate(match.operation),
+      priority: 2,
+    },
+  ];
 }
 
 /**
@@ -262,16 +267,21 @@ function extractTask(input: HookInput): SessionEvent[] {
   if (!TASK_TOOLS.has(input.tool_name)) return [];
 
   // Store tool name as type so create vs update can be reliably distinguished
-  const type = input.tool_name === "TaskUpdate" ? "task_update"
-    : input.tool_name === "TaskCreate" ? "task_create"
-    : "task"; // TodoWrite fallback
+  const type =
+    input.tool_name === "TaskUpdate"
+      ? "task_update"
+      : input.tool_name === "TaskCreate"
+        ? "task_create"
+        : "task"; // TodoWrite fallback
 
-  return [{
-    type,
-    category: "task",
-    data: truncate(JSON.stringify(input.tool_input), 300),
-    priority: 1,
-  }];
+  return [
+    {
+      type,
+      category: "task",
+      data: truncate(JSON.stringify(input.tool_input), 300),
+      priority: 1,
+    },
+  ];
 }
 
 /**
@@ -287,12 +297,14 @@ function extractTask(input: HookInput): SessionEvent[] {
  */
 function extractPlan(input: HookInput): SessionEvent[] {
   if (input.tool_name === "EnterPlanMode") {
-    return [{
-      type: "plan_enter",
-      category: "plan",
-      data: "entered plan mode",
-      priority: 2,
-    }];
+    return [
+      {
+        type: "plan_enter",
+        category: "plan",
+        data: "entered plan mode",
+        priority: 2,
+      },
+    ];
   }
 
   if (input.tool_name === "ExitPlanMode") {
@@ -300,12 +312,19 @@ function extractPlan(input: HookInput): SessionEvent[] {
 
     // Plan exit event with allowedPrompts detail
     const prompts = input.tool_input["allowedPrompts"];
-    const detail = Array.isArray(prompts) && prompts.length > 0
-      ? `exited plan mode (allowed: ${truncateAny(prompts.map((p: unknown) => {
-          if (typeof p === "object" && p !== null && "prompt" in p) return String((p as Record<string, unknown>).prompt);
-          return String(p);
-        }).join(", "), 200)})`
-      : "exited plan mode";
+    const detail =
+      Array.isArray(prompts) && prompts.length > 0
+        ? `exited plan mode (allowed: ${truncateAny(
+            prompts
+              .map((p: unknown) => {
+                if (typeof p === "object" && p !== null && "prompt" in p)
+                  return String((p as Record<string, unknown>).prompt);
+                return String(p);
+              })
+              .join(", "),
+            200,
+          )})`
+        : "exited plan mode";
     events.push({
       type: "plan_exit",
       category: "plan",
@@ -322,7 +341,11 @@ function extractPlan(input: HookInput): SessionEvent[] {
         data: "plan approved by user",
         priority: 1,
       });
-    } else if (response.includes("rejected") || response.includes("decline") || response.includes("denied")) {
+    } else if (
+      response.includes("rejected") ||
+      response.includes("decline") ||
+      response.includes("denied")
+    ) {
       events.push({
         type: "plan_rejected",
         category: "plan",
@@ -338,12 +361,14 @@ function extractPlan(input: HookInput): SessionEvent[] {
   if (input.tool_name === "Write" || input.tool_name === "Edit") {
     const filePath = String(input.tool_input["file_path"] ?? "");
     if (/[/\\]\.claude[/\\]plans[/\\]/.test(filePath)) {
-      return [{
-        type: "plan_file_write",
-        category: "plan",
-        data: truncate(`plan file: ${filePath.split(/[/\\]/).pop() ?? filePath}`),
-        priority: 2,
-      }];
+      return [
+        {
+          type: "plan_file_write",
+          category: "plan",
+          data: truncate(`plan file: ${filePath.split(/[/\\]/).pop() ?? filePath}`),
+          priority: 2,
+        },
+      ];
     }
   }
 
@@ -380,18 +405,20 @@ function extractEnv(input: HookInput): SessionEvent[] {
   if (input.tool_name !== "Bash") return [];
 
   const cmd = String(input.tool_input["command"] ?? "");
-  const isEnvCmd = ENV_PATTERNS.some(p => p.test(cmd));
+  const isEnvCmd = ENV_PATTERNS.some((p) => p.test(cmd));
   if (!isEnvCmd) return [];
 
   // Sanitize export commands to prevent secret leakage
   const sanitized = cmd.replace(/\bexport\s+(\w+)=\S*/g, "export $1=***");
 
-  return [{
-    type: "env",
-    category: "env",
-    data: truncate(sanitized),
-    priority: 2,
-  }];
+  return [
+    {
+      type: "env",
+      category: "env",
+      data: truncate(sanitized),
+      priority: 2,
+    },
+  ];
 }
 
 /**
@@ -402,12 +429,14 @@ function extractSkill(input: HookInput): SessionEvent[] {
   if (input.tool_name !== "Skill") return [];
 
   const skillName = String(input.tool_input["skill"] ?? "");
-  return [{
-    type: "skill",
-    category: "skill",
-    data: truncate(skillName),
-    priority: 3,
-  }];
+  return [
+    {
+      type: "skill",
+      category: "skill",
+      data: truncate(skillName),
+      priority: 3,
+    },
+  ];
 }
 
 /**
@@ -419,18 +448,23 @@ function extractSkill(input: HookInput): SessionEvent[] {
 function extractSubagent(input: HookInput): SessionEvent[] {
   if (input.tool_name !== "Agent") return [];
 
-  const prompt = truncate(String(input.tool_input["prompt"] ?? input.tool_input["description"] ?? ""), 200);
+  const prompt = truncate(
+    String(input.tool_input["prompt"] ?? input.tool_input["description"] ?? ""),
+    200,
+  );
   const response = input.tool_response ? truncate(String(input.tool_response), 300) : "";
   const isCompleted = response.length > 0;
 
-  return [{
-    type: isCompleted ? "subagent_completed" : "subagent_launched",
-    category: "subagent",
-    data: isCompleted
-      ? truncate(`[completed] ${prompt} → ${response}`, 300)
-      : truncate(`[launched] ${prompt}`, 300),
-    priority: isCompleted ? 2 : 3,
-  }];
+  return [
+    {
+      type: isCompleted ? "subagent_completed" : "subagent_launched",
+      category: "subagent",
+      data: isCompleted
+        ? truncate(`[completed] ${prompt} → ${response}`, 300)
+        : truncate(`[launched] ${prompt}`, 300),
+      priority: isCompleted ? 2 : 3,
+    },
+  ];
 }
 
 /**
@@ -449,12 +483,14 @@ function extractMcp(input: HookInput): SessionEvent[] {
   const firstArg = Object.values(tool_input).find((v): v is string => typeof v === "string");
   const argStr = firstArg ? `: ${truncate(String(firstArg), 100)}` : "";
 
-  return [{
-    type: "mcp",
-    category: "mcp",
-    data: truncate(`${toolShort}${argStr}`),
-    priority: 3,
-  }];
+  return [
+    {
+      type: "mcp",
+      category: "mcp",
+      data: truncate(`${toolShort}${argStr}`),
+      priority: 3,
+    },
+  ];
 }
 
 /**
@@ -465,21 +501,24 @@ function extractDecision(input: HookInput): SessionEvent[] {
   if (input.tool_name !== "AskUserQuestion") return [];
 
   const questions = input.tool_input["questions"];
-  const questionText = Array.isArray(questions) && questions.length > 0
-    ? String((questions[0] as Record<string, unknown>)["question"] ?? "")
-    : "";
+  const questionText =
+    Array.isArray(questions) && questions.length > 0
+      ? String((questions[0] as Record<string, unknown>)["question"] ?? "")
+      : "";
 
   const answer = truncate(String(input.tool_response ?? ""), 150);
   const summary = questionText
     ? `Q: ${truncate(questionText, 120)} → A: ${answer}`
     : `answer: ${answer}`;
 
-  return [{
-    type: "decision_question",
-    category: "decision",
-    data: truncate(summary),
-    priority: 2,
-  }];
+  return [
+    {
+      type: "decision_question",
+      category: "decision",
+      data: truncate(summary),
+      priority: 2,
+    },
+  ];
 }
 
 /**
@@ -490,12 +529,14 @@ function extractWorktree(input: HookInput): SessionEvent[] {
   if (input.tool_name !== "EnterWorktree") return [];
 
   const name = String(input.tool_input["name"] ?? "unnamed");
-  return [{
-    type: "worktree",
-    category: "env",
-    data: truncate(`entered worktree: ${name}`),
-    priority: 2,
-  }];
+  return [
+    {
+      type: "worktree",
+      category: "env",
+      data: truncate(`entered worktree: ${name}`),
+      priority: 2,
+    },
+  ];
 }
 
 // ── User-message extractors ────────────────────────────────────────────────
@@ -514,15 +555,17 @@ const DECISION_PATTERNS: RegExp[] = [
 ];
 
 function extractUserDecision(message: string): SessionEvent[] {
-  const isDecision = DECISION_PATTERNS.some(p => p.test(message));
+  const isDecision = DECISION_PATTERNS.some((p) => p.test(message));
   if (!isDecision) return [];
 
-  return [{
-    type: "decision",
-    category: "decision",
-    data: truncate(message, 300),
-    priority: 2,
-  }];
+  return [
+    {
+      type: "decision",
+      category: "decision",
+      data: truncate(message, 300),
+      priority: 2,
+    },
+  ];
 }
 
 /**
@@ -538,15 +581,17 @@ const ROLE_PATTERNS: RegExp[] = [
 ];
 
 function extractRole(message: string): SessionEvent[] {
-  const isRole = ROLE_PATTERNS.some(p => p.test(message));
+  const isRole = ROLE_PATTERNS.some((p) => p.test(message));
   if (!isRole) return [];
 
-  return [{
-    type: "role",
-    category: "role",
-    data: truncate(message, 300),
-    priority: 3,
-  }];
+  return [
+    {
+      type: "role",
+      category: "role",
+      data: truncate(message, 300),
+      priority: 3,
+    },
+  ];
 }
 
 /**
@@ -555,22 +600,30 @@ function extractRole(message: string): SessionEvent[] {
  */
 
 const INTENT_PATTERNS: Array<{ mode: string; pattern: RegExp }> = [
-  { mode: "investigate", pattern: /\b(why|how does|explain|understand|what is|analyze|debug|look into)\b/i },
-  { mode: "implement",   pattern: /\b(create|add|build|implement|write|make|develop|fix)\b/i },
-  { mode: "discuss",     pattern: /\b(think about|consider|should we|what if|pros and cons|opinion)\b/i },
-  { mode: "review",      pattern: /\b(review|check|audit|verify|test|validate)\b/i },
+  {
+    mode: "investigate",
+    pattern: /\b(why|how does|explain|understand|what is|analyze|debug|look into)\b/i,
+  },
+  { mode: "implement", pattern: /\b(create|add|build|implement|write|make|develop|fix)\b/i },
+  {
+    mode: "discuss",
+    pattern: /\b(think about|consider|should we|what if|pros and cons|opinion)\b/i,
+  },
+  { mode: "review", pattern: /\b(review|check|audit|verify|test|validate)\b/i },
 ];
 
 function extractIntent(message: string): SessionEvent[] {
   const match = INTENT_PATTERNS.find(({ pattern }) => pattern.test(message));
   if (!match) return [];
 
-  return [{
-    type: "intent",
-    category: "intent",
-    data: truncate(match.mode),
-    priority: 4,
-  }];
+  return [
+    {
+      type: "intent",
+      category: "intent",
+      data: truncate(match.mode),
+      priority: 4,
+    },
+  ];
 }
 
 /**
@@ -580,12 +633,14 @@ function extractIntent(message: string): SessionEvent[] {
 function extractData(message: string): SessionEvent[] {
   if (message.length <= 1024) return [];
 
-  return [{
-    type: "data",
-    category: "data",
-    data: truncate(message, 200),
-    priority: 4,
-  }];
+  return [
+    {
+      type: "data",
+      category: "data",
+      data: truncate(message, 200),
+      priority: 4,
+    },
+  ];
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────

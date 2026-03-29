@@ -39,9 +39,7 @@ export const PRE_TOOL_USE_MATCHERS = [
 export const PRE_TOOL_USE_MATCHER_PATTERN = PRE_TOOL_USE_MATCHERS.join("|");
 
 /** Required hooks for native Cursor support. */
-export const REQUIRED_HOOKS: HookType[] = [
-  HOOK_TYPES.PRE_TOOL_USE,
-];
+export const REQUIRED_HOOKS: HookType[] = [HOOK_TYPES.PRE_TOOL_USE];
 
 /** Optional hooks that improve behavior but aren't strictly required. */
 export const OPTIONAL_HOOKS: HookType[] = [HOOK_TYPES.POST_TOOL_USE];
@@ -70,8 +68,9 @@ export function isContextModeHook(
 
   const wrappedEntry = entry as { hooks?: Array<{ command?: string }> };
   return (
-    wrappedEntry.hooks?.some((hook: { command?: string }) =>
-      hook.command?.includes(scriptName) || hook.command?.includes(cliCommand),
+    wrappedEntry.hooks?.some(
+      (hook: { command?: string }) =>
+        hook.command?.includes(scriptName) || hook.command?.includes(cliCommand),
     ) ?? false
   );
 }

@@ -25,11 +25,11 @@ function getWorktreeSuffix() {
   }
   try {
     const cwd = process.cwd();
-    const mainWorktree = execFileSync(
-      "git",
-      ["worktree", "list", "--porcelain"],
-      { encoding: "utf-8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"] },
-    )
+    const mainWorktree = execFileSync("git", ["worktree", "list", "--porcelain"], {
+      encoding: "utf-8",
+      timeout: 2000,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
       .split(/\r?\n/)
       .find((l) => l.startsWith("worktree "))
       ?.replace("worktree ", "")
@@ -74,8 +74,8 @@ export const CURSOR_OPTS = {
 /** Kiro CLI platform options. */
 export const KIRO_OPTS = {
   configDir: ".kiro",
-  projectDirEnv: undefined,   // Kiro CLI provides cwd in hook stdin, no env var
-  sessionIdEnv: undefined,    // No session ID env var — uses ppid fallback
+  projectDirEnv: undefined, // Kiro CLI provides cwd in hook stdin, no env var
+  sessionIdEnv: undefined, // No session ID env var — uses ppid fallback
 };
 
 /**
@@ -85,7 +85,9 @@ export function readStdin() {
   return new Promise((resolve, reject) => {
     let data = "";
     process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => { data += chunk; });
+    process.stdin.on("data", (chunk) => {
+      data += chunk;
+    });
     process.stdin.on("end", () => resolve(data.replace(/^\uFEFF/, "")));
     process.stdin.on("error", reject);
     process.stdin.resume();

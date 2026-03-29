@@ -42,7 +42,10 @@ describe("formatDecision integration", () => {
   });
 
   it("claude-code modify flows through with permissionDecision", () => {
-    const result = formatDecision("claude-code", { action: "modify", updatedInput: { command: "echo hi" } });
+    const result = formatDecision("claude-code", {
+      action: "modify",
+      updatedInput: { command: "echo hi" },
+    });
     expect(result.hookSpecificOutput.permissionDecision).toBe("allow");
     expect(result.hookSpecificOutput.updatedInput).toEqual({ command: "echo hi" });
   });

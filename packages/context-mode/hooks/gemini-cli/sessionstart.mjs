@@ -15,10 +15,20 @@ import { createRoutingBlock } from "../routing-block.mjs";
 import { createToolNamer } from "../core/tool-naming.mjs";
 
 const ROUTING_BLOCK = createRoutingBlock(createToolNamer("gemini-cli"));
-import { writeSessionEventsFile, buildSessionDirective, getSessionEvents, getLatestSessionEvents } from "../session-directive.mjs";
 import {
-  readStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath,
-  getProjectDir, GEMINI_OPTS,
+  writeSessionEventsFile,
+  buildSessionDirective,
+  getSessionEvents,
+  getLatestSessionEvents,
+} from "../session-directive.mjs";
+import {
+  readStdin,
+  getSessionId,
+  getSessionDBPath,
+  getSessionEventsPath,
+  getCleanupFlagPath,
+  getProjectDir,
+  GEMINI_OPTS,
 } from "../session-helpers.mjs";
 import { join, dirname } from "node:path";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
@@ -55,7 +65,11 @@ try {
 
     db.close();
   } else if (source === "resume") {
-    try { unlinkSync(getCleanupFlagPath(OPTS)); } catch { /* no flag */ }
+    try {
+      unlinkSync(getCleanupFlagPath(OPTS));
+    } catch {
+      /* no flag */
+    }
 
     const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
     const dbPath = getSessionDBPath(OPTS);
@@ -72,18 +86,29 @@ try {
     const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
     const dbPath = getSessionDBPath(OPTS);
     const db = new SessionDB({ dbPath });
-    try { unlinkSync(getSessionEventsPath(OPTS)); } catch { /* no stale file */ }
+    try {
+      unlinkSync(getSessionEventsPath(OPTS));
+    } catch {
+      /* no stale file */
+    }
 
     const cleanupFlag = getCleanupFlagPath(OPTS);
     let previousWasFresh = false;
-    try { readFileSync(cleanupFlag); previousWasFresh = true; } catch { /* no flag */ }
+    try {
+      readFileSync(cleanupFlag);
+      previousWasFresh = true;
+    } catch {
+      /* no flag */
+    }
 
     if (previousWasFresh) {
       db.cleanupOldSessions(0);
     } else {
       db.cleanupOldSessions(7);
     }
-    db.db.exec(`DELETE FROM session_events WHERE session_id NOT IN (SELECT session_id FROM session_meta)`);
+    db.db.exec(
+      `DELETE FROM session_events WHERE session_id NOT IN (SELECT session_id FROM session_meta)`,
+    );
     writeFileSync(cleanupFlag, new Date().toISOString(), "utf-8");
 
     const sessionId = getSessionId(input, OPTS);
@@ -92,22 +117,31 @@ try {
 
     // Auto-write GEMINI.md on startup if missing or not merged yet
     try {
-      const { GeminiCLIAdapter } = await import(pathToFileURL(join(HOOK_DIR, "..", "..", "build", "adapters", "gemini-cli", "index.js")).href);
+      const { GeminiCLIAdapter } = await import(
+        pathToFileURL(join(HOOK_DIR, "..", "..", "build", "adapters", "gemini-cli", "index.js"))
+          .href
+      );
       new GeminiCLIAdapter().writeRoutingInstructions(projectDir, join(HOOK_DIR, "..", ".."));
-    } catch { /* best effort — don't block session start */ }
+    } catch {
+      /* best effort — don't block session start */
+    }
 
-    const ruleFilePaths = [
-      join(homedir(), ".gemini", "GEMINI.md"),
-      join(projectDir, "GEMINI.md"),
-    ];
+    const ruleFilePaths = [join(homedir(), ".gemini", "GEMINI.md"), join(projectDir, "GEMINI.md")];
     for (const p of ruleFilePaths) {
       try {
         const content = readFileSync(p, "utf-8");
         if (content.trim()) {
           db.insertEvent(sessionId, { type: "rule", category: "rule", data: p, priority: 1 });
-          db.insertEvent(sessionId, { type: "rule_content", category: "rule", data: content, priority: 1 });
+          db.insertEvent(sessionId, {
+            type: "rule_content",
+            category: "rule",
+            data: content,
+            priority: 1,
+          });
         }
-      } catch { /* file doesn't exist — skip */ }
+      } catch {
+        /* file doesn't exist — skip */
+      }
     }
 
     db.close();
@@ -122,7 +156,9 @@ try {
       pjoin(hd(), ".gemini", "context-mode", "sessionstart-debug.log"),
       `[${new Date().toISOString()}] ${err?.message || err}\n${err?.stack || ""}\n`,
     );
-  } catch { /* ignore logging failure */ }
+  } catch {
+    /* ignore logging failure */
+  }
 }
 
 const output = `SessionStart:compact hook success: Success\nSessionStart hook additional context: \n${additionalContext}`;

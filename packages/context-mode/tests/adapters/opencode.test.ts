@@ -177,9 +177,7 @@ describe("OpenCodeAdapter", () => {
 
     it("session dir is under ~/.config/opencode/context-mode/sessions/", () => {
       const sessionDir = adapter.getSessionDir();
-      expect(sessionDir).toBe(
-        join(homedir(), ".config", "opencode", "context-mode", "sessions"),
-      );
+      expect(sessionDir).toBe(join(homedir(), ".config", "opencode", "context-mode", "sessions"));
     });
 
     it("configureAllHooks writes back to the global config it read", () => {

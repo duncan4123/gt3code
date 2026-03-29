@@ -36,18 +36,13 @@ export type HookType = (typeof HOOK_TYPES)[keyof typeof HOOK_TYPES];
  * Required hooks that must be active for context-mode to function.
  * OpenCode uses TS plugin paradigm — no scripts, just event hooks.
  */
-export const REQUIRED_HOOKS: HookType[] = [
-  HOOK_TYPES.BEFORE,
-  HOOK_TYPES.AFTER,
-];
+export const REQUIRED_HOOKS: HookType[] = [HOOK_TYPES.BEFORE, HOOK_TYPES.AFTER];
 
 /**
  * Optional hooks that enhance functionality but aren't critical.
  * experimental.session.compacting is advisory.
  */
-export const OPTIONAL_HOOKS: HookType[] = [
-  HOOK_TYPES.COMPACTING,
-];
+export const OPTIONAL_HOOKS: HookType[] = [HOOK_TYPES.COMPACTING];
 
 /**
  * Check if an OpenCode plugin entry is the context-mode plugin.

@@ -111,18 +111,12 @@ export class ZedAdapter implements HookAdapter {
   }
 
   getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}.db`);
   }
 
   getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}-events.md`);
   }
 
@@ -153,8 +147,7 @@ export class ZedAdapter implements HookAdapter {
       {
         check: "Hook support",
         status: "warn",
-        message:
-          "Zed does not support hooks. Only MCP integration is available.",
+        message: "Zed does not support hooks. Only MCP integration is available.",
       },
     ];
   }
@@ -179,9 +172,8 @@ export class ZedAdapter implements HookAdapter {
         return {
           check: "MCP registration",
           status: "fail",
-          message:
-            "context_servers section exists but context-mode not found",
-          fix: 'Add context-mode to context_servers in ~/.config/zed/settings.json',
+          message: "context_servers section exists but context-mode not found",
+          fix: "Add context-mode to context_servers in ~/.config/zed/settings.json",
         };
       }
 
@@ -189,7 +181,7 @@ export class ZedAdapter implements HookAdapter {
         check: "MCP registration",
         status: "fail",
         message: "No context_servers section in settings.json",
-        fix: 'Add context_servers.context-mode to ~/.config/zed/settings.json',
+        fix: "Add context_servers.context-mode to ~/.config/zed/settings.json",
       };
     } catch {
       return {

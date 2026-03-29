@@ -13,9 +13,14 @@ import { startLifecycleGuard } from "../src/lifecycle.js";
 
 const TSX_PATH = execSync("which tsx", { encoding: "utf-8" }).trim();
 
-function spawnGuardChild(exitCode: number): { child: ReturnType<typeof spawn>; ready: Promise<void> } {
+function spawnGuardChild(exitCode: number): {
+  child: ReturnType<typeof spawn>;
+  ready: Promise<void>;
+} {
   const script = join(process.cwd(), `_lifecycle_test_${exitCode}.ts`);
-  writeFileSync(script, `
+  writeFileSync(
+    script,
+    `
 import { startLifecycleGuard } from "./src/lifecycle.ts";
 startLifecycleGuard({
   checkIntervalMs: 60000,
@@ -23,12 +28,17 @@ startLifecycleGuard({
 });
 process.stdout.write("READY");
 setInterval(() => {}, 1000);
-`);
+`,
+  );
   const child = spawn(TSX_PATH, [script], {
     cwd: process.cwd(),
     stdio: ["pipe", "pipe", "pipe"],
   });
-  child.on("close", () => { try { unlinkSync(script); } catch {} });
+  child.on("close", () => {
+    try {
+      unlinkSync(script);
+    } catch {}
+  });
   const ready = new Promise<void>((resolve) => {
     child.stdout!.on("data", (chunk: Buffer) => {
       if (chunk.toString().includes("READY")) resolve();
@@ -44,7 +54,9 @@ describe("Lifecycle Guard", () => {
 
     const cleanup = startLifecycleGuard({
       checkIntervalMs: 50, // fast for testing
-      onShutdown: () => { shutdownCalled = true; },
+      onShutdown: () => {
+        shutdownCalled = true;
+      },
       isParentAlive: () => false, // simulate dead parent
     });
 
@@ -60,7 +72,9 @@ describe("Lifecycle Guard", () => {
 
     const cleanup = startLifecycleGuard({
       checkIntervalMs: 50,
-      onShutdown: () => { shutdownCalled = true; },
+      onShutdown: () => {
+        shutdownCalled = true;
+      },
       isParentAlive: () => true, // parent alive
     });
 
@@ -75,7 +89,9 @@ describe("Lifecycle Guard", () => {
 
     const cleanup = startLifecycleGuard({
       checkIntervalMs: 30,
-      onShutdown: () => { shutdownCount++; },
+      onShutdown: () => {
+        shutdownCount++;
+      },
       isParentAlive: () => false,
     });
 
@@ -92,8 +108,13 @@ describe("Lifecycle Guard", () => {
 
     const cleanup = startLifecycleGuard({
       checkIntervalMs: 30,
-      onShutdown: () => { shutdownCalled = true; },
-      isParentAlive: () => { checkCount++; return true; },
+      onShutdown: () => {
+        shutdownCalled = true;
+      },
+      isParentAlive: () => {
+        checkCount++;
+        return true;
+      },
     });
 
     // Let a few checks run
@@ -112,7 +133,9 @@ describe("Lifecycle Guard", () => {
 
     const cleanup = startLifecycleGuard({
       checkIntervalMs: 30,
-      onShutdown: () => { shutdownCalled = true; },
+      onShutdown: () => {
+        shutdownCalled = true;
+      },
       isParentAlive: () => false, // simulates ppid=0 or ppid changed
     });
 
@@ -136,7 +159,10 @@ describe.skipIf(isWindows)("Lifecycle Guard — Integration (real process)", () 
 
     const code = await new Promise<number | null>((resolve) => {
       child.on("close", resolve);
-      setTimeout(() => { child.kill("SIGKILL"); resolve(null); }, 5000);
+      setTimeout(() => {
+        child.kill("SIGKILL");
+        resolve(null);
+      }, 5000);
     });
 
     assert.equal(code, 42, "Child should exit with code 42 when stdin closes");
@@ -150,7 +176,10 @@ describe.skipIf(isWindows)("Lifecycle Guard — Integration (real process)", () 
 
     const code = await new Promise<number | null>((resolve) => {
       child.on("close", resolve);
-      setTimeout(() => { child.kill("SIGKILL"); resolve(null); }, 5000);
+      setTimeout(() => {
+        child.kill("SIGKILL");
+        resolve(null);
+      }, 5000);
     });
 
     assert.equal(code, 43, "Child should exit with code 43 on SIGTERM");

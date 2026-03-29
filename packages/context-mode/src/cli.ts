@@ -15,7 +15,18 @@
 import * as p from "@clack/prompts";
 import color from "picocolors";
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, cpSync, accessSync, existsSync, readdirSync, rmSync, closeSync, openSync, constants } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  cpSync,
+  accessSync,
+  existsSync,
+  readdirSync,
+  rmSync,
+  closeSync,
+  openSync,
+  constants,
+} from "node:fs";
 import { request as httpsRequest } from "node:https";
 import { resolve, dirname, join } from "node:path";
 import { tmpdir, devNull } from "node:os";
@@ -55,12 +66,12 @@ const HOOK_MAP: Record<string, Record<string, string>> = {
     precompact: "hooks/vscode-copilot/precompact.mjs",
     sessionstart: "hooks/vscode-copilot/sessionstart.mjs",
   },
-  "cursor": {
+  cursor: {
     pretooluse: "hooks/cursor/pretooluse.mjs",
     posttooluse: "hooks/cursor/posttooluse.mjs",
     sessionstart: "hooks/cursor/sessionstart.mjs",
   },
-  "kiro": {
+  kiro: {
     pretooluse: "hooks/kiro/pretooluse.mjs",
     posttooluse: "hooks/kiro/posttooluse.mjs",
   },
@@ -116,8 +127,12 @@ function getPluginRoot(): string {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
   // build/cli.js or src/cli.ts → go up one level; cli.bundle.mjs at project root → stay here
-  if (__dirname.endsWith("/build") || __dirname.endsWith("\\build") ||
-      __dirname.endsWith("/src") || __dirname.endsWith("\\src")) {
+  if (
+    __dirname.endsWith("/build") ||
+    __dirname.endsWith("\\build") ||
+    __dirname.endsWith("/src") ||
+    __dirname.endsWith("\\src")
+  ) {
     return resolve(__dirname, "..");
   }
   return __dirname;
@@ -142,7 +157,9 @@ async function fetchLatestVersion(): Promise<string> {
       { headers: { Connection: "close" } },
       (res) => {
         let raw = "";
-        res.on("data", (chunk: Buffer) => { raw += chunk; });
+        res.on("data", (chunk: Buffer) => {
+          raw += chunk;
+        });
         res.on("end", () => {
           try {
             const data = JSON.parse(raw) as { version?: string };
@@ -154,7 +171,10 @@ async function fetchLatestVersion(): Promise<string> {
       },
     );
     req.on("error", () => resolve("unknown"));
-    req.setTimeout(5000, () => { req.destroy(); resolve("unknown"); });
+    req.setTimeout(5000, () => {
+      req.destroy();
+      resolve("unknown");
+    });
     req.end();
   });
 }
@@ -188,7 +208,10 @@ async function doctor(): Promise<number> {
     available = getAvailableLanguages(runtimes);
   } catch {
     s.stop("Diagnostics partial");
-    p.log.warn(color.yellow("Could not detect runtimes") + color.dim(" — module may be missing, restart session after upgrade"));
+    p.log.warn(
+      color.yellow("Could not detect runtimes") +
+        color.dim(" — module may be missing, restart session after upgrade"),
+    );
     p.outro(color.yellow("Doctor could not fully run — try again after restarting"));
     return 1;
   }
@@ -200,14 +223,10 @@ async function doctor(): Promise<number> {
 
   // Speed tier
   if (hasBunRuntime()) {
-    p.log.success(
-      color.green("Performance: FAST") +
-        " — Bun detected for JS/TS execution",
-    );
+    p.log.success(color.green("Performance: FAST") + " — Bun detected for JS/TS execution");
   } else {
     p.log.warn(
-      color.yellow("Performance: NORMAL") +
-        " — Using Node.js (install Bun for 3-5x speed boost)",
+      color.yellow("Performance: NORMAL") + " — Using Node.js (install Bun for 3-5x speed boost)",
     );
   }
 
@@ -243,14 +262,15 @@ async function doctor(): Promise<number> {
     } else {
       criticalFails++;
       const detail = result.stderr?.trim() ? ` (${result.stderr.trim().slice(0, 200)})` : "";
-      p.log.error(
-        color.red("Server test: FAIL") + ` — exit ${result.exitCode}${detail}`,
-      );
+      p.log.error(color.red("Server test: FAIL") + ` — exit ${result.exitCode}${detail}`);
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.includes("Cannot find module") || message.includes("MODULE_NOT_FOUND")) {
-      p.log.warn(color.yellow("Server test: SKIP") + color.dim(" — module not available (restart session after upgrade)"));
+      p.log.warn(
+        color.yellow("Server test: SKIP") +
+          color.dim(" — module not available (restart session after upgrade)"),
+      );
     } else {
       criticalFails++;
       p.log.error(color.red("Server test: FAIL") + ` — ${message}`);
@@ -282,8 +302,7 @@ async function doctor(): Promise<number> {
     p.log.success(color.green("Hook script exists: PASS") + color.dim(` — ${hookScriptPath}`));
   } catch {
     p.log.error(
-      color.red("Hook script exists: FAIL") +
-        color.dim(` — not found at ${hookScriptPath}`),
+      color.red("Hook script exists: FAIL") + color.dim(` — not found at ${hookScriptPath}`),
     );
   }
 
@@ -293,10 +312,7 @@ async function doctor(): Promise<number> {
   if (pluginCheck.status === "pass") {
     p.log.success(color.green("Plugin enabled: PASS") + color.dim(` — ${pluginCheck.message}`));
   } else {
-    p.log.warn(
-      color.yellow("Plugin enabled: WARN") +
-        ` — ${pluginCheck.message}`,
-    );
+    p.log.warn(color.yellow("Plugin enabled: WARN") + ` — ${pluginCheck.message}`);
   }
 
   // FTS5 / SQLite
@@ -306,7 +322,9 @@ async function doctor(): Promise<number> {
     const db = new Database(":memory:");
     db.exec("CREATE VIRTUAL TABLE fts_test USING fts5(content)");
     db.exec("INSERT INTO fts_test(content) VALUES ('hello world')");
-    const row = db.prepare("SELECT * FROM fts_test WHERE fts_test MATCH 'hello'").get() as { content: string } | undefined;
+    const row = db.prepare("SELECT * FROM fts_test WHERE fts_test MATCH 'hello'").get() as
+      | { content: string }
+      | undefined;
     db.close();
     if (row && row.content === "hello world") {
       p.log.success(color.green("FTS5 / SQLite: PASS") + " — native module works");
@@ -317,7 +335,10 @@ async function doctor(): Promise<number> {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.includes("Cannot find module") || message.includes("MODULE_NOT_FOUND")) {
-      p.log.warn(color.yellow("FTS5 / better-sqlite3: SKIP") + color.dim(" — module not available (restart session after upgrade)"));
+      p.log.warn(
+        color.yellow("FTS5 / better-sqlite3: SKIP") +
+          color.dim(" — module not available (restart session after upgrade)"),
+      );
     } else {
       criticalFails++;
       p.log.error(
@@ -336,14 +357,10 @@ async function doctor(): Promise<number> {
 
   if (latestVersion === "unknown") {
     p.log.warn(
-      color.yellow("npm (MCP): WARN") +
-        ` — local v${localVersion}, could not reach npm registry`,
+      color.yellow("npm (MCP): WARN") + ` — local v${localVersion}, could not reach npm registry`,
     );
   } else if (localVersion === latestVersion) {
-    p.log.success(
-      color.green("npm (MCP): PASS") +
-        ` — v${localVersion}`,
-    );
+    p.log.success(color.green("npm (MCP): PASS") + ` — v${localVersion}`);
   } else {
     p.log.warn(
       color.yellow("npm (MCP): WARN") +
@@ -353,15 +370,9 @@ async function doctor(): Promise<number> {
   }
 
   if (installedVersion === "not installed") {
-    p.log.info(
-      color.dim(`${adapter.name}: not installed`) +
-        " — using standalone MCP mode",
-    );
+    p.log.info(color.dim(`${adapter.name}: not installed`) + " — using standalone MCP mode");
   } else if (latestVersion !== "unknown" && installedVersion === latestVersion) {
-    p.log.success(
-      color.green(`${adapter.name}: PASS`) +
-        ` — v${installedVersion}`,
-    );
+    p.log.success(color.green(`${adapter.name}: PASS`) + ` — v${installedVersion}`);
   } else if (latestVersion !== "unknown") {
     p.log.warn(
       color.yellow(`${adapter.name}: WARN`) +
@@ -377,9 +388,7 @@ async function doctor(): Promise<number> {
 
   // Summary
   if (criticalFails > 0) {
-    p.outro(
-      color.red(`Diagnostics failed — ${criticalFails} critical issue(s) found`),
-    );
+    p.outro(color.red(`Diagnostics failed — ${criticalFails} critical issue(s) found`));
     return 1;
   }
 
@@ -404,8 +413,7 @@ async function upgrade() {
 
   p.intro(color.bgCyan(color.black(" context-mode upgrade ")));
   p.log.info(
-    `Platform: ${color.cyan(adapter.name)}` +
-      color.dim(` (${detection.confidence} confidence)`),
+    `Platform: ${color.cyan(adapter.name)}` + color.dim(` (${detection.confidence} confidence)`),
   );
 
   let pluginRoot = getPluginRoot();
@@ -419,16 +427,14 @@ async function upgrade() {
 
   s.start("Cloning mksglu/context-mode");
   try {
-    execSync(
-      `git clone --depth 1 https://github.com/mksglu/context-mode.git "${tmpDir}"`,
-      { stdio: "pipe", timeout: 30000 },
-    );
+    execSync(`git clone --depth 1 https://github.com/mksglu/context-mode.git "${tmpDir}"`, {
+      stdio: "pipe",
+      timeout: 30000,
+    });
     s.stop("Downloaded");
 
     const srcDir = tmpDir;
-    const newPkg = JSON.parse(
-      readFileSync(resolve(srcDir, "package.json"), "utf-8"),
-    );
+    const newPkg = JSON.parse(readFileSync(resolve(srcDir, "package.json"), "utf-8"));
     const newVersion = newPkg.version ?? "unknown";
 
     if (newVersion === localVersion) {
@@ -463,25 +469,41 @@ async function upgrade() {
       const cacheParent = cacheParentMatch[1];
       const myDir = pluginRoot.replace(cacheParent, "").replace(/[\\/]/g, "");
       try {
-        const oldDirs = readdirSync(cacheParent).filter(d => d !== myDir);
+        const oldDirs = readdirSync(cacheParent).filter((d) => d !== myDir);
         for (const d of oldDirs) {
-          try { rmSync(resolve(cacheParent, d), { recursive: true, force: true }); } catch { /* skip */ }
+          try {
+            rmSync(resolve(cacheParent, d), { recursive: true, force: true });
+          } catch {
+            /* skip */
+          }
         }
         if (oldDirs.length > 0) {
           p.log.info(color.dim(`  Cleaned ${oldDirs.length} stale cache dir(s)`));
         }
-      } catch { /* parent may not exist */ }
+      } catch {
+        /* parent may not exist */
+      }
     }
 
     const items = [
-      "build", "src", "hooks", "skills", "scripts", ".claude-plugin",
-      "start.mjs", "server.bundle.mjs", "cli.bundle.mjs", "package.json",
+      "build",
+      "src",
+      "hooks",
+      "skills",
+      "scripts",
+      ".claude-plugin",
+      "start.mjs",
+      "server.bundle.mjs",
+      "cli.bundle.mjs",
+      "package.json",
     ];
     for (const item of items) {
       try {
         rmSync(resolve(pluginRoot, item), { recursive: true, force: true });
         cpSync(resolve(srcDir, item), resolve(pluginRoot, item), { recursive: true });
-      } catch { /* some files may not exist in source */ }
+      } catch {
+        /* some files may not exist in source */
+      }
     }
 
     // Write .mcp.json with resolved absolute path (fixes #132)
@@ -493,10 +515,7 @@ async function upgrade() {
         },
       },
     };
-    writeFileSync(
-      resolve(pluginRoot, ".mcp.json"),
-      JSON.stringify(mcpConfig, null, 2) + "\n",
-    );
+    writeFileSync(resolve(pluginRoot, ".mcp.json"), JSON.stringify(mcpConfig, null, 2) + "\n");
 
     s.stop(color.green(`Updated in-place to v${newVersion}`));
 
@@ -555,16 +574,17 @@ async function upgrade() {
         ? `Updated v${localVersion} → v${newVersion}`
         : `Reinstalled v${localVersion} from GitHub`,
     );
-    p.log.success(
-      color.green("Plugin reinstalled from GitHub!") +
-        color.dim(` — v${newVersion}`),
-    );
+    p.log.success(color.green("Plugin reinstalled from GitHub!") + color.dim(` — v${newVersion}`));
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     s.stop(color.red("Update failed"));
     p.log.error(color.red("GitHub pull failed") + ` — ${message}`);
     p.log.info(color.dim("Continuing with hooks/settings fix..."));
-    try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   }
 
   // Step 3: Backup settings — adapter-aware
@@ -574,10 +594,7 @@ async function upgrade() {
     p.log.success(color.green("Backup created") + color.dim(" -> " + backupPath));
     changes.push("Backed up settings");
   } else {
-    p.log.warn(
-      color.yellow("No existing settings to backup") +
-        " — a new one will be created",
-    );
+    p.log.warn(color.yellow("No existing settings to backup") + " — a new one will be created");
   }
 
   // Step 4: Configure hooks — adapter-aware
@@ -601,11 +618,15 @@ async function upgrade() {
         accessSync(binPath, constants.F_OK);
         execSync(`chmod +x "${binPath}"`, { stdio: "ignore" });
         permSet.push(binPath);
-      } catch { /* not found — skip */ }
+      } catch {
+        /* not found — skip */
+      }
     }
   }
   if (permSet.length > 0) {
-    p.log.success(color.green("Permissions set") + color.dim(` — ${permSet.length} hook script(s)`));
+    p.log.success(
+      color.green("Permissions set") + color.dim(` — ${permSet.length} hook script(s)`),
+    );
     changes.push(`Set ${permSet.length} hook scripts as executable`);
   } else {
     p.log.error(
@@ -616,10 +637,7 @@ async function upgrade() {
 
   // Step 6: Report
   if (changes.length > 0) {
-    p.note(
-      changes.map((c) => color.green("  + ") + c).join("\n"),
-      "Changes Applied",
-    );
+    p.note(changes.map((c) => color.green("  + ") + c).join("\n"), "Changes Applied");
   } else {
     p.log.info(color.dim("No changes were needed."));
   }

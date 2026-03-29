@@ -36,7 +36,7 @@ export class OpenClawSessionDB extends SessionDB {
    * that would wipe the value set during the base constructor's
    * prepareStatements() call chain.
    */
-  private declare ocStmts: Map<string, PreparedStatement>;
+  declare private ocStmts: Map<string, PreparedStatement>;
 
   // ── Schema ──
 
@@ -61,29 +61,25 @@ export class OpenClawSessionDB extends SessionDB {
       this.ocStmts.set(key, this.db.prepare(sql) as PreparedStatement);
     };
 
-    p("getMostRecentSession",
-      `SELECT session_id FROM openclaw_session_map WHERE session_key = ?`);
+    p("getMostRecentSession", `SELECT session_id FROM openclaw_session_map WHERE session_key = ?`);
 
-    p("upsertSessionMap",
+    p(
+      "upsertSessionMap",
       `INSERT INTO openclaw_session_map (session_key, session_id)
        VALUES (?, ?)
        ON CONFLICT(session_key) DO UPDATE SET
-         session_id = excluded.session_id`);
+         session_id = excluded.session_id`,
+    );
 
-    p("deleteSessionMap",
-      `DELETE FROM openclaw_session_map WHERE session_key = ?`);
+    p("deleteSessionMap", `DELETE FROM openclaw_session_map WHERE session_key = ?`);
 
-    p("renameSessionMeta",
-      `UPDATE session_meta SET session_id = ? WHERE session_id = ?`);
+    p("renameSessionMeta", `UPDATE session_meta SET session_id = ? WHERE session_id = ?`);
 
-    p("renameSessionEvents",
-      `UPDATE session_events SET session_id = ? WHERE session_id = ?`);
+    p("renameSessionEvents", `UPDATE session_events SET session_id = ? WHERE session_id = ?`);
 
-    p("renameSessionResume",
-      `UPDATE session_resume SET session_id = ? WHERE session_id = ?`);
+    p("renameSessionResume", `UPDATE session_resume SET session_id = ? WHERE session_id = ?`);
 
-    p("renameSessionMap",
-      `UPDATE openclaw_session_map SET session_id = ? WHERE session_id = ?`);
+    p("renameSessionMap", `UPDATE openclaw_session_map SET session_id = ? WHERE session_id = ?`);
   }
 
   /** Shorthand to retrieve an OpenClaw-specific cached statement. */
@@ -110,7 +106,9 @@ export class OpenClawSessionDB extends SessionDB {
    * Returns null if no sessions exist for that key.
    */
   getMostRecentSession(sessionKey: string): string | null {
-    const row = this.oc("getMostRecentSession").get(sessionKey) as { session_id: string } | undefined;
+    const row = this.oc("getMostRecentSession").get(sessionKey) as
+      | { session_id: string }
+      | undefined;
     return row?.session_id ?? null;
   }
 

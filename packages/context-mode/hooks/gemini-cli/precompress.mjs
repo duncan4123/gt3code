@@ -24,7 +24,9 @@ try {
   const raw = await readStdin();
   const input = JSON.parse(raw);
 
-  const { buildResumeSnapshot } = await import(pathToFileURL(join(PKG_SESSION, "snapshot.js")).href);
+  const { buildResumeSnapshot } = await import(
+    pathToFileURL(join(PKG_SESSION, "snapshot.js")).href
+  );
   const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
 
   const dbPath = getSessionDBPath(OPTS);
@@ -47,7 +49,9 @@ try {
 } catch (err) {
   try {
     appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] ${err?.message || err}\n`);
-  } catch { /* silent */ }
+  } catch {
+    /* silent */
+  }
 }
 
 // PreCompress is advisory — no stdout output needed

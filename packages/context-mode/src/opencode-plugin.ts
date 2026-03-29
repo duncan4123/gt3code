@@ -75,22 +75,13 @@ interface CompactingHookOutput {
 // ── Helpers ───────────────────────────────────────────────
 
 function getSessionDir(): string {
-  const dir = join(
-    homedir(),
-    ".config",
-    "opencode",
-    "context-mode",
-    "sessions",
-  );
+  const dir = join(homedir(), ".config", "opencode", "context-mode", "sessions");
   mkdirSync(dir, { recursive: true });
   return dir;
 }
 
 function getDBPath(projectDir: string): string {
-  const hash = createHash("sha256")
-    .update(projectDir)
-    .digest("hex")
-    .slice(0, 16);
+  const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
   return join(getSessionDir(), `${hash}.db`);
 }
 
@@ -177,7 +168,10 @@ export const ContextModePlugin = async (ctx: PluginContext) => {
 
     // ── PreCompact: Snapshot generation ─────────────────
 
-    "experimental.session.compacting": async (input: CompactingHookInput, output: CompactingHookOutput) => {
+    "experimental.session.compacting": async (
+      input: CompactingHookInput,
+      output: CompactingHookOutput,
+    ) => {
       try {
         const events = db.getEvents(sessionId);
         if (events.length === 0) return "";

@@ -68,11 +68,7 @@ interface OpenClawPluginApi {
    * Supported names: "session_start", "before_compaction", "after_compaction",
    * "before_prompt_build"
    */
-  on(
-    event: string,
-    handler: (...args: unknown[]) => unknown,
-    opts?: { priority?: number },
-  ): void;
+  on(event: string, handler: (...args: unknown[]) => unknown, opts?: { priority?: number }): void;
   registerContextEngine(id: string, factory: () => ContextEngineInstance): void;
   registerCommand?(cmd: {
     name: string;
@@ -81,10 +77,7 @@ interface OpenClawPluginApi {
     requireAuth?: boolean;
     handler: (ctx: CommandContext) => { text: string } | Promise<{ text: string }>;
   }): void;
-  registerCli?(
-    factory: (ctx: { program: unknown }) => void,
-    meta: { commands: string[] },
-  ): void;
+  registerCli?(factory: (ctx: { program: unknown }) => void, meta: { commands: string[] }): void;
   logger?: {
     info: (...args: unknown[]) => void;
     error: (...args: unknown[]) => void;
@@ -160,21 +153,13 @@ const configSchema = {
 // ── Helpers ───────────────────────────────────────────────
 
 function getSessionDir(): string {
-  const dir = join(
-    homedir(),
-    ".openclaw",
-    "context-mode",
-    "sessions",
-  );
+  const dir = join(homedir(), ".openclaw", "context-mode", "sessions");
   mkdirSync(dir, { recursive: true });
   return dir;
 }
 
 function getDBPath(projectDir: string): string {
-  const hash = createHash("sha256")
-    .update(projectDir)
-    .digest("hex")
-    .slice(0, 16);
+  const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
   return join(getSessionDir(), `${hash}.db`);
 }
 
@@ -245,13 +230,7 @@ export default {
     // Load routing instructions synchronously for prompt injection
     let routingInstructions = "";
     try {
-      const instructionsPath = resolve(
-        buildDir,
-        "..",
-        "configs",
-        "openclaw",
-        "AGENTS.md",
-      );
+      const instructionsPath = resolve(buildDir, "..", "configs", "openclaw", "AGENTS.md");
       if (existsSync(instructionsPath)) {
         routingInstructions = readFileSync(instructionsPath, "utf-8");
       }
@@ -279,40 +258,37 @@ export default {
     // api.on() is the correct API for typed lifecycle hooks (session_start, before_tool_call, etc.).
     // api.registerHook() is for generic/command hooks (command:new, command:reset, command:stop).
 
-    api.on(
-      "before_tool_call",
-      async (event: unknown) => {
-        const { routing } = await initPromise;
-        const e = event as BeforeToolCallEvent;
-        const toolName = e.toolName ?? "";
-        const toolInput = e.params ?? {};
+    api.on("before_tool_call", async (event: unknown) => {
+      const { routing } = await initPromise;
+      const e = event as BeforeToolCallEvent;
+      const toolName = e.toolName ?? "";
+      const toolInput = e.params ?? {};
 
-        let decision;
-        try {
-          decision = routing.routePreToolUse(toolName, toolInput, projectDir, "openclaw");
-        } catch {
-          return; // Routing failure → allow passthrough
-        }
+      let decision;
+      try {
+        decision = routing.routePreToolUse(toolName, toolInput, projectDir, "openclaw");
+      } catch {
+        return; // Routing failure → allow passthrough
+      }
 
-        if (!decision) return; // No routing match → passthrough
+      if (!decision) return; // No routing match → passthrough
 
-        log.debug("before_tool_call", { tool: toolName, action: decision.action });
+      log.debug("before_tool_call", { tool: toolName, action: decision.action });
 
-        if (decision.action === "deny" || decision.action === "ask") {
-          return {
-            block: true,
-            blockReason: decision.reason ?? "Blocked by context-mode",
-          };
-        }
+      if (decision.action === "deny" || decision.action === "ask") {
+        return {
+          block: true,
+          blockReason: decision.reason ?? "Blocked by context-mode",
+        };
+      }
 
-        if (decision.action === "modify" && decision.updatedInput) {
-          // In-place mutation — OpenClaw reads the mutated params object.
-          Object.assign(toolInput, decision.updatedInput);
-        }
+      if (decision.action === "modify" && decision.updatedInput) {
+        // In-place mutation — OpenClaw reads the mutated params object.
+        Object.assign(toolInput, decision.updatedInput);
+      }
 
-        // "context" action → handled by before_prompt_build, not inline
-      },
-    );
+      // "context" action → handled by before_prompt_build, not inline
+    });
 
     // ── 2. after_tool_call — Session event capture ─────────
 
@@ -329,69 +305,75 @@ export default {
       search: "Grep",
     };
 
-    api.on(
-      "after_tool_call",
-      async (event: unknown) => {
-        try {
-          const e = event as AfterToolCallEvent;
-          const rawToolName = e.toolName ?? "";
-          const mappedToolName = OPENCLAW_TOOL_MAP[rawToolName] ?? rawToolName;
-          // Accept both result (v2+) and output (older builds)
-          const rawResult = e.result ?? e.output;
-          const resultStr =
-            typeof rawResult === "string"
-              ? rawResult
-              : rawResult != null
-                ? JSON.stringify(rawResult)
-                : undefined;
-          // Accept both error (string, v2+) and isError (boolean, older builds)
-          const hasError = Boolean(e.error || e.isError);
+    api.on("after_tool_call", async (event: unknown) => {
+      try {
+        const e = event as AfterToolCallEvent;
+        const rawToolName = e.toolName ?? "";
+        const mappedToolName = OPENCLAW_TOOL_MAP[rawToolName] ?? rawToolName;
+        // Accept both result (v2+) and output (older builds)
+        const rawResult = e.result ?? e.output;
+        const resultStr =
+          typeof rawResult === "string"
+            ? rawResult
+            : rawResult != null
+              ? JSON.stringify(rawResult)
+              : undefined;
+        // Accept both error (string, v2+) and isError (boolean, older builds)
+        const hasError = Boolean(e.error || e.isError);
 
-          const hookInput: HookInput = {
-            tool_name: mappedToolName,
-            tool_input: e.params ?? {},
-            tool_response: resultStr,
-            tool_output: hasError ? { isError: true } : undefined,
-          };
+        const hookInput: HookInput = {
+          tool_name: mappedToolName,
+          tool_input: e.params ?? {},
+          tool_response: resultStr,
+          tool_output: hasError ? { isError: true } : undefined,
+        };
 
-          const events = extractEvents(hookInput);
+        const events = extractEvents(hookInput);
 
-          // Resolve agent-specific sessionId from workspace paths in params
-          const routedSessionId = workspaceRouter.resolveSessionId(e.params ?? {}) ?? sessionId;
+        // Resolve agent-specific sessionId from workspace paths in params
+        const routedSessionId = workspaceRouter.resolveSessionId(e.params ?? {}) ?? sessionId;
 
-          if (events.length > 0) {
-            for (const ev of events) {
-              db.insertEvent(routedSessionId, ev as SessionEvent, "PostToolUse");
-            }
-            log.debug("after_tool_call", { tool: rawToolName, mapped: mappedToolName, sessionId: routedSessionId.slice(0, 8), events: events.length, durationMs: e.durationMs });
-          } else if (rawToolName) {
-            // Fallback: record any unrecognized tool call as a generic event
-            const data = JSON.stringify({
-              tool: rawToolName,
-              params: e.params,
-              durationMs: e.durationMs,
-            });
-            db.insertEvent(
-              routedSessionId,
-              {
-                type: "tool_call",
-                category: "openclaw",
-                data,
-                priority: 1,
-                data_hash: createHash("sha256")
-                  .update(data)
-                  .digest("hex")
-                  .slice(0, 16),
-              },
-              "PostToolUse",
-            );
-            log.debug("after_tool_call", { tool: rawToolName, mapped: rawToolName, sessionId: routedSessionId.slice(0, 8), events: 1, durationMs: e.durationMs });
+        if (events.length > 0) {
+          for (const ev of events) {
+            db.insertEvent(routedSessionId, ev as SessionEvent, "PostToolUse");
           }
-        } catch {
-          // Silent — session capture must never break the tool call
+          log.debug("after_tool_call", {
+            tool: rawToolName,
+            mapped: mappedToolName,
+            sessionId: routedSessionId.slice(0, 8),
+            events: events.length,
+            durationMs: e.durationMs,
+          });
+        } else if (rawToolName) {
+          // Fallback: record any unrecognized tool call as a generic event
+          const data = JSON.stringify({
+            tool: rawToolName,
+            params: e.params,
+            durationMs: e.durationMs,
+          });
+          db.insertEvent(
+            routedSessionId,
+            {
+              type: "tool_call",
+              category: "openclaw",
+              data,
+              priority: 1,
+              data_hash: createHash("sha256").update(data).digest("hex").slice(0, 16),
+            },
+            "PostToolUse",
+          );
+          log.debug("after_tool_call", {
+            tool: rawToolName,
+            mapped: rawToolName,
+            sessionId: routedSessionId.slice(0, 8),
+            events: 1,
+            durationMs: e.durationMs,
+          });
         }
-      },
-    );
+      } catch {
+        // Silent — session capture must never break the tool call
+      }
+    });
 
     // ── 3. command:new — Session initialization ────────────
 
@@ -407,8 +389,7 @@ export default {
       },
       {
         name: "context-mode.session-new",
-        description:
-          "Session initialization — cleans up old sessions on /new command",
+        description: "Session initialization — cleans up old sessions on /new command",
       },
     );
 
@@ -451,106 +432,94 @@ export default {
 
     // ── 4. session_start — Re-key DB session to OpenClaw's session ID ─
 
-    api.on(
-      "session_start",
-      async (event: unknown) => {
-        try {
-          const e = event as SessionStartEvent;
-          const sid = e?.sessionId;
-          if (!sid) return;
+    api.on("session_start", async (event: unknown) => {
+      try {
+        const e = event as SessionStartEvent;
+        const sid = e?.sessionId;
+        if (!sid) return;
 
-          const key = e?.sessionKey;
-          const resumedFrom = e?.resumedFrom;
-          log.debug("session_start", { sessionId: sid.slice(0, 8), sessionKey: key, resumedFrom });
+        const key = e?.sessionKey;
+        const resumedFrom = e?.resumedFrom;
+        log.debug("session_start", { sessionId: sid.slice(0, 8), sessionKey: key, resumedFrom });
 
-          if (key) {
-            // Per-agent session lookup via sessionKey
-            const prevId = db.getMostRecentSession(key);
-            if (prevId && prevId !== sid) {
-              db.renameSession(prevId, sid);
-              log.info(`session re-keyed ${prevId.slice(0, 8)}… → ${sid.slice(0, 8)}… (key=${key})`);
-            } else if (!prevId) {
-              db.ensureSessionWithKey(sid, projectDir, key);
-              log.info(`new session ${sid.slice(0, 8)}… (key=${key})`);
-            }
-          } else {
-            // Fallback: no sessionKey → fresh session (Option A)
-            db.ensureSession(sid, projectDir);
-            log.info(`session ${sid.slice(0, 8)}… (no sessionKey — fallback)`);
+        if (key) {
+          // Per-agent session lookup via sessionKey
+          const prevId = db.getMostRecentSession(key);
+          if (prevId && prevId !== sid) {
+            db.renameSession(prevId, sid);
+            log.info(`session re-keyed ${prevId.slice(0, 8)}… → ${sid.slice(0, 8)}… (key=${key})`);
+          } else if (!prevId) {
+            db.ensureSessionWithKey(sid, projectDir, key);
+            log.info(`new session ${sid.slice(0, 8)}… (key=${key})`);
           }
-
-          sessionId = sid as ReturnType<typeof randomUUID>;
-          _latestSessionId = sessionId;
-          sessionKey = key;
-          if (key) {
-            workspaceRouter.registerSession(key, sessionId);
-          }
-          resumeInjected = false;
-        } catch {
-          // best effort — never break session start
+        } else {
+          // Fallback: no sessionKey → fresh session (Option A)
+          db.ensureSession(sid, projectDir);
+          log.info(`session ${sid.slice(0, 8)}… (no sessionKey — fallback)`);
         }
-      },
-    );
+
+        sessionId = sid as ReturnType<typeof randomUUID>;
+        _latestSessionId = sessionId;
+        sessionKey = key;
+        if (key) {
+          workspaceRouter.registerSession(key, sessionId);
+        }
+        resumeInjected = false;
+      } catch {
+        // best effort — never break session start
+      }
+    });
 
     // ── 5. before_compaction — Flush events to snapshot before compaction ─
     // NOTE: OpenClaw compaction hooks were broken until #4967/#3728 fix.
     // Adapter gracefully degrades — session recovery falls back to DB snapshot
     // reconstruction when compaction events don't fire.
 
-    api.on(
-      "before_compaction",
-      async () => {
-        try {
-          const sid = sessionId; // snapshot to avoid race with concurrent session_start
-          const allEvents = db.getEvents(sid);
-          log.debug("before_compaction", { sessionId: sid.slice(0, 8), events: allEvents.length });
-          if (allEvents.length === 0) return;
-          const freshStats = db.getSessionStats(sid);
-          const snapshot = buildResumeSnapshot(allEvents, {
-            compactCount: (freshStats?.compact_count ?? 0) + 1,
-          });
-          db.upsertResume(sid, snapshot, allEvents.length);
-        } catch {
-          // best effort — never break compaction
-        }
-      },
-    );
+    api.on("before_compaction", async () => {
+      try {
+        const sid = sessionId; // snapshot to avoid race with concurrent session_start
+        const allEvents = db.getEvents(sid);
+        log.debug("before_compaction", { sessionId: sid.slice(0, 8), events: allEvents.length });
+        if (allEvents.length === 0) return;
+        const freshStats = db.getSessionStats(sid);
+        const snapshot = buildResumeSnapshot(allEvents, {
+          compactCount: (freshStats?.compact_count ?? 0) + 1,
+        });
+        db.upsertResume(sid, snapshot, allEvents.length);
+      } catch {
+        // best effort — never break compaction
+      }
+    });
 
     // ── 6. after_compaction — Increment compact count ─────
 
-    api.on(
-      "after_compaction",
-      async () => {
-        try {
-          const sid = sessionId;
-          log.debug("after_compaction", { sessionId: sid.slice(0, 8) });
-          db.incrementCompactCount(sid); // sessionId consistent with before_compaction within same sync cycle
-        } catch {
-          // best effort
-        }
-      },
-    );
+    api.on("after_compaction", async () => {
+      try {
+        const sid = sessionId;
+        log.debug("after_compaction", { sessionId: sid.slice(0, 8) });
+        db.incrementCompactCount(sid); // sessionId consistent with before_compaction within same sync cycle
+      } catch {
+        // best effort
+      }
+    });
 
     // ── 7. before_model_resolve — User message capture ────────
 
-    api.on(
-      "before_model_resolve",
-      async (event: unknown) => {
-        try {
-          const sid = sessionId; // snapshot to avoid race with concurrent session_start
-          const e = event as BeforeModelResolveEvent;
-          const messageText = e?.userMessage ?? e?.message ?? e?.content ?? "";
-          log.debug("before_model_resolve", { hasMessage: !!messageText });
-          if (!messageText) return;
-          const events = extractUserEvents(messageText);
-          for (const ev of events) {
-            db.insertEvent(sid, ev as import("./types.js").SessionEvent, "PostToolUse");
-          }
-        } catch {
-          // best effort — never break model resolution
+    api.on("before_model_resolve", async (event: unknown) => {
+      try {
+        const sid = sessionId; // snapshot to avoid race with concurrent session_start
+        const e = event as BeforeModelResolveEvent;
+        const messageText = e?.userMessage ?? e?.message ?? e?.content ?? "";
+        log.debug("before_model_resolve", { hasMessage: !!messageText });
+        if (!messageText) return;
+        const events = extractUserEvents(messageText);
+        for (const ev of events) {
+          db.insertEvent(sid, ev as import("./types.js").SessionEvent, "PostToolUse");
         }
-      },
-    );
+      } catch {
+        // best effort — never break model resolution
+      }
+    });
 
     // ── 8. before_prompt_build — Resume snapshot injection ────
 
@@ -560,7 +529,11 @@ export default {
         try {
           const sid = sessionId; // snapshot to avoid race with concurrent session_start
           const resume = db.getResume(sid);
-          log.debug("before_prompt_build[resume]", { sessionId: sid.slice(0, 8), hasResume: !!resume, injected: !resumeInjected });
+          log.debug("before_prompt_build[resume]", {
+            sessionId: sid.slice(0, 8),
+            hasResume: !!resume,
+            injected: !resumeInjected,
+          });
           if (resumeInjected) return undefined;
           if (!resume) return undefined;
           const freshStats = db.getSessionStats(sid);
@@ -622,7 +595,7 @@ export default {
             compacted: true,
             result: {
               summary: snapshot,
-              firstKeptEntryId: "",   // clear all history before this compaction
+              firstKeptEntryId: "", // clear all history before this compaction
               tokensBefore: currentTokenCount ?? 0,
               tokensAfter: 0,
             },

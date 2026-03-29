@@ -11,11 +11,24 @@
  */
 
 import {
-  ROUTING_BLOCK, READ_GUIDANCE, GREP_GUIDANCE, BASH_GUIDANCE,
-  createRoutingBlock, createReadGuidance, createGrepGuidance, createBashGuidance,
+  ROUTING_BLOCK,
+  READ_GUIDANCE,
+  GREP_GUIDANCE,
+  BASH_GUIDANCE,
+  createRoutingBlock,
+  createReadGuidance,
+  createGrepGuidance,
+  createBashGuidance,
 } from "../routing-block.mjs";
 import { createToolNamer } from "./tool-naming.mjs";
-import { existsSync, mkdirSync, rmSync, openSync, closeSync, constants as fsConstants } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  rmSync,
+  openSync,
+  closeSync,
+  constants as fsConstants,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
@@ -36,7 +49,9 @@ function guidanceOnce(type, content) {
   if (_guidanceShown.has(type)) return null;
 
   // Ensure marker directory exists
-  try { mkdirSync(_guidanceDir, { recursive: true }); } catch {}
+  try {
+    mkdirSync(_guidanceDir, { recursive: true });
+  } catch {}
 
   // Atomic create-or-fail: O_CREAT | O_EXCL | O_WRONLY
   // First process to create the file wins; others get EEXIST.
@@ -56,7 +71,9 @@ function guidanceOnce(type, content) {
 
 export function resetGuidanceThrottle() {
   _guidanceShown.clear();
-  try { rmSync(_guidanceDir, { recursive: true, force: true }); } catch {}
+  try {
+    rmSync(_guidanceDir, { recursive: true, force: true });
+  } catch {}
 }
 
 /**
@@ -74,8 +91,8 @@ function stripHeredocs(cmd) {
  */
 function stripQuotedContent(cmd) {
   return stripHeredocs(cmd)
-    .replace(/'[^']*'/g, "''")                    // single-quoted strings
-    .replace(/"[^"]*"/g, '""');                   // double-quoted strings
+    .replace(/'[^']*'/g, "''") // single-quoted strings
+    .replace(/"[^"]*"/g, '""'); // double-quoted strings
 }
 
 // Try to import security module — may not exist
@@ -86,7 +103,9 @@ export async function initSecurity(buildDir) {
     const { pathToFileURL } = await import("node:url");
     const secPath = (await import("node:path")).resolve(buildDir, "security.js");
     security = await import(pathToFileURL(secPath).href);
-  } catch { /* not available */ }
+  } catch {
+    /* not available */
+  }
 }
 
 /**
@@ -100,35 +119,35 @@ export async function initSecurity(buildDir) {
  */
 const TOOL_ALIASES = {
   // Gemini CLI
-  "run_shell_command": "Bash",
-  "read_file": "Read",
-  "read_many_files": "Read",
-  "grep_search": "Grep",
-  "search_file_content": "Grep",
-  "web_fetch": "WebFetch",
+  run_shell_command: "Bash",
+  read_file: "Read",
+  read_many_files: "Read",
+  grep_search: "Grep",
+  search_file_content: "Grep",
+  web_fetch: "WebFetch",
   // OpenCode
-  "bash": "Bash",
-  "view": "Read",
-  "grep": "Grep",
-  "fetch": "WebFetch",
-  "agent": "Agent",
+  bash: "Bash",
+  view: "Read",
+  grep: "Grep",
+  fetch: "WebFetch",
+  agent: "Agent",
   // Codex CLI
-  "shell": "Bash",
-  "shell_command": "Bash",
-  "exec_command": "Bash",
+  shell: "Bash",
+  shell_command: "Bash",
+  exec_command: "Bash",
   "container.exec": "Bash",
-  "local_shell": "Bash",
-  "grep_files": "Grep",
+  local_shell: "Bash",
+  grep_files: "Grep",
   // Cursor
-  "mcp_web_fetch": "WebFetch",
-  "mcp_fetch_tool": "WebFetch",
-  "Shell": "Bash",
+  mcp_web_fetch: "WebFetch",
+  mcp_fetch_tool: "WebFetch",
+  Shell: "Bash",
   // VS Code Copilot
-  "run_in_terminal": "Bash",
+  run_in_terminal: "Bash",
   // Kiro CLI (https://kiro.dev/docs/cli/hooks/)
-  "fs_read": "Read",
-  "fs_write": "Write",
-  "execute_bash": "Bash",
+  fs_read: "Read",
+  fs_write: "Write",
+  execute_bash: "Bash",
 };
 
 /**
@@ -165,7 +184,10 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
       if (policies.length > 0) {
         const result = security.evaluateCommand(command, policies);
         if (result.decision === "deny") {
-          return { action: "deny", reason: `Blocked by security policy: matches deny pattern ${result.matchedPattern}` };
+          return {
+            action: "deny",
+            reason: `Blocked by security policy: matches deny pattern ${result.matchedPattern}`,
+          };
         }
         if (result.decision === "ask" && result.matchedPattern) {
           return { action: "ask" };
@@ -185,7 +207,7 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
     if (/(^|\s|&&|\||\;)(curl|wget)\s/i.test(stripped)) {
       // Split on chain operators (&&, ||, ;) to evaluate each segment
       const segments = stripped.split(/\s*(?:&&|\|\||;)\s*/);
-      const hasDangerousSegment = segments.some(seg => {
+      const hasDangerousSegment = segments.some((seg) => {
         const s = seg.trim();
         // Only evaluate segments that contain curl or wget
         if (!/(^|\s)(curl|wget)\s/i.test(s)) return false;
@@ -286,7 +308,9 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
   if (canonical === "Agent" || canonical === "Task") {
     const subagentType = toolInput.subagent_type ?? "";
     // Detect the correct field name for the prompt/request/objective/question/query
-    const fieldName = ["prompt", "request", "objective", "question", "query", "task"].find(f => f in toolInput) ?? "prompt";
+    const fieldName =
+      ["prompt", "request", "objective", "question", "query", "task"].find((f) => f in toolInput) ??
+      "prompt";
     const prompt = toolInput[fieldName] ?? "";
 
     const updatedInput =
@@ -310,7 +334,10 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
       if (policies.length > 0) {
         const result = security.evaluateCommand(code, policies);
         if (result.decision === "deny") {
-          return { action: "deny", reason: `Blocked by security policy: shell code matches deny pattern ${result.matchedPattern}` };
+          return {
+            action: "deny",
+            reason: `Blocked by security policy: shell code matches deny pattern ${result.matchedPattern}`,
+          };
         }
         if (result.decision === "ask" && result.matchedPattern) {
           return { action: "ask" };
@@ -332,7 +359,10 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
       const denyGlobs = security.readToolDenyPatterns("Read", projectDir);
       const evalResult = security.evaluateFilePath(filePath, denyGlobs);
       if (evalResult.denied) {
-        return { action: "deny", reason: `Blocked by security policy: file path matches Read deny pattern ${evalResult.matchedPattern}` };
+        return {
+          action: "deny",
+          reason: `Blocked by security policy: file path matches Read deny pattern ${evalResult.matchedPattern}`,
+        };
       }
 
       // Check code parameter against Bash deny patterns (same as execute)
@@ -343,7 +373,10 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
         if (policies.length > 0) {
           const result = security.evaluateCommand(code, policies);
           if (result.decision === "deny") {
-            return { action: "deny", reason: `Blocked by security policy: shell code matches deny pattern ${result.matchedPattern}` };
+            return {
+              action: "deny",
+              reason: `Blocked by security policy: shell code matches deny pattern ${result.matchedPattern}`,
+            };
           }
           if (result.decision === "ask" && result.matchedPattern) {
             return { action: "ask" };
@@ -364,7 +397,10 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
           const cmd = entry.command ?? "";
           const result = security.evaluateCommand(cmd, policies);
           if (result.decision === "deny") {
-            return { action: "deny", reason: `Blocked by security policy: batch command "${entry.label ?? cmd}" matches deny pattern ${result.matchedPattern}` };
+            return {
+              action: "deny",
+              reason: `Blocked by security policy: batch command "${entry.label ?? cmd}" matches deny pattern ${result.matchedPattern}`,
+            };
           }
           if (result.decision === "ask" && result.matchedPattern) {
             return { action: "ask" };

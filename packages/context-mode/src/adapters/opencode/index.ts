@@ -161,9 +161,7 @@ export class OpenCodeAdapter implements HookAdapter {
   formatPreToolUseResponse(response: PreToolUseResponse): unknown {
     if (response.decision === "deny") {
       // OpenCode TS plugin paradigm: throw Error to block
-      throw new Error(
-        response.reason ?? "Blocked by context-mode hook",
-      );
+      throw new Error(response.reason ?? "Blocked by context-mode hook");
     }
     if (response.decision === "modify" && response.updatedInput) {
       // OpenCode: output.args mutation
@@ -171,9 +169,7 @@ export class OpenCodeAdapter implements HookAdapter {
     }
     if (response.decision === "ask") {
       // OpenCode: no native "ask" mechanism — throw to be safe
-      throw new Error(
-        response.reason ?? "Action requires user confirmation (security policy)",
-      );
+      throw new Error(response.reason ?? "Action requires user confirmation (security policy)");
     }
     // "context" — OpenCode's tool.execute.before cannot inject additionalContext
     // in PreToolUse (platform limitation). The guidance is delivered via
@@ -224,18 +220,12 @@ export class OpenCodeAdapter implements HookAdapter {
   }
 
   getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}.db`);
   }
 
   getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}-events.md`);
   }
 
@@ -295,11 +285,7 @@ export class OpenCodeAdapter implements HookAdapter {
   }
 
   writeSettings(settings: Record<string, unknown>): void {
-    writeFileSync(
-      this.getSettingsPath(),
-      JSON.stringify(settings, null, 2) + "\n",
-      "utf-8",
-    );
+    writeFileSync(this.getSettingsPath(), JSON.stringify(settings, null, 2) + "\n", "utf-8");
   }
 
   // ── Diagnostics (doctor) ─────────────────────────────────
@@ -328,9 +314,7 @@ export class OpenCodeAdapter implements HookAdapter {
         message: hasPlugin
           ? "context-mode found in plugin array"
           : "context-mode not found in plugin array",
-        fix: hasPlugin
-          ? undefined
-          : "context-mode upgrade",
+        fix: hasPlugin ? undefined : "context-mode upgrade",
       });
     } else {
       results.push({
@@ -345,8 +329,7 @@ export class OpenCodeAdapter implements HookAdapter {
     results.push({
       check: "SessionStart hook",
       status: "warn",
-      message:
-        "SessionStart not supported in OpenCode (see issues #14808, #5409)",
+      message: "SessionStart not supported in OpenCode (see issues #14808, #5409)",
     });
 
     return results;

@@ -30,6 +30,8 @@ import Migration0014 from "./Migrations/014_ProjectionThreadProposedPlanImplemen
 import Migration0015 from "./Migrations/015_ProjectionTurnsSourceProposedPlan.ts";
 import Migration0016 from "./Migrations/016_ProjectionThreadsCustomMetadata.ts";
 import Migration0017 from "./Migrations/017_MessagesFts5.ts";
+import Migration0018 from "./Migrations/018_MoveFts5ToBtree.ts";
+import Migration0019 from "./Migrations/019_CanonicalizeModelSelections.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -59,6 +61,8 @@ export const migrationEntries = [
   [15, "ProjectionTurnsSourceProposedPlan", Migration0015],
   [16, "ProjectionThreadsCustomMetadata", Migration0016],
   [17, "MessagesFts5", Migration0017],
+  [18, "MoveFts5ToBtree", Migration0018],
+  [19, "CanonicalizeModelSelections", Migration0019],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>
@@ -109,16 +113,5 @@ export const runMigrations = ({ toMigrationInclusive }: RunMigrationsOptions = {
  *
  * Use this to ensure migrations run before your application starts.
  * Migrations are run automatically - no separate script is needed.
- *
- * @example
- * ```typescript
- * import { MigrationsLive } from "@acme/db/Migrations"
- * import * as SqliteClient from "@acme/db/SqliteClient"
- *
- * // Migrations run automatically when SqliteClient is provided
- * const AppLayer = MigrationsLive.pipe(
- *   Layer.provideMerge(SqliteClient.layer({ filename: "database.sqlite" }))
- * )
- * ```
  */
 export const MigrationsLive = Layer.effectDiscard(runMigrations());

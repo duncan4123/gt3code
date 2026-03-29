@@ -1,10 +1,5 @@
 import { PolyglotExecutor } from "../src/executor.js";
-import {
-  detectRuntimes,
-  getRuntimeSummary,
-  hasBunRuntime,
-  type Language,
-} from "../src/runtime.js";
+import { detectRuntimes, getRuntimeSummary, hasBunRuntime, type Language } from "../src/runtime.js";
 
 const runtimes = detectRuntimes();
 const executor = new PolyglotExecutor({ runtimes });
@@ -28,11 +23,7 @@ async function bench(
 ): Promise<BenchResult | null> {
   // Check if runtime is available
   const runtimeMap: Record<string, string | null> = runtimes;
-  if (
-    language !== "javascript" &&
-    language !== "shell" &&
-    !runtimeMap[language]
-  ) {
+  if (language !== "javascript" && language !== "shell" && !runtimeMap[language]) {
     console.log(`  - ${name} [${language}] SKIP (runtime not available)`);
     return null;
   }
@@ -88,27 +79,17 @@ async function main() {
   console.log("======================================\n");
   console.log("System:");
   console.log(getRuntimeSummary(runtimes));
-  console.log(
-    `\nBun detected: ${hasBunRuntime() ? "YES (fast path)" : "NO (using Node.js)"}`,
-  );
+  console.log(`\nBun detected: ${hasBunRuntime() ? "YES (fast path)" : "NO (using Node.js)"}`);
   console.log();
 
   const results: BenchResult[] = [];
 
   // === 1. Hello World (Cold Start Overhead) ===
   console.log("1. Hello World (measures cold start overhead):");
-  const r1 = await bench(
-    "hello-world",
-    "javascript",
-    'console.log("hello");',
-  );
+  const r1 = await bench("hello-world", "javascript", 'console.log("hello");');
   if (r1) results.push(r1);
 
-  const r2 = await bench(
-    "hello-world",
-    "typescript",
-    'const m: string = "hello"; console.log(m);',
-  );
+  const r2 = await bench("hello-world", "typescript", 'const m: string = "hello"; console.log(m);');
   if (r2) results.push(r2);
 
   const r3 = await bench("hello-world", "python", 'print("hello")');
@@ -196,32 +177,16 @@ print(f"filtered: {len(filtered)}")
 
   // === 4. Output Size ===
   console.log("\n4. Output Size (measures stream processing):");
-  const r14 = await bench(
-    "output-1kb",
-    "javascript",
-    'console.log("x".repeat(1024));',
-  );
+  const r14 = await bench("output-1kb", "javascript", 'console.log("x".repeat(1024));');
   if (r14) results.push(r14);
 
-  const r15 = await bench(
-    "output-10kb",
-    "javascript",
-    'console.log("x".repeat(10240));',
-  );
+  const r15 = await bench("output-10kb", "javascript", 'console.log("x".repeat(10240));');
   if (r15) results.push(r15);
 
-  const r16 = await bench(
-    "output-50kb",
-    "javascript",
-    'console.log("x".repeat(51200));',
-  );
+  const r16 = await bench("output-50kb", "javascript", 'console.log("x".repeat(51200));');
   if (r16) results.push(r16);
 
-  const r17 = await bench(
-    "output-100kb",
-    "javascript",
-    'console.log("x".repeat(102400));',
-  );
+  const r17 = await bench("output-100kb", "javascript", 'console.log("x".repeat(102400));');
   if (r17) results.push(r17);
 
   // === 5. Concurrent Execution ===
@@ -318,9 +283,7 @@ print(f"filtered: {len(filtered)}")
 
   // === Comparison Note ===
   console.log("\n=== Comparison: context-mode vs raw cat/bash ===");
-  console.log(
-    "When Claude Code uses cat/head/Read to view a 50KB file, ALL 50KB enters context.",
-  );
+  console.log("When Claude Code uses cat/head/Read to view a 50KB file, ALL 50KB enters context.");
   console.log(
     "With context-mode execute_file, only the summary (typically 100-500 bytes) enters context.",
   );

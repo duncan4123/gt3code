@@ -25,24 +25,21 @@ export const HOOK_SCRIPTS: Record<string, string> = {
   [HOOK_TYPES.POST_TOOL_USE]: "posttooluse.mjs",
 };
 
-export const REQUIRED_HOOKS: string[] = [
-  HOOK_TYPES.PRE_TOOL_USE,
-];
+export const REQUIRED_HOOKS: string[] = [HOOK_TYPES.PRE_TOOL_USE];
 
-export const OPTIONAL_HOOKS: string[] = [
-  HOOK_TYPES.POST_TOOL_USE,
-];
+export const OPTIONAL_HOOKS: string[] = [HOOK_TYPES.POST_TOOL_USE];
 
 /**
  * Check if a hook entry points to a context-mode hook script.
  */
-export function isContextModeHook(
-  entry: { command?: string },
-  hookType: string,
-): boolean {
+export function isContextModeHook(entry: { command?: string }, hookType: string): boolean {
   const scriptName = HOOK_SCRIPTS[hookType];
   if (!scriptName) return false;
-  return entry.command?.includes(scriptName) || entry.command?.includes("context-mode hook kiro") || false;
+  return (
+    entry.command?.includes(scriptName) ||
+    entry.command?.includes("context-mode hook kiro") ||
+    false
+  );
 }
 
 /**

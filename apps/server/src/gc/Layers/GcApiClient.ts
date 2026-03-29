@@ -304,7 +304,9 @@ const makeGcApiClient = Effect.gen(function* () {
     return Effect.tryPromise({
       try: () =>
         sessionCache.get(sessionId, async () => {
-          const raw = await fetchJson<RawApiSession>(`/v0/session/${encodeURIComponent(sessionId)}`);
+          const raw = await fetchJson<RawApiSession>(
+            `/v0/session/${encodeURIComponent(sessionId)}`,
+          );
           return raw ? normalizeSessionResponse(raw) : null;
         }),
       catch: () => null,

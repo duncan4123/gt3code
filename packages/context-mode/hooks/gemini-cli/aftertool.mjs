@@ -10,7 +10,13 @@ import "../ensure-deps.mjs";
  * Must be fast (<20ms). No network, no LLM, just SQLite writes.
  */
 
-import { readStdin, getSessionId, getSessionDBPath, getProjectDir, GEMINI_OPTS } from "../session-helpers.mjs";
+import {
+  readStdin,
+  getSessionId,
+  getSessionDBPath,
+  getProjectDir,
+  GEMINI_OPTS,
+} from "../session-helpers.mjs";
 import { appendFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -39,9 +45,10 @@ try {
   const events = extractEvents({
     tool_name: input.tool_name,
     tool_input: input.tool_input ?? {},
-    tool_response: typeof input.tool_response === "string"
-      ? input.tool_response
-      : JSON.stringify(input.tool_response ?? ""),
+    tool_response:
+      typeof input.tool_response === "string"
+        ? input.tool_response
+        : JSON.stringify(input.tool_response ?? ""),
     tool_output: input.tool_output,
   });
 
@@ -49,12 +56,17 @@ try {
     db.insertEvent(sessionId, event, "AfterTool");
   }
 
-  appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] OK: ${input.tool_name} → ${events.length} events\n`);
+  appendFileSync(
+    DEBUG_LOG,
+    `[${new Date().toISOString()}] OK: ${input.tool_name} → ${events.length} events\n`,
+  );
   db.close();
 } catch (err) {
   try {
     appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] ERR: ${err?.message || err}\n`);
-  } catch { /* silent */ }
+  } catch {
+    /* silent */
+  }
 }
 
 // AfterTool is non-blocking — no stdout output

@@ -108,7 +108,10 @@ const makeWithDatabase = (
     const makeConnection = Effect.gen(function* () {
       const scope = yield* Effect.scope;
       const db = openDatabase();
-      yield* Scope.addFinalizer(scope, Effect.sync(() => db.close()));
+      yield* Scope.addFinalizer(
+        scope,
+        Effect.sync(() => db.close()),
+      );
 
       // better-sqlite3: statement.reader replaces statement.columns().length > 0
       const hasRows = (statement: BetterStatement): boolean => statement.reader;
@@ -154,7 +157,9 @@ const makeWithDatabase = (
                 if (hasRows(statement)) {
                   // better-sqlite3: raw() replaces setReturnArrays()
                   statement.raw(true);
-                  return statement.all(...params) as unknown as ReadonlyArray<ReadonlyArray<unknown>>;
+                  return statement.all(...params) as unknown as ReadonlyArray<
+                    ReadonlyArray<unknown>
+                  >;
                 }
                 statement.run(...params);
                 return [];

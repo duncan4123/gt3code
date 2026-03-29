@@ -40,21 +40,15 @@ describe("AntigravityAdapter", () => {
 
   describe("parse methods", () => {
     it("parsePreToolUseInput throws", () => {
-      expect(() => adapter.parsePreToolUseInput({})).toThrow(
-        /Antigravity does not support hooks/,
-      );
+      expect(() => adapter.parsePreToolUseInput({})).toThrow(/Antigravity does not support hooks/);
     });
 
     it("parsePostToolUseInput throws", () => {
-      expect(() => adapter.parsePostToolUseInput({})).toThrow(
-        /Antigravity does not support hooks/,
-      );
+      expect(() => adapter.parsePostToolUseInput({})).toThrow(/Antigravity does not support hooks/);
     });
 
     it("parsePreCompactInput throws", () => {
-      expect(() => adapter.parsePreCompactInput({})).toThrow(
-        /Antigravity does not support hooks/,
-      );
+      expect(() => adapter.parsePreCompactInput({})).toThrow(/Antigravity does not support hooks/);
     });
 
     it("parseSessionStartInput throws", () => {
@@ -127,9 +121,7 @@ describe("AntigravityAdapter", () => {
 
     it("session dir is under ~/.gemini/context-mode/sessions/", () => {
       const sessionDir = adapter.getSessionDir();
-      expect(sessionDir).toBe(
-        join(homedir(), ".gemini", "context-mode", "sessions"),
-      );
+      expect(sessionDir).toBe(join(homedir(), ".gemini", "context-mode", "sessions"));
     });
 
     it("session DB path contains project hash", () => {
@@ -155,9 +147,7 @@ describe("AntigravityAdapter", () => {
 
     it("globalPath is ~/.gemini/GEMINI.md", () => {
       const config = adapter.getRoutingInstructionsConfig();
-      expect(config.globalPath).toBe(
-        resolve(homedir(), ".gemini", "GEMINI.md"),
-      );
+      expect(config.globalPath).toBe(resolve(homedir(), ".gemini", "GEMINI.md"));
     });
 
     it("projectRelativePath is GEMINI.md", () => {

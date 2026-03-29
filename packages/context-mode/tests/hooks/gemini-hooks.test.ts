@@ -22,7 +22,11 @@ interface HookResult {
   stderr: string;
 }
 
-function runHook(hookFile: string, input: Record<string, unknown>, env?: Record<string, string>): HookResult {
+function runHook(
+  hookFile: string,
+  input: Record<string, unknown>,
+  env?: Record<string, string>,
+): HookResult {
   const result = spawnSync("node", [join(HOOKS_DIR, hookFile)], {
     input: JSON.stringify(input),
     encoding: "utf-8",
@@ -50,9 +54,21 @@ describe("Gemini CLI hooks", () => {
   });
 
   afterAll(() => {
-    try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* best effort */ }
-    try { if (existsSync(dbPath)) unlinkSync(dbPath); } catch { /* best effort */ }
-    try { if (existsSync(eventsPath)) unlinkSync(eventsPath); } catch { /* best effort */ }
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+    try {
+      if (existsSync(dbPath)) unlinkSync(dbPath);
+    } catch {
+      /* best effort */
+    }
+    try {
+      if (existsSync(eventsPath)) unlinkSync(eventsPath);
+    } catch {
+      /* best effort */
+    }
   });
 
   const geminiEnv = () => ({ GEMINI_PROJECT_DIR: tempDir });
@@ -61,35 +77,47 @@ describe("Gemini CLI hooks", () => {
 
   describe("aftertool.mjs", () => {
     test("captures Read event silently", () => {
-      const result = runHook("aftertool.mjs", {
-        tool_name: "Read",
-        tool_input: { file_path: "/src/main.ts" },
-        tool_output: "file contents",
-        session_id: "test-gemini-session",
-      }, geminiEnv());
+      const result = runHook(
+        "aftertool.mjs",
+        {
+          tool_name: "Read",
+          tool_input: { file_path: "/src/main.ts" },
+          tool_output: "file contents",
+          session_id: "test-gemini-session",
+        },
+        geminiEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe("");
     });
 
     test("captures Write event silently", () => {
-      const result = runHook("aftertool.mjs", {
-        tool_name: "Write",
-        tool_input: { file_path: "/src/new.ts", content: "code" },
-        session_id: "test-gemini-session",
-      }, geminiEnv());
+      const result = runHook(
+        "aftertool.mjs",
+        {
+          tool_name: "Write",
+          tool_input: { file_path: "/src/new.ts", content: "code" },
+          session_id: "test-gemini-session",
+        },
+        geminiEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe("");
     });
 
     test("captures Bash git event silently", () => {
-      const result = runHook("aftertool.mjs", {
-        tool_name: "Bash",
-        tool_input: { command: "git status" },
-        tool_output: "On branch main",
-        session_id: "test-gemini-session",
-      }, geminiEnv());
+      const result = runHook(
+        "aftertool.mjs",
+        {
+          tool_name: "Bash",
+          tool_input: { command: "git status" },
+          tool_output: "On branch main",
+          session_id: "test-gemini-session",
+        },
+        geminiEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe("");
@@ -105,9 +133,13 @@ describe("Gemini CLI hooks", () => {
 
   describe("precompress.mjs", () => {
     test("runs silently with no events", () => {
-      const result = runHook("precompress.mjs", {
-        session_id: "test-gemini-precompress",
-      }, geminiEnv());
+      const result = runHook(
+        "precompress.mjs",
+        {
+          session_id: "test-gemini-precompress",
+        },
+        geminiEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe("");
@@ -123,10 +155,14 @@ describe("Gemini CLI hooks", () => {
 
   describe("sessionstart.mjs", () => {
     test("startup: outputs routing block", () => {
-      const result = runHook("sessionstart.mjs", {
-        source: "startup",
-        session_id: "test-gemini-startup",
-      }, geminiEnv());
+      const result = runHook(
+        "sessionstart.mjs",
+        {
+          source: "startup",
+          session_id: "test-gemini-startup",
+        },
+        geminiEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("SessionStart");
@@ -138,29 +174,41 @@ describe("Gemini CLI hooks", () => {
     });
 
     test("compact: outputs routing block", () => {
-      const result = runHook("sessionstart.mjs", {
-        source: "compact",
-        session_id: "test-gemini-compact",
-      }, geminiEnv());
+      const result = runHook(
+        "sessionstart.mjs",
+        {
+          source: "compact",
+          session_id: "test-gemini-compact",
+        },
+        geminiEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("SessionStart");
     });
 
     test("clear: outputs routing block only", () => {
-      const result = runHook("sessionstart.mjs", {
-        source: "clear",
-        session_id: "test-gemini-clear",
-      }, geminiEnv());
+      const result = runHook(
+        "sessionstart.mjs",
+        {
+          source: "clear",
+          session_id: "test-gemini-clear",
+        },
+        geminiEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("SessionStart");
     });
 
     test("default source is startup", () => {
-      const result = runHook("sessionstart.mjs", {
-        session_id: "test-gemini-default",
-      }, geminiEnv());
+      const result = runHook(
+        "sessionstart.mjs",
+        {
+          session_id: "test-gemini-default",
+        },
+        geminiEnv(),
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("SessionStart");
@@ -175,30 +223,46 @@ describe("Gemini CLI hooks", () => {
       const env = geminiEnv();
 
       // 1. Capture events via AfterTool
-      runHook("aftertool.mjs", {
-        tool_name: "Read",
-        tool_input: { file_path: "/src/app.ts" },
-        tool_output: "export default {}",
-        session_id: sessionId,
-      }, env);
+      runHook(
+        "aftertool.mjs",
+        {
+          tool_name: "Read",
+          tool_input: { file_path: "/src/app.ts" },
+          tool_output: "export default {}",
+          session_id: sessionId,
+        },
+        env,
+      );
 
-      runHook("aftertool.mjs", {
-        tool_name: "Edit",
-        tool_input: { file_path: "/src/app.ts", old_string: "{}", new_string: "{ foo: 1 }" },
-        session_id: sessionId,
-      }, env);
+      runHook(
+        "aftertool.mjs",
+        {
+          tool_name: "Edit",
+          tool_input: { file_path: "/src/app.ts", old_string: "{}", new_string: "{ foo: 1 }" },
+          session_id: sessionId,
+        },
+        env,
+      );
 
       // 2. Build snapshot via PreCompress
-      const precompressResult = runHook("precompress.mjs", {
-        session_id: sessionId,
-      }, env);
+      const precompressResult = runHook(
+        "precompress.mjs",
+        {
+          session_id: sessionId,
+        },
+        env,
+      );
       expect(precompressResult.exitCode).toBe(0);
 
       // 3. SessionStart compact should include session knowledge
-      const startResult = runHook("sessionstart.mjs", {
-        source: "compact",
-        session_id: sessionId,
-      }, env);
+      const startResult = runHook(
+        "sessionstart.mjs",
+        {
+          source: "compact",
+          session_id: sessionId,
+        },
+        env,
+      );
       expect(startResult.exitCode).toBe(0);
       expect(startResult.stdout).toContain("SessionStart");
     });

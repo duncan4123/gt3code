@@ -139,7 +139,9 @@ const GcContextSidebar = memo(function GcContextSidebar({
                               : "bg-muted-foreground/30"
                     }`}
                   />
-                  <span className="text-[13px] leading-snug text-foreground/85">{session.state}</span>
+                  <span className="text-[13px] leading-snug text-foreground/85">
+                    {session.state}
+                  </span>
                   {session.running ? (
                     <Badge
                       variant="secondary"
@@ -161,7 +163,10 @@ const GcContextSidebar = memo(function GcContextSidebar({
             ) : (
               <ContextRow label="State" value={metadata["gc.state"]} />
             )}
-            <ContextRow label="Provider" value={session?.provider ?? metadata["gc.runtimeProvider"]} />
+            <ContextRow
+              label="Provider"
+              value={session?.provider ?? metadata["gc.runtimeProvider"]}
+            />
             <ContextRow label="Template" value={session?.template} />
             <ContextRow label="Kind" value={session?.kind} />
             <ContextRow label="Pool" value={session?.pool} />
@@ -186,7 +191,9 @@ const GcContextSidebar = memo(function GcContextSidebar({
                   </div>
                   <span className="shrink-0 text-[11px] tabular-nums text-foreground/70">
                     {session.contextPct}%
-                    {session.contextWindow != null ? ` / ${session.contextWindow.toLocaleString()}` : ""}
+                    {session.contextWindow != null
+                      ? ` / ${session.contextWindow.toLocaleString()}`
+                      : ""}
                   </span>
                 </div>
               </div>

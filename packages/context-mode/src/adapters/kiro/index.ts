@@ -79,7 +79,7 @@ export class KiroAdapter implements HookAdapter {
     postToolUse: true,
     preCompact: false,
     sessionStart: false,
-    canModifyArgs: false,      // Kiro CLI uses exit codes, can't modify input
+    canModifyArgs: false, // Kiro CLI uses exit codes, can't modify input
     canModifyOutput: false,
     canInjectSessionContext: false,
   };
@@ -103,9 +103,8 @@ export class KiroAdapter implements HookAdapter {
     return {
       toolName: input.tool_name ?? "",
       toolInput: input.tool_input ?? {},
-      toolOutput: typeof toolResponse === "string"
-        ? toolResponse
-        : JSON.stringify(toolResponse ?? ""),
+      toolOutput:
+        typeof toolResponse === "string" ? toolResponse : JSON.stringify(toolResponse ?? ""),
       sessionId: `pid-${process.ppid}`,
       projectDir: input.cwd ?? process.cwd(),
       raw,
@@ -160,18 +159,12 @@ export class KiroAdapter implements HookAdapter {
   }
 
   getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}.db`);
   }
 
   getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}-events.md`);
   }
 
@@ -179,14 +172,28 @@ export class KiroAdapter implements HookAdapter {
     // Kiro CLI hook config format: { preToolUse: [{ matcher, command }] }
     // Note: This generates the entries for agent config files
     return {
-      [KIRO_HOOK_TYPES.PRE_TOOL_USE]: [{
-        matcher: "*",
-        hooks: [{ type: "command", command: buildKiroHookCommand(KIRO_HOOK_TYPES.PRE_TOOL_USE, pluginRoot) }],
-      }],
-      [KIRO_HOOK_TYPES.POST_TOOL_USE]: [{
-        matcher: "*",
-        hooks: [{ type: "command", command: buildKiroHookCommand(KIRO_HOOK_TYPES.POST_TOOL_USE, pluginRoot) }],
-      }],
+      [KIRO_HOOK_TYPES.PRE_TOOL_USE]: [
+        {
+          matcher: "*",
+          hooks: [
+            {
+              type: "command",
+              command: buildKiroHookCommand(KIRO_HOOK_TYPES.PRE_TOOL_USE, pluginRoot),
+            },
+          ],
+        },
+      ],
+      [KIRO_HOOK_TYPES.POST_TOOL_USE]: [
+        {
+          matcher: "*",
+          hooks: [
+            {
+              type: "command",
+              command: buildKiroHookCommand(KIRO_HOOK_TYPES.POST_TOOL_USE, pluginRoot),
+            },
+          ],
+        },
+      ],
     };
   }
 
@@ -218,9 +225,7 @@ export class KiroAdapter implements HookAdapter {
       // Check required hooks
       for (const hookType of [KIRO_HOOK_TYPES.PRE_TOOL_USE]) {
         const entries = hooks[hookType] ?? [];
-        const found = entries.some((e: { command?: string }) =>
-          isKiroContextModeHook(e, hookType),
-        );
+        const found = entries.some((e: { command?: string }) => isKiroContextModeHook(e, hookType));
         results.push({
           check: `Hook: ${hookType}`,
           status: found ? "pass" : "fail",
@@ -234,9 +239,7 @@ export class KiroAdapter implements HookAdapter {
       // Check optional hooks
       for (const hookType of [KIRO_HOOK_TYPES.POST_TOOL_USE]) {
         const entries = hooks[hookType] ?? [];
-        const found = entries.some((e: { command?: string }) =>
-          isKiroContextModeHook(e, hookType),
-        );
+        const found = entries.some((e: { command?: string }) => isKiroContextModeHook(e, hookType));
         results.push({
           check: `Hook: ${hookType}`,
           status: found ? "pass" : "warn",
@@ -288,13 +291,7 @@ export class KiroAdapter implements HookAdapter {
 
   getInstalledVersion(): string {
     try {
-      const pkgPath = resolve(
-        homedir(),
-        ".kiro",
-        "extensions",
-        "context-mode",
-        "package.json",
-      );
+      const pkgPath = resolve(homedir(), ".kiro", "extensions", "context-mode", "package.json");
       const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
       return pkg.version ?? "unknown";
     } catch {
@@ -322,8 +319,14 @@ export class KiroAdapter implements HookAdapter {
       const hooks = (config.hooks ?? {}) as Record<string, unknown[]>;
 
       // Add preToolUse hook if not present
-      const preToolUseEntries = (hooks[KIRO_HOOK_TYPES.PRE_TOOL_USE] ?? []) as Array<Record<string, unknown>>;
-      if (!preToolUseEntries.some(e => isKiroContextModeHook(e as { command?: string }, KIRO_HOOK_TYPES.PRE_TOOL_USE))) {
+      const preToolUseEntries = (hooks[KIRO_HOOK_TYPES.PRE_TOOL_USE] ?? []) as Array<
+        Record<string, unknown>
+      >;
+      if (
+        !preToolUseEntries.some((e) =>
+          isKiroContextModeHook(e as { command?: string }, KIRO_HOOK_TYPES.PRE_TOOL_USE),
+        )
+      ) {
         preToolUseEntries.push({
           matcher: "*",
           command: buildKiroHookCommand(KIRO_HOOK_TYPES.PRE_TOOL_USE, pluginRoot),
@@ -333,8 +336,14 @@ export class KiroAdapter implements HookAdapter {
       }
 
       // Add postToolUse hook if not present
-      const postToolUseEntries = (hooks[KIRO_HOOK_TYPES.POST_TOOL_USE] ?? []) as Array<Record<string, unknown>>;
-      if (!postToolUseEntries.some(e => isKiroContextModeHook(e as { command?: string }, KIRO_HOOK_TYPES.POST_TOOL_USE))) {
+      const postToolUseEntries = (hooks[KIRO_HOOK_TYPES.POST_TOOL_USE] ?? []) as Array<
+        Record<string, unknown>
+      >;
+      if (
+        !postToolUseEntries.some((e) =>
+          isKiroContextModeHook(e as { command?: string }, KIRO_HOOK_TYPES.POST_TOOL_USE),
+        )
+      ) {
         postToolUseEntries.push({
           matcher: "*",
           command: buildKiroHookCommand(KIRO_HOOK_TYPES.POST_TOOL_USE, pluginRoot),

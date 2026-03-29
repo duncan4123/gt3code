@@ -245,7 +245,19 @@ describe("detectPlatform", () => {
   it("returns a valid platform as default when no env vars are set", () => {
     // No env vars set — result depends on which config dirs exist on this machine.
     const signal = detectPlatform();
-    expect(["claude-code", "gemini-cli", "codex", "cursor", "opencode", "openclaw", "vscode-copilot", "antigravity", "kiro", "pi", "zed"]).toContain(signal.platform);
+    expect([
+      "claude-code",
+      "gemini-cli",
+      "codex",
+      "cursor",
+      "opencode",
+      "openclaw",
+      "vscode-copilot",
+      "antigravity",
+      "kiro",
+      "pi",
+      "zed",
+    ]).toContain(signal.platform);
   });
 });
 

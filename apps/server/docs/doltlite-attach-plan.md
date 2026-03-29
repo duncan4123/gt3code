@@ -24,11 +24,13 @@ In `src/attach.c`, when opening an attached database:
 The B-tree pager code is already in `src/btree.c` (395KB). Doltlite replaced the default storage path with prolly-trees but the original code is still compiled in.
 
 For attached B-tree files:
+
 - Route `sqlite3BtreeOpen()` to the **original** SQLite B-tree implementation
 - The B-tree pager handles its own page cache, journal, and locking
 - No prolly-tree involvement for reads or writes to these tables
 
 For attached prolly-tree files:
+
 - Existing behavior, no changes
 
 ### Phase 3: Cross-database operations
@@ -36,6 +38,7 @@ For attached prolly-tree files:
 Cross-database JOINs already work with ATTACH (tested). The query planner treats attached databases as separate schemas. The change is only in which storage engine backs each attached file.
 
 Verify:
+
 - `SELECT` across B-tree and prolly-tree tables
 - `INSERT/UPDATE/DELETE` into attached B-tree tables
 - Transactions spanning both storage engines

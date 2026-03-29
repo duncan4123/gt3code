@@ -38,7 +38,9 @@ interface MockContextEngine {
   factory: () => {
     info: { id: string; name: string; ownsCompaction: boolean };
     ingest: (data: unknown) => Promise<{ ingested: boolean }>;
-    assemble: (ctx: { messages: unknown[] }) => Promise<{ messages: unknown[]; estimatedTokens: number }>;
+    assemble: (ctx: {
+      messages: unknown[];
+    }) => Promise<{ messages: unknown[]; estimatedTokens: number }>;
     compact: () => Promise<{ ok: boolean; compacted: boolean }>;
   };
 }
@@ -70,11 +72,7 @@ function createMockApiFull() {
       ) {
         hooks.push({ event, handler, meta });
       },
-      on(
-        event: string,
-        handler: (...args: unknown[]) => unknown,
-        opts?: { priority?: number },
-      ) {
+      on(event: string, handler: (...args: unknown[]) => unknown, opts?: { priority?: number }) {
         lifecycle.push({ event, handler, opts });
       },
       registerContextEngine(
@@ -117,7 +115,11 @@ const cleanups: Array<() => void> = [];
 
 afterAll(() => {
   for (const fn of cleanups) {
-    try { fn(); } catch { /* ignore */ }
+    try {
+      fn();
+    } catch {
+      /* ignore */
+    }
   }
 });
 
@@ -178,7 +180,9 @@ describe("OpenClawPlugin", () => {
   afterAll(() => {
     try {
       rmSync(tempDir, { recursive: true, force: true });
-    } catch { /* cleanup best effort */ }
+    } catch {
+      /* cleanup best effort */
+    }
   });
 
   // ── Object export form ────────────────────────────────
@@ -608,7 +612,9 @@ describe("OpenClawPlugin", () => {
 // ═══════════════════════════════════════════════════════════
 
 describe("Plugin exports", () => {
-  beforeEach(() => { vi.resetModules(); });
+  beforeEach(() => {
+    vi.resetModules();
+  });
 
   test("plugin exports id, name, configSchema, register", async () => {
     const { default: plugin } = await import("../../src/openclaw-plugin.js");
@@ -620,7 +626,9 @@ describe("Plugin exports", () => {
 });
 
 describe("session_start hook", () => {
-  beforeEach(() => { vi.resetModules(); });
+  beforeEach(() => {
+    vi.resetModules();
+  });
 
   test("session_start hook is registered", async () => {
     const { default: plugin } = await import("../../src/openclaw-plugin.js");
@@ -628,7 +636,7 @@ describe("session_start hook", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const hook = typedHooks.find(h => h.hookName === "session_start");
+    const hook = typedHooks.find((h) => h.hookName === "session_start");
     assert.ok(hook, "session_start hook must be registered");
   });
 
@@ -638,7 +646,7 @@ describe("session_start hook", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const hook = typedHooks.find(h => h.hookName === "session_start");
+    const hook = typedHooks.find((h) => h.hookName === "session_start");
     assert.ok(hook, "session_start must be registered");
     assert.equal(hook.opts?.priority, undefined);
   });
@@ -649,11 +657,11 @@ describe("session_start hook", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const sessionStartHandler = typedHooks.find(h => h.hookName === "session_start")?.handler;
+    const sessionStartHandler = typedHooks.find((h) => h.hookName === "session_start")?.handler;
     assert.ok(sessionStartHandler, "session_start handler must exist");
 
     const resumeHook = typedHooks.find(
-      h => h.hookName === "before_prompt_build" && h.opts?.priority === 10,
+      (h) => h.hookName === "before_prompt_build" && h.opts?.priority === 10,
     );
     assert.ok(resumeHook, "resume before_prompt_build hook must exist");
 
@@ -671,7 +679,9 @@ describe("session_start hook", () => {
 });
 
 describe("compaction hooks", () => {
-  beforeEach(() => { vi.resetModules(); });
+  beforeEach(() => {
+    vi.resetModules();
+  });
 
   test("before_compaction hook is registered", async () => {
     const { default: plugin } = await import("../../src/openclaw-plugin.js");
@@ -679,7 +689,7 @@ describe("compaction hooks", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const hook = typedHooks.find(h => h.hookName === "before_compaction");
+    const hook = typedHooks.find((h) => h.hookName === "before_compaction");
     assert.ok(hook, "before_compaction must be registered");
   });
 
@@ -689,7 +699,7 @@ describe("compaction hooks", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const hook = typedHooks.find(h => h.hookName === "after_compaction");
+    const hook = typedHooks.find((h) => h.hookName === "after_compaction");
     assert.ok(hook, "after_compaction must be registered");
   });
 
@@ -702,13 +712,17 @@ describe("compaction hooks", () => {
     db.ensureSession(sid, projectDir);
 
     // Insert a fake event
-    db.insertEvent(sid, {
-      type: "file",
-      category: "file",
-      data: "/src/test.ts",
-      priority: 2,
-      data_hash: "",
-    } as unknown as import("../../src/types.js").SessionEvent, "PostToolUse");
+    db.insertEvent(
+      sid,
+      {
+        type: "file",
+        category: "file",
+        data: "/src/test.ts",
+        priority: 2,
+        data_hash: "",
+      } as unknown as import("../../src/types.js").SessionEvent,
+      "PostToolUse",
+    );
 
     // Simulate before_compaction logic
     const events = db.getEvents(sid);
@@ -727,7 +741,9 @@ describe("compaction hooks", () => {
 });
 
 describe("resume injection (before_prompt_build)", () => {
-  beforeEach(() => { vi.resetModules(); });
+  beforeEach(() => {
+    vi.resetModules();
+  });
 
   test("before_prompt_build resume hook is registered at priority 10", async () => {
     const { default: plugin } = await import("../../src/openclaw-plugin.js");
@@ -736,7 +752,7 @@ describe("resume injection (before_prompt_build)", () => {
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
     const resumeHook = typedHooks.find(
-      h => h.hookName === "before_prompt_build" && h.opts?.priority === 10,
+      (h) => h.hookName === "before_prompt_build" && h.opts?.priority === 10,
     );
     assert.ok(resumeHook, "resume before_prompt_build hook must be registered at priority 10");
   });
@@ -756,9 +772,10 @@ describe("resume injection (before_prompt_build)", () => {
     assert.ok(resume, "resume must exist");
     assert.ok((stats?.compact_count ?? 0) > 0, "compact_count must be > 0");
 
-    const result = resume && (stats?.compact_count ?? 0) > 0
-      ? { prependSystemContext: resume.snapshot }
-      : undefined;
+    const result =
+      resume && (stats?.compact_count ?? 0) > 0
+        ? { prependSystemContext: resume.snapshot }
+        : undefined;
 
     assert.ok(result, "result must be defined");
     assert.ok(result.prependSystemContext.includes("## Resume"), "must include resume content");
@@ -790,9 +807,10 @@ describe("resume injection (before_prompt_build)", () => {
     assert.ok(resume, "resume exists");
     assert.equal(stats?.compact_count ?? 0, 0, "compact_count is 0");
 
-    const result = resume && (stats?.compact_count ?? 0) > 0
-      ? { prependSystemContext: resume.snapshot }
-      : undefined;
+    const result =
+      resume && (stats?.compact_count ?? 0) > 0
+        ? { prependSystemContext: resume.snapshot }
+        : undefined;
     assert.equal(result, undefined, "must return undefined if compact_count is 0");
   });
 });
@@ -893,9 +911,17 @@ describe("OpenClawSessionDB.renameSession", () => {
     const newId = randomUUID();
 
     db.ensureSession(oldId, projectDir);
-    db.insertEvent(oldId, {
-      type: "file", category: "file", data: "/src/test.ts", priority: 2, data_hash: "",
-    } as unknown as import("../../src/types.js").SessionEvent, "PostToolUse");
+    db.insertEvent(
+      oldId,
+      {
+        type: "file",
+        category: "file",
+        data: "/src/test.ts",
+        priority: 2,
+        data_hash: "",
+      } as unknown as import("../../src/types.js").SessionEvent,
+      "PostToolUse",
+    );
 
     db.renameSession(oldId, newId);
 
@@ -941,7 +967,9 @@ describe("OpenClawSessionDB.renameSession", () => {
 // ════════════════════════════════════════════
 
 describe("before_model_resolve hook", () => {
-  beforeEach(() => { vi.resetModules(); });
+  beforeEach(() => {
+    vi.resetModules();
+  });
 
   test("before_model_resolve hook is registered", async () => {
     const { default: plugin } = await import("../../src/openclaw-plugin.js");
@@ -949,7 +977,7 @@ describe("before_model_resolve hook", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const hook = typedHooks.find(h => h.hookName === "before_model_resolve");
+    const hook = typedHooks.find((h) => h.hookName === "before_model_resolve");
     assert.ok(hook, "before_model_resolve hook must be registered");
   });
 
@@ -958,7 +986,7 @@ describe("before_model_resolve hook", () => {
     // (the hook pipes userMessage through this function)
     const { extractUserEvents } = await import("../../src/session/extract.js");
     const events = extractUserEvents("don't use that approach, use X instead");
-    const decisionEvents = events.filter(e => e.category === "decision");
+    const decisionEvents = events.filter((e) => e.category === "decision");
     assert.ok(decisionEvents.length > 0, "extractUserEvents must return decision events");
   });
 
@@ -968,12 +996,12 @@ describe("before_model_resolve hook", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const hook = typedHooks.find(h => h.hookName === "before_model_resolve");
+    const hook = typedHooks.find((h) => h.hookName === "before_model_resolve");
     assert.ok(hook, "before_model_resolve must be registered");
 
     // Must not throw on a decision-style message
-    await assert.doesNotReject(
-      () => Promise.resolve(hook.handler({ userMessage: "don't use that approach, use X instead" })),
+    await assert.doesNotReject(() =>
+      Promise.resolve(hook.handler({ userMessage: "don't use that approach, use X instead" })),
     );
   });
 
@@ -983,7 +1011,7 @@ describe("before_model_resolve hook", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const hook = typedHooks.find(h => h.hookName === "before_model_resolve");
+    const hook = typedHooks.find((h) => h.hookName === "before_model_resolve");
     assert.ok(hook);
 
     // Must not throw on empty or missing message
@@ -997,7 +1025,9 @@ describe("before_model_resolve hook", () => {
 // ════════════════════════════════════════════
 
 describe("command lifecycle hooks", () => {
-  beforeEach(() => { vi.resetModules(); });
+  beforeEach(() => {
+    vi.resetModules();
+  });
 
   test("command:reset hook is registered", async () => {
     const { default: plugin } = await import("../../src/openclaw-plugin.js");
@@ -1005,7 +1035,7 @@ describe("command lifecycle hooks", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const hook = hooks.find(h => h.hookName === "command:reset");
+    const hook = hooks.find((h) => h.hookName === "command:reset");
     assert.ok(hook, "command:reset hook must be registered");
   });
 
@@ -1015,7 +1045,7 @@ describe("command lifecycle hooks", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const hook = hooks.find(h => h.hookName === "command:stop");
+    const hook = hooks.find((h) => h.hookName === "command:stop");
     assert.ok(hook, "command:stop hook must be registered");
   });
 
@@ -1025,7 +1055,7 @@ describe("command lifecycle hooks", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const hook = hooks.find(h => h.hookName === "command:reset");
+    const hook = hooks.find((h) => h.hookName === "command:reset");
     assert.ok(hook);
     await assert.doesNotReject(() => Promise.resolve(hook.handler()));
   });
@@ -1036,7 +1066,9 @@ describe("command lifecycle hooks", () => {
 // ════════════════════════════════════════════
 
 describe("verbose logging", () => {
-  beforeEach(() => { vi.resetModules(); });
+  beforeEach(() => {
+    vi.resetModules();
+  });
 
   test("plugin works without logger (logger is optional)", async () => {
     const { default: plugin } = await import("../../src/openclaw-plugin.js");
@@ -1053,11 +1085,11 @@ describe("verbose logging", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const hook = typedHooks.find(h => h.hookName === "session_start");
+    const hook = typedHooks.find((h) => h.hookName === "session_start");
     assert.ok(hook);
     await hook.handler({ sessionId: randomUUID(), sessionKey: "test:agent:1" });
 
-    const infoLines = logLines.filter(l => l.level === "info");
+    const infoLines = logLines.filter((l) => l.level === "info");
     assert.ok(infoLines.length > 0, "session_start must emit at least one info log");
   });
 
@@ -1067,7 +1099,7 @@ describe("verbose logging", () => {
 
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
-    const afterHook = typedHooks.find(h => h.hookName === "after_tool_call");
+    const afterHook = typedHooks.find((h) => h.hookName === "after_tool_call");
     assert.ok(afterHook, "after_tool_call must be registered via api.on()");
 
     await afterHook.handler({
@@ -1076,7 +1108,7 @@ describe("verbose logging", () => {
       output: "content",
     });
 
-    const debugLines = logLines.filter(l => l.level === "debug");
+    const debugLines = logLines.filter((l) => l.level === "debug");
     assert.ok(debugLines.length > 0, "after_tool_call must emit debug log when events captured");
   });
 
@@ -1087,7 +1119,7 @@ describe("verbose logging", () => {
     plugin.register(api as unknown as Parameters<typeof plugin.register>[0]);
 
     // session_start to capture session ID, then manually inject resume
-    const sessionStartHook = typedHooks.find(h => h.hookName === "session_start");
+    const sessionStartHook = typedHooks.find((h) => h.hookName === "session_start");
     const sid = randomUUID();
     await sessionStartHook!.handler({ sessionId: sid, sessionKey: "test:agent:1" });
 
@@ -1096,7 +1128,7 @@ describe("verbose logging", () => {
     // (resume injection via before_prompt_build requires DB state — test the log emission
     // by verifying the hook doesn't throw with logger present)
     const resumeHook = typedHooks.find(
-      h => h.hookName === "before_prompt_build" && h.opts?.priority === 10,
+      (h) => h.hookName === "before_prompt_build" && h.opts?.priority === 10,
     );
     assert.ok(resumeHook);
     await assert.doesNotReject(() => Promise.resolve(resumeHook.handler()));
@@ -1109,18 +1141,21 @@ describe("verbose logging", () => {
 
 describe("extractWorkspace", () => {
   it("extracts workspace from exec command path", () => {
-    expect(extractWorkspace({ command: "cat /openclaw/workspace-trainer/notes.md" }))
-      .toBe("/openclaw/workspace-trainer");
+    expect(extractWorkspace({ command: "cat /openclaw/workspace-trainer/notes.md" })).toBe(
+      "/openclaw/workspace-trainer",
+    );
   });
 
   it("extracts workspace from file_path param", () => {
-    expect(extractWorkspace({ file_path: "/openclaw/workspace-divorce/docs/memo.md" }))
-      .toBe("/openclaw/workspace-divorce");
+    expect(extractWorkspace({ file_path: "/openclaw/workspace-divorce/docs/memo.md" })).toBe(
+      "/openclaw/workspace-divorce",
+    );
   });
 
   it("extracts workspace from cwd param", () => {
-    expect(extractWorkspace({ cwd: "/openclaw/workspace-locadora" }))
-      .toBe("/openclaw/workspace-locadora");
+    expect(extractWorkspace({ cwd: "/openclaw/workspace-locadora" })).toBe(
+      "/openclaw/workspace-locadora",
+    );
   });
 
   it("returns null for non-workspace paths", () => {
@@ -1128,13 +1163,15 @@ describe("extractWorkspace", () => {
   });
 
   it("returns null for base /openclaw/workspace (no agent suffix)", () => {
-    expect(extractWorkspace({ command: "ls /openclaw/workspace/scripts" }))
-      .toBeNull();
+    expect(extractWorkspace({ command: "ls /openclaw/workspace/scripts" })).toBeNull();
   });
 
   it("handles multiple workspace refs — returns first match", () => {
-    expect(extractWorkspace({ command: "cp /openclaw/workspace-trainer/a /openclaw/workspace-divorce/b" }))
-      .toBe("/openclaw/workspace-trainer");
+    expect(
+      extractWorkspace({
+        command: "cp /openclaw/workspace-trainer/a /openclaw/workspace-divorce/b",
+      }),
+    ).toBe("/openclaw/workspace-trainer");
   });
 });
 
@@ -1142,29 +1179,29 @@ describe("WorkspaceRouter", () => {
   it("maps sessionKey to workspace and resolves sessionId", () => {
     const router = new WorkspaceRouter();
     router.registerSession("agent:trainer:main", "sid-trainer");
-    expect(router.resolveSessionId({ command: "cat /openclaw/workspace-trainer/x" }))
-      .toBe("sid-trainer");
+    expect(router.resolveSessionId({ command: "cat /openclaw/workspace-trainer/x" })).toBe(
+      "sid-trainer",
+    );
   });
 
   it("returns null for unknown workspace", () => {
     const router = new WorkspaceRouter();
-    expect(router.resolveSessionId({ command: "cat /openclaw/workspace-unknown/x" }))
-      .toBeNull();
+    expect(router.resolveSessionId({ command: "cat /openclaw/workspace-unknown/x" })).toBeNull();
   });
 
   it("updates sessionId on re-registration", () => {
     const router = new WorkspaceRouter();
     router.registerSession("agent:trainer:main", "sid-old");
     router.registerSession("agent:trainer:main", "sid-new");
-    expect(router.resolveSessionId({ command: "cat /openclaw/workspace-trainer/x" }))
-      .toBe("sid-new");
+    expect(router.resolveSessionId({ command: "cat /openclaw/workspace-trainer/x" })).toBe(
+      "sid-new",
+    );
   });
 
   it("handles sessionKey without agent: prefix gracefully", () => {
     const router = new WorkspaceRouter();
     router.registerSession("custom-key", "sid-custom");
     // No workspace derivable — should not crash
-    expect(router.resolveSessionId({ command: "cat /openclaw/workspace-trainer/x" }))
-      .toBeNull();
+    expect(router.resolveSessionId({ command: "cat /openclaw/workspace-trainer/x" })).toBeNull();
   });
 });

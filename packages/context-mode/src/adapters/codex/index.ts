@@ -112,18 +112,12 @@ export class CodexAdapter implements HookAdapter {
   }
 
   getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}.db`);
   }
 
   getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}-events.md`);
   }
 
@@ -170,8 +164,7 @@ export class CodexAdapter implements HookAdapter {
     try {
       const raw = readFileSync(this.getSettingsPath(), "utf-8");
       const hasContextMode = raw.includes("context-mode");
-      const hasMcpSection =
-        raw.includes("[mcp_servers]") || raw.includes("[mcp_servers.");
+      const hasMcpSection = raw.includes("[mcp_servers]") || raw.includes("[mcp_servers.");
 
       if (hasContextMode && hasMcpSection) {
         return {
@@ -185,9 +178,8 @@ export class CodexAdapter implements HookAdapter {
         return {
           check: "MCP registration",
           status: "fail",
-          message:
-            "[mcp_servers] section exists but context-mode not found",
-          fix: 'Add context-mode to [mcp_servers] in ~/.codex/config.toml',
+          message: "[mcp_servers] section exists but context-mode not found",
+          fix: "Add context-mode to [mcp_servers] in ~/.codex/config.toml",
         };
       }
 
@@ -195,7 +187,7 @@ export class CodexAdapter implements HookAdapter {
         check: "MCP registration",
         status: "fail",
         message: "No [mcp_servers] section in config.toml",
-        fix: 'Add [mcp_servers.context-mode] to ~/.codex/config.toml',
+        fix: "Add [mcp_servers.context-mode] to ~/.codex/config.toml",
       };
     } catch {
       return {

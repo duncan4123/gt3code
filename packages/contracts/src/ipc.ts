@@ -49,6 +49,8 @@ import type {
   OrchestrationGetTurnDiffResult,
   OrchestrationEvent,
   OrchestrationReadModel,
+  OrchestrationSearchThreadMessagesInput,
+  OrchestrationSearchThreadMessagesResult,
 } from "./orchestration";
 import { EditorId } from "./editor";
 import { ServerSettings, ServerSettingsPatch } from "./settings";
@@ -179,6 +181,9 @@ export interface NativeApi {
     ) => Promise<OrchestrationGetFullThreadDiffResult>;
     replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationEvent[]>;
     onDomainEvent: (callback: (event: OrchestrationEvent) => void) => () => void;
+    searchThreadMessages: (
+      input: OrchestrationSearchThreadMessagesInput,
+    ) => Promise<OrchestrationSearchThreadMessagesResult>;
   };
   gc: {
     getThreadContext: (input: { threadId: string }) => Promise<GcThreadContextResult>;

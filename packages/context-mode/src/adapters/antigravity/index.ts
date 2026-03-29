@@ -117,18 +117,12 @@ export class AntigravityAdapter implements HookAdapter {
   }
 
   getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}.db`);
   }
 
   getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}-events.md`);
   }
 
@@ -158,9 +152,7 @@ export class AntigravityAdapter implements HookAdapter {
       {
         check: "Hook support",
         status: "warn",
-        message:
-          "Antigravity does not support hooks. " +
-          "Only MCP integration is available.",
+        message: "Antigravity does not support hooks. " + "Only MCP integration is available.",
       },
     ];
   }
@@ -196,13 +188,7 @@ export class AntigravityAdapter implements HookAdapter {
 
   getInstalledVersion(): string {
     try {
-      const pkgPath = resolve(
-        homedir(),
-        ".gemini",
-        "extensions",
-        "context-mode",
-        "package.json",
-      );
+      const pkgPath = resolve(homedir(), ".gemini", "extensions", "context-mode", "package.json");
       const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
       return pkg.version ?? "unknown";
     } catch {

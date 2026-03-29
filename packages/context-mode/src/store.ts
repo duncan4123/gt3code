@@ -9,7 +9,13 @@
  */
 
 import type { Database as DatabaseInstance } from "better-sqlite3";
-import { loadDatabase, applyWALPragmas, closeDB } from "./db-base.js";
+import {
+  loadDatabase,
+  applyWALPragmas,
+  closeDB,
+  attachFtsBtree,
+  ftsSidecarPath,
+} from "./db-base.js";
 import type { PreparedStatement } from "./db-base.js";
 import { readFileSync, readdirSync, unlinkSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,19 +39,109 @@ export type { IndexResult, SearchResult, StoreStats } from "./types.js";
 // ─────────────────────────────────────────────────────────
 
 const STOPWORDS = new Set([
-  "the", "and", "for", "are", "but", "not", "you", "all", "can", "had",
-  "her", "was", "one", "our", "out", "has", "his", "how", "its", "may",
-  "new", "now", "old", "see", "way", "who", "did", "get", "got", "let",
-  "say", "she", "too", "use", "will", "with", "this", "that", "from",
-  "they", "been", "have", "many", "some", "them", "than", "each", "make",
-  "like", "just", "over", "such", "take", "into", "year", "your", "good",
-  "could", "would", "about", "which", "their", "there", "other", "after",
-  "should", "through", "also", "more", "most", "only", "very", "when",
-  "what", "then", "these", "those", "being", "does", "done", "both",
-  "same", "still", "while", "where", "here", "were", "much",
+  "the",
+  "and",
+  "for",
+  "are",
+  "but",
+  "not",
+  "you",
+  "all",
+  "can",
+  "had",
+  "her",
+  "was",
+  "one",
+  "our",
+  "out",
+  "has",
+  "his",
+  "how",
+  "its",
+  "may",
+  "new",
+  "now",
+  "old",
+  "see",
+  "way",
+  "who",
+  "did",
+  "get",
+  "got",
+  "let",
+  "say",
+  "she",
+  "too",
+  "use",
+  "will",
+  "with",
+  "this",
+  "that",
+  "from",
+  "they",
+  "been",
+  "have",
+  "many",
+  "some",
+  "them",
+  "than",
+  "each",
+  "make",
+  "like",
+  "just",
+  "over",
+  "such",
+  "take",
+  "into",
+  "year",
+  "your",
+  "good",
+  "could",
+  "would",
+  "about",
+  "which",
+  "their",
+  "there",
+  "other",
+  "after",
+  "should",
+  "through",
+  "also",
+  "more",
+  "most",
+  "only",
+  "very",
+  "when",
+  "what",
+  "then",
+  "these",
+  "those",
+  "being",
+  "does",
+  "done",
+  "both",
+  "same",
+  "still",
+  "while",
+  "where",
+  "here",
+  "were",
+  "much",
   // Common in code/changelogs
-  "update", "updates", "updated", "deps", "dev", "tests", "test",
-  "add", "added", "fix", "fixed", "run", "running", "using",
+  "update",
+  "updates",
+  "updated",
+  "deps",
+  "dev",
+  "tests",
+  "test",
+  "add",
+  "added",
+  "fix",
+  "fixed",
+  "run",
+  "running",
+  "using",
 ]);
 
 // ─────────────────────────────────────────────────────────
@@ -56,11 +152,7 @@ function sanitizeQuery(query: string, mode: "AND" | "OR" = "AND"): string {
   const words = query
     .replace(/['"(){}[\]*:^~]/g, " ")
     .split(/\s+/)
-    .filter(
-      (w) =>
-        w.length > 0 &&
-        !["AND", "OR", "NOT", "NEAR"].includes(w.toUpperCase()),
-    );
+    .filter((w) => w.length > 0 && !["AND", "OR", "NOT", "NEAR"].includes(w.toUpperCase()));
 
   if (words.length === 0) return '""';
   return words.map((w) => `"${w}"`).join(mode === "OR" ? " OR " : " ");
@@ -82,9 +174,7 @@ function levenshtein(a: string, b: string): number {
     const curr = [i];
     for (let j = 1; j <= b.length; j++) {
       curr[j] =
-        a[i - 1] === b[j - 1]
-          ? prev[j - 1]
-          : 1 + Math.min(prev[j], curr[j - 1], prev[j - 1]);
+        a[i - 1] === b[j - 1] ? prev[j - 1] : 1 + Math.min(prev[j], curr[j - 1], prev[j - 1]);
     }
     prev = curr;
   }
@@ -124,12 +214,18 @@ export function cleanupStaleDBs(): number {
       } catch {
         const base = join(dir, file);
         for (const suffix of ["", "-wal", "-shm"]) {
-          try { unlinkSync(base + suffix); } catch { /* ignore */ }
+          try {
+            unlinkSync(base + suffix);
+          } catch {
+            /* ignore */
+          }
         }
         cleaned++;
       }
     }
-  } catch { /* ignore readdir errors */ }
+  } catch {
+    /* ignore readdir errors */
+  }
   return cleaned;
 }
 
@@ -142,20 +238,28 @@ export function cleanupStaleContentDBs(contentDir: string, maxAgeDays: number): 
   try {
     if (!existsSync(contentDir)) return 0;
     const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
-    const files = readdirSync(contentDir).filter(f => f.endsWith(".db"));
+    const files = readdirSync(contentDir).filter((f) => f.endsWith(".db"));
     for (const file of files) {
       try {
         const filePath = join(contentDir, file);
         const mtime = statSync(filePath).mtimeMs;
         if (mtime < cutoff) {
           for (const suffix of ["", "-wal", "-shm"]) {
-            try { unlinkSync(filePath + suffix); } catch { /* ignore */ }
+            try {
+              unlinkSync(filePath + suffix);
+            } catch {
+              /* ignore */
+            }
           }
           cleaned++;
         }
-      } catch { /* ignore per-file errors */ }
+      } catch {
+        /* ignore per-file errors */
+      }
     }
-  } catch { /* ignore readdir errors */ }
+  } catch {
+    /* ignore readdir errors */
+  }
   return cleaned;
 }
 
@@ -251,10 +355,12 @@ export class ContentStore {
 
   constructor(dbPath?: string) {
     const Database = loadDatabase();
-    this.#dbPath =
-      dbPath ?? join(tmpdir(), `context-mode-${process.pid}.db`);
+    this.#dbPath = dbPath ?? join(tmpdir(), `context-mode-${process.pid}.db`);
     this.#db = new Database(this.#dbPath, { timeout: 5000 });
     applyWALPragmas(this.#db);
+    // ATTACH btree sidecar for FTS5 tables — prolly tree corrupts FTS5 blobs.
+    attachFtsBtree(this.#db, this.#dbPath);
+    this.#migrateFtsToSidecar();
     this.#initSchema();
     this.#prepareStatements();
   }
@@ -263,9 +369,44 @@ export class ContentStore {
   cleanup(): void {
     try {
       this.#db.close();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     for (const suffix of ["", "-wal", "-shm"]) {
-      try { unlinkSync(this.#dbPath + suffix); } catch { /* ignore */ }
+      try {
+        unlinkSync(this.#dbPath + suffix);
+      } catch {
+        /* ignore */
+      }
+    }
+    // Also clean up the FTS btree sidecar
+    const ftsPath = ftsSidecarPath(this.#dbPath);
+    for (const suffix of ["", "-wal", "-shm"]) {
+      try {
+        unlinkSync(ftsPath + suffix);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  // ── Migration: move FTS from prolly to btree sidecar ──
+
+  #migrateFtsToSidecar(): void {
+    // If old prolly-side FTS tables exist, drop them.
+    // Data loss is acceptable — FTS is a derived index, rebuilt on next indexing.
+    try {
+      const rows = this.#db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('chunks', 'chunks_trigram')",
+        )
+        .all() as Array<{ name: string }>;
+      if (rows.length > 0) {
+        this.#db.exec("DROP TABLE IF EXISTS chunks");
+        this.#db.exec("DROP TABLE IF EXISTS chunks_trigram");
+      }
+    } catch {
+      /* ignore — table may not exist */
     }
   }
 
@@ -281,21 +422,31 @@ export class ContentStore {
         indexed_at TEXT NOT NULL DEFAULT ''
       );
 
-      CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
+    `);
+
+    // FTS5 tables in the attached btree sidecar (fts.*) — prolly tree
+    // corrupts FTS5 blob storage. Separate exec() because multi-statement
+    // exec() can't mix schemas.
+    this.#db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS fts.chunks USING fts5(
         title,
         content,
         source_id UNINDEXED,
         content_type UNINDEXED,
         tokenize='porter unicode61'
-      );
-
-      CREATE VIRTUAL TABLE IF NOT EXISTS chunks_trigram USING fts5(
+      )
+    `);
+    this.#db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS fts.chunks_trigram USING fts5(
         title,
         content,
         source_id UNINDEXED,
         content_type UNINDEXED,
         tokenize='trigram'
-      );
+      )
+    `);
+
+    this.#db.exec(`
 
       CREATE TABLE IF NOT EXISTS vocabulary (
         word TEXT PRIMARY KEY
@@ -408,26 +559,22 @@ export class ContentStore {
       "INSERT INTO sources (label, chunk_count, code_chunk_count, indexed_at) VALUES (?, ?, ?, datetime('now'))",
     );
     this.#stmtInsertChunk = this.#db.prepare(
-      "INSERT INTO chunks (title, content, source_id, content_type) VALUES (?, ?, ?, ?)",
+      "INSERT INTO fts.chunks (title, content, source_id, content_type) VALUES (?, ?, ?, ?)",
     );
     this.#stmtInsertChunkTrigram = this.#db.prepare(
-      "INSERT INTO chunks_trigram (title, content, source_id, content_type) VALUES (?, ?, ?, ?)",
+      "INSERT INTO fts.chunks_trigram (title, content, source_id, content_type) VALUES (?, ?, ?, ?)",
     );
-    this.#stmtInsertVocab = this.#db.prepare(
-      "INSERT OR IGNORE INTO vocabulary (word) VALUES (?)",
-    );
+    this.#stmtInsertVocab = this.#db.prepare("INSERT OR IGNORE INTO vocabulary (word) VALUES (?)");
 
     // Dedup path: delete previous source with same label before re-indexing
     // Prevents stale outputs from accumulating in iterative workflows (build-fix-build)
     this.#stmtDeleteChunksByLabel = this.#db.prepare(
-      "DELETE FROM chunks WHERE source_id IN (SELECT id FROM sources WHERE label = ?)",
+      "DELETE FROM fts.chunks WHERE source_id IN (SELECT id FROM sources WHERE label = ?)",
     );
     this.#stmtDeleteChunksTrigramByLabel = this.#db.prepare(
-      "DELETE FROM chunks_trigram WHERE source_id IN (SELECT id FROM sources WHERE label = ?)",
+      "DELETE FROM fts.chunks_trigram WHERE source_id IN (SELECT id FROM sources WHERE label = ?)",
     );
-    this.#stmtDeleteSourcesByLabel = this.#db.prepare(
-      "DELETE FROM sources WHERE label = ?",
-    );
+    this.#stmtDeleteSourcesByLabel = this.#db.prepare("DELETE FROM sources WHERE label = ?");
 
     // Search path (hot)
     this.#stmtSearchPorter = this.#db.prepare(`
@@ -438,8 +585,8 @@ export class ContentStore {
         sources.label,
         bm25(chunks, 5.0, 1.0) AS rank,
         highlight(chunks, 1, char(2), char(3)) AS highlighted
-      FROM chunks
-      JOIN sources ON sources.id = chunks.source_id
+      FROM fts.chunks
+      JOIN sources ON sources.id = fts.chunks.source_id
       WHERE chunks MATCH ?
       ORDER BY rank
       LIMIT ?
@@ -452,8 +599,8 @@ export class ContentStore {
         sources.label,
         bm25(chunks, 5.0, 1.0) AS rank,
         highlight(chunks, 1, char(2), char(3)) AS highlighted
-      FROM chunks
-      JOIN sources ON sources.id = chunks.source_id
+      FROM fts.chunks
+      JOIN sources ON sources.id = fts.chunks.source_id
       WHERE chunks MATCH ? AND sources.label LIKE ?
       ORDER BY rank
       LIMIT ?
@@ -466,8 +613,8 @@ export class ContentStore {
         sources.label,
         bm25(chunks_trigram, 5.0, 1.0) AS rank,
         highlight(chunks_trigram, 1, char(2), char(3)) AS highlighted
-      FROM chunks_trigram
-      JOIN sources ON sources.id = chunks_trigram.source_id
+      FROM fts.chunks_trigram
+      JOIN sources ON sources.id = fts.chunks_trigram.source_id
       WHERE chunks_trigram MATCH ?
       ORDER BY rank
       LIMIT ?
@@ -480,8 +627,8 @@ export class ContentStore {
         sources.label,
         bm25(chunks_trigram, 5.0, 1.0) AS rank,
         highlight(chunks_trigram, 1, char(2), char(3)) AS highlighted
-      FROM chunks_trigram
-      JOIN sources ON sources.id = chunks_trigram.source_id
+      FROM fts.chunks_trigram
+      JOIN sources ON sources.id = fts.chunks_trigram.source_id
       WHERE chunks_trigram MATCH ? AND sources.label LIKE ?
       ORDER BY rank
       LIMIT ?
@@ -496,8 +643,8 @@ export class ContentStore {
         sources.label,
         bm25(chunks, 5.0, 1.0) AS rank,
         highlight(chunks, 1, char(2), char(3)) AS highlighted
-      FROM chunks
-      JOIN sources ON sources.id = chunks.source_id
+      FROM fts.chunks
+      JOIN sources ON sources.id = fts.chunks.source_id
       WHERE chunks MATCH ? AND chunks.content_type = ?
       ORDER BY rank
       LIMIT ?
@@ -510,8 +657,8 @@ export class ContentStore {
         sources.label,
         bm25(chunks, 5.0, 1.0) AS rank,
         highlight(chunks, 1, char(2), char(3)) AS highlighted
-      FROM chunks
-      JOIN sources ON sources.id = chunks.source_id
+      FROM fts.chunks
+      JOIN sources ON sources.id = fts.chunks.source_id
       WHERE chunks MATCH ? AND sources.label LIKE ? AND chunks.content_type = ?
       ORDER BY rank
       LIMIT ?
@@ -524,8 +671,8 @@ export class ContentStore {
         sources.label,
         bm25(chunks_trigram, 5.0, 1.0) AS rank,
         highlight(chunks_trigram, 1, char(2), char(3)) AS highlighted
-      FROM chunks_trigram
-      JOIN sources ON sources.id = chunks_trigram.source_id
+      FROM fts.chunks_trigram
+      JOIN sources ON sources.id = fts.chunks_trigram.source_id
       WHERE chunks_trigram MATCH ? AND chunks_trigram.content_type = ?
       ORDER BY rank
       LIMIT ?
@@ -538,8 +685,8 @@ export class ContentStore {
         sources.label,
         bm25(chunks_trigram, 5.0, 1.0) AS rank,
         highlight(chunks_trigram, 1, char(2), char(3)) AS highlighted
-      FROM chunks_trigram
-      JOIN sources ON sources.id = chunks_trigram.source_id
+      FROM fts.chunks_trigram
+      JOIN sources ON sources.id = fts.chunks_trigram.source_id
       WHERE chunks_trigram MATCH ? AND sources.label LIKE ? AND chunks_trigram.content_type = ?
       ORDER BY rank
       LIMIT ?
@@ -556,35 +703,27 @@ export class ContentStore {
     );
     this.#stmtChunksBySource = this.#db.prepare(
       `SELECT c.title, c.content, c.content_type, s.label
-       FROM chunks c
+       FROM fts.chunks c
        JOIN sources s ON s.id = c.source_id
        WHERE c.source_id = ?
        ORDER BY c.rowid`,
     );
-    this.#stmtSourceChunkCount = this.#db.prepare(
-      "SELECT chunk_count FROM sources WHERE id = ?",
-    );
-    this.#stmtChunkContent = this.#db.prepare(
-      "SELECT content FROM chunks WHERE source_id = ?",
-    );
+    this.#stmtSourceChunkCount = this.#db.prepare("SELECT chunk_count FROM sources WHERE id = ?");
+    this.#stmtChunkContent = this.#db.prepare("SELECT content FROM fts.chunks WHERE source_id = ?");
     this.#stmtSourceMeta = this.#db.prepare(
       "SELECT label, chunk_count, code_chunk_count, indexed_at FROM sources WHERE label = ?",
     );
     this.#stmtStats = this.#db.prepare(`
       SELECT
         (SELECT COUNT(*) FROM sources) AS sources,
-        (SELECT COUNT(*) FROM chunks) AS chunks,
-        (SELECT COUNT(*) FROM chunks WHERE content_type = 'code') AS codeChunks
+        (SELECT COUNT(*) FROM fts.chunks) AS chunks,
+        (SELECT COUNT(*) FROM fts.chunks WHERE content_type = 'code') AS codeChunks
     `);
   }
 
   // ── Index ──
 
-  index(options: {
-    content?: string;
-    path?: string;
-    source?: string;
-  }): IndexResult {
+  index(options: { content?: string; path?: string; source?: string }): IndexResult {
     const { content, path, source } = options;
 
     if (!content && !path) {
@@ -605,11 +744,7 @@ export class ContentStore {
    * into fixed-size line groups. Unlike markdown indexing, this does not
    * look for headings — it chunks by line count with overlap.
    */
-  indexPlainText(
-    content: string,
-    source: string,
-    linesPerChunk: number = 20,
-  ): IndexResult {
+  indexPlainText(content: string, source: string, linesPerChunk: number = 20): IndexResult {
     if (!content || content.trim().length === 0) {
       return this.#insertChunks([], source, "");
     }
@@ -632,11 +767,7 @@ export class ContentStore {
    *
    * Falls back to `indexPlainText` if the content is not valid JSON.
    */
-  indexJSON(
-    content: string,
-    source: string,
-    maxChunkBytes: number = MAX_CHUNK_BYTES,
-  ): IndexResult {
+  indexJSON(content: string, source: string, maxChunkBytes: number = MAX_CHUNK_BYTES): IndexResult {
     if (!content || content.trim().length === 0) {
       return this.indexPlainText("", source);
     }
@@ -872,10 +1003,7 @@ export class ContentStore {
 
   // ── Proximity Reranking ──
 
-  #applyProximityReranking(
-    results: SearchResult[],
-    query: string,
-  ): SearchResult[] {
+  #applyProximityReranking(results: SearchResult[], query: string): SearchResult[] {
     const terms = query
       .toLowerCase()
       .split(/\s+/)
@@ -940,10 +1068,19 @@ export class ContentStore {
 
   // ── Sources ──
 
-  getSourceMeta(label: string): { label: string; chunkCount: number; codeChunkCount: number; indexedAt: string } | null {
-    const row = this.#stmtSourceMeta.get(label) as { label: string; chunk_count: number; code_chunk_count: number; indexed_at: string } | undefined;
+  getSourceMeta(
+    label: string,
+  ): { label: string; chunkCount: number; codeChunkCount: number; indexedAt: string } | null {
+    const row = this.#stmtSourceMeta.get(label) as
+      | { label: string; chunk_count: number; code_chunk_count: number; indexed_at: string }
+      | undefined;
     if (!row) return null;
-    return { label: row.label, chunkCount: row.chunk_count, codeChunkCount: row.code_chunk_count, indexedAt: row.indexed_at };
+    return {
+      label: row.label,
+      chunkCount: row.chunk_count,
+      codeChunkCount: row.code_chunk_count,
+      indexedAt: row.indexed_at,
+    };
   }
 
   listSources(): Array<{ label: string; chunkCount: number }> {
@@ -977,9 +1114,7 @@ export class ContentStore {
   // ── Vocabulary ──
 
   getDistinctiveTerms(sourceId: number, maxTerms: number = 40): string[] {
-    const stats = this.#stmtSourceChunkCount.get(sourceId) as
-      | { chunk_count: number }
-      | undefined;
+    const stats = this.#stmtSourceChunkCount.get(sourceId) as { chunk_count: number } | undefined;
 
     if (!stats || stats.chunk_count < 3) return [];
 
@@ -1003,8 +1138,9 @@ export class ContentStore {
       }
     }
 
-    const filtered = Array.from(docFreq.entries())
-      .filter(([, count]) => count >= minAppearances && count <= maxAppearances);
+    const filtered = Array.from(docFreq.entries()).filter(
+      ([, count]) => count >= minAppearances && count <= maxAppearances,
+    );
 
     // Score: IDF (rarity) + length bonus + identifier bonus (underscore/camelCase)
     const scored = filtered.map(([word, count]: [string, number]) => {
@@ -1017,7 +1153,10 @@ export class ContentStore {
     });
 
     return scored
-      .sort((a: { word: string; score: number }, b: { word: string; score: number }) => b.score - a.score)
+      .sort(
+        (a: { word: string; score: number }, b: { word: string; score: number }) =>
+          b.score - a.score,
+      )
       .slice(0, maxTerms)
       .map((s: { word: string; score: number }) => s.word);
   }
@@ -1025,11 +1164,13 @@ export class ContentStore {
   // ── Stats ──
 
   getStats(): StoreStats {
-    const row = this.#stmtStats.get() as {
-      sources: number;
-      chunks: number;
-      codeChunks: number;
-    } | undefined;
+    const row = this.#stmtStats.get() as
+      | {
+          sources: number;
+          chunks: number;
+          codeChunks: number;
+        }
+      | undefined;
 
     return {
       sources: row?.sources ?? 0,
@@ -1046,10 +1187,10 @@ export class ContentStore {
    */
   cleanupStaleSources(maxAgeDays: number): number {
     const deleteChunks = this.#db.prepare(
-      "DELETE FROM chunks WHERE source_id IN (SELECT id FROM sources WHERE datetime(indexed_at) < datetime('now', '-' || ? || ' days'))",
+      "DELETE FROM fts.chunks WHERE source_id IN (SELECT id FROM sources WHERE datetime(indexed_at) < datetime('now', '-' || ? || ' days'))",
     );
     const deleteChunksTrigram = this.#db.prepare(
-      "DELETE FROM chunks_trigram WHERE source_id IN (SELECT id FROM sources WHERE datetime(indexed_at) < datetime('now', '-' || ? || ' days'))",
+      "DELETE FROM fts.chunks_trigram WHERE source_id IN (SELECT id FROM sources WHERE datetime(indexed_at) < datetime('now', '-' || ? || ' days'))",
     );
     const deleteSources = this.#db.prepare(
       "DELETE FROM sources WHERE datetime(indexed_at) < datetime('now', '-' || ? || ' days')",
@@ -1191,10 +1332,7 @@ export class ContentStore {
         const heading = headingMatch[2].trim();
 
         // Pop deeper levels from stack
-        while (
-          headingStack.length > 0 &&
-          headingStack[headingStack.length - 1].level >= level
-        ) {
+        while (headingStack.length > 0 && headingStack[headingStack.length - 1].level >= level) {
           headingStack.pop();
         }
         headingStack.push({ level, text: heading });
@@ -1236,10 +1374,7 @@ export class ContentStore {
     return chunks;
   }
 
-  #chunkPlainText(
-    text: string,
-    linesPerChunk: number,
-  ): Array<{ title: string; content: string }> {
+  #chunkPlainText(text: string, linesPerChunk: number): Array<{ title: string; content: string }> {
     // Try blank-line splitting first for naturally-sectioned output
     const sections = text.split(/\n\s*\n/);
     if (
@@ -1286,12 +1421,7 @@ export class ContentStore {
     return chunks;
   }
 
-  #walkJSON(
-    value: unknown,
-    path: string[],
-    chunks: Chunk[],
-    maxChunkBytes: number,
-  ): void {
+  #walkJSON(value: unknown, path: string[], chunks: Chunk[], maxChunkBytes: number): void {
     const title = path.length > 0 ? path.join(" > ") : "(root)";
     const serialized = JSON.stringify(value, null, 2);
 
@@ -1305,9 +1435,7 @@ export class ContentStore {
         typeof value === "object" &&
         value !== null &&
         !Array.isArray(value) &&
-        Object.values(value).some(
-          (v) => typeof v === "object" && v !== null,
-        );
+        Object.values(value).some((v) => typeof v === "object" && v !== null);
 
       if (!shouldRecurse) {
         chunks.push({ title, content: serialized, hasCode: true });
@@ -1368,13 +1496,10 @@ export class ContentStore {
     const sep = prefix ? `${prefix} > ` : "";
 
     if (!identityField) {
-      return startIdx === endIdx
-        ? `${sep}[${startIdx}]`
-        : `${sep}[${startIdx}-${endIdx}]`;
+      return startIdx === endIdx ? `${sep}[${startIdx}]` : `${sep}[${startIdx}-${endIdx}]`;
     }
 
-    const getId = (item: unknown) =>
-      String((item as Record<string, unknown>)[identityField]);
+    const getId = (item: unknown) => String((item as Record<string, unknown>)[identityField]);
 
     if (batch.length === 1) {
       return `${sep}${getId(batch[0])}`;
@@ -1385,12 +1510,7 @@ export class ContentStore {
     return `${sep}${getId(batch[0])}\u2026${getId(batch[batch.length - 1])}`;
   }
 
-  #chunkJSONArray(
-    arr: unknown[],
-    path: string[],
-    chunks: Chunk[],
-    maxChunkBytes: number,
-  ): void {
+  #chunkJSONArray(arr: unknown[], path: string[], chunks: Chunk[], maxChunkBytes: number): void {
     const prefix = path.length > 0 ? path.join(" > ") : "(root)";
     const identityField = this.#findIdentityField(arr);
 

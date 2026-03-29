@@ -67,7 +67,11 @@ function resolveWindowsBash(): string | null {
   // Fallback: scan PATH via `where bash`, skipping WSL and WindowsApps entries.
   try {
     const result = execSync("where bash", { encoding: "utf-8", stdio: "pipe" });
-    const candidates = result.trim().split(/\r?\n/).map(p => p.trim()).filter(Boolean);
+    const candidates = result
+      .trim()
+      .split(/\r?\n/)
+      .map((p) => p.trim())
+      .filter(Boolean);
     for (const p of candidates) {
       const lower = p.toLowerCase();
       if (lower.includes("system32") || lower.includes("windowsapps")) continue;
@@ -105,24 +109,19 @@ export function detectRuntimes(): RuntimeMap {
         : commandExists("ts-node")
           ? "ts-node"
           : null,
-    python: commandExists("python3")
-      ? "python3"
-      : commandExists("python")
-        ? "python"
-        : null,
+    python: commandExists("python3") ? "python3" : commandExists("python") ? "python" : null,
     shell: isWindows
-      ? (resolveWindowsBash() ?? (commandExists("sh") ? "sh" : commandExists("powershell") ? "powershell" : "cmd.exe"))
-      : commandExists("bash") ? "bash" : "sh",
+      ? (resolveWindowsBash() ??
+        (commandExists("sh") ? "sh" : commandExists("powershell") ? "powershell" : "cmd.exe"))
+      : commandExists("bash")
+        ? "bash"
+        : "sh",
     ruby: commandExists("ruby") ? "ruby" : null,
     go: commandExists("go") ? "go" : null,
     rust: commandExists("rustc") ? "rustc" : null,
     php: commandExists("php") ? "php" : null,
     perl: commandExists("perl") ? "perl" : null,
-    r: commandExists("Rscript")
-      ? "Rscript"
-      : commandExists("r")
-        ? "r"
-        : null,
+    r: commandExists("Rscript") ? "Rscript" : commandExists("r") ? "r" : null,
     elixir: commandExists("elixir") ? "elixir" : null,
   };
 }
@@ -140,58 +139,32 @@ export function getRuntimeSummary(runtimes: RuntimeMap): string {
   );
 
   if (runtimes.typescript) {
-    lines.push(
-      `  TypeScript: ${runtimes.typescript} (${getVersion(runtimes.typescript)})`,
-    );
+    lines.push(`  TypeScript: ${runtimes.typescript} (${getVersion(runtimes.typescript)})`);
   } else {
-    lines.push(
-      `  TypeScript: not available (install bun, tsx, or ts-node)`,
-    );
+    lines.push(`  TypeScript: not available (install bun, tsx, or ts-node)`);
   }
 
   if (runtimes.python) {
-    lines.push(
-      `  Python:     ${runtimes.python} (${getVersion(runtimes.python)})`,
-    );
+    lines.push(`  Python:     ${runtimes.python} (${getVersion(runtimes.python)})`);
   } else {
     lines.push(`  Python:     not available`);
   }
 
-  lines.push(
-    `  Shell:      ${runtimes.shell} (${getVersion(runtimes.shell)})`,
-  );
+  lines.push(`  Shell:      ${runtimes.shell} (${getVersion(runtimes.shell)})`);
 
   // Optional runtimes — only show if available
-  if (runtimes.ruby)
-    lines.push(
-      `  Ruby:       ${runtimes.ruby} (${getVersion(runtimes.ruby)})`,
-    );
-  if (runtimes.go)
-    lines.push(`  Go:         ${runtimes.go} (${getVersion(runtimes.go)})`);
-  if (runtimes.rust)
-    lines.push(
-      `  Rust:       ${runtimes.rust} (${getVersion(runtimes.rust)})`,
-    );
-  if (runtimes.php)
-    lines.push(
-      `  PHP:        ${runtimes.php} (${getVersion(runtimes.php)})`,
-    );
-  if (runtimes.perl)
-    lines.push(
-      `  Perl:       ${runtimes.perl} (${getVersion(runtimes.perl)})`,
-    );
-  if (runtimes.r)
-    lines.push(`  R:          ${runtimes.r} (${getVersion(runtimes.r)})`);
+  if (runtimes.ruby) lines.push(`  Ruby:       ${runtimes.ruby} (${getVersion(runtimes.ruby)})`);
+  if (runtimes.go) lines.push(`  Go:         ${runtimes.go} (${getVersion(runtimes.go)})`);
+  if (runtimes.rust) lines.push(`  Rust:       ${runtimes.rust} (${getVersion(runtimes.rust)})`);
+  if (runtimes.php) lines.push(`  PHP:        ${runtimes.php} (${getVersion(runtimes.php)})`);
+  if (runtimes.perl) lines.push(`  Perl:       ${runtimes.perl} (${getVersion(runtimes.perl)})`);
+  if (runtimes.r) lines.push(`  R:          ${runtimes.r} (${getVersion(runtimes.r)})`);
   if (runtimes.elixir)
-    lines.push(
-      `  Elixir:     ${runtimes.elixir} (${getVersion(runtimes.elixir)})`,
-    );
+    lines.push(`  Elixir:     ${runtimes.elixir} (${getVersion(runtimes.elixir)})`);
 
   if (!bunPreferred) {
     lines.push("");
-    lines.push(
-      "  Tip: Install Bun for 3-5x faster JS/TS execution → https://bun.sh",
-    );
+    lines.push("  Tip: Install Bun for 3-5x faster JS/TS execution → https://bun.sh");
   }
 
   return lines.join("\n");
@@ -211,16 +184,10 @@ export function getAvailableLanguages(runtimes: RuntimeMap): Language[] {
   return langs;
 }
 
-export function buildCommand(
-  runtimes: RuntimeMap,
-  language: Language,
-  filePath: string,
-): string[] {
+export function buildCommand(runtimes: RuntimeMap, language: Language, filePath: string): string[] {
   switch (language) {
     case "javascript":
-      return runtimes.javascript === "bun"
-        ? ["bun", "run", filePath]
-        : ["node", filePath];
+      return runtimes.javascript === "bun" ? ["bun", "run", filePath] : ["node", filePath];
 
     case "typescript":
       if (!runtimes.typescript) {
@@ -234,9 +201,7 @@ export function buildCommand(
 
     case "python":
       if (!runtimes.python) {
-        throw new Error(
-          "No Python runtime available. Install python3 or python.",
-        );
+        throw new Error("No Python runtime available. Install python3 or python.");
       }
       return [runtimes.python, filePath];
 
@@ -257,9 +222,7 @@ export function buildCommand(
 
     case "rust": {
       if (!runtimes.rust) {
-        throw new Error(
-          "Rust not available. Install rustc via https://rustup.rs",
-        );
+        throw new Error("Rust not available. Install rustc via https://rustup.rs");
       }
       // Rust needs compile + run — handled specially in executor
       return ["__rust_compile_run__", filePath];
@@ -285,7 +248,7 @@ export function buildCommand(
 
     case "elixir":
       if (!runtimes.elixir) {
-        throw new Error( "Elixir not available. Install elixir.");
+        throw new Error("Elixir not available. Install elixir.");
       }
       return ["elixir", filePath];
   }

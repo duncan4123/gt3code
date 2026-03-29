@@ -58,9 +58,7 @@ export const REQUIRED_HOOKS: HookEvent[] = [
  * Optional hooks that enhance functionality but aren't critical.
  * command:new provides session cleanup; context engine handles compaction.
  */
-export const OPTIONAL_HOOKS: HookEvent[] = [
-  HOOK_EVENTS.COMMAND_NEW,
-];
+export const OPTIONAL_HOOKS: HookEvent[] = [HOOK_EVENTS.COMMAND_NEW];
 
 /**
  * Check if a plugin entry is the context-mode plugin.

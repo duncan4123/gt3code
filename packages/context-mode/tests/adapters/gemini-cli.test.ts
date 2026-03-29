@@ -154,16 +154,12 @@ describe("GeminiCLIAdapter", () => {
 
   describe("config paths", () => {
     it("settings path is ~/.gemini/settings.json", () => {
-      expect(adapter.getSettingsPath()).toBe(
-        resolve(homedir(), ".gemini", "settings.json"),
-      );
+      expect(adapter.getSettingsPath()).toBe(resolve(homedir(), ".gemini", "settings.json"));
     });
 
     it("session dir is under ~/.gemini/context-mode/sessions/", () => {
       const sessionDir = adapter.getSessionDir();
-      expect(sessionDir).toBe(
-        join(homedir(), ".gemini", "context-mode", "sessions"),
-      );
+      expect(sessionDir).toBe(join(homedir(), ".gemini", "context-mode", "sessions"));
     });
   });
 

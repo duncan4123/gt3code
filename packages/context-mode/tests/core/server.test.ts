@@ -164,7 +164,10 @@ describe("Stdout Cap", () => {
       code: 'for (let i = 0; i < 4000; i++) console.log("x".repeat(25));',
       timeout: 10_000,
     });
-    assert.ok(r.stderr.includes("output capped"), "Expected cap message in stderr, got: " + r.stderr.slice(-200));
+    assert.ok(
+      r.stderr.includes("output capped"),
+      "Expected cap message in stderr, got: " + r.stderr.slice(-200),
+    );
     assert.ok(r.stderr.includes("process killed"), "Expected 'process killed' in stderr");
   });
 });
@@ -177,7 +180,10 @@ describe("Stderr Cap", () => {
       code: 'for (let i = 0; i < 4000; i++) console.error("e".repeat(25));',
       timeout: 10_000,
     });
-    assert.ok(r.stderr.includes("output capped"), "Expected cap message in stderr for stderr-heavy output");
+    assert.ok(
+      r.stderr.includes("output capped"),
+      "Expected cap message in stderr for stderr-heavy output",
+    );
   });
 });
 
@@ -202,7 +208,10 @@ describe("Normal Operation", () => {
     });
     assert.equal(r.exitCode, 0);
     assert.ok(r.stdout.includes("hello from capped executor"));
-    assert.ok(!r.stderr.includes("output capped"), "Should NOT contain cap message for small output");
+    assert.ok(
+      !r.stderr.includes("output capped"),
+      "Should NOT contain cap message for small output",
+    );
   });
 
   test("normal: moderate output below cap preserves all content", async () => {
@@ -230,7 +239,10 @@ describe("Memory Bounding", () => {
     assert.ok(r.stderr.includes("output capped"), "Cap should have triggered");
     const stdoutBytes = Buffer.byteLength(r.stdout);
     const tolerance = 256 * 1024;
-    assert.ok(stdoutBytes < capBytes + tolerance, "Collected " + stdoutBytes + " bytes stdout; expected bounded near " + capBytes);
+    assert.ok(
+      stdoutBytes < capBytes + tolerance,
+      "Collected " + stdoutBytes + " bytes stdout; expected bounded near " + capBytes,
+    );
   });
 });
 
@@ -255,7 +267,10 @@ describe("Cap Message Format", () => {
       timeout: 10_000,
     });
     assert.ok(r.stderr.includes("\u2014"), "Cap message should use em dash");
-    assert.ok(r.stderr.includes("[output capped at"), "Cap message should start with '[output capped at'");
+    assert.ok(
+      r.stderr.includes("[output capped at"),
+      "Cap message should start with '[output capped at'",
+    );
   });
 });
 
@@ -297,7 +312,11 @@ describe("Default Cap", () => {
 
 describe("Smart Truncation Interaction", () => {
   test("truncation: hardCap and maxOutputBytes work together", async () => {
-    const executor = new PolyglotExecutor({ hardCapBytes: 50 * 1024, maxOutputBytes: 1024, runtimes });
+    const executor = new PolyglotExecutor({
+      hardCapBytes: 50 * 1024,
+      maxOutputBytes: 1024,
+      runtimes,
+    });
     const r = await executor.execute({
       language: "javascript",
       code: 'for (let i = 0; i < 4000; i++) console.log("x".repeat(25));',
@@ -305,7 +324,10 @@ describe("Smart Truncation Interaction", () => {
     });
     assert.ok(r.stderr.includes("output capped"), "Hard cap should trigger");
     const stdoutBytes = Buffer.byteLength(r.stdout);
-    assert.ok(stdoutBytes < 50 * 1024, "Final stdout should be truncated by smartTruncate, got " + stdoutBytes + " bytes");
+    assert.ok(
+      stdoutBytes < 50 * 1024,
+      "Final stdout should be truncated by smartTruncate, got " + stdoutBytes + " bytes",
+    );
   });
 });
 
@@ -465,7 +487,7 @@ describe("turndown HTML-to-markdown conversion tests", () => {
   });
 
   test("handles nested tags correctly", async () => {
-    const html = '<div><p>Outer <strong>bold <em>and italic</em></strong> text</p></div>';
+    const html = "<div><p>Outer <strong>bold <em>and italic</em></strong> text</p></div>";
     const result = await turndownExecutor.execute({
       language: "javascript",
       code: buildConversionCode(html),
@@ -492,7 +514,10 @@ describe("turndown HTML-to-markdown conversion tests", () => {
       code: buildConversionCode("<p>Tom &amp; Jerry &lt;3 &quot;cheese&quot;</p>"),
     });
     assert.equal(result.exitCode, 0, `stderr: ${result.stderr}`);
-    assert(result.stdout.includes('Tom & Jerry <3 "cheese"'), `entities not decoded: ${result.stdout}`);
+    assert(
+      result.stdout.includes('Tom & Jerry <3 "cheese"'),
+      `entities not decoded: ${result.stdout}`,
+    );
   });
 });
 
@@ -512,20 +537,12 @@ mkdirSync(pluginDir, { recursive: true });
 // Create a test file in the user's project directory
 const testFileName = "data.json";
 const testData = { message: "hello from project dir", count: 42 };
-writeFileSync(
-  join(projectDir, testFileName),
-  JSON.stringify(testData),
-  "utf-8",
-);
+writeFileSync(join(projectDir, testFileName), JSON.stringify(testData), "utf-8");
 
 // Also create a different file with the same name in the plugin directory
 // to prove we're reading from the right place
 const pluginData = { message: "wrong directory", count: 0 };
-writeFileSync(
-  join(pluginDir, testFileName),
-  JSON.stringify(pluginData),
-  "utf-8",
-);
+writeFileSync(join(pluginDir, testFileName), JSON.stringify(pluginData), "utf-8");
 
 afterAll(() => {
   rmSync(projDirBaseDir, { recursive: true, force: true });
@@ -763,10 +780,7 @@ describe("Hook Injection", () => {
       prompt.includes("<tool_selection_hierarchy>"),
       "Should inject tool_selection_hierarchy",
     );
-    assert.ok(
-      prompt.includes("<forbidden_actions>"),
-      "Should inject forbidden_actions",
-    );
+    assert.ok(prompt.includes("<forbidden_actions>"), "Should inject forbidden_actions");
   });
 
   test("Task hook injects batch_execute as primary tool", () => {
@@ -776,10 +790,7 @@ describe("Hook Injection", () => {
     });
     const parsed = JSON.parse(output);
     const prompt = parsed.hookSpecificOutput.updatedInput.prompt;
-    assert.ok(
-      prompt.includes("batch_execute"),
-      "Should mention batch_execute as primary tool",
-    );
+    assert.ok(prompt.includes("batch_execute"), "Should mention batch_execute as primary tool");
   });
 
   test("Task hook upgrades Bash subagent to general-purpose", () => {
@@ -808,10 +819,7 @@ describe("Hook Injection", () => {
     });
     const parsed = JSON.parse(output);
     const prompt = parsed.hookSpecificOutput.updatedInput.prompt;
-    assert.ok(
-      prompt.startsWith(original),
-      "Original prompt should be preserved at the start",
-    );
+    assert.ok(prompt.startsWith(original), "Original prompt should be preserved at the start");
   });
 
   test("Non-Task tools are not affected by output budget", () => {
@@ -908,7 +916,8 @@ describe("Shared Knowledge Base (subagent -> main)", () => {
 
     // Subagent lifecycle: index → close (subagent done)
     store.index({
-      content: "# Security Audit\nNo critical vulnerabilities found. 3 medium severity issues in auth module.",
+      content:
+        "# Security Audit\nNo critical vulnerabilities found. 3 medium severity issues in auth module.",
       source: "subagent:security-audit",
     });
     // Subagent returns summary: "Indexed findings as 'subagent:security-audit'"
@@ -953,7 +962,8 @@ describe("Context Budget Measurement", () => {
     // Simulate what happens WITHOUT the output budget — full inline dump
     const bloatedResponse = Array.from(
       { length: 50 },
-      (_, i) => `Line ${i}: Detailed information about zod feature ${i} with examples and code snippets...`,
+      (_, i) =>
+        `Line ${i}: Detailed information about zod feature ${i} with examples and code snippets...`,
     ).join("\n");
 
     const words = bloatedResponse.split(/\s+/).filter((w) => w.length > 0).length;
@@ -970,15 +980,11 @@ if (LIVE) {
       const prompt = `Research the npm package "chalk" — what it does, latest version, weekly downloads. Keep it brief.`;
 
       // Use claude CLI in pipe mode with haiku for speed
-      const result = spawnSync(
-        "claude",
-        ["-p", "--model", "haiku", prompt],
-        {
-          encoding: "utf-8",
-          timeout: 60_000,
-          env: { ...process.env },
-        },
-      );
+      const result = spawnSync("claude", ["-p", "--model", "haiku", prompt], {
+        encoding: "utf-8",
+        timeout: 60_000,
+        env: { ...process.env },
+      });
 
       if (result.error || result.status !== 0) {
         console.log("    Skipped: claude CLI not available or errored");
@@ -995,10 +1001,7 @@ if (LIVE) {
         console.log(`    WARNING: Response exceeded 500 word budget (${words} words)`);
       }
 
-      assert.ok(
-        words < 1000,
-        `Response should be reasonable length, got ${words} words`,
-      );
+      assert.ok(words < 1000, `Response should be reasonable length, got ${words} words`);
     });
   });
 }
@@ -1008,10 +1011,7 @@ if (LIVE) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("ctx_upgrade tool: inline fallback for missing CLI", () => {
-  const serverSrc = readFileSync(
-    resolve(__dirname, "../../src/server.ts"),
-    "utf-8",
-  );
+  const serverSrc = readFileSync(resolve(__dirname, "../../src/server.ts"), "utf-8");
 
   test("tries cli.bundle.mjs first", () => {
     expect(serverSrc).toContain("cli.bundle.mjs");

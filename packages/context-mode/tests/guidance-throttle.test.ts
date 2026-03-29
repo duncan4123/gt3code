@@ -93,8 +93,12 @@ describe("guidance throttle", () => {
     const wid = process.env.VITEST_WORKER_ID;
     const suffix = wid ? `${process.ppid}-w${wid}` : String(process.ppid);
     const dir = path.resolve(os.tmpdir(), `context-mode-guidance-${suffix}`);
-    try { fs.mkdirSync(dir, { recursive: true }); } catch {}
-    try { fs.writeFileSync(path.resolve(dir, "read"), "", "utf-8"); } catch {}
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch {}
+    try {
+      fs.writeFileSync(path.resolve(dir, "read"), "", "utf-8");
+    } catch {}
 
     // Should detect file marker even though in-memory was cleared
     const r2 = routePreToolUse("Read", { file_path: "/tmp/b.ts" }, PROJECT_DIR);

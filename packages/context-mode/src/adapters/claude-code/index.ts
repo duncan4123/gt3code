@@ -205,18 +205,12 @@ export class ClaudeCodeAdapter implements HookAdapter {
   }
 
   getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}.db`);
   }
 
   getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}-events.md`);
   }
 
@@ -295,11 +289,7 @@ export class ClaudeCodeAdapter implements HookAdapter {
   }
 
   writeSettings(settings: Record<string, unknown>): void {
-    writeFileSync(
-      this.getSettingsPath(),
-      JSON.stringify(settings, null, 2) + "\n",
-      "utf-8",
-    );
+    writeFileSync(this.getSettingsPath(), JSON.stringify(settings, null, 2) + "\n", "utf-8");
   }
 
   // ── Diagnostics (doctor) ─────────────────────────────────
@@ -329,9 +319,7 @@ export class ClaudeCodeAdapter implements HookAdapter {
     results.push({
       check: "PreToolUse hook",
       status: hasPreToolUse ? "pass" : "fail",
-      message: hasPreToolUse
-        ? "PreToolUse hook configured"
-        : "No PreToolUse hooks found",
+      message: hasPreToolUse ? "PreToolUse hook configured" : "No PreToolUse hooks found",
       fix: hasPreToolUse ? undefined : "context-mode upgrade",
     });
 
@@ -340,9 +328,7 @@ export class ClaudeCodeAdapter implements HookAdapter {
     results.push({
       check: "SessionStart hook",
       status: hasSessionStart ? "pass" : "fail",
-      message: hasSessionStart
-        ? "SessionStart hook configured"
-        : "No SessionStart hooks found",
+      message: hasSessionStart ? "SessionStart hook configured" : "No SessionStart hooks found",
       fix: hasSessionStart ? undefined : "context-mode upgrade",
     });
 
@@ -350,9 +336,7 @@ export class ClaudeCodeAdapter implements HookAdapter {
   }
 
   /** Read plugin hooks from hooks/hooks.json or .claude-plugin/hooks/hooks.json */
-  private readPluginHooks(
-    pluginRoot: string,
-  ): Record<string, unknown[]> | undefined {
+  private readPluginHooks(pluginRoot: string): Record<string, unknown[]> | undefined {
     const candidates = [
       join(pluginRoot, "hooks", "hooks.json"),
       join(pluginRoot, ".claude-plugin", "hooks", "hooks.json"),
@@ -362,7 +346,9 @@ export class ClaudeCodeAdapter implements HookAdapter {
         const raw = readFileSync(candidate, "utf-8");
         const parsed = JSON.parse(raw) as { hooks?: Record<string, unknown[]> };
         if (parsed.hooks) return parsed.hooks;
-      } catch { /* not available */ }
+      } catch {
+        /* not available */
+      }
     }
     return undefined;
   }
@@ -404,9 +390,7 @@ export class ClaudeCodeAdapter implements HookAdapter {
       };
     }
 
-    const enabledPlugins = settings.enabledPlugins as
-      | Record<string, boolean>
-      | undefined;
+    const enabledPlugins = settings.enabledPlugins as Record<string, boolean> | undefined;
     if (!enabledPlugins) {
       return {
         check: "Plugin registration",
@@ -415,9 +399,7 @@ export class ClaudeCodeAdapter implements HookAdapter {
       };
     }
 
-    const pluginKey = Object.keys(enabledPlugins).find((k) =>
-      k.startsWith("context-mode"),
-    );
+    const pluginKey = Object.keys(enabledPlugins).find((k) => k.startsWith("context-mode"));
 
     if (pluginKey && enabledPlugins[pluginKey]) {
       return {
@@ -437,12 +419,7 @@ export class ClaudeCodeAdapter implements HookAdapter {
   getInstalledVersion(): string {
     // Primary: read from installed_plugins.json
     try {
-      const ipPath = resolve(
-        homedir(),
-        ".claude",
-        "plugins",
-        "installed_plugins.json",
-      );
+      const ipPath = resolve(homedir(), ".claude", "plugins", "installed_plugins.json");
       const ipRaw = JSON.parse(readFileSync(ipPath, "utf-8"));
       const plugins = ipRaw.plugins ?? {};
       for (const [key, entries] of Object.entries(plugins)) {
@@ -457,18 +434,9 @@ export class ClaudeCodeAdapter implements HookAdapter {
     }
 
     // Fallback: scan common plugin cache locations
-    const bases = [
-      resolve(homedir(), ".claude"),
-      resolve(homedir(), ".config", "claude"),
-    ];
+    const bases = [resolve(homedir(), ".claude"), resolve(homedir(), ".config", "claude")];
     for (const base of bases) {
-      const cacheDir = resolve(
-        base,
-        "plugins",
-        "cache",
-        "context-mode",
-        "context-mode",
-      );
+      const cacheDir = resolve(base, "plugins", "cache", "context-mode", "context-mode");
       try {
         const entries = readdirSync(cacheDir);
         const versions = entries
@@ -477,8 +445,7 @@ export class ClaudeCodeAdapter implements HookAdapter {
             const pa = a.split(".").map(Number);
             const pb = b.split(".").map(Number);
             for (let i = 0; i < 3; i++) {
-              if ((pa[i] ?? 0) !== (pb[i] ?? 0))
-                return (pa[i] ?? 0) - (pb[i] ?? 0);
+              if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
             }
             return 0;
           });
@@ -497,10 +464,7 @@ export class ClaudeCodeAdapter implements HookAdapter {
     const hooks = (settings.hooks ?? {}) as Record<string, unknown>;
     const changes: string[] = [];
 
-    const hookTypes: HookType[] = [
-      HOOK_TYPES.PRE_TOOL_USE,
-      HOOK_TYPES.SESSION_START,
-    ];
+    const hookTypes: HookType[] = [HOOK_TYPES.PRE_TOOL_USE, HOOK_TYPES.SESSION_START];
 
     for (const hookType of hookTypes) {
       const command = buildHookCommand(hookType, pluginRoot);
@@ -586,12 +550,7 @@ export class ClaudeCodeAdapter implements HookAdapter {
 
   updatePluginRegistry(pluginRoot: string, version: string): void {
     try {
-      const ipPath = resolve(
-        homedir(),
-        ".claude",
-        "plugins",
-        "installed_plugins.json",
-      );
+      const ipPath = resolve(homedir(), ".claude", "plugins", "installed_plugins.json");
       const ipRaw = JSON.parse(readFileSync(ipPath, "utf-8"));
       for (const [key, entries] of Object.entries(ipRaw.plugins || {})) {
         if (!key.toLowerCase().includes("context-mode")) continue;
@@ -650,9 +609,7 @@ export class ClaudeCodeAdapter implements HookAdapter {
    */
   private extractSessionId(input: ClaudeCodeHookInput): string {
     if (input.transcript_path) {
-      const match = input.transcript_path.match(
-        /([a-f0-9-]{36})\.jsonl$/,
-      );
+      const match = input.transcript_path.match(/([a-f0-9-]{36})\.jsonl$/);
       if (match) return match[1];
     }
     if (input.session_id) return input.session_id;

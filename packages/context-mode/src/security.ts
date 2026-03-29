@@ -33,9 +33,7 @@ export function parseBashPattern(pattern: string): string | null {
  * Parse any tool permission pattern like "ToolName(glob)".
  * Returns { tool, glob } or null if not a valid pattern.
  */
-export function parseToolPattern(
-  pattern: string,
-): { tool: string; glob: string } | null {
+export function parseToolPattern(pattern: string): { tool: string; glob: string } | null {
   // .+ is greedy: for "Read(some(path))" it captures "some(path)"
   // because $ forces the final \) to match only the last paren.
   const match = pattern.match(/^(\w+)\((.+)\)$/);
@@ -53,9 +51,7 @@ function escapeRegex(str: string): string {
 
 /** Escape regex specials except *, then convert * to .* */
 function convertGlobPart(glob: string): string {
-  return glob
-    .replace(/[.+?^${}()|[\]\\\/\-]/g, "\\$&")
-    .replace(/\*/g, ".*");
+  return glob.replace(/[.+?^${}()|[\]\\\/\-]/g, "\\$&").replace(/\*/g, ".*");
 }
 
 /**
@@ -65,10 +61,7 @@ function convertGlobPart(glob: string): string {
  * - Colon: "tree:*" becomes /^tree(\s.*)?$/ (command with optional args)
  * - Space: "sudo *" becomes /^sudo .*$/  (literal glob match)
  */
-export function globToRegex(
-  glob: string,
-  caseInsensitive: boolean = false,
-): RegExp {
+export function globToRegex(glob: string, caseInsensitive: boolean = false): RegExp {
   let regexStr: string;
 
   const colonIdx = glob.indexOf(":");
@@ -97,10 +90,7 @@ export function globToRegex(
  * - `*` matches anything except path separators
  * - Paths are matched with forward slashes (callers normalize first)
  */
-export function fileGlobToRegex(
-  glob: string,
-  caseInsensitive: boolean = false,
-): RegExp {
+export function fileGlobToRegex(glob: string, caseInsensitive: boolean = false): RegExp {
   let regexStr = "";
   let i = 0;
 
@@ -234,9 +224,7 @@ function readSingleSettings(path: string): SecurityPolicy | null {
 
   const filterBash = (arr: unknown): string[] => {
     if (!Array.isArray(arr)) return [];
-    return arr.filter(
-      (p): p is string => typeof p === "string" && parseBashPattern(p) !== null,
-    );
+    return arr.filter((p): p is string => typeof p === "string" && parseBashPattern(p) !== null);
   };
 
   return {
@@ -272,8 +260,7 @@ export function readBashPolicies(
     if (sharedPolicy) policies.push(sharedPolicy);
   }
 
-  const globalPath =
-    globalSettingsPath ?? resolve(homedir(), ".claude", "settings.json");
+  const globalPath = globalSettingsPath ?? resolve(homedir(), ".claude", "settings.json");
   const globalPolicy = readSingleSettings(globalPath);
   if (globalPolicy) policies.push(globalPolicy);
 
@@ -327,19 +314,14 @@ export function readToolDenyPatterns(
   };
 
   if (projectDir) {
-    const localGlobs = extractGlobs(
-      resolve(projectDir, ".claude", "settings.local.json"),
-    );
+    const localGlobs = extractGlobs(resolve(projectDir, ".claude", "settings.local.json"));
     if (localGlobs !== null) result.push(localGlobs);
 
-    const sharedGlobs = extractGlobs(
-      resolve(projectDir, ".claude", "settings.json"),
-    );
+    const sharedGlobs = extractGlobs(resolve(projectDir, ".claude", "settings.json"));
     if (sharedGlobs !== null) result.push(sharedGlobs);
   }
 
-  const globalPath =
-    globalSettingsPath ?? resolve(homedir(), ".claude", "settings.json");
+  const globalPath = globalSettingsPath ?? resolve(homedir(), ".claude", "settings.json");
   const globalGlobs = extractGlobs(globalPath);
   if (globalGlobs !== null) result.push(globalGlobs);
 
@@ -385,11 +367,7 @@ export function evaluateCommand(
     const askMatch = matchesAnyPattern(command, policy.ask, caseInsensitive);
     if (askMatch) return { decision: "ask", matchedPattern: askMatch };
 
-    const allowMatch = matchesAnyPattern(
-      command,
-      policy.allow,
-      caseInsensitive,
-    );
+    const allowMatch = matchesAnyPattern(command, policy.allow, caseInsensitive);
     if (allowMatch) return { decision: "allow", matchedPattern: allowMatch };
   }
 
@@ -472,13 +450,8 @@ const SHELL_ESCAPE_PATTERNS: Record<string, RegExp[]> = {
     /exec(?:Sync|File|FileSync)?\(\s*(['"`])(.*?)\1/g,
     /spawn(?:Sync)?\(\s*(['"`])(.*?)\1/g,
   ],
-  ruby: [
-    /system\(\s*(['"])(.*?)\1/g,
-    /`(.*?)`/g,
-  ],
-  go: [
-    /exec\.Command\(\s*(['"`])(.*?)\1/g,
-  ],
+  ruby: [/system\(\s*(['"])(.*?)\1/g, /`(.*?)`/g],
+  go: [/exec\.Command\(\s*(['"`])(.*?)\1/g],
   php: [
     /shell_exec\(\s*(['"`])(.*?)\1/g,
     /(?:^|[^.])exec\(\s*(['"`])(.*?)\1/g,
@@ -486,9 +459,7 @@ const SHELL_ESCAPE_PATTERNS: Record<string, RegExp[]> = {
     /passthru\(\s*(['"`])(.*?)\1/g,
     /proc_open\(\s*(['"`])(.*?)\1/g,
   ],
-  rust: [
-    /Command::new\(\s*(['"`])(.*?)\1/g,
-  ],
+  rust: [/Command::new\(\s*(['"`])(.*?)\1/g],
 };
 
 /**
@@ -500,8 +471,7 @@ const SHELL_ESCAPE_PATTERNS: Record<string, RegExp[]> = {
  */
 function extractPythonSubprocessListArgs(code: string): string[] {
   const commands: string[] = [];
-  const pattern =
-    /subprocess\.(?:run|call|Popen|check_output|check_call)\(\s*\[([^\]]+)\]/g;
+  const pattern = /subprocess\.(?:run|call|Popen|check_output|check_call)\(\s*\[([^\]]+)\]/g;
 
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(code)) !== null) {
@@ -522,10 +492,7 @@ function extractPythonSubprocessListArgs(code: string): string[] {
  * Returns an array of command strings found in the code. For unknown
  * languages or code without shell-escape calls, returns an empty array.
  */
-export function extractShellCommands(
-  code: string,
-  language: string,
-): string[] {
+export function extractShellCommands(code: string, language: string): string[] {
   const patterns = SHELL_ESCAPE_PATTERNS[language];
   if (!patterns && language !== "python") return [];
 

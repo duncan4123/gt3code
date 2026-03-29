@@ -16,10 +16,20 @@ import { createRoutingBlock } from "../routing-block.mjs";
 import { createToolNamer } from "../core/tool-naming.mjs";
 
 const ROUTING_BLOCK = createRoutingBlock(createToolNamer("vscode-copilot"));
-import { writeSessionEventsFile, buildSessionDirective, getSessionEvents, getLatestSessionEvents } from "../session-directive.mjs";
 import {
-  readStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath,
-  getProjectDir, VSCODE_OPTS,
+  writeSessionEventsFile,
+  buildSessionDirective,
+  getSessionEvents,
+  getLatestSessionEvents,
+} from "../session-directive.mjs";
+import {
+  readStdin,
+  getSessionId,
+  getSessionDBPath,
+  getSessionEventsPath,
+  getCleanupFlagPath,
+  getProjectDir,
+  VSCODE_OPTS,
 } from "../session-helpers.mjs";
 import { join } from "node:path";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
@@ -56,7 +66,11 @@ try {
 
     db.close();
   } else if (source === "resume") {
-    try { unlinkSync(getCleanupFlagPath(OPTS)); } catch { /* no flag */ }
+    try {
+      unlinkSync(getCleanupFlagPath(OPTS));
+    } catch {
+      /* no flag */
+    }
 
     const { SessionDB } = await loadSessionDB();
     const dbPath = getSessionDBPath(OPTS);
@@ -73,18 +87,29 @@ try {
     const { SessionDB } = await loadSessionDB();
     const dbPath = getSessionDBPath(OPTS);
     const db = new SessionDB({ dbPath });
-    try { unlinkSync(getSessionEventsPath(OPTS)); } catch { /* no stale file */ }
+    try {
+      unlinkSync(getSessionEventsPath(OPTS));
+    } catch {
+      /* no stale file */
+    }
 
     const cleanupFlag = getCleanupFlagPath(OPTS);
     let previousWasFresh = false;
-    try { readFileSync(cleanupFlag); previousWasFresh = true; } catch { /* no flag */ }
+    try {
+      readFileSync(cleanupFlag);
+      previousWasFresh = true;
+    } catch {
+      /* no flag */
+    }
 
     if (previousWasFresh) {
       db.cleanupOldSessions(0);
     } else {
       db.cleanupOldSessions(7);
     }
-    db.db.exec(`DELETE FROM session_events WHERE session_id NOT IN (SELECT session_id FROM session_meta)`);
+    db.db.exec(
+      `DELETE FROM session_events WHERE session_id NOT IN (SELECT session_id FROM session_meta)`,
+    );
     writeFileSync(cleanupFlag, new Date().toISOString(), "utf-8");
 
     const sessionId = getSessionId(input, OPTS);
@@ -93,21 +118,31 @@ try {
 
     // Auto-write copilot-instructions.md on first startup if not present
     try {
-      const { VSCodeCopilotAdapter } = await import(pathToFileURL(join(HOOK_DIR, "..", "..", "build", "adapters", "vscode-copilot", "index.js")).href);
+      const { VSCodeCopilotAdapter } = await import(
+        pathToFileURL(join(HOOK_DIR, "..", "..", "build", "adapters", "vscode-copilot", "index.js"))
+          .href
+      );
       new VSCodeCopilotAdapter().writeRoutingInstructions(projectDir, join(HOOK_DIR, "..", ".."));
-    } catch { /* best effort — don't block session start */ }
+    } catch {
+      /* best effort — don't block session start */
+    }
 
-    const ruleFilePaths = [
-      join(projectDir, ".github", "copilot-instructions.md"),
-    ];
+    const ruleFilePaths = [join(projectDir, ".github", "copilot-instructions.md")];
     for (const p of ruleFilePaths) {
       try {
         const content = readFileSync(p, "utf-8");
         if (content.trim()) {
           db.insertEvent(sessionId, { type: "rule", category: "rule", data: p, priority: 1 });
-          db.insertEvent(sessionId, { type: "rule_content", category: "rule", data: content, priority: 1 });
+          db.insertEvent(sessionId, {
+            type: "rule_content",
+            category: "rule",
+            data: content,
+            priority: 1,
+          });
         }
-      } catch { /* file doesn't exist — skip */ }
+      } catch {
+        /* file doesn't exist — skip */
+      }
     }
 
     db.close();
@@ -122,7 +157,9 @@ try {
       pjoin(hd(), ".vscode", "context-mode", "sessionstart-debug.log"),
       `[${new Date().toISOString()}] ${err?.message || err}\n${err?.stack || ""}\n`,
     );
-  } catch { /* ignore logging failure */ }
+  } catch {
+    /* ignore logging failure */
+  }
 }
 
 const output = `SessionStart:compact hook success: Success\nSessionStart hook additional context: \n${additionalContext}`;

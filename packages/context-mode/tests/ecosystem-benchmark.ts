@@ -406,17 +406,13 @@ print(f"Statuses: {dict(statuses.most_common())}")
 
 async function main() {
   console.log("");
-  console.log(
-    "\u2554" + "\u2550".repeat(74) + "\u2557",
-  );
+  console.log("\u2554" + "\u2550".repeat(74) + "\u2557");
   console.log(
     "\u2551" +
       "   Context Mode — Ecosystem Benchmark (Real MCP & Skill Outputs)        " +
       "\u2551",
   );
-  console.log(
-    "\u255A" + "\u2550".repeat(74) + "\u255D",
-  );
+  console.log("\u255A" + "\u2550".repeat(74) + "\u255D");
   console.log("");
   console.log("Runtimes:\n" + getRuntimeSummary(runtimes));
   console.log("\nFixtures: tests/fixtures/ (captured from real tool invocations)");
@@ -434,7 +430,9 @@ async function main() {
   }
 
   for (const [tool, group] of toolGroups) {
-    console.log(`\u250C\u2500\u2500\u2500 ${tool.toUpperCase()} ${"─".repeat(Math.max(0, 68 - tool.length))}`);
+    console.log(
+      `\u250C\u2500\u2500\u2500 ${tool.toUpperCase()} ${"─".repeat(Math.max(0, 68 - tool.length))}`,
+    );
     console.log("\u2502");
 
     for (const scenario of group) {
@@ -496,21 +494,20 @@ async function main() {
   }
 
   // ===== SUMMARY TABLE =====
-  console.log(
-    "\u2554" + "\u2550".repeat(74) + "\u2557",
-  );
+  console.log("\u2554" + "\u2550".repeat(74) + "\u2557");
   console.log(
     "\u2551" +
       "                        Ecosystem Benchmark Results                      " +
       "\u2551",
   );
-  console.log(
-    "\u255A" + "\u2550".repeat(74) + "\u255D",
-  );
+  console.log("\u255A" + "\u2550".repeat(74) + "\u255D");
   console.log("");
 
   // Per-tool summary
-  const toolSummary = new Map<string, { rawBytes: number; contextBytes: number; count: number; totalMs: number }>();
+  const toolSummary = new Map<
+    string,
+    { rawBytes: number; contextBytes: number; count: number; totalMs: number }
+  >();
   for (const r of rows) {
     const s = toolSummary.get(r.tool) || { rawBytes: 0, contextBytes: 0, count: 0, totalMs: 0 };
     s.rawBytes += r.rawBytes;
@@ -520,12 +517,8 @@ async function main() {
     toolSummary.set(r.tool, s);
   }
 
-  console.log(
-    "| Tool           | Scenarios | Raw Size   | Context    | Savings | Avg Time |",
-  );
-  console.log(
-    "|----------------|-----------|------------|------------|---------|----------|",
-  );
+  console.log("| Tool           | Scenarios | Raw Size   | Context    | Savings | Avg Time |");
+  console.log("|----------------|-----------|------------|------------|---------|----------|");
   for (const [tool, s] of toolSummary) {
     const savings = ((1 - s.contextBytes / s.rawBytes) * 100).toFixed(0) + "%";
     const avgMs = Math.round(s.totalMs / s.count) + "ms";
@@ -533,9 +526,7 @@ async function main() {
       `| ${tool.padEnd(14)} | ${String(s.count).padStart(9)} | ${((s.rawBytes / 1024).toFixed(1) + "KB").padStart(10)} | ${(s.contextBytes + "B").padStart(10)} | ${savings.padStart(7)} | ${avgMs.padStart(8)} |`,
     );
   }
-  console.log(
-    "|----------------|-----------|------------|------------|---------|----------|",
-  );
+  console.log("|----------------|-----------|------------|------------|---------|----------|");
 
   const totalRaw = rows.reduce((s, r) => s + r.rawBytes, 0);
   const totalCtx = rows.reduce((s, r) => s + r.contextBytes, 0);
@@ -562,17 +553,13 @@ async function main() {
   console.log("");
 
   // ===== CONTEXT WINDOW IMPACT =====
-  console.log(
-    "\u2554" + "\u2550".repeat(74) + "\u2557",
-  );
+  console.log("\u2554" + "\u2550".repeat(74) + "\u2557");
   console.log(
     "\u2551" +
       "                  Context Window Impact Analysis                         " +
       "\u2551",
   );
-  console.log(
-    "\u255A" + "\u2550".repeat(74) + "\u255D",
-  );
+  console.log("\u255A" + "\u2550".repeat(74) + "\u255D");
   console.log("");
 
   const rawTokens = Math.ceil(totalRaw / 4);
@@ -597,17 +584,13 @@ async function main() {
   console.log("");
 
   // ===== REAL WORKFLOW EXAMPLE =====
-  console.log(
-    "\u2554" + "\u2550".repeat(74) + "\u2557",
-  );
+  console.log("\u2554" + "\u2550".repeat(74) + "\u2557");
   console.log(
     "\u2551" +
       "               Real Workflow: Debug a Next.js App                        " +
       "\u2551",
   );
-  console.log(
-    "\u255A" + "\u2550".repeat(74) + "\u255D",
-  );
+  console.log("\u255A" + "\u2550".repeat(74) + "\u255D");
   console.log("");
   console.log('  Developer: "Tests are failing after upgrading Next.js. Fix it."');
   console.log("");
@@ -624,7 +607,7 @@ async function main() {
   let workflowRaw = 0;
   let workflowCtx = 0;
   for (const tool of workflowTools) {
-    const toolRows = rows.filter(r => r.tool === tool);
+    const toolRows = rows.filter((r) => r.tool === tool);
     if (toolRows.length > 0) {
       const row = toolRows[0]; // Take first scenario per tool
       workflowRaw += row.rawBytes;
@@ -648,9 +631,7 @@ async function main() {
 
   // ===== FINAL STATUS =====
   console.log("═".repeat(76));
-  console.log(
-    `Ecosystem Benchmark: ${rows.length} scenarios passed, ${skipped} skipped`,
-  );
+  console.log(`Ecosystem Benchmark: ${rows.length} scenarios passed, ${skipped} skipped`);
   console.log(
     `Overall: ${(totalRaw / 1024).toFixed(0)}KB raw → ${(totalCtx / 1024).toFixed(1)}KB context = ${totalSavings} savings (${multiplier}x multiplier)`,
   );

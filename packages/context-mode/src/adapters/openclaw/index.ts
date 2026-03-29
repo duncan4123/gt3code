@@ -210,18 +210,12 @@ export class OpenClawAdapter implements HookAdapter {
   }
 
   getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}.db`);
   }
 
   getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}-events.md`);
   }
 
@@ -287,11 +281,7 @@ export class OpenClawAdapter implements HookAdapter {
   writeSettings(settings: Record<string, unknown>): void {
     // Write to openclaw.json in current directory
     const configPath = resolve("openclaw.json");
-    writeFileSync(
-      configPath,
-      JSON.stringify(settings, null, 2) + "\n",
-      "utf-8",
-    );
+    writeFileSync(configPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
   }
 
   // ── Diagnostics (doctor) ─────────────────────────────────
@@ -322,9 +312,7 @@ export class OpenClawAdapter implements HookAdapter {
         message: hasPlugin
           ? "context-mode found in plugins.entries"
           : "context-mode not found in plugins.entries",
-        fix: hasPlugin
-          ? undefined
-          : "context-mode upgrade",
+        fix: hasPlugin ? undefined : "context-mode upgrade",
       });
 
       // Check if enabled
@@ -334,9 +322,7 @@ export class OpenClawAdapter implements HookAdapter {
         results.push({
           check: "Plugin enabled",
           status: isEnabled ? "pass" : "warn",
-          message: isEnabled
-            ? "context-mode plugin is enabled"
-            : "context-mode plugin is disabled",
+          message: isEnabled ? "context-mode plugin is enabled" : "context-mode plugin is disabled",
         });
       }
     } else {
@@ -360,8 +346,7 @@ export class OpenClawAdapter implements HookAdapter {
       results.push({
         check: "Context engine",
         status: "warn",
-        message:
-          "context-mode not set as context engine — compaction will use default engine",
+        message: "context-mode not set as context engine — compaction will use default engine",
       });
     }
 
@@ -403,13 +388,7 @@ export class OpenClawAdapter implements HookAdapter {
   getInstalledVersion(): string {
     // Check ~/.openclaw/extensions/context-mode/ for the plugin
     try {
-      const pkgPath = resolve(
-        homedir(),
-        ".openclaw",
-        "extensions",
-        "context-mode",
-        "package.json",
-      );
+      const pkgPath = resolve(homedir(), ".openclaw", "extensions", "context-mode", "package.json");
       const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
       if (typeof pkg.version === "string") return pkg.version;
     } catch {
@@ -418,11 +397,7 @@ export class OpenClawAdapter implements HookAdapter {
 
     // Also check node_modules
     try {
-      const pkgPath = resolve(
-        "node_modules",
-        "context-mode",
-        "package.json",
-      );
+      const pkgPath = resolve("node_modules", "context-mode", "package.json");
       const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
       if (typeof pkg.version === "string") return pkg.version;
     } catch {
@@ -472,9 +447,7 @@ export class OpenClawAdapter implements HookAdapter {
       slots.contextEngine = "context-mode";
       changes.push("Set context-mode as context engine (owns compaction)");
     } else if (slots.contextEngine !== "context-mode") {
-      changes.push(
-        `Context engine already set to "${slots.contextEngine}" — not overwriting`,
-      );
+      changes.push(`Context engine already set to "${slots.contextEngine}" — not overwriting`);
     }
 
     this.writeSettings(settings);

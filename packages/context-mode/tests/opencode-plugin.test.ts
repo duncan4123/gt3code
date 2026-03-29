@@ -40,7 +40,9 @@ describe("ContextModePlugin", () => {
   afterAll(() => {
     try {
       rmSync(tempDir, { recursive: true, force: true });
-    } catch { /* cleanup best effort */ }
+    } catch {
+      /* cleanup best effort */
+    }
   });
 
   // ── Factory ───────────────────────────────────────────
@@ -119,10 +121,7 @@ describe("ContextModePlugin", () => {
     it("handles empty input gracefully", async () => {
       const plugin = await createTestPlugin(join(tempDir, "before-empty"));
 
-      const result = await plugin["tool.execute.before"](
-        {} as any,
-        { args: {} } as any,
-      );
+      const result = await plugin["tool.execute.before"]({} as any, { args: {} } as any);
       expect(result).toBeUndefined();
     });
   });
@@ -136,7 +135,12 @@ describe("ContextModePlugin", () => {
       // Should not throw
       await expect(
         plugin["tool.execute.after"](
-          { tool: "Read", sessionID: "test-session", callID: "call-1", args: { file_path: "/test/file.ts" } },
+          {
+            tool: "Read",
+            sessionID: "test-session",
+            callID: "call-1",
+            args: { file_path: "/test/file.ts" },
+          },
           { title: "Read", output: "file contents here", metadata: {} },
         ),
       ).resolves.toBeUndefined();
@@ -147,7 +151,12 @@ describe("ContextModePlugin", () => {
 
       await expect(
         plugin["tool.execute.after"](
-          { tool: "Write", sessionID: "test-session", callID: "call-2", args: { file_path: "/test/new-file.ts", content: "code" } },
+          {
+            tool: "Write",
+            sessionID: "test-session",
+            callID: "call-2",
+            args: { file_path: "/test/new-file.ts", content: "code" },
+          },
           { title: "Write", output: "", metadata: {} },
         ),
       ).resolves.toBeUndefined();
@@ -158,7 +167,12 @@ describe("ContextModePlugin", () => {
 
       await expect(
         plugin["tool.execute.after"](
-          { tool: "Bash", sessionID: "test-session", callID: "call-3", args: { command: "git commit -m 'test'" } },
+          {
+            tool: "Bash",
+            sessionID: "test-session",
+            callID: "call-3",
+            args: { command: "git commit -m 'test'" },
+          },
           { title: "Bash", output: "[main abc1234] test", metadata: {} },
         ),
       ).resolves.toBeUndefined();
@@ -168,10 +182,7 @@ describe("ContextModePlugin", () => {
       const plugin = await createTestPlugin(join(tempDir, "after-empty"));
 
       await expect(
-        plugin["tool.execute.after"](
-          {} as any,
-          { title: "", output: "", metadata: {} } as any,
-        ),
+        plugin["tool.execute.after"]({} as any, { title: "", output: "", metadata: {} } as any),
       ).resolves.toBeUndefined();
     });
   });
@@ -195,15 +206,30 @@ describe("ContextModePlugin", () => {
 
       // Capture several events first
       await plugin["tool.execute.after"](
-        { tool: "Read", sessionID: "test-session", callID: "call-1", args: { file_path: "/src/index.ts" } },
+        {
+          tool: "Read",
+          sessionID: "test-session",
+          callID: "call-1",
+          args: { file_path: "/src/index.ts" },
+        },
         { title: "Read", output: "export default {}", metadata: {} },
       );
       await plugin["tool.execute.after"](
-        { tool: "Edit", sessionID: "test-session", callID: "call-2", args: { file_path: "/src/index.ts", old_string: "{}", new_string: "{ foo: 1 }" } },
+        {
+          tool: "Edit",
+          sessionID: "test-session",
+          callID: "call-2",
+          args: { file_path: "/src/index.ts", old_string: "{}", new_string: "{ foo: 1 }" },
+        },
         { title: "Edit", output: "", metadata: {} },
       );
       await plugin["tool.execute.after"](
-        { tool: "Bash", sessionID: "test-session", callID: "call-3", args: { command: "git status" } },
+        {
+          tool: "Bash",
+          sessionID: "test-session",
+          callID: "call-3",
+          args: { command: "git status" },
+        },
         { title: "Bash", output: "On branch main", metadata: {} },
       );
 
@@ -222,7 +248,12 @@ describe("ContextModePlugin", () => {
       const plugin = await createTestPlugin(join(tempDir, "compact-multi"));
 
       await plugin["tool.execute.after"](
-        { tool: "Read", sessionID: "test-session", callID: "call-1", args: { file_path: "/test/a.ts" } },
+        {
+          tool: "Read",
+          sessionID: "test-session",
+          callID: "call-1",
+          args: { file_path: "/test/a.ts" },
+        },
         { title: "Read", output: "code", metadata: {} },
       );
 
@@ -235,7 +266,12 @@ describe("ContextModePlugin", () => {
 
       // Capture more events
       await plugin["tool.execute.after"](
-        { tool: "Write", sessionID: "test-session", callID: "call-2", args: { file_path: "/test/b.ts", content: "new file" } },
+        {
+          tool: "Write",
+          sessionID: "test-session",
+          callID: "call-2",
+          args: { file_path: "/test/b.ts", content: "new file" },
+        },
         { title: "Write", output: "", metadata: {} },
       );
 
@@ -262,7 +298,12 @@ describe("ContextModePlugin", () => {
 
       // After hook captures the event
       await plugin["tool.execute.after"](
-        { tool: "Read", sessionID: "test-session", callID: "call-1", args: { file_path: "/app/main.ts" } },
+        {
+          tool: "Read",
+          sessionID: "test-session",
+          callID: "call-1",
+          args: { file_path: "/app/main.ts" },
+        },
         { title: "Read", output: "console.log('hello')", metadata: {} },
       );
 

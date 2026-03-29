@@ -5,11 +5,9 @@
  */
 export function extractWorkspace(params: Record<string, unknown>): string | null {
   // Priority: cwd > file_path > command (most specific first)
-  const sources = [
-    params.cwd,
-    params.file_path,
-    params.command,
-  ].filter((v): v is string => typeof v === "string");
+  const sources = [params.cwd, params.file_path, params.command].filter(
+    (v): v is string => typeof v === "string",
+  );
 
   for (const src of sources) {
     const match = src.match(/\/openclaw\/workspace-[a-zA-Z0-9_-]+/);

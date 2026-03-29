@@ -14,7 +14,9 @@ import {
 } from "../../src/session/snapshot.js";
 
 // ── Helpers ──
-function makeEvent(overrides: Partial<StoredEvent> & Pick<StoredEvent, "type" | "category">): StoredEvent {
+function makeEvent(
+  overrides: Partial<StoredEvent> & Pick<StoredEvent, "type" | "category">,
+): StoredEvent {
   return {
     type: overrides.type,
     category: overrides.category,
@@ -95,12 +97,14 @@ describe("Slice 4: File Limit", () => {
   test("renderActiveFiles limits to last 10 files", () => {
     const events: StoredEvent[] = [];
     for (let i = 0; i < 15; i++) {
-      events.push(makeEvent({
-        type: "file",
-        category: "file",
-        data: `src/file-${i}.ts`,
-        priority: 1,
-      }));
+      events.push(
+        makeEvent({
+          type: "file",
+          category: "file",
+          data: `src/file-${i}.ts`,
+          priority: 1,
+        }),
+      );
     }
     const xml = renderActiveFiles(events);
     const fileTagCount = (xml.match(/<file /g) || []).length;
@@ -121,8 +125,18 @@ describe("Slice 4: File Limit", () => {
 describe("Slice 5: Task State", () => {
   test("buildResumeSnapshot with pending task events includes task_state", () => {
     const events: StoredEvent[] = [
-      makeEvent({ type: "task", category: "task", data: JSON.stringify({ subject: "Write tests" }), priority: 1 }),
-      makeEvent({ type: "task", category: "task", data: JSON.stringify({ taskId: "1", status: "in_progress" }), priority: 1 }),
+      makeEvent({
+        type: "task",
+        category: "task",
+        data: JSON.stringify({ subject: "Write tests" }),
+        priority: 1,
+      }),
+      makeEvent({
+        type: "task",
+        category: "task",
+        data: JSON.stringify({ taskId: "1", status: "in_progress" }),
+        priority: 1,
+      }),
     ];
     const xml = buildResumeSnapshot(events);
     assert.ok(xml.includes("<task_state>"), "should include <task_state>");
@@ -132,9 +146,24 @@ describe("Slice 5: Task State", () => {
 
   test("renderTaskState filters completed tasks and shows only pending", () => {
     const events: StoredEvent[] = [
-      makeEvent({ type: "task", category: "task", data: JSON.stringify({ subject: "Old task" }), priority: 1 }),
-      makeEvent({ type: "task", category: "task", data: JSON.stringify({ subject: "Current task" }), priority: 1 }),
-      makeEvent({ type: "task", category: "task", data: JSON.stringify({ taskId: "1", status: "completed" }), priority: 1 }),
+      makeEvent({
+        type: "task",
+        category: "task",
+        data: JSON.stringify({ subject: "Old task" }),
+        priority: 1,
+      }),
+      makeEvent({
+        type: "task",
+        category: "task",
+        data: JSON.stringify({ subject: "Current task" }),
+        priority: 1,
+      }),
+      makeEvent({
+        type: "task",
+        category: "task",
+        data: JSON.stringify({ taskId: "1", status: "completed" }),
+        priority: 1,
+      }),
     ];
     const xml = renderTaskState(events);
     assert.ok(!xml.includes("Old task"), "should NOT show completed task");
@@ -143,8 +172,18 @@ describe("Slice 5: Task State", () => {
 
   test("renderTaskState returns empty when all tasks completed", () => {
     const events: StoredEvent[] = [
-      makeEvent({ type: "task", category: "task", data: JSON.stringify({ subject: "Done task" }), priority: 1 }),
-      makeEvent({ type: "task", category: "task", data: JSON.stringify({ taskId: "1", status: "completed" }), priority: 1 }),
+      makeEvent({
+        type: "task",
+        category: "task",
+        data: JSON.stringify({ subject: "Done task" }),
+        priority: 1,
+      }),
+      makeEvent({
+        type: "task",
+        category: "task",
+        data: JSON.stringify({ taskId: "1", status: "completed" }),
+        priority: 1,
+      }),
     ];
     const xml = renderTaskState(events);
     assert.equal(xml, "", "should return empty when all tasks completed");
@@ -174,8 +213,18 @@ describe("Slice 6: Rules", () => {
 describe("Slice 7: Rules + Decisions", () => {
   test("renderRules includes both CLAUDE.md rules and user decisions", () => {
     const events: StoredEvent[] = [
-      makeEvent({ type: "rule", category: "rule", data: "CLAUDE.md: Never set Claude as git author", priority: 1 }),
-      makeEvent({ type: "rule", category: "rule", data: 'User correction: "use ctx- prefix, not cm-"', priority: 1 }),
+      makeEvent({
+        type: "rule",
+        category: "rule",
+        data: "CLAUDE.md: Never set Claude as git author",
+        priority: 1,
+      }),
+      makeEvent({
+        type: "rule",
+        category: "rule",
+        data: 'User correction: "use ctx- prefix, not cm-"',
+        priority: 1,
+      }),
     ];
     const xml = renderRules(events);
     assert.ok(xml.includes("CLAUDE.md"), "should include CLAUDE.md rule");
@@ -220,7 +269,12 @@ describe("Slice 8: Environment", () => {
   });
 
   test("renderEnvironment with env events", () => {
-    const envEv = makeEvent({ type: "env", category: "env", data: "source .venv/bin/activate", priority: 2 });
+    const envEv = makeEvent({
+      type: "env",
+      category: "env",
+      data: "source .venv/bin/activate",
+      priority: 2,
+    });
     const xml = renderEnvironment(undefined, [envEv], undefined);
     assert.ok(xml.includes("<env>"), "should include <env>");
     assert.ok(xml.includes("activate"), "should include env data");
@@ -239,7 +293,12 @@ describe("Slice 8: Environment", () => {
 describe("Slice 9: Errors", () => {
   test("buildResumeSnapshot with error events includes errors_encountered", () => {
     const events: StoredEvent[] = [
-      makeEvent({ type: "error_tool", category: "error", data: "Push rejected: non-fast-forward", priority: 2 }),
+      makeEvent({
+        type: "error_tool",
+        category: "error",
+        data: "Push rejected: non-fast-forward",
+        priority: 2,
+      }),
     ];
     const xml = buildResumeSnapshot(events);
     assert.ok(xml.includes("<errors_encountered>"), "should include <errors_encountered>");
@@ -279,7 +338,7 @@ describe("Slice 10: Intent", () => {
   test("renderIntent renders mode attribute and content", () => {
     const ev = makeEvent({ type: "intent", category: "intent", data: "investigate", priority: 4 });
     const xml = renderIntent(ev);
-    assert.ok(xml.includes('mode="investigate"'), 'should include mode attribute');
+    assert.ok(xml.includes('mode="investigate"'), "should include mode attribute");
     assert.ok(xml.includes("investigate"), "should include intent text");
   });
 });
@@ -291,7 +350,12 @@ describe("Slice 10: Intent", () => {
 describe("Slice 11: XML Escaping", () => {
   test("escapes XML special characters in data fields", () => {
     const events: StoredEvent[] = [
-      makeEvent({ type: "file_edit", category: "file", data: 'src/<Main & "App">.tsx', priority: 1 }),
+      makeEvent({
+        type: "file_edit",
+        category: "file",
+        data: 'src/<Main & "App">.tsx',
+        priority: 1,
+      }),
     ];
     const xml = buildResumeSnapshot(events);
     // Should not contain raw < > & " in the data portion
@@ -314,7 +378,12 @@ describe("Slice 11: XML Escaping", () => {
 
   test("escapes XML in error data", () => {
     const events: StoredEvent[] = [
-      makeEvent({ type: "error_tool", category: "error", data: "Error: <tag> & 'quote'", priority: 2 }),
+      makeEvent({
+        type: "error_tool",
+        category: "error",
+        data: "Error: <tag> & 'quote'",
+        priority: 2,
+      }),
     ];
     const xml = renderErrors(events);
     assert.ok(xml.includes("&lt;tag&gt;"), "should escape tags in errors");
@@ -331,36 +400,44 @@ describe("Slice 12: Byte Budget", () => {
     // Generate a lot of events to stress the budget
     const events: StoredEvent[] = [];
     for (let i = 0; i < 50; i++) {
-      events.push(makeEvent({
-        type: "file",
-        category: "file",
-        data: `src/very/long/path/to/some/deeply/nested/file-${i}.ts`,
-        priority: 1,
-      }));
+      events.push(
+        makeEvent({
+          type: "file",
+          category: "file",
+          data: `src/very/long/path/to/some/deeply/nested/file-${i}.ts`,
+          priority: 1,
+        }),
+      );
     }
     for (let i = 0; i < 20; i++) {
-      events.push(makeEvent({
-        type: "task",
-        category: "task",
-        data: `Task ${i}: ${"x".repeat(100)}`,
-        priority: 1,
-      }));
+      events.push(
+        makeEvent({
+          type: "task",
+          category: "task",
+          data: `Task ${i}: ${"x".repeat(100)}`,
+          priority: 1,
+        }),
+      );
     }
     for (let i = 0; i < 10; i++) {
-      events.push(makeEvent({
-        type: "rule",
-        category: "rule",
-        data: `Rule ${i}: ${"y".repeat(100)}`,
-        priority: 1,
-      }));
+      events.push(
+        makeEvent({
+          type: "rule",
+          category: "rule",
+          data: `Rule ${i}: ${"y".repeat(100)}`,
+          priority: 1,
+        }),
+      );
     }
     for (let i = 0; i < 10; i++) {
-      events.push(makeEvent({
-        type: "error_tool",
-        category: "error",
-        data: `Error ${i}: ${"z".repeat(100)}`,
-        priority: 2,
-      }));
+      events.push(
+        makeEvent({
+          type: "error_tool",
+          category: "error",
+          data: `Error ${i}: ${"z".repeat(100)}`,
+          priority: 2,
+        }),
+      );
     }
     events.push(makeEvent({ type: "intent", category: "intent", data: "implement", priority: 4 }));
 
@@ -372,12 +449,14 @@ describe("Slice 12: Byte Budget", () => {
   test("respects custom maxBytes option", () => {
     const events: StoredEvent[] = [];
     for (let i = 0; i < 30; i++) {
-      events.push(makeEvent({
-        type: "file",
-        category: "file",
-        data: `src/file-${i}.ts`,
-        priority: 1,
-      }));
+      events.push(
+        makeEvent({
+          type: "file",
+          category: "file",
+          data: `src/file-${i}.ts`,
+          priority: 1,
+        }),
+      );
     }
 
     const xml = buildResumeSnapshot(events, { maxBytes: 512 });
@@ -396,21 +475,25 @@ describe("Slice 13: Budget Trimming", () => {
     const events: StoredEvent[] = [];
     // P1 content
     for (let i = 0; i < 10; i++) {
-      events.push(makeEvent({
-        type: "file",
-        category: "file",
-        data: `src/component-${i}.tsx`,
-        priority: 1,
-      }));
+      events.push(
+        makeEvent({
+          type: "file",
+          category: "file",
+          data: `src/component-${i}.tsx`,
+          priority: 1,
+        }),
+      );
     }
     // P2 content
     for (let i = 0; i < 5; i++) {
-      events.push(makeEvent({
-        type: "error_tool",
-        category: "error",
-        data: `Error resolving module ${i}`,
-        priority: 2,
-      }));
+      events.push(
+        makeEvent({
+          type: "error_tool",
+          category: "error",
+          data: `Error resolving module ${i}`,
+          priority: 2,
+        }),
+      );
     }
     // P3-P4 content (intent)
     events.push(makeEvent({ type: "intent", category: "intent", data: "implement", priority: 4 }));
@@ -435,7 +518,12 @@ describe("Slice 13: Budget Trimming", () => {
   test("budget trimming preserves P1 sections over P2 when budget is very tight", () => {
     const events: StoredEvent[] = [
       makeEvent({ type: "file_edit", category: "file", data: "src/a.ts", priority: 1 }),
-      makeEvent({ type: "error_tool", category: "error", data: "Some error message that takes space", priority: 2 }),
+      makeEvent({
+        type: "error_tool",
+        category: "error",
+        data: "Some error message that takes space",
+        priority: 2,
+      }),
       makeEvent({ type: "intent", category: "intent", data: "implement", priority: 4 }),
     ];
 
@@ -459,8 +547,14 @@ describe("Slice 13: Budget Trimming", () => {
 describe("Slice 14: XML Structure", () => {
   test("buildResumeSnapshot starts with <session_resume and ends with </session_resume>", () => {
     const xml = buildResumeSnapshot([]);
-    assert.ok(xml.startsWith("<session_resume"), `should start with <session_resume, got: ${xml.slice(0, 30)}`);
-    assert.ok(xml.endsWith("</session_resume>"), `should end with </session_resume>, got: ${xml.slice(-30)}`);
+    assert.ok(
+      xml.startsWith("<session_resume"),
+      `should start with <session_resume, got: ${xml.slice(0, 30)}`,
+    );
+    assert.ok(
+      xml.endsWith("</session_resume>"),
+      `should end with </session_resume>, got: ${xml.slice(-30)}`,
+    );
   });
 
   test("buildResumeSnapshot includes compact_count from options", () => {
@@ -484,7 +578,10 @@ describe("Slice 14: XML Structure", () => {
       makeEvent({ type: "cwd", category: "cwd", data: "/project", priority: 2 }),
     ];
     const xml = buildResumeSnapshot(events);
-    assert.ok(xml.includes('events_captured="3"'), `should have events_captured="3", got: ${xml.slice(0, 120)}`);
+    assert.ok(
+      xml.includes('events_captured="3"'),
+      `should have events_captured="3", got: ${xml.slice(0, 120)}`,
+    );
   });
 });
 
@@ -513,9 +610,24 @@ describe("Edge Cases", () => {
     const events: StoredEvent[] = [
       makeEvent({ type: "file_edit", category: "file", data: "src/server.ts", priority: 1 }),
       makeEvent({ type: "file_read", category: "file", data: "src/store.ts", priority: 1 }),
-      makeEvent({ type: "task", category: "task", data: JSON.stringify({ subject: "Implement session continuity" }), priority: 1 }),
-      makeEvent({ type: "rule", category: "rule", data: "CLAUDE.md: Never set Claude as git author", priority: 1 }),
-      makeEvent({ type: "decision", category: "decision", data: "use ctx- prefix, not cm-", priority: 2 }),
+      makeEvent({
+        type: "task",
+        category: "task",
+        data: JSON.stringify({ subject: "Implement session continuity" }),
+        priority: 1,
+      }),
+      makeEvent({
+        type: "rule",
+        category: "rule",
+        data: "CLAUDE.md: Never set Claude as git author",
+        priority: 1,
+      }),
+      makeEvent({
+        type: "decision",
+        category: "decision",
+        data: "use ctx- prefix, not cm-",
+        priority: 2,
+      }),
       makeEvent({ type: "cwd", category: "cwd", data: "/Users/mksglu/project", priority: 2 }),
       makeEvent({ type: "git", category: "git", data: "branch", priority: 2 }),
       makeEvent({ type: "env", category: "env", data: "nvm use 20", priority: 2 }),
@@ -633,10 +745,30 @@ describe("Slice 15: Snapshot includes subagents", () => {
 
   test("buildResumeSnapshot with 4 completed agents preserves all results", () => {
     const events: StoredEvent[] = [
-      makeEvent({ type: "subagent_completed", category: "subagent", data: "[completed] Cursor → CURSOR_TRACE_DIR", priority: 2 }),
-      makeEvent({ type: "subagent_completed", category: "subagent", data: "[completed] Gemini → GEMINI_PROJECT_DIR", priority: 2 }),
-      makeEvent({ type: "subagent_completed", category: "subagent", data: "[completed] Codex → no detection", priority: 2 }),
-      makeEvent({ type: "subagent_completed", category: "subagent", data: "[completed] VS Code → VSCODE_PID", priority: 2 }),
+      makeEvent({
+        type: "subagent_completed",
+        category: "subagent",
+        data: "[completed] Cursor → CURSOR_TRACE_DIR",
+        priority: 2,
+      }),
+      makeEvent({
+        type: "subagent_completed",
+        category: "subagent",
+        data: "[completed] Gemini → GEMINI_PROJECT_DIR",
+        priority: 2,
+      }),
+      makeEvent({
+        type: "subagent_completed",
+        category: "subagent",
+        data: "[completed] Codex → no detection",
+        priority: 2,
+      }),
+      makeEvent({
+        type: "subagent_completed",
+        category: "subagent",
+        data: "[completed] VS Code → VSCODE_PID",
+        priority: 2,
+      }),
     ];
     const xml = buildResumeSnapshot(events, { maxBytes: 4096 });
     assert.ok(xml.includes("Cursor"), "should include Cursor agent result");

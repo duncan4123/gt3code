@@ -228,18 +228,12 @@ export class GeminiCLIAdapter implements HookAdapter {
   }
 
   getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}.db`);
   }
 
   getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}-events.md`);
   }
 
@@ -304,11 +298,7 @@ export class GeminiCLIAdapter implements HookAdapter {
   writeSettings(settings: Record<string, unknown>): void {
     const dir = resolve(homedir(), ".gemini");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      this.getSettingsPath(),
-      JSON.stringify(settings, null, 2) + "\n",
-      "utf-8",
-    );
+    writeFileSync(this.getSettingsPath(), JSON.stringify(settings, null, 2) + "\n", "utf-8");
   }
 
   // ── Diagnostics (doctor) ─────────────────────────────────
@@ -393,17 +383,11 @@ export class GeminiCLIAdapter implements HookAdapter {
     }
 
     // Check in extensions or settings for context-mode
-    const extensions = settings.extensions as
-      | Record<string, unknown>
-      | Array<unknown>
-      | undefined;
+    const extensions = settings.extensions as Record<string, unknown> | Array<unknown> | undefined;
 
     if (extensions) {
       const hasPlugin = Array.isArray(extensions)
-        ? extensions.some(
-            (e) =>
-              typeof e === "string" && e.includes("context-mode"),
-          )
+        ? extensions.some((e) => typeof e === "string" && e.includes("context-mode"))
         : Object.keys(extensions).some((k) => k.includes("context-mode"));
 
       if (hasPlugin) {
@@ -425,13 +409,7 @@ export class GeminiCLIAdapter implements HookAdapter {
   getInstalledVersion(): string {
     // Check ~/.gemini/ extension cache for context-mode
     try {
-      const cachePath = resolve(
-        homedir(),
-        ".gemini",
-        "extensions",
-        "context-mode",
-        "package.json",
-      );
+      const cachePath = resolve(homedir(), ".gemini", "extensions", "context-mode", "package.json");
       const pkg = JSON.parse(readFileSync(cachePath, "utf-8"));
       if (typeof pkg.version === "string") return pkg.version;
     } catch {
@@ -449,10 +427,7 @@ export class GeminiCLIAdapter implements HookAdapter {
 
     const hookConfigs: Array<{
       name: string;
-    }> = [
-      { name: GEMINI_HOOK_NAMES.BEFORE_TOOL },
-      { name: GEMINI_HOOK_NAMES.SESSION_START },
-    ];
+    }> = [{ name: GEMINI_HOOK_NAMES.BEFORE_TOOL }, { name: GEMINI_HOOK_NAMES.SESSION_START }];
 
     for (const config of hookConfigs) {
       const command = buildGeminiHookCommand(config.name as GeminiHookType, pluginRoot);
@@ -461,9 +436,7 @@ export class GeminiCLIAdapter implements HookAdapter {
         hooks: [{ type: "command", command }],
       };
 
-      const existing = hooks[config.name] as
-        | Array<Record<string, unknown>>
-        | undefined;
+      const existing = hooks[config.name] as Array<Record<string, unknown>> | undefined;
       if (existing && Array.isArray(existing)) {
         const idx = existing.findIndex((e) => {
           const entryHooks = e.hooks as Array<{ command?: string }> | undefined;
@@ -520,13 +493,7 @@ export class GeminiCLIAdapter implements HookAdapter {
     // Gemini CLI doesn't have a formal plugin registry like Claude Code.
     // Update the extension cache package.json if it exists.
     try {
-      const pkgPath = resolve(
-        homedir(),
-        ".gemini",
-        "extensions",
-        "context-mode",
-        "package.json",
-      );
+      const pkgPath = resolve(homedir(), ".gemini", "extensions", "context-mode", "package.json");
       const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
       pkg.version = version;
       pkg.installPath = pluginRoot;

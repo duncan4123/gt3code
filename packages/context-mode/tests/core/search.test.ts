@@ -76,17 +76,17 @@ describe("Fix 1: searchWithFallback cascade on persistent store", () => {
     const results = store.searchWithFallback("databse", 3, "execute:shell");
     assert.ok(results.length > 0, "Fuzzy should correct 'databse' to 'database'");
     assert.equal(results[0].matchLayer, "rrf-fuzzy", "matchLayer should be 'rrf-fuzzy'");
-    assert.ok(results[0].content.toLowerCase().includes("database"), "Content should have 'database'");
+    assert.ok(
+      results[0].content.toLowerCase().includes("database"),
+      "Content should have 'database'",
+    );
 
     store.close();
   });
 
   test("searchWithFallback: cascade stops at first successful layer", () => {
     const store = createStore();
-    store.indexPlainText(
-      "Redis cache hit rate: 95%\nMemcached fallback rate: 3%",
-      "execute:shell",
-    );
+    store.indexPlainText("Redis cache hit rate: 95%\nMemcached fallback rate: 3%", "execute:shell");
 
     // "redis" is an exact term — should stop at RRF, never try fuzzy
     const results = store.searchWithFallback("redis cache", 3, "execute:shell");
@@ -129,7 +129,7 @@ describe("Fix 2: persistent store replaces ephemeral DB correctly", () => {
     const errorResults = store.searchWithFallback("401 timeout", 3, "execute:typescript:error");
     assert.ok(errorResults.length > 0, "Should find error content");
     assert.ok(
-      errorResults.every(r => r.source.includes("error")),
+      errorResults.every((r) => r.source.includes("error")),
       "All results should be from the error source",
     );
 
@@ -137,7 +137,7 @@ describe("Fix 2: persistent store replaces ephemeral DB correctly", () => {
     const successResults = store.searchWithFallback("tests passed", 3, "execute:shell");
     assert.ok(successResults.length > 0, "Should find success content");
     assert.ok(
-      successResults.every(r => r.source.includes("shell")),
+      successResults.every((r) => r.source.includes("shell")),
       "All results should be from the shell source",
     );
 
@@ -153,13 +153,16 @@ describe("Fix 2: persistent store replaces ephemeral DB correctly", () => {
 
     // Global search (no source filter) should find content from all sources
     const allResults = store.searchWithFallback("error log", 10);
-    assert.ok(allResults.length >= 3, `Should find content from all 3 sources, got ${allResults.length}`);
+    assert.ok(
+      allResults.length >= 3,
+      `Should find content from all 3 sources, got ${allResults.length}`,
+    );
 
     // Source-scoped search should be precise
     const cmd2Only = store.searchWithFallback("error log", 3, "cmd-2");
     assert.ok(cmd2Only.length > 0, "Should find cmd-2 results");
     assert.ok(
-      cmd2Only.every(r => r.source.includes("cmd-2")),
+      cmd2Only.every((r) => r.source.includes("cmd-2")),
       "Scoped results should only be from cmd-2",
     );
 
@@ -173,7 +176,8 @@ describe("Fix 3: batch_execute search precision (no indiscriminate boosting)", (
 
     // Simulate batch_execute with multiple command outputs indexed
     store.index({
-      content: "# Git Log\n\ncommit abc123\nAuthor: dev@example.com\nFix memory leak in WebSocket handler",
+      content:
+        "# Git Log\n\ncommit abc123\nAuthor: dev@example.com\nFix memory leak in WebSocket handler",
       source: "batch:git-log",
     });
     store.index({
@@ -195,7 +199,7 @@ describe("Fix 3: batch_execute search precision (no indiscriminate boosting)", (
     // The old boosted approach would return ALL sections; searchWithFallback
     // should be precise and only return the relevant one
     assert.ok(
-      !results.some(r => r.content.includes("Packet loss")),
+      !results.some((r) => r.content.includes("Packet loss")),
       "Network stats should NOT appear in memory leak results",
     );
 
@@ -218,14 +222,14 @@ describe("Fix 3: batch_execute search precision (no indiscriminate boosting)", (
     const buildResults = store.searchWithFallback("TypeScript files compiled", 3, "batch:build");
     assert.ok(buildResults.length > 0, "Should find build output");
     assert.ok(
-      buildResults.every(r => r.source.includes("build")),
+      buildResults.every((r) => r.source.includes("build")),
       "All results should be from build source",
     );
 
     const testResults = store.searchWithFallback("tests passed coverage", 3, "batch:test");
     assert.ok(testResults.length > 0, "Should find test output");
     assert.ok(
-      testResults.every(r => r.source.includes("test")),
+      testResults.every((r) => r.source.includes("test")),
       "All results should be from test source",
     );
 
@@ -239,7 +243,8 @@ describe("Fix 4: transaction-wrapped vocabulary insertion", () => {
 
     // Index content with distinctive words
     store.index({
-      content: "# Microservices\n\nThe containerized orchestration platform manages deployments.\n\n" +
+      content:
+        "# Microservices\n\nThe containerized orchestration platform manages deployments.\n\n" +
         "# Monitoring\n\nPrometheus collects containerized metrics from orchestration layer.\n\n" +
         "# Scaling\n\nHorizontal pod autoscaling uses containerized orchestration policies.",
       source: "k8s-docs",
@@ -433,17 +438,25 @@ describe("Edge cases and hardening", () => {
 
     // Index enough content for multiple results
     store.index({
-      content: Array.from({ length: 10 }, (_, i) =>
-        `## Error ${i}\n\nTypeError: Cannot read property '${i}' of undefined at line ${i * 10}`
+      content: Array.from(
+        { length: 10 },
+        (_, i) =>
+          `## Error ${i}\n\nTypeError: Cannot read property '${i}' of undefined at line ${i * 10}`,
       ).join("\n\n"),
       source: "error-log",
     });
 
     const limited = store.searchWithFallback("TypeError property undefined", 2);
-    assert.ok(limited.length <= 2, `Limit 2 should return at most 2 results, got ${limited.length}`);
+    assert.ok(
+      limited.length <= 2,
+      `Limit 2 should return at most 2 results, got ${limited.length}`,
+    );
 
     const moreLimited = store.searchWithFallback("TypeError property undefined", 1);
-    assert.ok(moreLimited.length <= 1, `Limit 1 should return at most 1 result, got ${moreLimited.length}`);
+    assert.ok(
+      moreLimited.length <= 1,
+      `Limit 1 should return at most 1 result, got ${moreLimited.length}`,
+    );
 
     store.close();
   });
@@ -459,11 +472,13 @@ describe("AND semantics (issue #23)", () => {
 
     // Index two documents — one relevant, one only matches on "function"
     store.index({
-      content: "## useEffect cleanup\nReturn a cleanup function from useEffect to avoid memory leaks.\nAlways clean up subscriptions and timers in the cleanup function.",
+      content:
+        "## useEffect cleanup\nReturn a cleanup function from useEffect to avoid memory leaks.\nAlways clean up subscriptions and timers in the cleanup function.",
       source: "React Hooks Guide",
     });
     store.index({
-      content: "## What is a function\nA function is a reusable block of code that performs a specific task.\nFunctions accept parameters and return values.",
+      content:
+        "## What is a function\nA function is a reusable block of code that performs a specific task.\nFunctions accept parameters and return values.",
       source: "JavaScript Basics",
     });
 
@@ -483,7 +498,8 @@ describe("AND semantics (issue #23)", () => {
     const store = createStore();
 
     store.index({
-      content: "## useEffect cleanup\nReturn a cleanup function from useEffect to avoid memory leaks.",
+      content:
+        "## useEffect cleanup\nReturn a cleanup function from useEffect to avoid memory leaks.",
       source: "React Hooks Guide",
     });
     store.index({
@@ -572,10 +588,7 @@ describe("Source-scoped searchWithFallback (intentSearch path)", () => {
       "ERROR: connection refused to database at 10.0.0.5:5432\nRetry 3/3 failed",
       "cmd-1: psql status",
     );
-    store.indexPlainText(
-      "All 42 tests passed in 3.2s\nCoverage: 87%",
-      "cmd-2: npm test",
-    );
+    store.indexPlainText("All 42 tests passed in 3.2s\nCoverage: 87%", "cmd-2: npm test");
 
     // Source-scoped search should only find results from the target source
     const results = store.searchWithFallback("connection refused", 3, "cmd-1");
@@ -604,10 +617,7 @@ describe("Source-scoped searchWithFallback (intentSearch path)", () => {
     // "horizontalPod" is a partial camelCase term — porter won't match, trigram will
     const results = store.searchWithFallback("horizontalPod", 3, "cmd-1");
     assert.ok(results.length > 0, "Trigram should find partial camelCase match");
-    assert.ok(
-      results[0].content.includes("horizontalPodAutoscaler"),
-      "Should find the full term",
-    );
+    assert.ok(results[0].content.includes("horizontalPodAutoscaler"), "Should find the full term");
     assert.equal(results[0].matchLayer, "rrf", "Should match via RRF layer");
 
     store.close();
@@ -669,11 +679,17 @@ describe("Multi-source isolation (batch_execute path)", () => {
     // Each scoped search should only return results from its source
     const gitResults = store.searchWithFallback("files changed", 3, "batch: git status");
     assert.ok(gitResults.length > 0, "Should find git status results");
-    assert.ok(gitResults.every(r => r.source.includes("git status")), "All results should be from git status");
+    assert.ok(
+      gitResults.every((r) => r.source.includes("git status")),
+      "All results should be from git status",
+    );
 
     const testResults = store.searchWithFallback("tests passed", 3, "batch: npm test");
     assert.ok(testResults.length > 0, "Should find test results");
-    assert.ok(testResults.every(r => r.source.includes("npm test")), "All results should be from npm test");
+    assert.ok(
+      testResults.every((r) => r.source.includes("npm test")),
+      "All results should be from npm test",
+    );
 
     // Global fallback (no source filter) should search across all sources
     const globalResults = store.searchWithFallback("files", 10);
@@ -837,10 +853,7 @@ describe("Index deduplication (issue #67)", () => {
       JSON.stringify({ status: "error", message: "connection refused" }),
       "api-response",
     );
-    store.indexJSON(
-      JSON.stringify({ status: "ok", data: [1, 2, 3] }),
-      "api-response",
-    );
+    store.indexJSON(JSON.stringify({ status: "ok", data: [1, 2, 3] }), "api-response");
 
     const oldResults = store.search("connection refused");
     expect(oldResults.length).toBe(0);
@@ -1054,11 +1067,7 @@ describe("fuzzyCorrect: Levenshtein Typo Correction", () => {
     const store = createSeededStore();
     // Exact word exists in vocabulary — no correction needed
     const corrected = store.fuzzyCorrect("authentication");
-    assert.equal(
-      corrected,
-      null,
-      "Should return null when word already exists in vocabulary",
-    );
+    assert.equal(corrected, null, "Should return null when word already exists in vocabulary");
     store.close();
   });
 
@@ -1066,11 +1075,7 @@ describe("fuzzyCorrect: Levenshtein Typo Correction", () => {
     const store = createSeededStore();
     // Completely unrelated — edit distance too high for any vocabulary word
     const corrected = store.fuzzyCorrect("xyzqwertymno");
-    assert.equal(
-      corrected,
-      null,
-      "Should return null when no close match exists",
-    );
+    assert.equal(corrected, null, "Should return null when no close match exists");
     store.close();
   });
 });
@@ -1186,11 +1191,7 @@ describe("Fuzzy Edge Cases", () => {
     const results = store.searchWithFallback("Redis", 3);
     const elapsed = performance.now() - start;
     assert.ok(results.length > 0, "Should find Redis content");
-    assert.equal(
-      results[0].matchLayer,
-      "rrf",
-      "Exact match should resolve at RRF layer",
-    );
+    assert.equal(results[0].matchLayer, "rrf", "Exact match should resolve at RRF layer");
     // Sanity: should be fast since it didn't need fuzzy
     assert.ok(elapsed < 500, `Should be fast for Layer 1 hit, took ${elapsed.toFixed(0)}ms`);
     store.close();
@@ -1305,18 +1306,11 @@ describe("Scenario 1: Server Log Error (line 347 of 500)", () => {
 
     // Smart truncation
     const truncated = simulateSmartTruncation(logContent, MAX_BYTES);
-    const truncationFoundError = truncated
-      .toLowerCase()
-      .includes("connection refused");
+    const truncationFoundError = truncated.toLowerCase().includes("connection refused");
 
     // Intent search
-    const intentResult = simulateIntentSearch(
-      logContent,
-      "connection refused database error",
-    );
-    const intentFoundError = intentResult.found
-      .toLowerCase()
-      .includes("connection refused");
+    const intentResult = simulateIntentSearch(logContent, "connection refused database error");
+    const intentFoundError = intentResult.found.toLowerCase().includes("connection refused");
 
     scenarioResults.push({
       name: "Server Log Error",
@@ -1327,10 +1321,7 @@ describe("Scenario 1: Server Log Error (line 347 of 500)", () => {
     });
 
     // Intent search MUST find the error
-    assert.ok(
-      intentFoundError,
-      "Intent search should find 'connection refused' error",
-    );
+    assert.ok(intentFoundError, "Intent search should find 'connection refused' error");
   });
 });
 
@@ -1362,10 +1353,7 @@ describe("Scenario 2: Test Failures (3 among 200 tests)", () => {
     if (truncated.includes("testFuzzyMatch")) truncationFailCount++;
 
     // Intent search — use terms that actually appear in the failure lines
-    const intentResult = simulateIntentSearch(
-      testOutput,
-      "FAILED Expected but got",
-    );
+    const intentResult = simulateIntentSearch(testOutput, "FAILED Expected but got");
     let intentFailCount = 0;
     if (intentResult.found.includes("testTokenExpiry")) intentFailCount++;
     if (intentResult.found.includes("testRefundFlow")) intentFailCount++;
@@ -1397,14 +1385,10 @@ describe("Scenario 3: Build Warnings (2 among 300 lines)", () => {
           "  WARNING: 'left-pad' has been deprecated. Use 'string.prototype.padStart' instead.",
         );
       } else if (i === 200) {
-        lines.push(
-          "  WARNING: 'request' has been deprecated. Use 'node-fetch' instead.",
-        );
+        lines.push("  WARNING: 'request' has been deprecated. Use 'node-fetch' instead.");
       } else {
         const ms = (20 + (i % 180)).toString();
-        lines.push(
-          `  [built] ./src/components/Component${i}.tsx (${ms}ms)`,
-        );
+        lines.push(`  [built] ./src/components/Component${i}.tsx (${ms}ms)`);
       }
     }
     const buildOutput = lines.join("\n");
@@ -1416,10 +1400,7 @@ describe("Scenario 3: Build Warnings (2 among 300 lines)", () => {
     if (truncated.includes("'request'")) truncationWarningCount++;
 
     // Intent search
-    const intentResult = simulateIntentSearch(
-      buildOutput,
-      "WARNING deprecated",
-    );
+    const intentResult = simulateIntentSearch(buildOutput, "WARNING deprecated");
     let intentWarningCount = 0;
     if (intentResult.found.includes("left-pad")) intentWarningCount++;
     if (intentResult.found.includes("'request'")) intentWarningCount++;
@@ -1446,11 +1427,13 @@ describe("Scenario 4: API Auth Error (line 743 of 1000)", () => {
     const lines: string[] = [];
     for (let i = 0; i < 1000; i++) {
       if (i === 742) {
-        lines.push('  {');
+        lines.push("  {");
         lines.push('    "error": "authentication_failed",');
-        lines.push('    "message": "authentication failed, token expired at 2024-01-15T12:00:00Z",');
+        lines.push(
+          '    "message": "authentication failed, token expired at 2024-01-15T12:00:00Z",',
+        );
         lines.push('    "code": 401');
-        lines.push('  },');
+        lines.push("  },");
       } else {
         lines.push(
           `  { "id": ${i}, "name": "user_${i}", "status": "active", "score": ${(i * 7) % 100} },`,
@@ -1461,18 +1444,11 @@ describe("Scenario 4: API Auth Error (line 743 of 1000)", () => {
 
     // Smart truncation
     const truncated = simulateSmartTruncation(apiResponse, MAX_BYTES);
-    const truncationFoundAuth = truncated
-      .toLowerCase()
-      .includes("authentication failed");
+    const truncationFoundAuth = truncated.toLowerCase().includes("authentication failed");
 
     // Intent search
-    const intentResult = simulateIntentSearch(
-      apiResponse,
-      "authentication failed token expired",
-    );
-    const intentFoundAuth = intentResult.found
-      .toLowerCase()
-      .includes("authentication failed");
+    const intentResult = simulateIntentSearch(apiResponse, "authentication failed token expired");
+    const intentFoundAuth = intentResult.found.toLowerCase().includes("authentication failed");
 
     scenarioResults.push({
       name: "API Auth Error",
@@ -1483,10 +1459,7 @@ describe("Scenario 4: API Auth Error (line 743 of 1000)", () => {
     });
 
     // Intent search MUST find the auth error
-    assert.ok(
-      intentFoundAuth,
-      "Intent search should find 'authentication failed' error",
-    );
+    assert.ok(intentFoundAuth, "Intent search should find 'authentication failed' error");
   });
 });
 
@@ -1544,7 +1517,9 @@ describe("Scenario 5: Score-based search finds sections matching later intent wo
         } else if (i % 37 === 0) {
           lines.push(`Bugfix release ${i}: minor fix for edge case in parser.`);
         } else {
-          lines.push(`Version ${Math.floor(i / 50)}.${i % 10}.${i % 5}: improved performance and stability for module-${i}.`);
+          lines.push(
+            `Version ${Math.floor(i / 50)}.${i % 10}.${i % 5}: improved performance and stability for module-${i}.`,
+          );
         }
       }
     }
@@ -1559,12 +1534,15 @@ describe("Scenario 5: Score-based search finds sections matching later intent wo
     const intentResult = simulateIntentSearch(changelogOutput, intent, 5);
 
     // Check which of the three important sections were found
-    const foundPrototypeFix = intentResult.found.includes("Object.prototype.hasOwnProperty")
-      || intentResult.found.includes("allowPrototypes");
-    const foundProtoFiltering = intentResult.found.includes("__proto__ keys filtered")
-      || intentResult.found.includes("constructor.prototype");
-    const foundSecurityAdvisory = intentResult.found.includes("security advisory note added")
-      || intentResult.found.includes("Security Advisory");
+    const foundPrototypeFix =
+      intentResult.found.includes("Object.prototype.hasOwnProperty") ||
+      intentResult.found.includes("allowPrototypes");
+    const foundProtoFiltering =
+      intentResult.found.includes("__proto__ keys filtered") ||
+      intentResult.found.includes("constructor.prototype");
+    const foundSecurityAdvisory =
+      intentResult.found.includes("security advisory note added") ||
+      intentResult.found.includes("Security Advisory");
 
     const relevantSectionsFound = [
       foundPrototypeFix,
@@ -1587,7 +1565,7 @@ describe("Scenario 5: Score-based search finds sections matching later intent wo
     assert.ok(
       relevantSectionsFound >= 2,
       `Score-based search should find at least 2/3 relevant sections, found ${relevantSectionsFound}/3. ` +
-      `BM25 should rank multi-word matches above single-word filler matches.`,
+        `BM25 should rank multi-word matches above single-word filler matches.`,
     );
 
     // The prototype pollution fix section (Section A) is the highest-value result
@@ -1596,7 +1574,7 @@ describe("Scenario 5: Score-based search finds sections matching later intent wo
     assert.ok(
       foundPrototypeFix,
       "Score-based search MUST find the 'Prototype Pollution Fix' section — " +
-      "it matches 4 intent words and should rank highest via BM25.",
+        "it matches 4 intent words and should rank highest via BM25.",
     );
   });
 });
@@ -1691,14 +1669,8 @@ describe("extractSnippet with highlight markers", () => {
     const highlighted = markHighlighted(content, ["connections", "configuration"]);
 
     const result = extractSnippet(content, "connect configure", 1500, highlighted);
-    assert.ok(
-      result.includes("connections"),
-      `Expected snippet to include "connections"`,
-    );
-    assert.ok(
-      result.includes("configuration"),
-      `Expected snippet to include "configuration"`,
-    );
+    assert.ok(result.includes("connections"), `Expected snippet to include "connections"`);
+    assert.ok(result.includes("configuration"), `Expected snippet to include "configuration"`);
   });
 
   test("falls back to indexOf when highlighted is absent", () => {
@@ -1714,10 +1686,7 @@ describe("extractSnippet with highlight markers", () => {
   test("returns prefix when no matches found at all", () => {
     const content = buildContent("Nothing relevant here.", "Still nothing relevant.");
     const result = extractSnippet(content, "xylophone");
-    assert.ok(
-      result.endsWith("\u2026"),
-      `Expected snippet to end with ellipsis (prefix fallback)`,
-    );
+    assert.ok(result.endsWith("\u2026"), `Expected snippet to end with ellipsis (prefix fallback)`);
   });
 
   test("short query terms (<=2 chars) are filtered in indexOf fallback", () => {
@@ -1749,10 +1718,7 @@ describe("Store integration: highlighted field", () => {
         r.highlighted.includes(STX),
         `Expected STX marker in highlighted, got: ${r.highlighted.slice(0, 100)}`,
       );
-      assert.ok(
-        r.highlighted.includes(ETX),
-        `Expected ETX marker in highlighted`,
-      );
+      assert.ok(r.highlighted.includes(ETX), `Expected ETX marker in highlighted`);
     } finally {
       store.close();
     }
@@ -1794,10 +1760,7 @@ describe("Store integration: highlighted field", () => {
 
       const r = results[0];
       assert.ok(r.highlighted, "Expected highlighted field from trigram search");
-      assert.ok(
-        r.highlighted.includes(STX),
-        "Expected STX marker in trigram highlighted",
-      );
+      assert.ok(r.highlighted.includes(STX), "Expected STX marker in trigram highlighted");
     } finally {
       store.close();
     }
@@ -1844,7 +1807,8 @@ describe("BM25 field weight tuning", () => {
       });
       // Chunk 2: "authentication" in content only
       store.index({
-        content: "# Security Overview\n\nThe authentication process validates credentials against the database.",
+        content:
+          "# Security Overview\n\nThe authentication process validates credentials against the database.",
         source: "docs-content-only",
       });
 
@@ -1904,12 +1868,14 @@ describe("Content type filter", () => {
     const store = createStore();
     // Index content with code blocks (will get contentType="code")
     store.index({
-      content: "# API Reference\n\n```javascript\nfunction authenticate(user, pass) {\n  return jwt.sign({ user }, SECRET);\n}\n```\n\nThis function handles user authentication.",
+      content:
+        "# API Reference\n\n```javascript\nfunction authenticate(user, pass) {\n  return jwt.sign({ user }, SECRET);\n}\n```\n\nThis function handles user authentication.",
       source: "api-docs",
     });
     // Index prose-only content (will get contentType="prose")
     store.index({
-      content: "# Architecture Overview\n\nThe authentication flow uses JWT tokens for session management. Users authenticate via the login endpoint.",
+      content:
+        "# Architecture Overview\n\nThe authentication flow uses JWT tokens for session management. Users authenticate via the login endpoint.",
       source: "arch-docs",
     });
     return store;
@@ -1934,7 +1900,11 @@ describe("Content type filter", () => {
       const results = store.search("authentication", 10, undefined, "AND", "prose");
       assert.ok(results.length > 0, "Should find prose chunks");
       for (const r of results) {
-        assert.equal(r.contentType, "prose", `Expected prose, got ${r.contentType} in "${r.title}"`);
+        assert.equal(
+          r.contentType,
+          "prose",
+          `Expected prose, got ${r.contentType} in "${r.title}"`,
+        );
       }
     } finally {
       store.close();
@@ -2043,7 +2013,7 @@ describe("Reciprocal Rank Fusion", () => {
 
       const results = store.searchWithFallback("caching strategy", 10);
       // Check no duplicates: same source+title should not appear twice
-      const keys = results.map(r => `${r.source}::${r.title}`);
+      const keys = results.map((r) => `${r.source}::${r.title}`);
       const uniqueKeys = new Set(keys);
       assert.equal(keys.length, uniqueKeys.size, "Results should have no duplicates");
     } finally {
@@ -2091,7 +2061,8 @@ describe("Reciprocal Rank Fusion", () => {
         source: "code-docs",
       });
       store.index({
-        content: "# Architecture\n\nThe authentication system uses JWT tokens for session management.",
+        content:
+          "# Architecture\n\nThe authentication system uses JWT tokens for session management.",
         source: "prose-docs",
       });
 
@@ -2158,8 +2129,8 @@ describe("Proximity reranking", () => {
       // Terms are far apart: "error" at start, "handling" much later
       store.indexPlainText(
         "When an error occurs in the system, the logger records it. " +
-        "After extensive processing and validation of the request parameters, " +
-        "the response formatting and status code handling takes place.",
+          "After extensive processing and validation of the request parameters, " +
+          "the response formatting and status code handling takes place.",
         "distant-terms",
       );
 
@@ -2178,14 +2149,8 @@ describe("Proximity reranking", () => {
   test("single-term queries are not affected by proximity", () => {
     const store = createStore();
     try {
-      store.indexPlainText(
-        "The authentication system validates user credentials.",
-        "source-a",
-      );
-      store.indexPlainText(
-        "Authentication is required for all API endpoints.",
-        "source-b",
-      );
+      store.indexPlainText("The authentication system validates user credentials.", "source-a");
+      store.indexPlainText("Authentication is required for all API endpoints.", "source-b");
 
       const results = store.searchWithFallback("authentication", 5);
       assert.ok(results.length > 0, "Should find results");
@@ -2207,7 +2172,7 @@ describe("Proximity reranking", () => {
       // Span of ~80+ chars between "cache" and "invalidation"
       store.indexPlainText(
         "The cache layer stores frequently accessed data in memory for fast retrieval. " +
-        "When data changes, the system triggers invalidation of affected entries.",
+          "When data changes, the system triggers invalidation of affected entries.",
         "wide-span",
       );
 
@@ -2225,10 +2190,7 @@ describe("Proximity reranking", () => {
   test("proximity with source filter still works", () => {
     const store = createStore();
     try {
-      store.indexPlainText(
-        "The error handling middleware catches exceptions.",
-        "filtered-source",
-      );
+      store.indexPlainText("The error handling middleware catches exceptions.", "filtered-source");
       store.indexPlainText(
         "Error recovery and handling procedures are documented.",
         "other-source",
@@ -2255,8 +2217,8 @@ describe("Proximity reranking", () => {
       // Terms spread out
       store.indexPlainText(
         "The user profile page displays account information. " +
-        "For security, authentication is checked on every request. " +
-        "Additionally, token expiration and validation rules apply to API calls.",
+          "For security, authentication is checked on every request. " +
+          "Additionally, token expiration and validation rules apply to API calls.",
         "spread-out",
       );
 

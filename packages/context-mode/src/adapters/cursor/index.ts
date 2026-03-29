@@ -148,8 +148,7 @@ export class CursorAdapter implements HookAdapter {
     if (response.decision === "ask") {
       return {
         permission: "ask",
-        user_message:
-          response.reason ?? "Action requires user confirmation (security policy)",
+        user_message: response.reason ?? "Action requires user confirmation (security policy)",
       };
     }
     // Cursor rejects empty stdout as "no valid response", so adapter callers
@@ -180,18 +179,12 @@ export class CursorAdapter implements HookAdapter {
   }
 
   getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}.db`);
   }
 
   getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
+    const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
     return join(this.getSessionDir(), `${hash}-events.md`);
   }
 
@@ -253,7 +246,8 @@ export class CursorAdapter implements HookAdapter {
       results.push({
         check: "Native hook config",
         status: "fail",
-        message: "No readable native Cursor hook config found in .cursor/hooks.json or ~/.cursor/hooks.json",
+        message:
+          "No readable native Cursor hook config found in .cursor/hooks.json or ~/.cursor/hooks.json",
         fix: "context-mode upgrade",
       });
     } else {
@@ -266,8 +260,8 @@ export class CursorAdapter implements HookAdapter {
 
       for (const hookType of REQUIRED_HOOKS) {
         const entries = hooks[hookType] as CursorHookCommandEntry[] | undefined;
-        const hasHook = Array.isArray(entries)
-          && entries.some((entry) => isContextModeHook(entry, hookType));
+        const hasHook =
+          Array.isArray(entries) && entries.some((entry) => isContextModeHook(entry, hookType));
 
         results.push({
           check: hookType,
@@ -281,8 +275,8 @@ export class CursorAdapter implements HookAdapter {
 
       for (const hookType of OPTIONAL_HOOKS) {
         const entries = hooks[hookType] as CursorHookCommandEntry[] | undefined;
-        const hasHook = Array.isArray(entries)
-          && entries.some((entry) => isContextModeHook(entry, hookType));
+        const hasHook =
+          Array.isArray(entries) && entries.some((entry) => isContextModeHook(entry, hookType));
 
         results.push({
           check: hookType,
@@ -307,7 +301,8 @@ export class CursorAdapter implements HookAdapter {
       results.push({
         check: "Claude compatibility",
         status: "warn",
-        message: "Claude-compatible hooks detected; native Cursor hooks are the supported configuration",
+        message:
+          "Claude-compatible hooks detected; native Cursor hooks are the supported configuration",
       });
     }
 
@@ -321,7 +316,9 @@ export class CursorAdapter implements HookAdapter {
       try {
         const raw = readFileSync(configPath, "utf-8");
         const config = JSON.parse(raw) as Record<string, unknown>;
-        const servers = (config.mcpServers ?? config.servers) as Record<string, unknown> | undefined;
+        const servers = (config.mcpServers ?? config.servers) as
+          | Record<string, unknown>
+          | undefined;
         if (!servers) continue;
 
         const hasContextMode = Object.entries(servers).some(([name, value]) => {
@@ -367,27 +364,42 @@ export class CursorAdapter implements HookAdapter {
     const hooks = (settings.hooks ?? {}) as Record<string, CursorHookCommandEntry[] | unknown>;
     const changes: string[] = [];
 
-    this.upsertHookEntry(hooks, CURSOR_HOOK_NAMES.PRE_TOOL_USE, {
-      type: "command",
-      command: buildHookCommand(CURSOR_HOOK_NAMES.PRE_TOOL_USE),
-      matcher: PRE_TOOL_USE_MATCHER_PATTERN,
-      loop_limit: null,
-      failClosed: false,
-    }, changes);
+    this.upsertHookEntry(
+      hooks,
+      CURSOR_HOOK_NAMES.PRE_TOOL_USE,
+      {
+        type: "command",
+        command: buildHookCommand(CURSOR_HOOK_NAMES.PRE_TOOL_USE),
+        matcher: PRE_TOOL_USE_MATCHER_PATTERN,
+        loop_limit: null,
+        failClosed: false,
+      },
+      changes,
+    );
 
-    this.upsertHookEntry(hooks, CURSOR_HOOK_NAMES.POST_TOOL_USE, {
-      type: "command",
-      command: buildHookCommand(CURSOR_HOOK_NAMES.POST_TOOL_USE),
-      loop_limit: null,
-      failClosed: false,
-    }, changes);
+    this.upsertHookEntry(
+      hooks,
+      CURSOR_HOOK_NAMES.POST_TOOL_USE,
+      {
+        type: "command",
+        command: buildHookCommand(CURSOR_HOOK_NAMES.POST_TOOL_USE),
+        loop_limit: null,
+        failClosed: false,
+      },
+      changes,
+    );
 
-    this.upsertHookEntry(hooks, CURSOR_HOOK_NAMES.SESSION_START, {
-      type: "command",
-      command: buildHookCommand(CURSOR_HOOK_NAMES.SESSION_START),
-      loop_limit: null,
-      failClosed: false,
-    }, changes);
+    this.upsertHookEntry(
+      hooks,
+      CURSOR_HOOK_NAMES.SESSION_START,
+      {
+        type: "command",
+        command: buildHookCommand(CURSOR_HOOK_NAMES.SESSION_START),
+        loop_limit: null,
+        failClosed: false,
+      },
+      changes,
+    );
 
     settings.version = 1;
     settings.hooks = hooks;
@@ -450,10 +462,7 @@ export class CursorAdapter implements HookAdapter {
   }
 
   private getProjectDir(input: CursorHookInput): string | undefined {
-    return input.cwd
-      || input.workspace_roots?.[0]
-      || process.env.CURSOR_CWD
-      || process.cwd();
+    return input.cwd || input.workspace_roots?.[0] || process.env.CURSOR_CWD || process.cwd();
   }
 
   private extractSessionId(input: CursorHookInput): string {
@@ -496,7 +505,9 @@ export class CursorAdapter implements HookAdapter {
     changes: string[],
   ): void {
     const existingRaw = hooks[hookType];
-    const existing = Array.isArray(existingRaw) ? [...existingRaw] as CursorHookCommandEntry[] : [];
+    const existing = Array.isArray(existingRaw)
+      ? ([...existingRaw] as CursorHookCommandEntry[])
+      : [];
     const idx = existing.findIndex((candidate) => isContextModeHook(candidate, hookType));
 
     if (idx >= 0) {

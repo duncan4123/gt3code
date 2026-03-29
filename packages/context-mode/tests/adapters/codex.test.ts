@@ -32,27 +32,19 @@ describe("CodexAdapter", () => {
 
   describe("parse methods", () => {
     it("parsePreToolUseInput throws", () => {
-      expect(() => adapter.parsePreToolUseInput({})).toThrow(
-        /Codex CLI does not support hooks/,
-      );
+      expect(() => adapter.parsePreToolUseInput({})).toThrow(/Codex CLI does not support hooks/);
     });
 
     it("parsePostToolUseInput throws", () => {
-      expect(() => adapter.parsePostToolUseInput({})).toThrow(
-        /Codex CLI does not support hooks/,
-      );
+      expect(() => adapter.parsePostToolUseInput({})).toThrow(/Codex CLI does not support hooks/);
     });
 
     it("parsePreCompactInput throws", () => {
-      expect(() => adapter.parsePreCompactInput({})).toThrow(
-        /Codex CLI does not support hooks/,
-      );
+      expect(() => adapter.parsePreCompactInput({})).toThrow(/Codex CLI does not support hooks/);
     });
 
     it("parseSessionStartInput throws", () => {
-      expect(() => adapter.parseSessionStartInput({})).toThrow(
-        /Codex CLI does not support hooks/,
-      );
+      expect(() => adapter.parseSessionStartInput({})).toThrow(/Codex CLI does not support hooks/);
     });
   });
 
@@ -112,16 +104,12 @@ describe("CodexAdapter", () => {
 
   describe("config paths", () => {
     it("settings path is ~/.codex/config.toml", () => {
-      expect(adapter.getSettingsPath()).toBe(
-        resolve(homedir(), ".codex", "config.toml"),
-      );
+      expect(adapter.getSettingsPath()).toBe(resolve(homedir(), ".codex", "config.toml"));
     });
 
     it("session dir is under ~/.codex/context-mode/sessions/", () => {
       const sessionDir = adapter.getSessionDir();
-      expect(sessionDir).toBe(
-        join(homedir(), ".codex", "context-mode", "sessions"),
-      );
+      expect(sessionDir).toBe(join(homedir(), ".codex", "context-mode", "sessions"));
     });
   });
 });

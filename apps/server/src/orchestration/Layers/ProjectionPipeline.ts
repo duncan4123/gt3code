@@ -359,6 +359,50 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
   const path = yield* Path.Path;
   const serverConfig = yield* ServerConfig;
 
+  const listThreadMessageFtsRows = (threadId: string) =>
+    sql.unsafe<{ readonly rowid: number; readonly text: string }>(
+      `SELECT rowid, text FROM projection_thread_messages WHERE thread_id = ?`,
+      [threadId],
+    );
+
+  const upsertMessageFtsDocument = (messageId: string, text: string, replaceExisting: boolean) =>
+    Effect.gen(function* () {
+      const inserted = yield* sql.unsafe<{ readonly rowid: number }>(
+        `SELECT rowid FROM projection_thread_messages WHERE message_id = ?`,
+        [messageId],
+      );
+      const rowid = inserted[0]?.rowid;
+      if (rowid === undefined) {
+        return;
+      }
+      if (replaceExisting) {
+        yield* sql.unsafe(
+          `INSERT INTO fts.messages_fts(messages_fts, rowid, text) VALUES ('delete', ?, ?)`,
+          [rowid, text],
+        );
+      }
+      yield* sql.unsafe(`INSERT INTO fts.messages_fts(rowid, text) VALUES (?, ?)`, [rowid, text]);
+    });
+
+  const deleteMessageFtsDocuments = (
+    rows: ReadonlyArray<{ readonly rowid: number; readonly text: string }>,
+  ) =>
+    Effect.forEach(
+      rows,
+      ({ rowid, text }) =>
+        sql.unsafe(
+          `INSERT INTO fts.messages_fts(messages_fts, rowid, text) VALUES ('delete', ?, ?)`,
+          [rowid, text],
+        ),
+      { concurrency: 1 },
+    ).pipe(Effect.asVoid);
+
+  const rebuildThreadFtsDocuments = (threadId: string) =>
+    sql.unsafe(
+      `INSERT INTO fts.messages_fts(rowid, text)
+       SELECT rowid, text FROM projection_thread_messages WHERE thread_id = ?`,
+      [threadId],
+    );
 
   const applyProjectsProjection: ProjectorDefinition["apply"] = (event, _attachmentSideEffects) =>
     Effect.gen(function* () {
@@ -619,6 +663,12 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
             createdAt: existingMessage?.createdAt ?? event.payload.createdAt,
             updatedAt: event.payload.updatedAt,
           });
+          // Sync FTS index in the attached btree sidecar using the canonical rowid.
+          yield* upsertMessageFtsDocument(
+            event.payload.messageId,
+            nextText,
+            existingMessage !== undefined,
+          );
           return;
         }
 
@@ -642,12 +692,15 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
             return;
           }
 
+          const existingFtsRows = yield* listThreadMessageFtsRows(event.payload.threadId);
           yield* projectionThreadMessageRepository.deleteByThreadId({
             threadId: event.payload.threadId,
           });
+          yield* deleteMessageFtsDocuments(existingFtsRows);
           yield* Effect.forEach(keptRows, projectionThreadMessageRepository.upsert, {
             concurrency: 1,
           }).pipe(Effect.asVoid);
+          yield* rebuildThreadFtsDocuments(event.payload.threadId);
           attachmentSideEffects.prunedThreadRelativePaths.set(
             event.payload.threadId,
             collectThreadAttachmentRelativePaths(event.payload.threadId, keptRows),
@@ -1182,17 +1235,12 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
         prunedThreadRelativePaths: new Map<string, Set<string>>(),
       };
 
-      yield* sql.withTransaction(
-        projector.apply(event, attachmentSideEffects).pipe(
-          Effect.flatMap(() =>
-            projectionStateRepository.upsert({
-              projector: projector.name,
-              lastAppliedSequence: event.sequence,
-              updatedAt: event.occurredAt,
-            }),
-          ),
-        ),
-      );
+      yield* projector.apply(event, attachmentSideEffects);
+      yield* projectionStateRepository.upsert({
+        projector: projector.name,
+        lastAppliedSequence: event.sequence,
+        updatedAt: event.occurredAt,
+      });
 
       yield* runAttachmentSideEffects(attachmentSideEffects).pipe(
         Effect.catch((cause) =>
@@ -1217,114 +1265,139 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
             eventStore.readFromSequence(
               Option.isSome(stateRow) ? stateRow.value.lastAppliedSequence : 0,
             ),
-            (event) => runProjectorForEvent(projector, event),
+            // Wrap in transaction here — during bootstrap there is no outer
+            // transaction, unlike the live processEnvelope path.
+            (event) => sql.withTransaction(runProjectorForEvent(projector, event)),
           ),
         ),
       );
 
   const projectEvent: OrchestrationProjectionPipelineShape["projectEvent"] = (event) =>
-    Effect.forEach(
-      projectors,
-      (projector) =>
-        runProjectorForEvent(projector, event).pipe(
+    Effect.gen(function* () {
+      for (const projector of projectors) {
+        yield* runProjectorForEvent(projector, event).pipe(
           Effect.catchTag("SqlError", (sqlError) =>
             Effect.fail(
-              toPersistenceSqlError(
-                `ProjectionPipeline.projectEvent:${projector.name}`,
-              )(sqlError),
+              toPersistenceSqlError(`ProjectionPipeline.projectEvent:${projector.name}`)(sqlError),
             ),
           ),
-        ),
-      { concurrency: 1 },
-    ).pipe(
+        );
+      }
+
+      // Dolt version control — flush prolly-tree skip list to prevent corruption.
+      // Commits at meaningful state boundaries, tags milestones, batch flushes
+      // every 10 high-frequency events. Skip during bootstrap.
+      if (!bootstrapComplete) return;
+
+      const tid = event.aggregateId.substring(0, 8);
+      let msg: string;
+      let tag = false;
+
+      switch (event.type) {
+        case "project.created":
+          msg = `project created ${tid}`;
+          tag = true;
+          sinceLastCommit = 0;
+          break;
+        case "project.deleted":
+          msg = `project deleted ${tid}`;
+          tag = true;
+          sinceLastCommit = 0;
+          break;
+        case "thread.created":
+          msg = `thread created ${tid}`;
+          tag = true;
+          sinceLastCommit = 0;
+          break;
+        case "thread.deleted":
+          msg = `thread deleted ${tid}`;
+          tag = true;
+          sinceLastCommit = 0;
+          break;
+        case "thread.reverted":
+          msg = `thread reverted ${tid}`;
+          tag = true;
+          sinceLastCommit = 0;
+          break;
+        case "thread.turn-diff-completed":
+          msg = `turn completed ${tid}`;
+          tag = true;
+          sinceLastCommit = 0;
+          break;
+        case "project.meta-updated":
+          msg = `project updated ${tid}`;
+          sinceLastCommit = 0;
+          break;
+        case "thread.message-sent":
+          msg = `message ${tid}`;
+          sinceLastCommit = 0;
+          break;
+        case "thread.turn-interrupt-requested":
+          msg = `turn interrupted ${tid}`;
+          sinceLastCommit = 0;
+          break;
+        case "thread.checkpoint-revert-requested":
+          msg = `revert requested ${tid}`;
+          sinceLastCommit = 0;
+          break;
+        case "thread.session-set":
+          msg = `session changed ${tid}`;
+          sinceLastCommit = 0;
+          break;
+        case "thread.proposed-plan-upserted":
+          msg = `plan proposed ${tid}`;
+          sinceLastCommit = 0;
+          break;
+        default:
+          sinceLastCommit++;
+          if (sinceLastCommit < 10) return;
+          msg = `batch flush (${sinceLastCommit} events)`;
+          sinceLastCommit = 0;
+          break;
+      }
+
+      // dolt_add + dolt_commit — catch failures silently (e.g. "nothing to commit").
+      yield* Effect.gen(function* () {
+        yield* sql`SELECT dolt_add('orchestration_events')`;
+        yield* sql`SELECT dolt_add('orchestration_command_receipts')`;
+        yield* sql`SELECT dolt_add('projection_state')`;
+        yield* sql`SELECT dolt_add('projection_projects')`;
+        yield* sql`SELECT dolt_add('projection_threads')`;
+        yield* sql`SELECT dolt_add('projection_thread_messages')`;
+        yield* sql`SELECT dolt_add('projection_thread_activities')`;
+        yield* sql`SELECT dolt_add('projection_thread_sessions')`;
+        yield* sql`SELECT dolt_add('projection_thread_proposed_plans')`;
+        yield* sql`SELECT dolt_add('projection_turns')`;
+        yield* sql`SELECT dolt_add('projection_pending_approvals')`;
+        yield* sql`SELECT dolt_add('checkpoint_diff_blobs')`;
+        yield* sql`SELECT dolt_add('provider_session_runtime')`;
+        // FTS tables live in the attached btree sidecar (fts.*), not the
+        // prolly tree — they are not versioned by dolt.
+        yield* sql`SELECT dolt_commit('-m', ${msg})`;
+        // Workaround: doltlite prolly-tree flushes can desync indexes
+        // from table data during commit. REINDEX is cheap on a healthy
+        // DB and self-heals before the next read. Remove once the
+        // underlying doltlite bug is fixed.
+        yield* sql`REINDEX;`;
+        if (tag) {
+          yield* sql`SELECT dolt_tag(${`${event.type}-${event.sequence}`})`;
+        }
+        if (event.type === "thread.turn-start-requested") {
+          yield* sql`SELECT dolt_gc()`.pipe(Effect.catch(() => Effect.void));
+        }
+      }).pipe(Effect.catch(() => Effect.void));
+    }).pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
       Effect.provideService(ServerConfig, serverConfig),
       Effect.asVoid,
-      // Dolt version control — flush prolly-tree skip list to prevent corruption.
-      // Commits at meaningful state boundaries, tags milestones, batch flushes
-      // every 10 high-frequency events. Skip during bootstrap.
-      Effect.tap(() => {
-        if (!bootstrapComplete) return Effect.void;
-
-        const tid = event.aggregateId.substring(0, 8);
-        let msg: string;
-        let tag = false;
-
-        switch (event.type) {
-          case "project.created":
-            msg = `project created ${tid}`; tag = true; sinceLastCommit = 0; break;
-          case "project.deleted":
-            msg = `project deleted ${tid}`; tag = true; sinceLastCommit = 0; break;
-          case "thread.created":
-            msg = `thread created ${tid}`; tag = true; sinceLastCommit = 0; break;
-          case "thread.deleted":
-            msg = `thread deleted ${tid}`; tag = true; sinceLastCommit = 0; break;
-          case "thread.reverted":
-            msg = `thread reverted ${tid}`; tag = true; sinceLastCommit = 0; break;
-          case "thread.turn-diff-completed":
-            msg = `turn completed ${tid}`; tag = true; sinceLastCommit = 0; break;
-          case "project.meta-updated":
-            msg = `project updated ${tid}`; sinceLastCommit = 0; break;
-          case "thread.message-sent":
-            msg = `message ${tid}`; sinceLastCommit = 0; break;
-          case "thread.turn-interrupt-requested":
-            msg = `turn interrupted ${tid}`; sinceLastCommit = 0; break;
-          case "thread.checkpoint-revert-requested":
-            msg = `revert requested ${tid}`; sinceLastCommit = 0; break;
-          case "thread.session-set":
-            msg = `session changed ${tid}`; sinceLastCommit = 0; break;
-          case "thread.proposed-plan-upserted":
-            msg = `plan proposed ${tid}`; sinceLastCommit = 0; break;
-          default:
-            sinceLastCommit++;
-            if (sinceLastCommit < 10) return Effect.void;
-            msg = `batch flush (${sinceLastCommit} events)`;
-            sinceLastCommit = 0;
-            break;
-        }
-
-        // Sequential dolt_add — concurrent calls deadlock on single SQLite connection
-        return Effect.all([
-          sql`SELECT dolt_add('orchestration_events')`,
-          sql`SELECT dolt_add('orchestration_command_receipts')`,
-          sql`SELECT dolt_add('projection_state')`,
-          sql`SELECT dolt_add('projection_projects')`,
-          sql`SELECT dolt_add('projection_threads')`,
-          sql`SELECT dolt_add('projection_thread_messages')`,
-          sql`SELECT dolt_add('projection_thread_activities')`,
-          sql`SELECT dolt_add('projection_thread_sessions')`,
-          sql`SELECT dolt_add('projection_thread_proposed_plans')`,
-          sql`SELECT dolt_add('projection_turns')`,
-          sql`SELECT dolt_add('projection_pending_approvals')`,
-          sql`SELECT dolt_add('checkpoint_diff_blobs')`,
-          sql`SELECT dolt_add('provider_session_runtime')`,
-          sql`SELECT dolt_add('messages_fts_data')`,
-          sql`SELECT dolt_add('messages_fts_idx')`,
-          sql`SELECT dolt_add('messages_fts_docsize')`,
-          sql`SELECT dolt_add('messages_fts_config')`,
-        ], { concurrency: 1 }).pipe(
-          Effect.flatMap(() => sql`SELECT dolt_commit('-m', ${msg})`),
-          Effect.flatMap(() =>
-            tag
-              ? sql`SELECT dolt_tag(${`${event.type}-${event.sequence}`})`
-              : Effect.void,
-          ),
-          Effect.flatMap(() =>
-            event.type === "thread.turn-start-requested"
-              ? sql`SELECT dolt_gc()`.pipe(Effect.catchAll(() => Effect.void))
-              : Effect.void,
-          ),
-          Effect.catchAll(() => Effect.void),
-        );
-      }),
     );
 
-  const bootstrap: OrchestrationProjectionPipelineShape["bootstrap"] = Effect.forEach(
-    projectors,
-    bootstrapProjector,
-    { concurrency: 1 },
-  ).pipe(
+  const bootstrap: OrchestrationProjectionPipelineShape["bootstrap"] = Effect.gen(function* () {
+    for (const projector of projectors) {
+      yield* bootstrapProjector(projector);
+    }
+  }).pipe(
     Effect.provideService(FileSystem.FileSystem, fileSystem),
     Effect.provideService(Path.Path, path),
     Effect.provideService(ServerConfig, serverConfig),

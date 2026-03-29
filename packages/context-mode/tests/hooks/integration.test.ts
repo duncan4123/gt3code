@@ -11,14 +11,7 @@ import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  mkdirSync,
-  mkdtempSync,
-  writeFileSync,
-  readFileSync,
-  rmSync,
-  existsSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -34,7 +27,9 @@ const _wid = process.env.VITEST_WORKER_ID;
 const _guidanceSuffix = _wid ? `${process.pid}-w${_wid}` : String(process.pid);
 const _guidanceDir = resolve(tmpdir(), `context-mode-guidance-${_guidanceSuffix}`);
 beforeEach(() => {
-  try { rmSync(_guidanceDir, { recursive: true, force: true }); } catch {}
+  try {
+    rmSync(_guidanceDir, { recursive: true, force: true });
+  } catch {}
 });
 
 interface HookResult {
@@ -43,7 +38,11 @@ interface HookResult {
   stderr: string;
 }
 
-function runHook(input: Record<string, unknown>, env?: Record<string, string>, { bom = false } = {}): HookResult {
+function runHook(
+  input: Record<string, unknown>,
+  env?: Record<string, string>,
+  { bom = false } = {},
+): HookResult {
   const json = JSON.stringify(input);
   const result = spawnSync("node", [HOOK_PATH], {
     input: bom ? "\uFEFF" + json : json,
@@ -259,11 +258,7 @@ describe("Task", () => {
       updated.prompt.includes("Research this GitHub repository."),
       "Expected original prompt preserved",
     );
-    assert.equal(
-      updated.description,
-      "Research repo",
-      "Expected other fields preserved",
-    );
+    assert.equal(updated.description, "Research repo", "Expected other fields preserved");
   });
 
   test("Task + Explore subagent: keeps original subagent_type", () => {
@@ -376,8 +371,12 @@ describe("Security Policy Enforcement", () => {
   });
 
   afterAll(() => {
-    try { rmSync(ISOLATED_HOME, { recursive: true, force: true }); } catch {}
-    try { rmSync(MOCK_PROJECT_DIR, { recursive: true, force: true }); } catch {}
+    try {
+      rmSync(ISOLATED_HOME, { recursive: true, force: true });
+    } catch {}
+    try {
+      rmSync(MOCK_PROJECT_DIR, { recursive: true, force: true });
+    } catch {}
   });
 
   test("Security: Bash + sudo denied by deny pattern", () => {
@@ -392,15 +391,15 @@ describe("Security Policy Enforcement", () => {
   });
 
   test("Security: Bash + git allowed, falls through to Stage 2", () => {
-    const result = runHook(
-      { tool_name: "Bash", tool_input: { command: "git status" } },
-      secEnv,
-    );
+    const result = runHook({ tool_name: "Bash", tool_input: { command: "git status" } }, secEnv);
     // git is in allow list -> falls through to Stage 2 routing
     // Stage 2: git is not curl/wget/fetch -> additionalContext with BASH_GUIDANCE
     assert.equal(result.exitCode, 0);
     const parsed = JSON.parse(result.stdout);
-    assert.ok(parsed.hookSpecificOutput.additionalContext, "Allowed Bash command should get additionalContext");
+    assert.ok(
+      parsed.hookSpecificOutput.additionalContext,
+      "Allowed Bash command should get additionalContext",
+    );
     assert.ok(
       parsed.hookSpecificOutput.additionalContext.includes("<context_guidance>"),
       "Expected <context_guidance> in Bash additionalContext",
@@ -521,11 +520,20 @@ describe("Plugin Tool Name Format in ROUTING_BLOCK", () => {
     assert.equal(result.exitCode, 0);
     const parsed = JSON.parse(result.stdout);
     const prompt = parsed.hookSpecificOutput.updatedInput.prompt;
-    assert.ok(prompt.includes(PLUGIN_PREFIX + "ctx_batch_execute"), "Expected plugin-format ctx_batch_execute");
+    assert.ok(
+      prompt.includes(PLUGIN_PREFIX + "ctx_batch_execute"),
+      "Expected plugin-format ctx_batch_execute",
+    );
     assert.ok(prompt.includes(PLUGIN_PREFIX + "ctx_search"), "Expected plugin-format ctx_search");
     assert.ok(prompt.includes(PLUGIN_PREFIX + "ctx_execute"), "Expected plugin-format ctx_execute");
-    assert.ok(prompt.includes(PLUGIN_PREFIX + "ctx_fetch_and_index"), "Expected plugin-format ctx_fetch_and_index");
-    assert.ok(!prompt.includes(SHORT_PREFIX + "ctx_batch_execute"), "Must not contain short-form ctx_batch_execute");
+    assert.ok(
+      prompt.includes(PLUGIN_PREFIX + "ctx_fetch_and_index"),
+      "Expected plugin-format ctx_fetch_and_index",
+    );
+    assert.ok(
+      !prompt.includes(SHORT_PREFIX + "ctx_batch_execute"),
+      "Must not contain short-form ctx_batch_execute",
+    );
   });
 
   test("Read nudge uses plugin-format execute_file tool name", () => {
@@ -533,8 +541,14 @@ describe("Plugin Tool Name Format in ROUTING_BLOCK", () => {
     assert.equal(result.exitCode, 0);
     const parsed = JSON.parse(result.stdout);
     const ctx = parsed.hookSpecificOutput.additionalContext;
-    assert.ok(ctx.includes(PLUGIN_PREFIX + "ctx_execute_file"), "Expected plugin-format ctx_execute_file in Read nudge");
-    assert.ok(!ctx.includes(SHORT_PREFIX + "ctx_execute_file"), "Read nudge must not contain short-form ctx_execute_file");
+    assert.ok(
+      ctx.includes(PLUGIN_PREFIX + "ctx_execute_file"),
+      "Expected plugin-format ctx_execute_file in Read nudge",
+    );
+    assert.ok(
+      !ctx.includes(SHORT_PREFIX + "ctx_execute_file"),
+      "Read nudge must not contain short-form ctx_execute_file",
+    );
   });
 
   test("Grep nudge uses plugin-format execute tool name", () => {
@@ -542,8 +556,14 @@ describe("Plugin Tool Name Format in ROUTING_BLOCK", () => {
     assert.equal(result.exitCode, 0);
     const parsed = JSON.parse(result.stdout);
     const ctx = parsed.hookSpecificOutput.additionalContext;
-    assert.ok(ctx.includes(PLUGIN_PREFIX + "ctx_execute"), "Expected plugin-format ctx_execute in Grep nudge");
-    assert.ok(!ctx.includes(SHORT_PREFIX + "ctx_execute"), "Grep nudge must not contain short-form ctx_execute");
+    assert.ok(
+      ctx.includes(PLUGIN_PREFIX + "ctx_execute"),
+      "Expected plugin-format ctx_execute in Grep nudge",
+    );
+    assert.ok(
+      !ctx.includes(SHORT_PREFIX + "ctx_execute"),
+      "Grep nudge must not contain short-form ctx_execute",
+    );
   });
 
   test("WebFetch deny reason uses plugin-format fetch_and_index tool name", () => {
@@ -551,8 +571,14 @@ describe("Plugin Tool Name Format in ROUTING_BLOCK", () => {
     assert.equal(result.exitCode, 0);
     const parsed = JSON.parse(result.stdout);
     const reason = parsed.hookSpecificOutput.permissionDecisionReason;
-    assert.ok(reason.includes(PLUGIN_PREFIX + "ctx_fetch_and_index"), "Expected plugin-format ctx_fetch_and_index in WebFetch deny");
-    assert.ok(!reason.includes(SHORT_PREFIX + "ctx_fetch_and_index"), "WebFetch deny must not contain short-form");
+    assert.ok(
+      reason.includes(PLUGIN_PREFIX + "ctx_fetch_and_index"),
+      "Expected plugin-format ctx_fetch_and_index in WebFetch deny",
+    );
+    assert.ok(
+      !reason.includes(SHORT_PREFIX + "ctx_fetch_and_index"),
+      "WebFetch deny must not contain short-form",
+    );
   });
 
   test("Bash inline-HTTP redirect uses plugin-format execute tool name", () => {
@@ -561,8 +587,14 @@ describe("Plugin Tool Name Format in ROUTING_BLOCK", () => {
     assert.equal(result.exitCode, 0);
     const parsed = JSON.parse(result.stdout);
     const cmd = parsed.hookSpecificOutput.updatedInput.command;
-    assert.ok(cmd.includes(PLUGIN_PREFIX + "ctx_execute"), "Expected plugin-format ctx_execute in inline-HTTP redirect");
-    assert.ok(!cmd.includes(SHORT_PREFIX + "ctx_execute"), "Inline-HTTP redirect must not contain short-form ctx_execute");
+    assert.ok(
+      cmd.includes(PLUGIN_PREFIX + "ctx_execute"),
+      "Expected plugin-format ctx_execute in inline-HTTP redirect",
+    );
+    assert.ok(
+      !cmd.includes(SHORT_PREFIX + "ctx_execute"),
+      "Inline-HTTP redirect must not contain short-form ctx_execute",
+    );
   });
 });
 
@@ -824,18 +856,26 @@ describe("Routing instructions — hookless platform gate", () => {
 
 describe("UTF-8 BOM handling (core/stdin.mjs path)", () => {
   test("pretooluse.mjs parses BOM-prefixed stdin without error", () => {
-    const result = runHook({
-      tool_name: "Glob",
-      tool_input: { pattern: "**/*.ts" },
-    }, undefined, { bom: true });
+    const result = runHook(
+      {
+        tool_name: "Glob",
+        tool_input: { pattern: "**/*.ts" },
+      },
+      undefined,
+      { bom: true },
+    );
     assertPassthrough(result);
   });
 
   test("pretooluse.mjs handles BOM-prefixed Bash input correctly", () => {
-    const result = runHook({
-      tool_name: "Bash",
-      tool_input: { command: "curl -s http://example.com" },
-    }, undefined, { bom: true });
+    const result = runHook(
+      {
+        tool_name: "Bash",
+        tool_input: { command: "curl -s http://example.com" },
+      },
+      undefined,
+      { bom: true },
+    );
     assertRedirect(result, "context-mode");
   });
 });

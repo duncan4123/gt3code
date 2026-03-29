@@ -30,7 +30,9 @@ export function ensureDeps() {
           stdio: "pipe",
           timeout: 120000,
         });
-      } catch { /* best effort — hook degrades gracefully without DB */ }
+      } catch {
+        /* best effort — hook degrades gracefully without DB */
+      }
     }
   }
 }

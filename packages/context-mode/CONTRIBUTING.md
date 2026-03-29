@@ -49,6 +49,7 @@ configs/             → Per-platform install files (settings.json, mcp.json, CL
 `tsc` compiles `src/` → `build/`. `start.mjs` loads `server.bundle.mjs` (CI-built) if present, otherwise falls back to `build/server.js`.
 
 > **Critical for local dev:** Delete `server.bundle.mjs` in your local clone or your `build/server.js` changes will never be loaded:
+>
 > ```bash
 > rm server.bundle.mjs  # forces start.mjs to use build/server.js
 > ```
@@ -68,6 +69,7 @@ Session events flow through a two-database system:
    - Dies when MCP server process exits
 
 **Session restore flow** (compact/resume):
+
 ```
 SessionStart hook → reads SessionDB → writes events as markdown file
                   → injects ~275 token directive (summary + search queries)
@@ -224,13 +226,13 @@ npm run test:watch
 
 ### What needs rebuild?
 
-| Changed | Rebuild needed? | Why |
-|---------|:-:|---|
-| `hooks/*.mjs` | No | Plain JS, loaded fresh each invocation |
-| `src/*.ts` | Yes | Compiles to `build/` (MCP server, executor, store) |
-| `src/session/*.ts` | Yes | Compiles to `build/session/`, imported by hooks |
-| `src/adapters/**/*.ts` | Yes | Compiles to `build/adapters/`, platform detection + hooks |
-| `configs/*` | No | Static files, served directly |
+| Changed                | Rebuild needed? | Why                                                       |
+| ---------------------- | :-------------: | --------------------------------------------------------- |
+| `hooks/*.mjs`          |       No        | Plain JS, loaded fresh each invocation                    |
+| `src/*.ts`             |       Yes       | Compiles to `build/` (MCP server, executor, store)        |
+| `src/session/*.ts`     |       Yes       | Compiles to `build/session/`, imported by hooks           |
+| `src/adapters/**/*.ts` |       Yes       | Compiles to `build/adapters/`, platform detection + hooks |
+| `configs/*`            |       No        | Static files, served directly                             |
 
 After rebuilding, restart your Claude Code session. The MCP server reloads on session start.
 
@@ -238,20 +240,20 @@ After rebuilding, restart your Claude Code session. The MCP server reloads on se
 
 ### Key files to know
 
-| File | Purpose |
-|---|---|
-| `src/server.ts` | MCP server, tool handlers, auto-indexing of session events |
-| `src/store.ts` | FTS5 content store (index, search, chunking) |
-| `src/executor.ts` | Polyglot code executor (JS, Python, Shell, etc.) |
-| `src/session/db.ts` | SessionDB — persistent session event storage |
-| `src/session/extract.ts` | Event extractors for PostToolUse hook |
-| `src/adapters/detect.ts` | Platform detection (Claude Code, Gemini CLI, etc.) |
-| `src/adapters/types.ts` | HookAdapter interface, shared adapter types |
-| `hooks/sessionstart.mjs` | Session lifecycle (startup/compact/resume/clear) |
-| `hooks/posttooluse.mjs` | Real-time event capture from tool calls |
-| `hooks/precompact.mjs` | Resume snapshot builder (fires before compact) |
-| `hooks/pretooluse.mjs` | Tool routing + context window protection |
-| `hooks/session-helpers.mjs` | Shared utilities (stdin reader, session ID, DB paths) |
+| File                        | Purpose                                                    |
+| --------------------------- | ---------------------------------------------------------- |
+| `src/server.ts`             | MCP server, tool handlers, auto-indexing of session events |
+| `src/store.ts`              | FTS5 content store (index, search, chunking)               |
+| `src/executor.ts`           | Polyglot code executor (JS, Python, Shell, etc.)           |
+| `src/session/db.ts`         | SessionDB — persistent session event storage               |
+| `src/session/extract.ts`    | Event extractors for PostToolUse hook                      |
+| `src/adapters/detect.ts`    | Platform detection (Claude Code, Gemini CLI, etc.)         |
+| `src/adapters/types.ts`     | HookAdapter interface, shared adapter types                |
+| `hooks/sessionstart.mjs`    | Session lifecycle (startup/compact/resume/clear)           |
+| `hooks/posttooluse.mjs`     | Real-time event capture from tool calls                    |
+| `hooks/precompact.mjs`      | Resume snapshot builder (fires before compact)             |
+| `hooks/pretooluse.mjs`      | Tool routing + context window protection                   |
+| `hooks/session-helpers.mjs` | Shared utilities (stdin reader, session ID, DB paths)      |
 
 ## TDD Workflow
 
@@ -269,30 +271,30 @@ We follow test-driven development. Every PR must include tests.
 
 **Do NOT create new test files.** Add your tests to the existing file that covers the same domain. We maintain a small number of well-organized test files — one per adapter, one per core module. Creating a new file per feature or per PR leads to fragmentation that makes the suite harder to navigate and maintain.
 
-| Domain | Test File |
-|---|---|
-| Adapters | `tests/adapters/<platform>.test.ts` |
-| Client detection | `tests/adapters/detect.test.ts`, `tests/adapters/client-map.test.ts` |
-| Search & FTS5 | `tests/core/search.test.ts` |
-| Server & tools | `tests/core/server.test.ts` |
-| CLI & bundle | `tests/core/cli.test.ts` |
-| Routing | `tests/core/routing.test.ts` |
-| Hook routing | `tests/hooks/core-routing.test.ts` |
-| Hook formatting | `tests/hooks/formatters.test.ts` |
-| Hook integration | `tests/hooks/integration.test.ts` |
-| Cursor hooks | `tests/hooks/cursor-hooks.test.ts` |
-| Gemini hooks | `tests/hooks/gemini-hooks.test.ts` |
-| VS Code hooks | `tests/hooks/vscode-hooks.test.ts` |
-| Kiro hooks | `tests/hooks/kiro-hooks.test.ts` |
-| Session DB | `tests/session/session-db.test.ts` |
-| Session extract | `tests/session/session-extract.test.ts` |
-| Session snapshot | `tests/session/session-snapshot.test.ts` |
-| Session continuity | `tests/session/continuity.test.ts` |
-| Session pipeline | `tests/session/session-pipeline.test.ts` |
-| Executor | `tests/executor.test.ts` |
-| Store/Search | `tests/store.test.ts` |
-| Security | `tests/security.test.ts` |
-| OpenClaw plugin | `tests/plugins/openclaw.test.ts` |
+| Domain             | Test File                                                            |
+| ------------------ | -------------------------------------------------------------------- |
+| Adapters           | `tests/adapters/<platform>.test.ts`                                  |
+| Client detection   | `tests/adapters/detect.test.ts`, `tests/adapters/client-map.test.ts` |
+| Search & FTS5      | `tests/core/search.test.ts`                                          |
+| Server & tools     | `tests/core/server.test.ts`                                          |
+| CLI & bundle       | `tests/core/cli.test.ts`                                             |
+| Routing            | `tests/core/routing.test.ts`                                         |
+| Hook routing       | `tests/hooks/core-routing.test.ts`                                   |
+| Hook formatting    | `tests/hooks/formatters.test.ts`                                     |
+| Hook integration   | `tests/hooks/integration.test.ts`                                    |
+| Cursor hooks       | `tests/hooks/cursor-hooks.test.ts`                                   |
+| Gemini hooks       | `tests/hooks/gemini-hooks.test.ts`                                   |
+| VS Code hooks      | `tests/hooks/vscode-hooks.test.ts`                                   |
+| Kiro hooks         | `tests/hooks/kiro-hooks.test.ts`                                     |
+| Session DB         | `tests/session/session-db.test.ts`                                   |
+| Session extract    | `tests/session/session-extract.test.ts`                              |
+| Session snapshot   | `tests/session/session-snapshot.test.ts`                             |
+| Session continuity | `tests/session/continuity.test.ts`                                   |
+| Session pipeline   | `tests/session/session-pipeline.test.ts`                             |
+| Executor           | `tests/executor.test.ts`                                             |
+| Store/Search       | `tests/store.test.ts`                                                |
+| Security           | `tests/security.test.ts`                                             |
+| OpenClaw plugin    | `tests/plugins/openclaw.test.ts`                                     |
 
 If your change doesn't fit any existing file, discuss with the maintainer before creating a new one.
 
@@ -321,11 +323,13 @@ These tests run without a live OpenClaw instance — they mock the plugin API.
 To test against a running OpenClaw gateway:
 
 1. Install the plugin:
+
    ```bash
    npm run install:openclaw
    # Or with a custom state directory:
    npm run install:openclaw -- /path/to/openclaw-state
    ```
+
    The script picks up `$OPENCLAW_STATE_DIR` from your environment (default: `/openclaw`). It handles building, native dependency rebuild, extension registration, and gateway restart in one step.
 
 2. Open a Pi Agent session and verify hooks fire by checking the debug log output.
@@ -337,6 +341,7 @@ See [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md) for hook registrati
 When filing a bug, **always include your prompt**. The exact message you sent to Claude Code is critical for reproduction. Without it, we can't debug the issue.
 
 Required information:
+
 - `/context-mode:doctor` output (must be latest version)
 - The prompt that triggered the bug
 - Debug logs from `Ctrl+O` (background tool calls and MCP communication)
@@ -354,13 +359,13 @@ Required information:
 
 ## Quick Reference
 
-| Task | Command |
-|---|---|
-| Check version | `/context-mode:doctor` |
-| Upgrade plugin | `/context-mode:upgrade` |
-| View session stats | `/context-mode:stats` |
-| See background steps | `Ctrl+O` |
-| Kill cached server | `pkill -f "context-mode.*start.mjs"` |
-| Rebuild after changes | `npm run build` |
-| Run all tests | `npm test` |
-| Watch mode | `npm run test:watch` |
+| Task                  | Command                              |
+| --------------------- | ------------------------------------ |
+| Check version         | `/context-mode:doctor`               |
+| Upgrade plugin        | `/context-mode:upgrade`              |
+| View session stats    | `/context-mode:stats`                |
+| See background steps  | `Ctrl+O`                             |
+| Kill cached server    | `pkill -f "context-mode.*start.mjs"` |
+| Rebuild after changes | `npm run build`                      |
+| Run all tests         | `npm test`                           |
+| Watch mode            | `npm run test:watch`                 |

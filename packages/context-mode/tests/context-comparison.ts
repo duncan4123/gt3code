@@ -32,8 +32,7 @@ const scenarios: Scenario[] = [
   {
     name: "API Response (15 users)",
     fixture: "api-response.json",
-    description:
-      "GET /api/users response — JSON array with nested metadata, preferences",
+    description: "GET /api/users response — JSON array with nested metadata, preferences",
     language: "javascript",
     code: `
       const users = JSON.parse(FILE_CONTENT);
@@ -49,8 +48,7 @@ const scenarios: Scenario[] = [
   {
     name: "package.json (33 deps)",
     fixture: "package-large.json",
-    description:
-      "Next.js SaaS app — 23 deps + 10 devDeps with scripts",
+    description: "Next.js SaaS app — 23 deps + 10 devDeps with scripts",
     language: "javascript",
     code: `
       const pkg = JSON.parse(FILE_CONTENT);
@@ -67,8 +65,7 @@ const scenarios: Scenario[] = [
   {
     name: "Test output (30 suites)",
     fixture: "test-output.txt",
-    description:
-      "vitest run output — 30 test suites with pass/fail details",
+    description: "vitest run output — 30 test suites with pass/fail details",
     language: "javascript",
     code: `
       const lines = FILE_CONTENT.split("\\n");
@@ -94,8 +91,7 @@ const scenarios: Scenario[] = [
   {
     name: "TypeScript errors (50)",
     fixture: "tsc-errors.txt",
-    description:
-      "tsc --noEmit output — 50 type errors across 8 source files",
+    description: "tsc --noEmit output — 50 type errors across 8 source files",
     language: "javascript",
     code: `
       const lines = FILE_CONTENT.trim().split("\\n").filter(l => l.includes("error TS"));
@@ -117,8 +113,7 @@ const scenarios: Scenario[] = [
   {
     name: "git diff (6 files)",
     fixture: "git-diff.patch",
-    description:
-      "git diff HEAD~1 — 6 files changed with additions/deletions",
+    description: "git diff HEAD~1 — 6 files changed with additions/deletions",
     language: "javascript",
     code: `
       const lines = FILE_CONTENT.split("\\n");
@@ -137,8 +132,7 @@ const scenarios: Scenario[] = [
   {
     name: "Access log (500 requests)",
     fixture: "access.log",
-    description:
-      "nginx access log — 500 HTTP requests with IPs, status codes, durations",
+    description: "nginx access log — 500 HTTP requests with IPs, status codes, durations",
     language: "javascript",
     code: `
       const lines = FILE_CONTENT.trim().split("\\n");
@@ -156,8 +150,7 @@ const scenarios: Scenario[] = [
   {
     name: "Build output (100+ lines)",
     fixture: "build-output.txt",
-    description:
-      "next build output — compiled files, warnings, errors, route manifest",
+    description: "next build output — compiled files, warnings, errors, route manifest",
     language: "shell",
     code: `
 errors=$(echo "$FILE_CONTENT" | grep -c "^ERROR\\|error TS" || true)
@@ -173,8 +166,7 @@ fi
   {
     name: "Source code (200 lines TS)",
     fixture: "source-example.ts",
-    description:
-      "Express + Prisma + Zod service — interfaces, schemas, class, routes",
+    description: "Express + Prisma + Zod service — interfaces, schemas, class, routes",
     language: "javascript",
     code: `
       const lines = FILE_CONTENT.split("\\n");
@@ -196,8 +188,7 @@ fi
   {
     name: "MCP tools (40 tools)",
     fixture: "mcp-tools.json",
-    description:
-      "MCP server tools/list response — 40 tools with JSON Schema inputs",
+    description: "MCP server tools/list response — 40 tools with JSON Schema inputs",
     language: "javascript",
     code: `
       const tools = JSON.parse(FILE_CONTENT);
@@ -213,8 +204,7 @@ fi
   {
     name: "Git log (150+ commits)",
     fixture: "git-log.txt",
-    description:
-      "git log --oneline — 150+ commits with authors and conventional commits",
+    description: "git log --oneline — 150+ commits with authors and conventional commits",
     language: "javascript",
     code: `
       const lines = FILE_CONTENT.trim().split("\\n");
@@ -241,8 +231,7 @@ if (runtimes.python) {
   scenarios.push({
     name: "Analytics CSV (500 rows)",
     fixture: "analytics.csv",
-    description:
-      "Event analytics — 500 events with user_id, action, resource, status",
+    description: "Event analytics — 500 events with user_id, action, resource, status",
     language: "python",
     code: `
 import csv, io
@@ -268,21 +257,11 @@ print(f"Statuses: {dict(statuses.most_common())}")
 // ===== RUN COMPARISON =====
 async function main() {
   console.log("");
+  console.log("\u2554" + "\u2550".repeat(66) + "\u2557");
   console.log(
-    "\u2554" +
-      "\u2550".repeat(66) +
-      "\u2557",
+    "\u2551" + "     Context Mode — Before vs After Comparison (Fixtures)      " + "\u2551",
   );
-  console.log(
-    "\u2551" +
-      "     Context Mode — Before vs After Comparison (Fixtures)      " +
-      "\u2551",
-  );
-  console.log(
-    "\u255A" +
-      "\u2550".repeat(66) +
-      "\u255D",
-  );
+  console.log("\u255A" + "\u2550".repeat(66) + "\u255D");
   console.log("");
   console.log("Runtimes:\n" + getRuntimeSummary(runtimes));
   console.log("\nFixtures: tests/fixtures/");
@@ -318,9 +297,7 @@ async function main() {
     });
 
     if (result.exitCode !== 0) {
-      console.log(
-        `  ERROR in ${scenario.name}: ${result.stderr.slice(0, 200)}`,
-      );
+      console.log(`  ERROR in ${scenario.name}: ${result.stderr.slice(0, 200)}`);
       continue;
     }
 
@@ -336,27 +313,19 @@ async function main() {
     console.log(`\u250C\u2500\u2500\u2500 ${scenario.name}`);
     console.log(`\u2502 ${scenario.description}`);
     console.log(`\u2502`);
-    console.log(
-      `\u2502 WITHOUT context-mode (raw Read/cat):`,
-    );
+    console.log(`\u2502 WITHOUT context-mode (raw Read/cat):`);
     console.log(
       `\u2502   ${(rawBytes / 1024).toFixed(1)}KB enters Claude's context (${Math.ceil(rawContent.length / 4).toLocaleString()} tokens est.)`,
     );
     console.log(`\u2502`);
-    console.log(
-      `\u2502 WITH context-mode (execute_file):`,
-    );
+    console.log(`\u2502 WITH context-mode (execute_file):`);
     console.log(
       `\u2502   ${contextBytes}B enters Claude's context (${Math.ceil(result.stdout.length / 4)} tokens est.)`,
     );
     console.log(`\u2502`);
-    console.log(
-      `\u2502 \u2192 Savings: ${savings}%`,
-    );
+    console.log(`\u2502 \u2192 Savings: ${savings}%`);
     console.log(`\u2502`);
-    console.log(
-      `\u2502 What Claude actually sees:`,
-    );
+    console.log(`\u2502 What Claude actually sees:`);
     result.stdout
       .trim()
       .split("\n")
@@ -366,28 +335,14 @@ async function main() {
   }
 
   // ===== SUMMARY TABLE =====
+  console.log("\u2554" + "\u2550".repeat(66) + "\u2557");
   console.log(
-    "\u2554" +
-      "\u2550".repeat(66) +
-      "\u2557",
+    "\u2551" + "                       Summary Table                           " + "\u2551",
   );
-  console.log(
-    "\u2551" +
-      "                       Summary Table                           " +
-      "\u2551",
-  );
-  console.log(
-    "\u255A" +
-      "\u2550".repeat(66) +
-      "\u255D",
-  );
+  console.log("\u255A" + "\u2550".repeat(66) + "\u255D");
   console.log("");
-  console.log(
-    "| Scenario                     | Without (raw)  | With (ctx-mode) | Savings |",
-  );
-  console.log(
-    "|------------------------------|----------------|-----------------|---------|",
-  );
+  console.log("| Scenario                     | Without (raw)  | With (ctx-mode) | Savings |");
+  console.log("|------------------------------|----------------|-----------------|---------|");
   for (const r of rows) {
     const rawStr = `${(r.rawBytes / 1024).toFixed(1)}KB`;
     const ctxStr = `${r.contextBytes}B`;
@@ -395,13 +350,8 @@ async function main() {
       `| ${r.name.padEnd(28)} | ${rawStr.padStart(14)} | ${ctxStr.padStart(15)} | ${r.savings.padStart(7)} |`,
     );
   }
-  console.log(
-    "|------------------------------|----------------|-----------------|---------|",
-  );
-  const totalSavings = (
-    (1 - totalContextBytes / totalRawBytes) *
-    100
-  ).toFixed(0);
+  console.log("|------------------------------|----------------|-----------------|---------|");
+  const totalSavings = ((1 - totalContextBytes / totalRawBytes) * 100).toFixed(0);
   console.log(
     `| ${"TOTAL".padEnd(28)} | ${((totalRawBytes / 1024).toFixed(1) + "KB").padStart(14)} | ${(totalContextBytes + "B").padStart(15)} | ${(totalSavings + "%").padStart(7)} |`,
   );
@@ -411,91 +361,59 @@ async function main() {
   const totalRawTokens = Math.ceil(totalRawBytes / 4);
   const totalCtxTokens = Math.ceil(totalContextBytes / 4);
 
+  console.log("\u2554" + "\u2550".repeat(66) + "\u2557");
   console.log(
-    "\u2554" +
-      "\u2550".repeat(66) +
-      "\u2557",
+    "\u2551" + "                  Context Window Impact                        " + "\u2551",
   );
-  console.log(
-    "\u2551" +
-      "                  Context Window Impact                        " +
-      "\u2551",
-  );
-  console.log(
-    "\u255A" +
-      "\u2550".repeat(66) +
-      "\u255D",
-  );
+  console.log("\u255A" + "\u2550".repeat(66) + "\u255D");
   console.log("");
-  console.log(
-    `  Claude's context window:  200,000 tokens`,
-  );
+  console.log(`  Claude's context window:  200,000 tokens`);
   console.log("");
-  console.log(
-    `  WITHOUT context-mode:`,
-  );
+  console.log(`  WITHOUT context-mode:`);
   console.log(
     `    ${totalRawTokens.toLocaleString()} tokens consumed → ${((totalRawTokens / 200_000) * 100).toFixed(1)}% of context used just reading files`,
   );
   console.log("");
-  console.log(
-    `  WITH context-mode:`,
-  );
+  console.log(`  WITH context-mode:`);
   console.log(
     `    ${totalCtxTokens.toLocaleString()} tokens consumed → ${((totalCtxTokens / 200_000) * 100).toFixed(2)}% of context`,
   );
   console.log("");
-  console.log(
-    `  Tokens saved: ${(totalRawTokens - totalCtxTokens).toLocaleString()}`,
-  );
+  console.log(`  Tokens saved: ${(totalRawTokens - totalCtxTokens).toLocaleString()}`);
   console.log(
     `  Multiplier:   ${Math.floor(totalRawTokens / totalCtxTokens)}x more files per session`,
   );
   console.log("");
 
   // ===== REAL SESSION EXAMPLE =====
+  console.log("\u2554" + "\u2550".repeat(66) + "\u2557");
   console.log(
-    "\u2554" +
-      "\u2550".repeat(66) +
-      "\u2557",
+    "\u2551" + "              Real Debugging Session Example                   " + "\u2551",
   );
-  console.log(
-    "\u2551" +
-      "              Real Debugging Session Example                   " +
-      "\u2551",
-  );
-  console.log(
-    "\u255A" +
-      "\u2550".repeat(66) +
-      "\u255D",
-  );
+  console.log("\u255A" + "\u2550".repeat(66) + "\u255D");
   console.log("");
   console.log("  Developer: 'Fix the failing tests and type errors'");
   console.log("");
   console.log("  Claude needs to:");
-  console.log(
-    "    1. Read test output (30 suites)    ",
-  );
-  console.log(
-    "    2. Read tsc errors (50 errors)     ",
-  );
-  console.log(
-    "    3. Read the source file            ",
-  );
-  console.log(
-    "    4. Read git diff (recent changes)  ",
-  );
-  console.log(
-    "    5. Read package.json (deps)        ",
-  );
+  console.log("    1. Read test output (30 suites)    ");
+  console.log("    2. Read tsc errors (50 errors)     ");
+  console.log("    3. Read the source file            ");
+  console.log("    4. Read git diff (recent changes)  ");
+  console.log("    5. Read package.json (deps)        ");
   console.log("");
 
   // Calculate actual savings for this scenario
-  const debugFixtures = ["test-output.txt", "tsc-errors.txt", "source-example.ts", "git-diff.patch", "package-large.json"];
+  const debugFixtures = [
+    "test-output.txt",
+    "tsc-errors.txt",
+    "source-example.ts",
+    "git-diff.patch",
+    "package-large.json",
+  ];
   let debugRaw = 0;
   let debugCtx = 0;
   for (const f of debugFixtures) {
-    const row = rows.find(r => scenarios.find(s => s.fixture === f)?.name === r.name);
+    const row = rows.find((r) => scenarios.find((s) => s.fixture === f)?.name === r.name);
     if (row) {
       debugRaw += row.rawBytes;
       debugCtx += row.contextBytes;

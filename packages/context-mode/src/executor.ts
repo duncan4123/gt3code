@@ -2,12 +2,7 @@ import { spawn, execSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import {
-  detectRuntimes,
-  buildCommand,
-  type RuntimeMap,
-  type Language,
-} from "./runtime.js";
+import { detectRuntimes, buildCommand, type RuntimeMap, type Language } from "./runtime.js";
 import { smartTruncate } from "./truncate.js";
 export type { ExecResult } from "./types.js";
 import type { ExecResult } from "./types.js";
@@ -19,12 +14,16 @@ function killTree(proc: ReturnType<typeof spawn>): void {
   if (isWin && proc.pid) {
     try {
       execSync(`taskkill /F /T /PID ${proc.pid}`, { stdio: "pipe" });
-    } catch { /* already dead */ }
+    } catch {
+      /* already dead */
+    }
   } else if (proc.pid) {
     try {
       // Kill entire process group (negative PID) to prevent orphaned children
       process.kill(-proc.pid, "SIGKILL");
-    } catch { /* already dead */ }
+    } catch {
+      /* already dead */
+    }
   }
 }
 
@@ -71,7 +70,9 @@ export class PolyglotExecutor {
       try {
         // Kill process group on Unix to catch all children
         process.kill(isWin ? pid : -pid, "SIGTERM");
-      } catch { /* already dead */ }
+      } catch {
+        /* already dead */
+      }
     }
     this.#backgroundedPids.clear();
   }
@@ -99,14 +100,18 @@ export class PolyglotExecutor {
       if (!result.backgrounded) {
         try {
           rmSync(tmpDir, { recursive: true, force: true });
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       }
 
       return result;
     } catch (err) {
       try {
         rmSync(tmpDir, { recursive: true, force: true });
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       throw err;
     }
   }
@@ -114,11 +119,7 @@ export class PolyglotExecutor {
   async executeFile(opts: ExecuteFileOptions): Promise<ExecResult> {
     const { path: filePath, language, code, timeout = 30_000 } = opts;
     const absolutePath = resolve(this.#projectRoot, filePath);
-    const wrappedCode = this.#wrapWithFileContent(
-      absolutePath,
-      language,
-      code,
-    );
+    const wrappedCode = this.#wrapWithFileContent(absolutePath, language, code);
     return this.execute({ language, code: wrappedCode, timeout });
   }
 
@@ -162,11 +163,7 @@ export class PolyglotExecutor {
     return fp;
   }
 
-  async #compileAndRun(
-    srcPath: string,
-    cwd: string,
-    timeout: number,
-  ): Promise<ExecResult> {
+  async #compileAndRun(srcPath: string, cwd: string, timeout: number): Promise<ExecResult> {
     const binSuffix = isWin ? ".exe" : "";
     const binPath = srcPath.replace(/\.rs$/, "") + binSuffix;
 
@@ -212,9 +209,7 @@ export class PolyglotExecutor {
         const posixPath = cmd[1].replace(/\\/g, "/");
         spawnArgs = [posixPath];
       } else {
-        spawnArgs = isWin
-          ? cmd.slice(1).map(a => a.replace(/\\/g, "/"))
-          : cmd.slice(1);
+        spawnArgs = isWin ? cmd.slice(1).map((a) => a.replace(/\\/g, "/")) : cmd.slice(1);
       }
 
       const proc = spawn(spawnCmd, spawnArgs, {
@@ -324,73 +319,73 @@ export class PolyglotExecutor {
     // See: https://www.elttam.com/blog/env/, MITRE T1574.006
     const DENIED = new Set([
       // Shell — auto-execute scripts, override builtins
-      "BASH_ENV",             // sourced by non-interactive bash
-      "ENV",                  // sourced by sh/dash
-      "PROMPT_COMMAND",       // runs before each prompt
-      "PS4",                  // $(cmd) expansion in xtrace
-      "SHELLOPTS",            // enables xtrace/verbose, dumps to stdout
-      "BASHOPTS",             // bash-specific shell options
-      "CDPATH",               // makes cd print to stdout
-      "INPUTRC",              // readline key rebinding
-      "BASH_XTRACEFD",        // redirects debug output to stdout
+      "BASH_ENV", // sourced by non-interactive bash
+      "ENV", // sourced by sh/dash
+      "PROMPT_COMMAND", // runs before each prompt
+      "PS4", // $(cmd) expansion in xtrace
+      "SHELLOPTS", // enables xtrace/verbose, dumps to stdout
+      "BASHOPTS", // bash-specific shell options
+      "CDPATH", // makes cd print to stdout
+      "INPUTRC", // readline key rebinding
+      "BASH_XTRACEFD", // redirects debug output to stdout
       // Node.js — require injection, inspector
-      "NODE_OPTIONS",         // --require, --loader, --inspect
-      "NODE_PATH",            // module search path injection
+      "NODE_OPTIONS", // --require, --loader, --inspect
+      "NODE_PATH", // module search path injection
       // Python — stdlib override, startup injection
-      "PYTHONSTARTUP",        // auto-executes in interactive mode
-      "PYTHONHOME",           // overrides stdlib location (breaks Python)
-      "PYTHONWARNINGS",       // triggers module import chain → RCE
-      "PYTHONBREAKPOINT",     // arbitrary callable
-      "PYTHONINSPECT",        // enters interactive mode after script
+      "PYTHONSTARTUP", // auto-executes in interactive mode
+      "PYTHONHOME", // overrides stdlib location (breaks Python)
+      "PYTHONWARNINGS", // triggers module import chain → RCE
+      "PYTHONBREAKPOINT", // arbitrary callable
+      "PYTHONINSPECT", // enters interactive mode after script
       // Ruby — option/module injection
-      "RUBYOPT",              // injects CLI options (-r loads files)
-      "RUBYLIB",              // module search path injection
+      "RUBYOPT", // injects CLI options (-r loads files)
+      "RUBYLIB", // module search path injection
       // Perl — option/module injection
-      "PERL5OPT",             // injects CLI options (-M runs code)
-      "PERL5LIB",             // module search path injection
-      "PERLLIB",              // legacy module search path
-      "PERL5DB",              // debugger command injection
+      "PERL5OPT", // injects CLI options (-M runs code)
+      "PERL5LIB", // module search path injection
+      "PERLLIB", // legacy module search path
+      "PERL5DB", // debugger command injection
       // Elixir/Erlang — eval injection
-      "ERL_AFLAGS",           // prepends erl flags (-eval runs code)
-      "ERL_FLAGS",            // appends erl flags
-      "ELIXIR_ERL_OPTIONS",   // Elixir-specific erl flags
-      "ERL_LIBS",             // beam file loading
+      "ERL_AFLAGS", // prepends erl flags (-eval runs code)
+      "ERL_FLAGS", // appends erl flags
+      "ELIXIR_ERL_OPTIONS", // Elixir-specific erl flags
+      "ERL_LIBS", // beam file loading
       // Go — compiler/linker injection
-      "GOFLAGS",              // injects go command flags
-      "CGO_CFLAGS",           // C compiler flag injection
-      "CGO_LDFLAGS",          // linker flag injection
+      "GOFLAGS", // injects go command flags
+      "CGO_CFLAGS", // C compiler flag injection
+      "CGO_LDFLAGS", // linker flag injection
       // Rust — compiler substitution
-      "RUSTC",                // arbitrary compiler binary
-      "RUSTC_WRAPPER",        // compiler wrapper injection
+      "RUSTC", // arbitrary compiler binary
+      "RUSTC_WRAPPER", // compiler wrapper injection
       "RUSTC_WORKSPACE_WRAPPER",
       "CARGO_BUILD_RUSTC",
       "CARGO_BUILD_RUSTC_WRAPPER",
-      "RUSTFLAGS",            // compiler flag injection
+      "RUSTFLAGS", // compiler flag injection
       // PHP — config injection
-      "PHPRC",                // auto_prepend_file → RCE
-      "PHP_INI_SCAN_DIR",     // additional .ini loading
+      "PHPRC", // auto_prepend_file → RCE
+      "PHP_INI_SCAN_DIR", // additional .ini loading
       // R — startup script injection
-      "R_PROFILE",            // site-wide R profile
-      "R_PROFILE_USER",       // user R profile
-      "R_HOME",               // R installation override
+      "R_PROFILE", // site-wide R profile
+      "R_PROFILE_USER", // user R profile
+      "R_HOME", // R installation override
       // Dynamic linker — shared library injection
-      "LD_PRELOAD",           // loads .so before all others (Linux)
+      "LD_PRELOAD", // loads .so before all others (Linux)
       "DYLD_INSERT_LIBRARIES", // macOS equivalent of LD_PRELOAD
       // OpenSSL — engine loading
-      "OPENSSL_CONF",         // loads engine modules → .so exec
-      "OPENSSL_ENGINES",      // engine directory override
+      "OPENSSL_CONF", // loads engine modules → .so exec
+      "OPENSSL_ENGINES", // engine directory override
       // Compiler — binary substitution
-      "CC",                   // C compiler override
-      "CXX",                  // C++ compiler override
-      "AR",                   // archiver override
+      "CC", // C compiler override
+      "CXX", // C++ compiler override
+      "AR", // archiver override
       // Git — command injection via hooks/config
-      "GIT_TEMPLATE_DIR",     // hook injection on git init
-      "GIT_CONFIG_GLOBAL",    // core.pager/editor runs commands
-      "GIT_CONFIG_SYSTEM",    // system-level config injection
-      "GIT_EXEC_PATH",        // substitute git subcommands
-      "GIT_SSH",              // arbitrary command instead of ssh
-      "GIT_SSH_COMMAND",      // arbitrary ssh command
-      "GIT_ASKPASS",          // arbitrary credential command
+      "GIT_TEMPLATE_DIR", // hook injection on git init
+      "GIT_CONFIG_GLOBAL", // core.pager/editor runs commands
+      "GIT_CONFIG_SYSTEM", // system-level config injection
+      "GIT_EXEC_PATH", // substitute git subcommands
+      "GIT_SSH", // arbitrary command instead of ssh
+      "GIT_SSH_COMMAND", // arbitrary ssh command
+      "GIT_ASKPASS", // arbitrary credential command
     ]);
 
     // Start with parent env, then strip dangerous vars and apply overrides
@@ -431,12 +426,14 @@ export class PolyglotExecutor {
 
     // Ensure SSL_CERT_FILE is set so Python/Ruby HTTPS works in sandbox.
     if (!env["SSL_CERT_FILE"]) {
-      const certPaths = isWin ? [] : [
-        "/etc/ssl/cert.pem",                         // macOS, some Linux
-        "/etc/ssl/certs/ca-certificates.crt",         // Debian/Ubuntu/Alpine
-        "/etc/pki/tls/certs/ca-bundle.crt",           // RHEL/CentOS/Fedora
-        "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", // Fedora alt
-      ];
+      const certPaths = isWin
+        ? []
+        : [
+            "/etc/ssl/cert.pem", // macOS, some Linux
+            "/etc/ssl/certs/ca-certificates.crt", // Debian/Ubuntu/Alpine
+            "/etc/pki/tls/certs/ca-bundle.crt", // RHEL/CentOS/Fedora
+            "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", // Fedora alt
+          ];
       for (const p of certPaths) {
         if (existsSync(p)) {
           env["SSL_CERT_FILE"] = p;
@@ -448,11 +445,7 @@ export class PolyglotExecutor {
     return env;
   }
 
-  #wrapWithFileContent(
-    absolutePath: string,
-    language: Language,
-    code: string,
-  ): string {
+  #wrapWithFileContent(absolutePath: string, language: Language, code: string): string {
     const escaped = JSON.stringify(absolutePath);
     switch (language) {
       case "javascript":

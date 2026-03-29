@@ -8,12 +8,15 @@ Demonstrates how to create a responsive layout that switches from block display 
 <div class="md:flex">
   <img class="md:shrink-0 md:h-full md:w-48" src="image.jpg" alt="Description" />
   <div>
-    <p>Looking to take your team away on a retreat to enjoy awesome food and take in some sunshine? We have a list of places to do just that.</p>
+    <p>
+      Looking to take your team away on a retreat to enjoy awesome food and take in some sunshine?
+      We have a list of places to do just that.
+    </p>
   </div>
 </div>
 ```
 
---------------------------------
+---
 
 ### Create responsive grid layouts with breakpoint variants
 
@@ -27,7 +30,7 @@ Use Tailwind's responsive variants (md, lg, etc.) to apply different grid column
 </div>
 ```
 
---------------------------------
+---
 
 ### Apply Custom Tailwind CSS Breakpoints in HTML
 
@@ -41,7 +44,7 @@ This HTML snippet illustrates how to utilize custom breakpoints defined in your 
 </div>
 ```
 
---------------------------------
+---
 
 ### Multi-column Layout with Tailwind CSS
 
@@ -59,7 +62,8 @@ Creates a responsive multi-column layout using Tailwind CSS columns utilities. T
 ```jsx
 <div className="relative columns-1 gap-6 text-justify font-serif text-base sm:columns-3">
   <p>
-    Expedita quo ea quod laborum ullam ipsum enim. Deleniti commodi et. Nam id laborum placeat natus eum.
+    Expedita quo ea quod laborum ullam ipsum enim. Deleniti commodi et. Nam id laborum placeat natus
+    eum.
   </p>
   <p className="mt-6">
     Eligendi error nisi recusandae velit numquam nihil aperiam enim. Eum et molestias.
@@ -67,7 +71,7 @@ Creates a responsive multi-column layout using Tailwind CSS columns utilities. T
 </div>
 ```
 
---------------------------------
+---
 
 ### Create mask position grid layout in Tailwind CSS
 

@@ -181,28 +181,19 @@ describe("ClaudeCodeAdapter", () => {
 
   describe("config paths", () => {
     it("settings path is ~/.claude/settings.json", () => {
-      expect(adapter.getSettingsPath()).toBe(
-        resolve(homedir(), ".claude", "settings.json"),
-      );
+      expect(adapter.getSettingsPath()).toBe(resolve(homedir(), ".claude", "settings.json"));
     });
 
     it("session dir is under ~/.claude/context-mode/sessions/", () => {
       const sessionDir = adapter.getSessionDir();
-      expect(sessionDir).toBe(
-        join(homedir(), ".claude", "context-mode", "sessions"),
-      );
+      expect(sessionDir).toBe(join(homedir(), ".claude", "context-mode", "sessions"));
     });
 
     it("DB path uses sha256 hash of projectDir", () => {
       const projectDir = "/my/project";
-      const hash = createHash("sha256")
-        .update(projectDir)
-        .digest("hex")
-        .slice(0, 16);
+      const hash = createHash("sha256").update(projectDir).digest("hex").slice(0, 16);
       const dbPath = adapter.getSessionDBPath(projectDir);
-      expect(dbPath).toBe(
-        join(homedir(), ".claude", "context-mode", "sessions", `${hash}.db`),
-      );
+      expect(dbPath).toBe(join(homedir(), ".claude", "context-mode", "sessions", `${hash}.db`));
     });
   });
 
@@ -234,14 +225,22 @@ describe("ClaudeCodeAdapter", () => {
         join(pluginRoot, "hooks", "hooks.json"),
         JSON.stringify({
           hooks: {
-            PreToolUse: [{
-              matcher: "Bash",
-              hooks: [{ type: "command", command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs" }],
-            }],
-            SessionStart: [{
-              matcher: "",
-              hooks: [{ type: "command", command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/sessionstart.mjs" }],
-            }],
+            PreToolUse: [
+              {
+                matcher: "Bash",
+                hooks: [
+                  { type: "command", command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs" },
+                ],
+              },
+            ],
+            SessionStart: [
+              {
+                matcher: "",
+                hooks: [
+                  { type: "command", command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/sessionstart.mjs" },
+                ],
+              },
+            ],
           },
         }),
       );
@@ -261,14 +260,22 @@ describe("ClaudeCodeAdapter", () => {
         join(pluginRoot, ".claude-plugin", "hooks", "hooks.json"),
         JSON.stringify({
           hooks: {
-            PreToolUse: [{
-              matcher: "Bash",
-              hooks: [{ type: "command", command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs" }],
-            }],
-            SessionStart: [{
-              matcher: "",
-              hooks: [{ type: "command", command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/sessionstart.mjs" }],
-            }],
+            PreToolUse: [
+              {
+                matcher: "Bash",
+                hooks: [
+                  { type: "command", command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs" },
+                ],
+              },
+            ],
+            SessionStart: [
+              {
+                matcher: "",
+                hooks: [
+                  { type: "command", command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/sessionstart.mjs" },
+                ],
+              },
+            ],
           },
         }),
       );
@@ -295,14 +302,18 @@ describe("ClaudeCodeAdapter", () => {
         join(tempDir, "settings.json"),
         JSON.stringify({
           hooks: {
-            PreToolUse: [{
-              matcher: "Bash",
-              hooks: [{ type: "command", command: "context-mode hook claude-code pretooluse" }],
-            }],
-            SessionStart: [{
-              matcher: "",
-              hooks: [{ type: "command", command: "context-mode hook claude-code sessionstart" }],
-            }],
+            PreToolUse: [
+              {
+                matcher: "Bash",
+                hooks: [{ type: "command", command: "context-mode hook claude-code pretooluse" }],
+              },
+            ],
+            SessionStart: [
+              {
+                matcher: "",
+                hooks: [{ type: "command", command: "context-mode hook claude-code sessionstart" }],
+              },
+            ],
           },
         }),
       );
