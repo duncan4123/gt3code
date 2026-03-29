@@ -239,38 +239,32 @@ function simulateTurn(
   stmts.upsertMessage.run(asstMsgId, threadId, turnId, "assistant", "", 1, ts, ts, null);
   stmts.insActivity.run(threadId, activitySeq.n++, "message-appended", ts);
 
-  // 4. Streaming updates — variable chunk sizes like real LLM responses
-  const numChunks = 3 + (turnN % 12); // 3-14 chunks per turn
-  let accumulated = "";
+  // 4. Streaming — NO DB writes at all during streaming.
+  // Build the final response with variable-size content (in memory only).
+  let finalResponse = "";
+  const numChunks = 3 + (turnN % 12);
   for (let chunk = 0; chunk < numChunks; chunk++) {
-    // Vary chunk size: short reasoning, medium text, long code blocks
     const kind = chunk % 3;
-    let addition: string;
     if (kind === 0) {
-      // Short reasoning chunk (~50-200 chars)
-      addition = `Let me think about this. ${turnN % 2 === 0 ? "The issue is in the handler." : "I'll check the configuration first."} `;
+      finalResponse += `Let me think about this. ${turnN % 2 === 0 ? "The issue is in the handler." : "I'll check the configuration first."} `;
     } else if (kind === 1) {
-      // Medium explanation chunk (~200-800 chars)
-      addition = `Here's what I found: the function \`process${turnN}Handler\` on line ${100 + turnN * 3} has a bug where it doesn't handle the edge case when the input array is empty. The fix is to add a guard clause at the top of the function. `.repeat(1 + (chunk % 3));
+      finalResponse += `Here's what I found: the function \`process${turnN}Handler\` on line ${100 + turnN * 3} has a bug where it doesn't handle the edge case when the input array is empty. The fix is to add a guard clause at the top of the function. `.repeat(1 + (chunk % 3));
     } else {
-      // Large code block chunk (~500-3000 chars)
       const lines = 5 + (chunk * 3) + (turnN % 7);
-      addition = "```typescript\n" + Array.from({ length: lines }, (_, i) =>
+      finalResponse += "```typescript\n" + Array.from({ length: lines }, (_, i) =>
         `  ${i === 0 ? "export" : ""} const ${i === 0 ? "result" : `step${i}`} = ${i === 0 ? "await pipeline(" : `transform${i}(`}${i > 0 ? `step${i - 1}` : "input"}, { timeout: ${1000 + i * 100}, retries: ${i % 3}, metadata: ${JSON.stringify({ turn: turnN, chunk, line: i })} });`
       ).join("\n") + "\n```\n";
     }
-    accumulated += addition;
-    stmts.upsertMessage.run(asstMsgId, threadId, turnId, "assistant", accumulated, 1, ts, ts, null);
-    stmts.insActivity.run(threadId, activitySeq.n++, "message-updated", ts);
+    // No activity inserts during streaming — UI gets these via WebSocket
   }
 
-  // 5. Turn completed — final response is the full accumulated text
+  // 5. Turn completed — write final response to DB (single write)
   stmts.insEvent.run(
     `evt-${eventSeq.n++}`, "thread", threadId, turnN * 4 + 3,
     "thread.turn-completed", ts,
     JSON.stringify({ turnId }),
   );
-  stmts.upsertMessage.run(asstMsgId, threadId, turnId, "assistant", accumulated, 0, ts, ts, null);
+  stmts.upsertMessage.run(asstMsgId, threadId, turnId, "assistant", finalResponse, 0, ts, ts, null);
   stmts.upsertTurn.run(turnId, threadId, userMsgId, null, null, asstMsgId, "completed", ts);
   stmts.insActivity.run(threadId, activitySeq.n++, "turn-completed", ts);
 }

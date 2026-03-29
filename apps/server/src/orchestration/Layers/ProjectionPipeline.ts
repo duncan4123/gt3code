@@ -37,6 +37,7 @@ import { ProjectionThreadProposedPlanRepositoryLive } from "../../persistence/La
 import { ProjectionThreadSessionRepositoryLive } from "../../persistence/Layers/ProjectionThreadSessions.ts";
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
 import { ProjectionThreadRepositoryLive } from "../../persistence/Layers/ProjectionThreads.ts";
+import { ftsDbPath } from "../../persistence/Layers/Sqlite.ts";
 import { ServerConfig } from "../../config.ts";
 import {
   OrchestrationProjectionPipeline,
@@ -641,11 +642,9 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
             (row) => row.messageId === event.payload.messageId,
           );
           const nextText =
-            existingMessage && event.payload.streaming
-              ? `${existingMessage.text}${event.payload.text}`
-              : existingMessage && event.payload.text.length === 0
-                ? existingMessage.text
-                : event.payload.text;
+            existingMessage && event.payload.text.length === 0
+              ? existingMessage.text
+              : event.payload.text;
           const nextAttachments =
             event.payload.attachments !== undefined
               ? yield* materializeAttachmentsForProjection({
@@ -1274,6 +1273,17 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
 
   const projectEvent: OrchestrationProjectionPipelineShape["projectEvent"] = (event) =>
     Effect.gen(function* () {
+      // Skip intermediate streaming events entirely — no projector writes,
+      // no dolt_commit. The UI gets streaming content via WebSocket push.
+      // The final non-streaming event captures the complete state.
+      if (
+        event.type === "thread.message-sent" &&
+        "streaming" in event.payload &&
+        event.payload.streaming === true
+      ) {
+        return;
+      }
+
       for (const projector of projectors) {
         yield* runProjectorForEvent(projector, event).pipe(
           Effect.catchTag("SqlError", (sqlError) =>
@@ -1357,6 +1367,10 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
       }
 
       // dolt_add + dolt_commit — catch failures silently (e.g. "nothing to commit").
+      // DETACH fts sidecar before dolt operations — FTS5 virtual tables in
+      // attached btree databases corrupt prolly-tree indexes during dolt_commit.
+      const ftsPath = ftsDbPath(serverConfig.dbPath);
+      yield* sql.unsafe(`DETACH DATABASE fts`).pipe(Effect.catch(() => Effect.void));
       yield* Effect.gen(function* () {
         yield* sql`SELECT dolt_add('orchestration_events')`;
         yield* sql`SELECT dolt_add('orchestration_command_receipts')`;
@@ -1371,14 +1385,7 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
         yield* sql`SELECT dolt_add('projection_pending_approvals')`;
         yield* sql`SELECT dolt_add('checkpoint_diff_blobs')`;
         yield* sql`SELECT dolt_add('provider_session_runtime')`;
-        // FTS tables live in the attached btree sidecar (fts.*), not the
-        // prolly tree — they are not versioned by dolt.
         yield* sql`SELECT dolt_commit('-m', ${msg})`;
-        // Workaround: doltlite prolly-tree flushes can desync indexes
-        // from table data during commit. REINDEX is cheap on a healthy
-        // DB and self-heals before the next read. Remove once the
-        // underlying doltlite bug is fixed.
-        yield* sql`REINDEX;`;
         if (tag) {
           yield* sql`SELECT dolt_tag(${`${event.type}-${event.sequence}`})`;
         }
@@ -1386,6 +1393,7 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
           yield* sql`SELECT dolt_gc()`.pipe(Effect.catch(() => Effect.void));
         }
       }).pipe(Effect.catch(() => Effect.void));
+      yield* sql.unsafe(`ATTACH DATABASE '${ftsPath}' AS fts`).pipe(Effect.catch(() => Effect.void));
     }).pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
