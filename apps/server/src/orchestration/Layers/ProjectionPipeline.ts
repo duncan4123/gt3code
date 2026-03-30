@@ -370,9 +370,76 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const projectionTurnRepository = yield* ProjectionTurnRepository;
     const projectionPendingApprovalRepository = yield* ProjectionPendingApprovalRepository;
 
+    // Skip dolt_commit during bootstrap — only commit during live operation.
+    let bootstrapComplete = false;
+
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const serverConfig = yield* ServerConfig;
+
+    const listThreadMessageFtsRows = (threadId: string) =>
+      sql
+        .unsafe<{ readonly rowid: number; readonly text: string }>(
+          `SELECT rowid, text FROM projection_thread_messages WHERE thread_id = ?`,
+          [threadId],
+        )
+        .pipe(
+          Effect.catchTag("SqlError", (e) =>
+            Effect.fail(toPersistenceSqlError("listThreadMessageFtsRows")(e)),
+          ),
+        );
+
+    const upsertMessageFtsDocument = (messageId: string, text: string, replaceExisting: boolean) =>
+      Effect.gen(function* () {
+        const inserted = yield* sql.unsafe<{ readonly rowid: number }>(
+          `SELECT rowid FROM projection_thread_messages WHERE message_id = ?`,
+          [messageId],
+        );
+        const rowid = inserted[0]?.rowid;
+        if (rowid === undefined) return;
+        if (replaceExisting) {
+          yield* sql.unsafe(
+            `INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', ?, ?)`,
+            [rowid, text],
+          );
+        }
+        yield* sql.unsafe(`INSERT INTO messages_fts(rowid, text) VALUES (?, ?)`, [rowid, text]);
+      }).pipe(
+        Effect.catchTag("SqlError", (e) =>
+          Effect.fail(toPersistenceSqlError("upsertMessageFtsDocument")(e)),
+        ),
+      );
+
+    const deleteMessageFtsDocuments = (
+      rows: ReadonlyArray<{ readonly rowid: number; readonly text: string }>,
+    ) =>
+      Effect.forEach(
+        rows,
+        ({ rowid, text }) =>
+          sql.unsafe(
+            `INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', ?, ?)`,
+            [rowid, text],
+          ),
+        { concurrency: 1 },
+      ).pipe(
+        Effect.asVoid,
+        Effect.catchTag("SqlError", (e) =>
+          Effect.fail(toPersistenceSqlError("deleteMessageFtsDocuments")(e)),
+        ),
+      );
+
+    const rebuildThreadFtsDocuments = (threadId: string) =>
+      sql
+        .unsafe(
+          `INSERT INTO messages_fts(rowid, text)
+     SELECT rowid, text FROM projection_thread_messages WHERE thread_id = ?`,
+          [threadId],
+        )
+        .pipe(
+          Effect.catchTag("SqlError", (e) =>
+            Effect.fail(toPersistenceSqlError("rebuildThreadFtsDocuments")(e)),
+          ),
+        );
 
     const applyProjectsProjection: ProjectorDefinition["apply"] = Effect.fn(
       "applyProjectsProjection",
@@ -653,6 +720,19 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             createdAt: existingMessage?.createdAt ?? event.payload.createdAt,
             updatedAt: event.payload.updatedAt,
           });
+          // Sync FTS index (best-effort — never blocks pipeline).
+          yield* upsertMessageFtsDocument(
+            event.payload.messageId,
+            nextText,
+            existingMessage !== undefined,
+          ).pipe(
+            Effect.catch((e) =>
+              Effect.logWarning("FTS upsert failed (non-fatal)", {
+                messageId: event.payload.messageId,
+                error: String(e),
+              }),
+            ),
+          );
           return;
         }
 
@@ -676,12 +756,31 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             return;
           }
 
+          // Snapshot FTS state BEFORE delete (best-effort).
+          const existingFtsRows = yield* listThreadMessageFtsRows(event.payload.threadId).pipe(
+            Effect.catch(() =>
+              Effect.succeed(
+                [] as ReadonlyArray<{ readonly rowid: number; readonly text: string }>,
+              ),
+            ),
+          );
+
           yield* projectionThreadMessageRepository.deleteByThreadId({
             threadId: event.payload.threadId,
           });
           yield* Effect.forEach(keptRows, projectionThreadMessageRepository.upsert, {
             concurrency: 1,
           }).pipe(Effect.asVoid);
+          // Best-effort FTS rebuild.
+          yield* deleteMessageFtsDocuments(existingFtsRows).pipe(
+            Effect.flatMap(() => rebuildThreadFtsDocuments(event.payload.threadId)),
+            Effect.catch((e) =>
+              Effect.logWarning("FTS rebuild failed on revert (non-fatal)", {
+                threadId: event.payload.threadId,
+                error: String(e),
+              }),
+            ),
+          );
           attachmentSideEffects.prunedThreadRelativePaths.set(
             event.payload.threadId,
             collectThreadAttachmentRelativePaths(event.payload.threadId, keptRows),
@@ -1208,17 +1307,12 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         prunedThreadRelativePaths: new Map<string, Set<string>>(),
       };
 
-      yield* sql.withTransaction(
-        projector.apply(event, attachmentSideEffects).pipe(
-          Effect.flatMap(() =>
-            projectionStateRepository.upsert({
-              projector: projector.name,
-              lastAppliedSequence: event.sequence,
-              updatedAt: event.occurredAt,
-            }),
-          ),
-        ),
-      );
+      yield* projector.apply(event, attachmentSideEffects);
+      yield* projectionStateRepository.upsert({
+        projector: projector.name,
+        lastAppliedSequence: event.sequence,
+        updatedAt: event.occurredAt,
+      });
 
       yield* runAttachmentSideEffects(attachmentSideEffects).pipe(
         Effect.catch((cause) =>
@@ -1243,22 +1337,79 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
               eventStore.readFromSequence(
                 Option.isSome(stateRow) ? stateRow.value.lastAppliedSequence : 0,
               ),
-              (event) => runProjectorForEvent(projector, event),
+              (event) => sql.withTransaction(runProjectorForEvent(projector, event)),
             ),
           ),
         );
+
+    const doltCommitForEvent = (event: OrchestrationEvent): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        if (!bootstrapComplete) return;
+
+        const tid = event.aggregateId.substring(0, 8);
+        let msg: string;
+        let tag = false;
+
+        switch (event.type) {
+          case "project.created":
+            msg = `project created ${tid}`;
+            tag = true;
+            break;
+          case "project.deleted":
+            msg = `project deleted ${tid}`;
+            tag = true;
+            break;
+          case "thread.created":
+            msg = `thread created ${tid}`;
+            tag = true;
+            break;
+          case "thread.deleted":
+            msg = `thread deleted ${tid}`;
+            tag = true;
+            break;
+          case "thread.reverted":
+            msg = `thread reverted ${tid}`;
+            tag = true;
+            break;
+          case "thread.turn-diff-completed":
+            msg = `turn completed ${tid}`;
+            tag = true;
+            break;
+          case "project.meta-updated":
+            msg = `project updated ${tid}`;
+            break;
+          default:
+            return;
+        }
+
+        yield* sql`SELECT dolt_add('orchestration_events')`;
+        yield* sql`SELECT dolt_add('orchestration_command_receipts')`;
+        yield* sql`SELECT dolt_add('projection_state')`;
+        yield* sql`SELECT dolt_add('projection_projects')`;
+        yield* sql`SELECT dolt_add('projection_threads')`;
+        yield* sql`SELECT dolt_add('projection_thread_messages')`;
+        yield* sql`SELECT dolt_add('projection_thread_activities')`;
+        yield* sql`SELECT dolt_add('projection_thread_sessions')`;
+        yield* sql`SELECT dolt_add('projection_thread_proposed_plans')`;
+        yield* sql`SELECT dolt_add('projection_turns')`;
+        yield* sql`SELECT dolt_add('projection_pending_approvals')`;
+        yield* sql`SELECT dolt_add('checkpoint_diff_blobs')`;
+        yield* sql`SELECT dolt_add('provider_session_runtime')`;
+        yield* sql`SELECT dolt_commit('-m', ${msg})`;
+        if (tag) {
+          yield* sql`SELECT dolt_tag(${`${event.type}-${event.sequence}`})`;
+        }
+      }).pipe(Effect.catch((e) => Effect.logWarning(`dolt_commit failed: ${e}`)));
 
     const projectEvent: OrchestrationProjectionPipelineShape["projectEvent"] = (event) =>
       Effect.forEach(projectors, (projector) => runProjectorForEvent(projector, event), {
         concurrency: 1,
       }).pipe(
+        Effect.tap(() => doltCommitForEvent(event)),
         Effect.provideService(FileSystem.FileSystem, fileSystem),
         Effect.provideService(Path.Path, path),
         Effect.provideService(ServerConfig, serverConfig),
         Effect.asVoid,
-        Effect.catchTag("SqlError", (sqlError) =>
-          Effect.fail(toPersistenceSqlError("ProjectionPipeline.projectEvent:query")(sqlError)),
-        ),
       );
 
     const bootstrap: OrchestrationProjectionPipelineShape["bootstrap"] = Effect.forEach(
@@ -1270,13 +1421,14 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       Effect.provideService(Path.Path, path),
       Effect.provideService(ServerConfig, serverConfig),
       Effect.asVoid,
-      Effect.tap(() =>
-        Effect.log("orchestration projection pipeline bootstrapped").pipe(
+      Effect.tap(() => {
+        bootstrapComplete = true;
+        return Effect.log("orchestration projection pipeline bootstrapped").pipe(
           Effect.annotateLogs({ projectors: projectors.length }),
-        ),
-      ),
-      Effect.catchTag("SqlError", (sqlError) =>
-        Effect.fail(toPersistenceSqlError("ProjectionPipeline.bootstrap:query")(sqlError)),
+        );
+      }),
+      Effect.catch((error) =>
+        Effect.fail(toPersistenceSqlError("ProjectionPipeline.bootstrap:query")(error)),
       ),
     );
 

@@ -6,9 +6,7 @@ import type {
 } from "@t3tools/contracts";
 import { OrchestrationCommand } from "@t3tools/contracts";
 import { Deferred, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { toPersistenceSqlError } from "../../persistence/Errors.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { OrchestrationCommandReceiptRepository } from "../../persistence/Services/OrchestrationCommandReceipts.ts";
 import {
@@ -50,7 +48,6 @@ function commandToAggregateRef(command: OrchestrationCommand): {
 }
 
 const makeOrchestrationEngine = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
   const eventStore = yield* OrchestrationEventStore;
   const commandReceiptRepository = yield* OrchestrationCommandReceiptRepository;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
@@ -107,51 +104,46 @@ const makeOrchestrationEngine = Effect.gen(function* () {
         readModel,
       });
       const eventBases = Array.isArray(eventBase) ? eventBase : [eventBase];
-      const committedCommand = yield* sql
-        .withTransaction(
-          Effect.gen(function* () {
-            const committedEvents: OrchestrationEvent[] = [];
-            let nextReadModel = readModel;
+      // NOTE: Removed sql.withTransaction wrapper — DoltliteClient uses a
+      // Semaphore(1) for connection serialization, and nested transaction
+      // acquisition deadlocks. Each projector wraps its own work atomically;
+      // the engine processes one command at a time via the Queue, so the
+      // overall operation is effectively serialized.
+      const committedCommand = yield* Effect.gen(function* () {
+        const committedEvents: OrchestrationEvent[] = [];
+        let nextReadModel = readModel;
 
-            for (const nextEvent of eventBases) {
-              const savedEvent = yield* eventStore.append(nextEvent);
-              nextReadModel = yield* projectEvent(nextReadModel, savedEvent);
-              yield* projectionPipeline.projectEvent(savedEvent);
-              committedEvents.push(savedEvent);
-            }
+        for (const nextEvent of eventBases) {
+          const savedEvent = yield* eventStore.append(nextEvent);
+          nextReadModel = yield* projectEvent(nextReadModel, savedEvent);
+          yield* projectionPipeline.projectEvent(savedEvent);
+          committedEvents.push(savedEvent);
+        }
 
-            const lastSavedEvent = committedEvents.at(-1) ?? null;
-            if (lastSavedEvent === null) {
-              return yield* new OrchestrationCommandInvariantError({
-                commandType: envelope.command.type,
-                detail: "Command produced no events.",
-              });
-            }
+        const lastSavedEvent = committedEvents.at(-1) ?? null;
+        if (lastSavedEvent === null) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: envelope.command.type,
+            detail: "Command produced no events.",
+          });
+        }
 
-            yield* commandReceiptRepository.upsert({
-              commandId: envelope.command.commandId,
-              aggregateKind: lastSavedEvent.aggregateKind,
-              aggregateId: lastSavedEvent.aggregateId,
-              acceptedAt: lastSavedEvent.occurredAt,
-              resultSequence: lastSavedEvent.sequence,
-              status: "accepted",
-              error: null,
-            });
+        yield* commandReceiptRepository.upsert({
+          commandId: envelope.command.commandId,
+          aggregateKind: lastSavedEvent.aggregateKind,
+          aggregateId: lastSavedEvent.aggregateId,
+          acceptedAt: lastSavedEvent.occurredAt,
+          resultSequence: lastSavedEvent.sequence,
+          status: "accepted",
+          error: null,
+        });
 
-            return {
-              committedEvents,
-              lastSequence: lastSavedEvent.sequence,
-              nextReadModel,
-            } as const;
-          }),
-        )
-        .pipe(
-          Effect.catchTag("SqlError", (sqlError) =>
-            Effect.fail(
-              toPersistenceSqlError("OrchestrationEngine.processEnvelope:transaction")(sqlError),
-            ),
-          ),
-        );
+        return {
+          committedEvents,
+          lastSequence: lastSavedEvent.sequence,
+          nextReadModel,
+        } as const;
+      });
 
       readModel = committedCommand.nextReadModel;
       for (const event of committedCommand.committedEvents) {
