@@ -345,7 +345,6 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
   // Skip dolt_commit during bootstrap — only commit during live operation.
   let bootstrapComplete = false;
   // Counter for batching high-frequency events (activities, tool calls, subagents).
-  let sinceLastCommit = 0;
   const projectionProjectRepository = yield* ProjectionProjectRepository;
   const projectionThreadRepository = yield* ProjectionThreadRepository;
   const projectionThreadMessageRepository = yield* ProjectionThreadMessageRepository;
@@ -365,7 +364,11 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
         `SELECT rowid, text FROM projection_thread_messages WHERE thread_id = ?`,
         [threadId],
       )
-      .pipe(Effect.catchTag("SqlError", (e) => Effect.fail(toPersistenceSqlError("listThreadMessageFtsRows")(e))));
+      .pipe(
+        Effect.catchTag("SqlError", (e) =>
+          Effect.fail(toPersistenceSqlError("listThreadMessageFtsRows")(e)),
+        ),
+      );
 
   const upsertMessageFtsDocument = (messageId: string, text: string, replaceExisting: boolean) =>
     Effect.gen(function* () {
@@ -384,7 +387,11 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
         );
       }
       yield* sql.unsafe(`INSERT INTO fts.messages_fts(rowid, text) VALUES (?, ?)`, [rowid, text]);
-    }).pipe(Effect.catchTag("SqlError", (e) => Effect.fail(toPersistenceSqlError("upsertMessageFtsDocument")(e))));
+    }).pipe(
+      Effect.catchTag("SqlError", (e) =>
+        Effect.fail(toPersistenceSqlError("upsertMessageFtsDocument")(e)),
+      ),
+    );
 
   const deleteMessageFtsDocuments = (
     rows: ReadonlyArray<{ readonly rowid: number; readonly text: string }>,
@@ -399,7 +406,9 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
       { concurrency: 1 },
     ).pipe(
       Effect.asVoid,
-      Effect.catchTag("SqlError", (e) => Effect.fail(toPersistenceSqlError("deleteMessageFtsDocuments")(e))),
+      Effect.catchTag("SqlError", (e) =>
+        Effect.fail(toPersistenceSqlError("deleteMessageFtsDocuments")(e)),
+      ),
     );
 
   const rebuildThreadFtsDocuments = (threadId: string) =>
@@ -409,7 +418,11 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
        SELECT rowid, text FROM projection_thread_messages WHERE thread_id = ?`,
         [threadId],
       )
-      .pipe(Effect.catchTag("SqlError", (e) => Effect.fail(toPersistenceSqlError("rebuildThreadFtsDocuments")(e))));
+      .pipe(
+        Effect.catchTag("SqlError", (e) =>
+          Effect.fail(toPersistenceSqlError("rebuildThreadFtsDocuments")(e)),
+        ),
+      );
 
   const applyProjectsProjection: ProjectorDefinition["apply"] = (event, _attachmentSideEffects) =>
     Effect.gen(function* () {
@@ -1298,63 +1311,47 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
         case "project.created":
           msg = `project created ${tid}`;
           tag = true;
-          sinceLastCommit = 0;
+
           break;
         case "project.deleted":
           msg = `project deleted ${tid}`;
           tag = true;
-          sinceLastCommit = 0;
+
           break;
         case "thread.created":
           msg = `thread created ${tid}`;
           tag = true;
-          sinceLastCommit = 0;
+
           break;
         case "thread.deleted":
           msg = `thread deleted ${tid}`;
           tag = true;
-          sinceLastCommit = 0;
+
           break;
         case "thread.reverted":
           msg = `thread reverted ${tid}`;
           tag = true;
-          sinceLastCommit = 0;
+
           break;
         case "thread.turn-diff-completed":
           msg = `turn completed ${tid}`;
           tag = true;
-          sinceLastCommit = 0;
+
           break;
         case "project.meta-updated":
           msg = `project updated ${tid}`;
-          sinceLastCommit = 0;
+
           break;
         case "thread.message-sent":
-          msg = `message ${tid}`;
-          sinceLastCommit = 0;
-          break;
         case "thread.turn-interrupt-requested":
-          msg = `turn interrupted ${tid}`;
-          sinceLastCommit = 0;
-          break;
         case "thread.checkpoint-revert-requested":
-          msg = `revert requested ${tid}`;
-          sinceLastCommit = 0;
-          break;
         case "thread.session-set":
-          msg = `session changed ${tid}`;
-          sinceLastCommit = 0;
-          break;
         case "thread.proposed-plan-upserted":
-          msg = `plan proposed ${tid}`;
-          sinceLastCommit = 0;
-          break;
         default:
-          sinceLastCommit++;
-          if (sinceLastCommit < 10) return;
-          msg = `batch flush (${sinceLastCommit} events)`;
-          sinceLastCommit = 0;
-          break;
+          // Non-structural events: skip commit. Data stays in the working
+          // set and gets committed on the next structural event (turn
+          // complete, thread create/delete/revert).
+          return;
       }
 
       // dolt_add + dolt_commit — catch failures silently (e.g. "nothing to commit").
@@ -1375,18 +1372,10 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
         // FTS tables live in the attached btree sidecar (fts.*), not the
         // prolly tree — they are not versioned by dolt.
         yield* sql`SELECT dolt_commit('-m', ${msg})`;
-        // Workaround: doltlite prolly-tree flushes can desync indexes
-        // from table data during commit. REINDEX is cheap on a healthy
-        // DB and self-heals before the next read. Remove once the
-        // underlying doltlite bug is fixed.
-        yield* sql`REINDEX;`;
         if (tag) {
           yield* sql`SELECT dolt_tag(${`${event.type}-${event.sequence}`})`;
         }
-        if (event.type === "thread.turn-start-requested") {
-          yield* sql`SELECT dolt_gc()`.pipe(Effect.catch(() => Effect.void));
-        }
-      }).pipe(Effect.catch(() => Effect.void));
+      }).pipe(Effect.catch((e) => Effect.logWarning(`dolt_commit failed: ${e}`)));
     }).pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
