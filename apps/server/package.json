@@ -15,7 +15,7 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "tsx --watch src/index.ts",
+    "dev": "cd ../.. && tsx --watch apps/server/src/index.ts",
     "build": "node scripts/cli.ts build",
     "start": "node dist/index.mjs",
     "prepare": "effect-language-service patch",
