@@ -27,7 +27,12 @@ import type {
 } from "./project";
 import type {
   ServerConfig,
+  ServerBackupRemote,
   ServerProviderUpdatedPayload,
+  ServerPushBackupInput,
+  ServerPushBackupResult,
+  ServerRemoveBackupRemoteInput,
+  ServerUpsertBackupRemoteInput,
   ServerUpsertKeybindingResult,
 } from "./server";
 import type {
@@ -176,6 +181,10 @@ export interface NativeApi {
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
+    listBackupRemotes: () => Promise<ReadonlyArray<ServerBackupRemote>>;
+    upsertBackupRemote: (input: ServerUpsertBackupRemoteInput) => Promise<ServerBackupRemote>;
+    removeBackupRemote: (input: ServerRemoveBackupRemoteInput) => Promise<void>;
+    pushBackup: (input: ServerPushBackupInput) => Promise<ServerPushBackupResult>;
   };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;

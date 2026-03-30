@@ -79,6 +79,7 @@ import { expandHomePath } from "./os-jank.ts";
 import { makeServerPushBus } from "./wsServer/pushBus.ts";
 import { makeServerReadiness } from "./wsServer/readiness.ts";
 import { decodeJsonResult, formatSchemaError } from "@t3tools/shared/schemaJson";
+import { ServerBackupsService } from "./serverBackups.ts";
 
 /**
  * ServerShape - Service API for server lifecycle control.
@@ -218,6 +219,7 @@ export type ServerRuntimeServices =
   | TerminalManager
   | Keybindings
   | ServerSettingsService
+  | ServerBackupsService
   | Open
   | AnalyticsService;
 
@@ -258,6 +260,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
   const runPromise = Effect.runPromiseWith(runtimeServices);
 
   const gitManager = yield* GitManager;
+  const serverBackups = yield* ServerBackupsService;
   const terminalManager = yield* TerminalManager;
   const keybindingsManager = yield* Keybindings;
   const serverSettingsManager = yield* ServerSettingsService;
@@ -935,6 +938,25 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       case WS_METHODS.serverUpdateSettings: {
         const body = stripRequestTag(request.body);
         return yield* serverSettingsManager.updateSettings(body.patch);
+      }
+
+      case WS_METHODS.serverListBackupRemotes: {
+        return yield* serverBackups.listBackupRemotes();
+      }
+
+      case WS_METHODS.serverUpsertBackupRemote: {
+        const body = stripRequestTag(request.body);
+        return yield* serverBackups.upsertBackupRemote(body);
+      }
+
+      case WS_METHODS.serverRemoveBackupRemote: {
+        const body = stripRequestTag(request.body);
+        return yield* serverBackups.removeBackupRemote(body.name);
+      }
+
+      case WS_METHODS.serverPushBackup: {
+        const body = stripRequestTag(request.body);
+        return yield* serverBackups.pushBackup(body);
       }
 
       default: {

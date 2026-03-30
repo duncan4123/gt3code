@@ -95,3 +95,34 @@ export const ServerProviderUpdatedPayload = Schema.Struct({
   providers: ServerProviders,
 });
 export type ServerProviderUpdatedPayload = typeof ServerProviderUpdatedPayload.Type;
+
+export const ServerBackupRemote = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  url: TrimmedNonEmptyString,
+});
+export type ServerBackupRemote = typeof ServerBackupRemote.Type;
+
+export const ServerBackupRemotes = Schema.Array(ServerBackupRemote);
+export type ServerBackupRemotes = typeof ServerBackupRemotes.Type;
+
+export const ServerUpsertBackupRemoteInput = ServerBackupRemote;
+export type ServerUpsertBackupRemoteInput = typeof ServerUpsertBackupRemoteInput.Type;
+
+export const ServerRemoveBackupRemoteInput = Schema.Struct({
+  name: TrimmedNonEmptyString,
+});
+export type ServerRemoveBackupRemoteInput = typeof ServerRemoveBackupRemoteInput.Type;
+
+export const ServerPushBackupInput = Schema.Struct({
+  remoteName: TrimmedNonEmptyString,
+  branch: Schema.optional(TrimmedNonEmptyString),
+});
+export type ServerPushBackupInput = typeof ServerPushBackupInput.Type;
+
+export const ServerPushBackupResult = Schema.Struct({
+  remoteName: TrimmedNonEmptyString,
+  branch: TrimmedNonEmptyString,
+  commitHash: TrimmedNonEmptyString,
+  pushedAt: IsoDateTime,
+});
+export type ServerPushBackupResult = typeof ServerPushBackupResult.Type;

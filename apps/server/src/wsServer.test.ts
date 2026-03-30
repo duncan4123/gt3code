@@ -1136,6 +1136,46 @@ describe("WebSocket Server", () => {
     );
   });
 
+  it("manages backup remotes through the server RPC surface", async () => {
+    const baseDir = makeTempDir("t3code-state-backup-remotes-");
+    const remoteDbPath = path.join(baseDir, "remote-backup.db");
+
+    server = await createTestServer({ cwd: "/my/workspace", baseDir });
+    const addr = server.address();
+    const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+
+    const [ws] = await connectAndAwaitWelcome(port);
+    connections.push(ws);
+
+    const upsertResponse = await sendRequest(ws, WS_METHODS.serverUpsertBackupRemote, {
+      name: "backup",
+      url: `file://${remoteDbPath}`,
+    });
+    expect(upsertResponse.error).toBeUndefined();
+    expect(upsertResponse.result).toEqual({
+      name: "backup",
+      url: `file://${remoteDbPath}`,
+    });
+
+    const listResponse = await sendRequest(ws, WS_METHODS.serverListBackupRemotes);
+    expect(listResponse.error).toBeUndefined();
+    expect(listResponse.result).toEqual([
+      {
+        name: "backup",
+        url: `file://${remoteDbPath}`,
+      },
+    ]);
+
+    const removeResponse = await sendRequest(ws, WS_METHODS.serverRemoveBackupRemote, {
+      name: "backup",
+    });
+    expect(removeResponse.error).toBeUndefined();
+
+    const emptyListResponse = await sendRequest(ws, WS_METHODS.serverListBackupRemotes);
+    expect(emptyListResponse.error).toBeUndefined();
+    expect(emptyListResponse.result).toEqual([]);
+  });
+
   it("returns error for unknown methods", async () => {
     server = await createTestServer({ cwd: "/test" });
     const addr = server.address();

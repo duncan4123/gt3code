@@ -14,6 +14,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import {
   PROVIDER_DISPLAY_NAMES,
   type ProviderKind,
+  type ServerBackupRemote,
   type ServerProvider,
   type ServerProviderModel,
   ThreadId,
@@ -40,7 +41,11 @@ import {
   setDesktopUpdateStateQueryData,
   useDesktopUpdateState,
 } from "../../lib/desktopUpdateReactQuery";
-import { serverConfigQueryOptions, serverQueryKeys } from "../../lib/serverReactQuery";
+import {
+  serverBackupRemotesQueryOptions,
+  serverConfigQueryOptions,
+  serverQueryKeys,
+} from "../../lib/serverReactQuery";
 import {
   MAX_CUSTOM_MODEL_LENGTH,
   getCustomModelOptionsByProvider,
@@ -517,8 +522,14 @@ export function GeneralSettingsPanel() {
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
   const serverConfigQuery = useQuery(serverConfigQueryOptions());
+  const backupRemotesQuery = useQuery(serverBackupRemotesQueryOptions());
   const [isOpeningKeybindings, setIsOpeningKeybindings] = useState(false);
   const [openKeybindingsError, setOpenKeybindingsError] = useState<string | null>(null);
+  const [backupRemoteName, setBackupRemoteName] = useState("backup");
+  const [backupRemoteUrl, setBackupRemoteUrl] = useState("");
+  const [isSavingBackupRemote, setIsSavingBackupRemote] = useState(false);
+  const [isPushingBackupRemoteName, setIsPushingBackupRemoteName] = useState<string | null>(null);
+  const [removingBackupRemoteName, setRemovingBackupRemoteName] = useState<string | null>(null);
   const [openProviderDetails, setOpenProviderDetails] = useState<Record<ProviderKind, boolean>>({
     codex: Boolean(
       settings.providers.codex.binaryPath !== DEFAULT_UNIFIED_SETTINGS.providers.codex.binaryPath ||
@@ -563,6 +574,7 @@ export function GeneralSettingsPanel() {
   const keybindingsConfigPath = serverConfigQuery.data?.keybindingsConfigPath ?? null;
   const availableEditors = serverConfigQuery.data?.availableEditors;
   const serverProviders = serverConfigQuery.data?.providers ?? EMPTY_SERVER_PROVIDERS;
+  const backupRemotes = backupRemotesQuery.data ?? [];
   const codexHomePath = settings.providers.codex.homePath;
 
   const textGenerationModelSelection = resolveAppModelSelectionState(settings, serverProviders);
@@ -601,6 +613,83 @@ export function GeneralSettingsPanel() {
         setIsOpeningKeybindings(false);
       });
   }, [availableEditors, keybindingsConfigPath]);
+
+  const saveBackupRemote = useCallback(() => {
+    const name = backupRemoteName.trim();
+    const url = backupRemoteUrl.trim();
+    if (!name || !url) {
+      toastManager.add({
+        title: "Backup remote incomplete",
+        description: "Enter both a remote name and a remote URL.",
+        type: "error",
+      });
+      return;
+    }
+    setIsSavingBackupRemote(true);
+    void ensureNativeApi()
+      .server.upsertBackupRemote({ name, url })
+      .then((remote) => {
+        setBackupRemoteName(remote.name);
+        queryClient.invalidateQueries({ queryKey: serverQueryKeys.backupRemotes() });
+        toastManager.add({
+          title: "Backup remote saved",
+          description: `Remote '${remote.name}' now points to ${remote.url}.`,
+        });
+      })
+      .catch((error: unknown) => {
+        toastManager.add({
+          title: "Backup remote failed",
+          description: error instanceof Error ? error.message : "Could not save the backup remote.",
+          type: "error",
+        });
+      })
+      .finally(() => setIsSavingBackupRemote(false));
+  }, [backupRemoteName, backupRemoteUrl, queryClient]);
+
+  const pushBackupRemote = useCallback((remote: ServerBackupRemote) => {
+    setIsPushingBackupRemoteName(remote.name);
+    void ensureNativeApi()
+      .server.pushBackup({ remoteName: remote.name })
+      .then((result) => {
+        toastManager.add({
+          title: "Backup pushed",
+          description: `Pushed ${result.branch} to ${result.remoteName} at ${formatRelativeTimeLabel(result.pushedAt)}.`,
+        });
+      })
+      .catch((error: unknown) => {
+        toastManager.add({
+          title: "Backup push failed",
+          description:
+            error instanceof Error ? error.message : "Could not push to the backup remote.",
+          type: "error",
+        });
+      })
+      .finally(() => setIsPushingBackupRemoteName(null));
+  }, []);
+
+  const removeBackupRemote = useCallback(
+    (remote: ServerBackupRemote) => {
+      setRemovingBackupRemoteName(remote.name);
+      void ensureNativeApi()
+        .server.removeBackupRemote({ name: remote.name })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: serverQueryKeys.backupRemotes() });
+          toastManager.add({
+            title: "Backup remote removed",
+            description: `Removed '${remote.name}'.`,
+          });
+        })
+        .catch((error: unknown) => {
+          toastManager.add({
+            title: "Remove failed",
+            description: error instanceof Error ? error.message : "Could not remove the remote.",
+            type: "error",
+          });
+        })
+        .finally(() => setRemovingBackupRemoteName(null));
+    },
+    [queryClient],
+  );
 
   const addCustomModel = useCallback(
     (provider: ProviderKind) => {
@@ -1372,6 +1461,90 @@ export function GeneralSettingsPanel() {
       </SettingsSection>
 
       <SettingsSection title="Advanced">
+        <SettingsRow
+          title="Remote backups"
+          description="Push the server state DB to a Doltlite remote using dolt_remote and dolt_push."
+          status={
+            <div className="space-y-2">
+              <span className="block">
+                Use a `file://` or `http://host:port/database.db` remote URL served by
+                `doltlite-remotesrv`.
+              </span>
+              {backupRemotes.length > 0 ? (
+                <div className="space-y-2">
+                  {backupRemotes.map((remote) => (
+                    <div
+                      key={remote.name}
+                      className="flex flex-col gap-2 rounded-xl border border-border/70 bg-background/70 px-3 py-2 sm:flex-row sm:items-center"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono text-[11px] text-foreground">{remote.name}</div>
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          {remote.url}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          disabled={isPushingBackupRemoteName === remote.name}
+                          onClick={() => pushBackupRemote(remote)}
+                        >
+                          {isPushingBackupRemoteName === remote.name ? (
+                            <>
+                              <LoaderIcon className="size-3.5 animate-spin" />
+                              Pushing...
+                            </>
+                          ) : (
+                            "Push now"
+                          )}
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          disabled={removingBackupRemoteName === remote.name}
+                          onClick={() => removeBackupRemote(remote)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="block text-muted-foreground">
+                  No backup remotes configured yet.
+                </span>
+              )}
+            </div>
+          }
+        >
+          <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,180px)_minmax(0,1fr)_auto]">
+            <Input
+              value={backupRemoteName}
+              onChange={(event) => setBackupRemoteName(event.target.value)}
+              placeholder="backup"
+              spellCheck={false}
+            />
+            <Input
+              value={backupRemoteUrl}
+              onChange={(event) => setBackupRemoteUrl(event.target.value)}
+              placeholder="http://backup-host:8080/t3-state.db"
+              spellCheck={false}
+            />
+            <Button variant="outline" disabled={isSavingBackupRemote} onClick={saveBackupRemote}>
+              {isSavingBackupRemote ? (
+                <>
+                  <LoaderIcon className="size-3.5 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save remote"
+              )}
+            </Button>
+          </div>
+        </SettingsRow>
+
         <SettingsRow
           title="Keybindings"
           description="Open the persisted `keybindings.json` file to edit advanced bindings directly."

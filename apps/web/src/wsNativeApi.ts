@@ -214,6 +214,10 @@ export function createWsNativeApi(): NativeApi {
       upsertKeybinding: (input) => transport.request(WS_METHODS.serverUpsertKeybinding, input),
       getSettings: () => transport.request(WS_METHODS.serverGetSettings),
       updateSettings: (patch) => transport.request(WS_METHODS.serverUpdateSettings, { patch }),
+      listBackupRemotes: () => transport.request(WS_METHODS.serverListBackupRemotes),
+      upsertBackupRemote: (input) => transport.request(WS_METHODS.serverUpsertBackupRemote, input),
+      removeBackupRemote: (input) => transport.request(WS_METHODS.serverRemoveBackupRemote, input),
+      pushBackup: (input) => transport.request(WS_METHODS.serverPushBackup, input),
     },
     orchestration: {
       getSnapshot: () => transport.request(ORCHESTRATION_WS_METHODS.getSnapshot),

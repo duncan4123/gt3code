@@ -362,6 +362,33 @@ describe("wsNativeApi", () => {
     });
   });
 
+  it("forwards backup remote RPCs to the websocket server methods", async () => {
+    requestMock.mockResolvedValue(undefined);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+    await api.server.listBackupRemotes();
+    await api.server.upsertBackupRemote({
+      name: "backup",
+      url: "http://backup-host:8080/t3-state.db",
+    });
+    await api.server.removeBackupRemote({ name: "backup" });
+    await api.server.pushBackup({ remoteName: "backup", branch: "main" });
+
+    expect(requestMock).toHaveBeenNthCalledWith(1, WS_METHODS.serverListBackupRemotes);
+    expect(requestMock).toHaveBeenNthCalledWith(2, WS_METHODS.serverUpsertBackupRemote, {
+      name: "backup",
+      url: "http://backup-host:8080/t3-state.db",
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(3, WS_METHODS.serverRemoveBackupRemote, {
+      name: "backup",
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(4, WS_METHODS.serverPushBackup, {
+      remoteName: "backup",
+      branch: "main",
+    });
+  });
+
   it("uses no client timeout for git.runStackedAction", async () => {
     requestMock.mockResolvedValue({
       action: "commit",

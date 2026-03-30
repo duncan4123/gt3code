@@ -35,6 +35,7 @@ import { GitHubCliLive } from "./git/Layers/GitHubCli";
 import { RoutingTextGenerationLive } from "./git/Layers/RoutingTextGeneration";
 import { PtyAdapter } from "./terminal/Services/PTY";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService";
+import { ServerBackupsLive } from "./serverBackups";
 
 type RuntimePtyAdapterLoader = {
   layer: Layer.Layer<PtyAdapter, never, FileSystem.FileSystem | Path.Path>;
@@ -145,5 +146,6 @@ export function makeServerRuntimeServicesLayer() {
     gitManagerLayer,
     terminalLayer,
     KeybindingsLive,
+    ServerBackupsLive,
   ).pipe(Layer.provideMerge(NodeServices.layer));
 }
