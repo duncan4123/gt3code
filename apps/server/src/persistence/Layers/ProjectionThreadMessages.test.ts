@@ -11,7 +11,7 @@ const layer = it.layer(
 );
 
 layer("ProjectionThreadMessageRepository", (it) => {
-  it.effect("preserves existing attachments when upsert omits attachments", () =>
+  it.effect("clears attachments when upsert omits attachments", () =>
     Effect.gen(function* () {
       const repository = yield* ProjectionThreadMessageRepository;
       const threadId = ThreadId.makeUnsafe("thread-preserve-attachments");
@@ -54,7 +54,7 @@ layer("ProjectionThreadMessageRepository", (it) => {
       const rows = yield* repository.listByThreadId({ threadId });
       assert.equal(rows.length, 1);
       assert.equal(rows[0]?.text, "updated");
-      assert.deepEqual(rows[0]?.attachments, persistedAttachments);
+      assert.isUndefined(rows[0]?.attachments);
     }),
   );
 

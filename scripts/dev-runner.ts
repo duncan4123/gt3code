@@ -156,6 +156,8 @@ export function createDevRunnerEnv({
       VITE_DEV_SERVER_URL: devUrl?.toString() ?? `http://localhost:${webPort}`,
       T3CODE_HOME: resolvedBaseDir,
     };
+    const defaultNoBrowser = mode === "dev" || mode === "dev:server";
+    const effectiveNoBrowser = noBrowser ?? defaultNoBrowser;
 
     if (!isDesktopMode) {
       output.T3CODE_PORT = String(serverPort);
@@ -179,10 +181,8 @@ export function createDevRunnerEnv({
       delete output.T3CODE_AUTH_TOKEN;
     }
 
-    if (!isDesktopMode && noBrowser !== undefined) {
-      output.T3CODE_NO_BROWSER = noBrowser ? "1" : "0";
-    } else if (!isDesktopMode) {
-      delete output.T3CODE_NO_BROWSER;
+    if (!isDesktopMode) {
+      output.T3CODE_NO_BROWSER = effectiveNoBrowser ? "1" : "0";
     }
 
     if (autoBootstrapProjectFromCwd !== undefined) {

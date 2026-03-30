@@ -13,7 +13,7 @@ import {
   type OrchestrationThreadActivity,
   type ProviderRuntimeEvent,
 } from "@t3tools/contracts";
-import { Cache, Cause, Duration, Effect, Layer, Option, Stream } from "effect";
+import { Cache, Cause, Duration, Effect, Layer, Option, Ref, Stream } from "effect";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
@@ -27,6 +27,7 @@ import {
   type ProviderRuntimeIngestionShape,
 } from "../Services/ProviderRuntimeIngestion.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { TurnTransactionManager } from "../../persistence/Services/TurnTransactionManager.ts";
 
 const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
 const providerCommandId = (event: ProviderRuntimeEvent, tag: string): CommandId =>
@@ -505,6 +506,8 @@ const make = Effect.fn("make")(function* () {
   const providerService = yield* ProviderService;
   const projectionTurnRepository = yield* ProjectionTurnRepository;
   const serverSettingsService = yield* ServerSettingsService;
+  const turnTransactions = yield* TurnTransactionManager;
+  const bufferedInputsRef = yield* Ref.make<ReadonlyArray<RuntimeIngestionInput>>([]);
 
   const turnMessageIdsByTurnKey = yield* Cache.make<string, Set<MessageId>>({
     capacity: TURN_MESSAGE_IDS_BY_TURN_CACHE_CAPACITY,
@@ -974,6 +977,14 @@ const make = Effect.fn("make")(function* () {
           );
         }
 
+        if (event.type === "turn.started" && eventTurnId) {
+          yield* turnTransactions.beginTurnTransaction({
+            threadId: thread.id,
+            turnId: eventTurnId,
+            startedAt: now,
+          });
+        }
+
         yield* orchestrationEngine.dispatch({
           type: "thread.session.set",
           commandId: providerCommandId(event, "thread-session-set"),
@@ -1136,6 +1147,7 @@ const make = Effect.fn("make")(function* () {
 
     if (event.type === "session.exited") {
       yield* clearTurnStateForSession(thread.id);
+      yield* turnTransactions.abortActiveForThread(thread.id, "provider session exited");
     }
 
     if (event.type === "runtime.error") {
@@ -1217,6 +1229,23 @@ const make = Effect.fn("make")(function* () {
         createdAt: activity.createdAt,
       }),
     ).pipe(Effect.asVoid);
+
+    if (event.type === "turn.completed" && shouldApplyThreadLifecycle && eventTurnId) {
+      yield* turnTransactions.commitTurnTransaction({
+        threadId: thread.id,
+        turnId: eventTurnId,
+      });
+    }
+
+    if (event.type === "turn.aborted" && eventTurnId) {
+      yield* turnTransactions.rollbackTurnTransaction(
+        {
+          threadId: thread.id,
+          turnId: eventTurnId,
+        },
+        event.payload.reason,
+      );
+    }
   });
 
   const processDomainEvent = (_event: TurnStartRequestedDomainEvent) => Effect.void;
@@ -1224,20 +1253,79 @@ const make = Effect.fn("make")(function* () {
   const processInput = (input: RuntimeIngestionInput) =>
     input.source === "runtime" ? processRuntimeEvent(input.event) : processDomainEvent(input.event);
 
-  const processInputSafely = (input: RuntimeIngestionInput) =>
-    processInput(input).pipe(
+  const takeBufferedInputAt = (index: number) =>
+    Ref.modify(bufferedInputsRef, (existing) => {
+      const next = [...existing];
+      const [input] = next.splice(index, 1);
+      return [input, next] as const;
+    });
+
+  function drainBufferedInputs(): Effect.Effect<void> {
+    return Effect.suspend(() =>
+      Effect.gen(function* () {
+        const bufferedInputs = yield* Ref.get(bufferedInputsRef);
+        if (bufferedInputs.length === 0) {
+          return;
+        }
+
+        const activeScope = yield* turnTransactions.getActiveScope();
+        const nextIndex =
+          activeScope === undefined
+            ? 0
+            : bufferedInputs.findIndex(
+                (input) =>
+                  input.source === "runtime" && input.event.threadId === activeScope.threadId,
+              );
+
+        if (nextIndex < 0) {
+          return;
+        }
+
+        const nextInput = yield* takeBufferedInputAt(nextIndex);
+        if (!nextInput) {
+          return;
+        }
+
+        yield* processInputSafely(nextInput);
+        yield* drainBufferedInputs();
+      }),
+    );
+  }
+
+  function processInputSafely(input: RuntimeIngestionInput): Effect.Effect<void> {
+    return Effect.gen(function* () {
+      yield* processInput(input).pipe(
+        Effect.catchCause((cause) => {
+          if (Cause.hasInterruptsOnly(cause)) {
+            return Effect.interrupt;
+          }
+          return Effect.gen(function* () {
+            if (input.source === "runtime") {
+              yield* turnTransactions
+                .abortActiveForThread(input.event.threadId, "provider runtime ingestion failed")
+                .pipe(Effect.catch(() => Effect.void));
+            }
+            yield* Effect.logWarning("provider runtime ingestion failed to process event", {
+              source: input.source,
+              eventId: input.event.eventId,
+              eventType: input.event.type,
+              cause: Cause.pretty(cause),
+            });
+          });
+        }),
+      );
+      yield* drainBufferedInputs();
+    }).pipe(
       Effect.catchCause((cause) => {
         if (Cause.hasInterruptsOnly(cause)) {
-          return Effect.failCause(cause);
+          return Effect.interrupt;
         }
-        return Effect.logWarning("provider runtime ingestion failed to process event", {
-          source: input.source,
-          eventId: input.event.eventId,
-          eventType: input.event.type,
+        return Effect.logWarning("provider runtime ingestion failed to drain buffered events", {
           cause: Cause.pretty(cause),
         });
       }),
     );
+  }
 
   const worker = yield* makeDrainableWorker(processInputSafely);
 

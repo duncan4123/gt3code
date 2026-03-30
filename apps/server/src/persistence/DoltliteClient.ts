@@ -93,6 +93,10 @@ function openDB(filename: string, options: DoltliteClientConfig): BetterDatabase
   return db;
 }
 
+function hasRows(statement: BetterStatement): boolean {
+  return statement.reader;
+}
+
 // ─── Core client factory ────────────────────────────────────────────────────
 
 const makeWithDatabase = (
@@ -112,9 +116,6 @@ const makeWithDatabase = (
         scope,
         Effect.sync(() => db.close()),
       );
-
-      // better-sqlite3: statement.reader replaces statement.columns().length > 0
-      const hasRows = (statement: BetterStatement): boolean => statement.reader;
 
       const prepareCache = yield* Cache.make({
         capacity: options.prepareCacheSize ?? 200,

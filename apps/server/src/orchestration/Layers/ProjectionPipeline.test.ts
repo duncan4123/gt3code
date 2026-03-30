@@ -19,6 +19,7 @@ import {
   makeSqlitePersistenceLive,
   SqlitePersistenceMemory,
 } from "../../persistence/Layers/Sqlite.ts";
+import { TurnTransactionManagerLive } from "../../persistence/Layers/TurnTransactionManager.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import {
@@ -33,6 +34,7 @@ const makeProjectionPipelinePrefixedTestLayer = (prefix: string) =>
   OrchestrationProjectionPipelineLive.pipe(
     Layer.provideMerge(OrchestrationEventStoreLive),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix })),
+    Layer.provideMerge(TurnTransactionManagerLive),
     Layer.provideMerge(SqlitePersistenceMemory),
     Layer.provideMerge(NodeServices.layer),
   );
@@ -1716,10 +1718,12 @@ it.effect("restores pending turn-start metadata across projection pipeline resta
     const persistenceLayer = makeSqlitePersistenceLive(dbPath);
     const firstProjectionLayer = OrchestrationProjectionPipelineLive.pipe(
       Layer.provideMerge(OrchestrationEventStoreLive),
+      Layer.provideMerge(TurnTransactionManagerLive),
       Layer.provideMerge(persistenceLayer),
     );
     const secondProjectionLayer = OrchestrationProjectionPipelineLive.pipe(
       Layer.provideMerge(OrchestrationEventStoreLive),
+      Layer.provideMerge(TurnTransactionManagerLive),
       Layer.provideMerge(persistenceLayer),
     );
 
@@ -1844,6 +1848,7 @@ const engineLayer = it.layer(
     Layer.provide(OrchestrationProjectionPipelineLive),
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),
+    Layer.provide(TurnTransactionManagerLive),
     Layer.provideMerge(SqlitePersistenceMemory),
     Layer.provideMerge(
       ServerConfig.layerTest(process.cwd(), {

@@ -38,6 +38,7 @@ import { ProjectionThreadSessionRepositoryLive } from "../../persistence/Layers/
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
 import { ProjectionThreadRepositoryLive } from "../../persistence/Layers/ProjectionThreads.ts";
 import { ServerConfig } from "../../config.ts";
+import { TurnTransactionManager } from "../../persistence/Services/TurnTransactionManager.ts";
 import {
   OrchestrationProjectionPipeline,
   type OrchestrationProjectionPipelineShape,
@@ -369,6 +370,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const projectionThreadSessionRepository = yield* ProjectionThreadSessionRepository;
     const projectionTurnRepository = yield* ProjectionTurnRepository;
     const projectionPendingApprovalRepository = yield* ProjectionPendingApprovalRepository;
+    const turnTransactions = yield* TurnTransactionManager;
 
     // Skip dolt_commit during bootstrap — only commit during live operation.
     let bootstrapComplete = false;
@@ -720,17 +722,20 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             createdAt: existingMessage?.createdAt ?? event.payload.createdAt,
             updatedAt: event.payload.updatedAt,
           });
-          // Sync FTS index (best-effort — never blocks pipeline).
-          yield* upsertMessageFtsDocument(
-            event.payload.messageId,
-            nextText,
-            existingMessage !== undefined,
-          ).pipe(
-            Effect.catch((e) =>
-              Effect.logWarning("FTS upsert failed (non-fatal)", {
-                messageId: event.payload.messageId,
-                error: String(e),
-              }),
+          // Defer FTS maintenance until after commit so Doltlite only mutates
+          // the virtual table once the surrounding turn transaction is durable.
+          yield* turnTransactions.runOrDeferPostCommit(
+            upsertMessageFtsDocument(
+              event.payload.messageId,
+              nextText,
+              existingMessage !== undefined,
+            ).pipe(
+              Effect.catch((e) =>
+                Effect.logWarning("FTS upsert failed (non-fatal)", {
+                  messageId: event.payload.messageId,
+                  error: String(e),
+                }),
+              ),
             ),
           );
           return;
@@ -771,14 +776,16 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           yield* Effect.forEach(keptRows, projectionThreadMessageRepository.upsert, {
             concurrency: 1,
           }).pipe(Effect.asVoid);
-          // Best-effort FTS rebuild.
-          yield* deleteMessageFtsDocuments(existingFtsRows).pipe(
-            Effect.flatMap(() => rebuildThreadFtsDocuments(event.payload.threadId)),
-            Effect.catch((e) =>
-              Effect.logWarning("FTS rebuild failed on revert (non-fatal)", {
-                threadId: event.payload.threadId,
-                error: String(e),
-              }),
+          // Rebuild FTS only after the revert is durable.
+          yield* turnTransactions.runOrDeferPostCommit(
+            deleteMessageFtsDocuments(existingFtsRows).pipe(
+              Effect.flatMap(() => rebuildThreadFtsDocuments(event.payload.threadId)),
+              Effect.catch((e) =>
+                Effect.logWarning("FTS rebuild failed on revert (non-fatal)", {
+                  threadId: event.payload.threadId,
+                  error: String(e),
+                }),
+              ),
             ),
           );
           attachmentSideEffects.prunedThreadRelativePaths.set(
@@ -1405,7 +1412,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       Effect.forEach(projectors, (projector) => runProjectorForEvent(projector, event), {
         concurrency: 1,
       }).pipe(
-        Effect.tap(() => doltCommitForEvent(event)),
+        Effect.tap(() => turnTransactions.runOrDeferPostCommit(doltCommitForEvent(event))),
         Effect.provideService(FileSystem.FileSystem, fileSystem),
         Effect.provideService(Path.Path, path),
         Effect.provideService(ServerConfig, serverConfig),

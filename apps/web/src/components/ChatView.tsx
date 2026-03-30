@@ -2182,11 +2182,20 @@ export default function ChatView({ threadId }: ChatViewProps) {
       activeThread?.error
     ) {
       resetSendPhase();
+      return;
+    }
+    if (
+      phase === "ready" &&
+      activeThread?.session?.activeTurnId == null &&
+      !sendInFlightRef.current
+    ) {
+      resetSendPhase();
     }
   }, [
     activePendingApproval,
     activePendingUserInput,
     activeThread?.error,
+    activeThread?.session?.activeTurnId,
     phase,
     resetSendPhase,
     sendPhase,

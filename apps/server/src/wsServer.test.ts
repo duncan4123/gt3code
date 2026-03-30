@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Effect, Exit, Layer, PlatformError, PubSub, Scope, Stream } from "effect";
+import { Effect, Exit, Layer, PubSub, Scope, Stream } from "effect";
 import { describe, expect, it, afterEach, vi } from "vitest";
 import { createServer } from "./wsServer";
 import WebSocket from "ws";
@@ -45,7 +45,6 @@ import type {
 } from "@t3tools/contracts";
 import { TerminalManager, type TerminalManagerShape } from "./terminal/Services/Manager";
 import { makeSqlitePersistenceLive, SqlitePersistenceMemory } from "./persistence/Layers/Sqlite";
-import { SqlClient, SqlError } from "effect/unstable/sql";
 import { ProviderService, type ProviderServiceShape } from "./provider/Services/ProviderService";
 import { ProviderRegistry, type ProviderRegistryShape } from "./provider/Services/ProviderRegistry";
 import { Open, type OpenShape } from "./open";
@@ -53,7 +52,6 @@ import { GitManager, type GitManagerShape } from "./git/Services/GitManager.ts";
 import type { GitCoreShape } from "./git/Services/GitCore.ts";
 import { GitCore } from "./git/Services/GitCore.ts";
 import { GitCommandError, GitManagerError } from "./git/Errors.ts";
-import { MigrationError } from "@effect/sql-sqlite-bun/SqliteMigrator";
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService.ts";
 import { ServerSettingsService } from "./serverSettings.ts";
 
@@ -485,10 +483,9 @@ describe("WebSocket Server", () => {
 
   async function createTestServer(
     options: {
-      persistenceLayer?: Layer.Layer<
-        SqlClient.SqlClient,
-        SqlError.SqlError | MigrationError | PlatformError.PlatformError
-      >;
+      persistenceLayer?:
+        | ReturnType<typeof makeSqlitePersistenceLive>
+        | typeof SqlitePersistenceMemory;
       cwd?: string;
       autoBootstrapProjectFromCwd?: boolean;
       logWebSocketEvents?: boolean;

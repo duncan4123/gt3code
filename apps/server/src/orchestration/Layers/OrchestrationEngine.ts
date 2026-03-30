@@ -9,6 +9,7 @@ import { Deferred, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "
 
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { OrchestrationCommandReceiptRepository } from "../../persistence/Services/OrchestrationCommandReceipts.ts";
+import { TurnTransactionManager } from "../../persistence/Services/TurnTransactionManager.ts";
 import {
   OrchestrationCommandInvariantError,
   OrchestrationCommandPreviouslyRejectedError,
@@ -51,13 +52,14 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const eventStore = yield* OrchestrationEventStore;
   const commandReceiptRepository = yield* OrchestrationCommandReceiptRepository;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
+  const turnTransactions = yield* TurnTransactionManager;
 
   let readModel = createEmptyReadModel(new Date().toISOString());
 
   const commandQueue = yield* Queue.unbounded<CommandEnvelope>();
   const eventPubSub = yield* PubSub.unbounded<OrchestrationEvent>();
 
-  const processEnvelope = (envelope: CommandEnvelope): Effect.Effect<void> => {
+  const processEnvelope = (envelope: CommandEnvelope) => {
     const dispatchStartSequence = readModel.snapshotSequence;
     const reconcileReadModelAfterDispatchFailure = Effect.gen(function* () {
       const persistedEvents = yield* Stream.runCollect(
@@ -78,7 +80,39 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       }
     });
 
-    return Effect.gen(function* () {
+    const handleDispatchFailure = (error: OrchestrationDispatchError) =>
+      Effect.gen(function* () {
+        yield* reconcileReadModelAfterDispatchFailure.pipe(
+          Effect.catch(() =>
+            Effect.logWarning(
+              "failed to reconcile orchestration read model after dispatch failure",
+            ).pipe(
+              Effect.annotateLogs({
+                commandId: envelope.command.commandId,
+                snapshotSequence: readModel.snapshotSequence,
+              }),
+            ),
+          ),
+        );
+
+        if (Schema.is(OrchestrationCommandInvariantError)(error)) {
+          const aggregateRef = commandToAggregateRef(envelope.command);
+          yield* commandReceiptRepository
+            .upsert({
+              commandId: envelope.command.commandId,
+              aggregateKind: aggregateRef.aggregateKind,
+              aggregateId: aggregateRef.aggregateId,
+              acceptedAt: new Date().toISOString(),
+              resultSequence: readModel.snapshotSequence,
+              status: "rejected",
+              error: error.message,
+            })
+            .pipe(Effect.catch(() => Effect.void));
+        }
+        yield* Deferred.fail(envelope.result, error);
+      });
+
+    const transactionalDispatch = Effect.gen(function* () {
       const existingReceipt = yield* commandReceiptRepository.getByCommandId({
         commandId: envelope.command.commandId,
       });
@@ -104,11 +138,6 @@ const makeOrchestrationEngine = Effect.gen(function* () {
         readModel,
       });
       const eventBases = Array.isArray(eventBase) ? eventBase : [eventBase];
-      // NOTE: Removed sql.withTransaction wrapper — DoltliteClient uses a
-      // Semaphore(1) for connection serialization, and nested transaction
-      // acquisition deadlocks. Each projector wraps its own work atomically;
-      // the engine processes one command at a time via the Queue, so the
-      // overall operation is effectively serialized.
       const committedCommand = yield* Effect.gen(function* () {
         const committedEvents: OrchestrationEvent[] = [];
         let nextReadModel = readModel;
@@ -150,40 +179,12 @@ const makeOrchestrationEngine = Effect.gen(function* () {
         yield* PubSub.publish(eventPubSub, event);
       }
       yield* Deferred.succeed(envelope.result, { sequence: committedCommand.lastSequence });
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.gen(function* () {
-          yield* reconcileReadModelAfterDispatchFailure.pipe(
-            Effect.catch(() =>
-              Effect.logWarning(
-                "failed to reconcile orchestration read model after dispatch failure",
-              ).pipe(
-                Effect.annotateLogs({
-                  commandId: envelope.command.commandId,
-                  snapshotSequence: readModel.snapshotSequence,
-                }),
-              ),
-            ),
-          );
+    });
 
-          if (Schema.is(OrchestrationCommandInvariantError)(error)) {
-            const aggregateRef = commandToAggregateRef(envelope.command);
-            yield* commandReceiptRepository
-              .upsert({
-                commandId: envelope.command.commandId,
-                aggregateKind: aggregateRef.aggregateKind,
-                aggregateId: aggregateRef.aggregateId,
-                acceptedAt: new Date().toISOString(),
-                resultSequence: readModel.snapshotSequence,
-                status: "rejected",
-                error: error.message,
-              })
-              .pipe(Effect.catch(() => Effect.void));
-          }
-          yield* Deferred.fail(envelope.result, error);
-        }),
-      ),
-    );
+    return {
+      transactionalDispatch,
+      handleDispatchFailure,
+    } as const;
   };
 
   yield* projectionPipeline.bootstrap;
@@ -195,7 +196,15 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     }),
   );
 
-  const worker = Effect.forever(Queue.take(commandQueue).pipe(Effect.flatMap(processEnvelope)));
+  const runEnvelope = (envelope: CommandEnvelope) =>
+    Effect.gen(function* () {
+      const envelopeProcessor = processEnvelope(envelope);
+      yield* turnTransactions
+        .withCommandScope(envelopeProcessor.transactionalDispatch)
+        .pipe(Effect.catch((error) => envelopeProcessor.handleDispatchFailure(error)));
+    });
+
+  const worker = Effect.forever(Queue.take(commandQueue).pipe(Effect.flatMap(runEnvelope)));
   yield* Effect.forkScoped(worker);
   yield* Effect.log("orchestration engine started").pipe(
     Effect.annotateLogs({ sequence: readModel.snapshotSequence }),

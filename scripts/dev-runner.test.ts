@@ -116,6 +116,28 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
 
         assert.equal(env.T3CODE_MODE, "web");
         assert.equal(env.T3CODE_LOG_WS_EVENTS, undefined);
+        assert.equal(env.T3CODE_NO_BROWSER, "1");
+      }),
+    );
+
+    it.effect("keeps browser auto-open disabled by default for watched server mode", () =>
+      Effect.gen(function* () {
+        const env = yield* createDevRunnerEnv({
+          mode: "dev:server",
+          baseEnv: {},
+          serverOffset: 0,
+          webOffset: 0,
+          t3Home: undefined,
+          authToken: undefined,
+          noBrowser: undefined,
+          autoBootstrapProjectFromCwd: undefined,
+          logWebSocketEvents: undefined,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
+
+        assert.equal(env.T3CODE_NO_BROWSER, "1");
       }),
     );
 

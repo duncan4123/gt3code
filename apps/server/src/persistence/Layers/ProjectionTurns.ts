@@ -261,12 +261,8 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
     );
 
   const replacePendingTurnStart: ProjectionTurnRepositoryShape["replacePendingTurnStart"] = (row) =>
-    sql
-      .withTransaction(
-        clearPendingProjectionTurnsByThread({ threadId: row.threadId }).pipe(
-          Effect.flatMap(() => insertPendingProjectionTurn(row)),
-        ),
-      )
+    clearPendingProjectionTurnsByThread({ threadId: row.threadId })
+      .pipe(Effect.flatMap(() => insertPendingProjectionTurn(row)))
       .pipe(
         Effect.mapError(
           toPersistenceSqlOrDecodeError(

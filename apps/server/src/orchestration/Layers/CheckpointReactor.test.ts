@@ -27,6 +27,7 @@ import { RuntimeReceiptBusLive } from "./RuntimeReceiptBus.ts";
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
+import { TurnTransactionManagerLive } from "../../persistence/Layers/TurnTransactionManager.ts";
 import {
   OrchestrationEngineService,
   type OrchestrationEngineShape,
@@ -250,6 +251,7 @@ describe("CheckpointReactor", () => {
       Layer.provide(OrchestrationProjectionPipelineLive),
       Layer.provide(OrchestrationEventStoreLive),
       Layer.provide(OrchestrationCommandReceiptRepositoryLive),
+      Layer.provide(TurnTransactionManagerLive),
       Layer.provide(SqlitePersistenceMemory),
     );
 

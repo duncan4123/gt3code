@@ -1,4 +1,5 @@
 import { SchemaIssue, Schema } from "effect";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 
 import type { ProjectionRepositoryError } from "../persistence/Errors.ts";
 
@@ -80,6 +81,7 @@ export class OrchestrationListenerCallbackError extends Schema.TaggedErrorClass<
 
 export type OrchestrationDispatchError =
   | ProjectionRepositoryError
+  | SqlError
   | OrchestrationCommandInvariantError
   | OrchestrationCommandPreviouslyRejectedError
   | OrchestrationProjectorDecodeError
