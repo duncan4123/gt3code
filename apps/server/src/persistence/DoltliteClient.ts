@@ -50,7 +50,7 @@ export interface DoltliteClientConfig {
 
 // ─── better-sqlite3 types (minimal surface we need) ───────────────────────
 
-interface BetterStatement {
+export interface BetterStatement {
   readonly reader: boolean;
   safeIntegers(enabled: boolean): this;
   raw(enabled: boolean): this;
@@ -58,7 +58,7 @@ interface BetterStatement {
   run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
 }
 
-interface BetterDatabase {
+export interface BetterDatabase {
   prepare(sql: string): BetterStatement;
   exec(sql: string): this;
   pragma(source: string, options?: { simple?: boolean }): unknown;
@@ -80,7 +80,10 @@ function loadDatabase(): BetterDatabaseConstructor {
   return _Database!;
 }
 
-function openDB(filename: string, options: DoltliteClientConfig): BetterDatabase {
+export function openDoltliteDatabase(
+  filename: string,
+  options: DoltliteClientConfig,
+): BetterDatabase {
   const Database = loadDatabase();
   const db = new Database(filename, {
     readonly: options.readonly ?? false,
@@ -241,12 +244,14 @@ const makeWithDatabase = (
     });
   });
 
+export const makeDoltliteClientWithDatabase = makeWithDatabase;
+
 // ─── Public layer constructors ──────────────────────────────────────────────
 
 export const layer = (config: DoltliteClientConfig): Layer.Layer<Client.SqlClient> =>
   Layer.effectServices(
     Effect.map(
-      makeWithDatabase(config, () => openDB(config.filename, config)),
+      makeWithDatabase(config, () => openDoltliteDatabase(config.filename, config)),
       (client) =>
         ServiceMap.make(DoltliteClient, client).pipe(ServiceMap.add(Client.SqlClient, client)),
     ),
@@ -259,7 +264,9 @@ export const layerConfig = (
     Config.unwrap(config)
       .asEffect()
       .pipe(
-        Effect.flatMap((opts) => makeWithDatabase(opts, () => openDB(opts.filename, opts))),
+        Effect.flatMap((opts) =>
+          makeWithDatabase(opts, () => openDoltliteDatabase(opts.filename, opts)),
+        ),
         Effect.map((client) =>
           ServiceMap.make(DoltliteClient, client).pipe(ServiceMap.add(Client.SqlClient, client)),
         ),
