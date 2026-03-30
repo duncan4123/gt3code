@@ -2286,10 +2286,11 @@ server.registerTool(
       description: z.string().optional().default("").describe("What this convoy accomplishes"),
       rig: z.string().optional().default("").describe("Target rig name (e.g. gascity, t3code)"),
       metadata: z.record(z.unknown()).optional().describe("Additional metadata as JSON object"),
+      database: z.string().optional().describe("Named persistent database to store convoy in. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ title, description, rig, metadata }) => {
-    const store = getStore();
+  async ({ title, description, rig, metadata, database }) => {
+    const store = resolveStore(database);
     try {
       const { randomUUID } = await import("node:crypto");
       const id = randomUUID();
@@ -2330,10 +2331,11 @@ server.registerTool(
       issue_type: z.string().optional().default("task").describe("task | gate | formula | session"),
       priority: z.number().optional().default(2).describe("Priority 1-4 (1=highest)"),
       assignee: z.string().optional().describe("Agent assignee"),
+      database: z.string().optional().describe("Named persistent database to store bead in. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ title, description, rig, convoy_id, issue_type, priority, assignee }) => {
-    const store = getStore();
+  async ({ title, description, rig, convoy_id, issue_type, priority, assignee, database }) => {
+    const store = resolveStore(database);
     try {
       const { randomUUID } = await import("node:crypto");
       const id = randomUUID();
@@ -2376,10 +2378,11 @@ server.registerTool(
       issue_id: z.string().describe("ID of the dependent bead (the one that is blocked)"),
       depends_on_id: z.string().describe("ID of the bead it depends on (the blocker)"),
       type: z.string().optional().default("blocks").describe("Relationship type: blocks | child-of | relates-to"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ issue_id, depends_on_id, type }) => {
-    const store = getStore();
+  async ({ issue_id, depends_on_id, type, database }) => {
+    const store = resolveStore(database);
     try {
       const now = new Date().toISOString();
       store.exec(
@@ -2409,10 +2412,11 @@ server.registerTool(
       "Use to review staged work before deploying to production GC.",
     inputSchema: z.object({
       include_beads: z.boolean().optional().default(true).describe("Include child beads under each convoy"),
+      database: z.string().optional().describe("Named persistent database to list convoys from. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ include_beads }) => {
-    const store = getStore();
+  async ({ include_beads, database }) => {
+    const store = resolveStore(database);
     try {
       const convoys = store.queryAll(
         `SELECT id, title, description, rig, status, created_at FROM issues
@@ -2462,6 +2466,185 @@ server.registerTool(
       });
     } catch (e: any) {
       return trackResponse("ctx_convoy_list", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────
+// Project docs tools (version-controlled knowledge)
+// ─────────────────────────────────────────────────────────
+
+server.registerTool(
+  "ctx_docs_status",
+  {
+    title: "Project Docs Status",
+    description:
+      "Show version-controlled project docs: active workarounds, planned work, " +
+      "config values, and recent changes. Read this at session start to understand " +
+      "the current state of the project.",
+    inputSchema: z.object({
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ database }) => {
+    const store = resolveStore(database);
+    const lines: string[] = ["## Project Docs\n"];
+
+    // Config
+    try {
+      const config = store.queryAll("SELECT key, value FROM docs_config ORDER BY key") as Array<{ key: string; value: string }>;
+      if (config.length) {
+        lines.push("### Config");
+        for (const { key, value } of config) lines.push(`- **${key}**: ${value}`);
+        lines.push("");
+      }
+    } catch { /* table may not exist yet */ }
+
+    // Active workarounds
+    try {
+      const active = store.queryAll("SELECT name, location, remove_when FROM docs_workarounds WHERE status = 'active' ORDER BY id") as Array<Record<string, string>>;
+      if (active.length) {
+        lines.push(`### Active Workarounds (${active.length})`);
+        for (const w of active) lines.push(`- **${w.name}** @ \`${w.location}\` — remove when: ${w.remove_when || "unknown"}`);
+        lines.push("");
+      }
+    } catch { /* table may not exist yet */ }
+
+    // Workarounds to verify
+    try {
+      const verify = store.queryAll("SELECT name, location FROM docs_workarounds WHERE status = 'verify' ORDER BY id") as Array<Record<string, string>>;
+      if (verify.length) {
+        lines.push(`### Needs Verification (${verify.length})`);
+        for (const w of verify) lines.push(`- **${w.name}** @ \`${w.location}\``);
+        lines.push("");
+      }
+    } catch { /* table may not exist yet */ }
+
+    // Plans
+    try {
+      const plans = store.queryAll("SELECT id, title, status FROM docs_plans ORDER BY id") as Array<{ id: number; title: string; status: string }>;
+      if (plans.length) {
+        lines.push(`### Plans (${plans.length})`);
+        for (const p of plans) lines.push(`- [${p.status}] ${p.title}`);
+        lines.push("");
+      }
+    } catch { /* table may not exist yet */ }
+
+    // Recent log
+    try {
+      const log = store.queryAll("SELECT message, created_at FROM docs_log ORDER BY id DESC LIMIT 5") as Array<{ message: string; created_at: string }>;
+      if (log.length) {
+        lines.push("### Recent Changes");
+        for (const entry of log) lines.push(`- ${entry.created_at}: ${entry.message}`);
+        lines.push("");
+      }
+    } catch { /* table may not exist yet */ }
+
+    if (lines.length === 1) lines.push("No project docs yet. Use ctx_docs_update to add entries.");
+
+    return trackResponse("ctx_docs_status", {
+      content: [{ type: "text" as const, text: lines.join("\n") }],
+    });
+  },
+);
+
+server.registerTool(
+  "ctx_docs_query",
+  {
+    title: "Query Project Docs",
+    description:
+      "Run a read-only SQL query against the project docs tables: docs_config, " +
+      "docs_workarounds, docs_plans, docs_failures, docs_log. Use for ad-hoc " +
+      "queries not covered by ctx_docs_status.",
+    inputSchema: z.object({
+      sql: z.string().describe("SQL SELECT query against docs_* tables"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ sql, database }) => {
+    const store = resolveStore(database);
+    const trimmed = sql.trim().toUpperCase();
+    if (!trimmed.startsWith("SELECT")) {
+      return trackResponse("ctx_docs_query", {
+        content: [{ type: "text" as const, text: "Error: ctx_docs_query only supports SELECT. Use ctx_docs_update for mutations." }],
+        isError: true,
+      });
+    }
+    try {
+      const rows = store.queryAll(sql) as Array<Record<string, unknown>>;
+      if (!rows.length) {
+        return trackResponse("ctx_docs_query", {
+          content: [{ type: "text" as const, text: "No results." }],
+        });
+      }
+      const cols = Object.keys(rows[0]);
+      const lines = [cols.join(" | "), cols.map(() => "---").join(" | ")];
+      for (const row of rows) lines.push(cols.map(c => String(row[c] ?? "")).join(" | "));
+      return trackResponse("ctx_docs_query", {
+        content: [{ type: "text" as const, text: lines.join("\n") }],
+      });
+    } catch (e: any) {
+      return trackResponse("ctx_docs_query", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_docs_update",
+  {
+    title: "Update Project Docs",
+    description:
+      "Run an INSERT, UPDATE, or DELETE against project docs tables, with a log " +
+      "message explaining what changed and why. Every mutation is recorded in docs_log " +
+      "for audit trail. Tables: docs_config, docs_workarounds, docs_plans, docs_failures.",
+    inputSchema: z.object({
+      sql: z.string().describe("SQL mutation (INSERT/UPDATE/DELETE) against docs_* tables"),
+      message: z.string().describe("What changed and why — recorded in docs_log"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ sql, message, database }) => {
+    const store = resolveStore(database);
+    const trimmed = sql.trim().toUpperCase();
+    if (trimmed.startsWith("SELECT")) {
+      return trackResponse("ctx_docs_update", {
+        content: [{ type: "text" as const, text: "Error: Use ctx_docs_query for SELECT. ctx_docs_update is for mutations." }],
+        isError: true,
+      });
+    }
+    // Only allow mutations on docs_* tables
+    const allowedTables = ["docs_config", "docs_workarounds", "docs_plans", "docs_failures", "docs_log"];
+    const mentionsDocsTable = allowedTables.some(t => trimmed.includes(t.toUpperCase()));
+    if (!mentionsDocsTable) {
+      return trackResponse("ctx_docs_update", {
+        content: [{ type: "text" as const, text: `Error: Only docs_* tables allowed. Tables: ${allowedTables.join(", ")}` }],
+        isError: true,
+      });
+    }
+    try {
+      store.exec(sql);
+      // Determine which tables were changed
+      const changed = allowedTables.filter(t => trimmed.includes(t.toUpperCase())).join(", ");
+      const now = new Date().toISOString();
+      store.exec(
+        `INSERT INTO docs_log (message, tables_changed, created_at) VALUES ('${message.replace(/'/g, "''")}', '${changed}', '${now}')`
+      );
+      // Try dolt_commit if available
+      try {
+        store.queryOne(`SELECT dolt_commit('-A', '-m', '${message.replace(/'/g, "''")}')`);
+      } catch { /* plain sqlite — no dolt_commit, that's fine */ }
+
+      return trackResponse("ctx_docs_update", {
+        content: [{ type: "text" as const, text: `Updated ${changed}. Logged: "${message}"` }],
+      });
+    } catch (e: any) {
+      return trackResponse("ctx_docs_update", {
         content: [{ type: "text" as const, text: `Error: ${e.message}` }],
         isError: true,
       });

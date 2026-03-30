@@ -406,6 +406,45 @@ export class ContentStore {
         comment TEXT,
         created_at TEXT NOT NULL DEFAULT ''
       );
+
+      -- Version-controlled project docs (pipeline.sqlite pattern)
+      CREATE TABLE IF NOT EXISTS docs_config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated TEXT NOT NULL DEFAULT ''
+      );
+
+      CREATE TABLE IF NOT EXISTS docs_workarounds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        location TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        remove_when TEXT,
+        updated TEXT NOT NULL DEFAULT ''
+      );
+
+      CREATE TABLE IF NOT EXISTS docs_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'planned',
+        created TEXT NOT NULL DEFAULT '',
+        updated TEXT NOT NULL DEFAULT ''
+      );
+
+      CREATE TABLE IF NOT EXISTS docs_failures (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        error TEXT NOT NULL,
+        cause TEXT NOT NULL,
+        fix TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS docs_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message TEXT NOT NULL,
+        tables_changed TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT ''
+      );
     `);
   }
 
