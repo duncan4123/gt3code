@@ -2652,6 +2652,230 @@ server.registerTool(
   },
 );
 
+server.registerTool(
+  "ctx_docs_commit",
+  {
+    title: "Commit Project Docs",
+    description:
+      "Create a dolt commit of the current docs state. Use after one or more " +
+      "ctx_docs_update calls to checkpoint your changes with a descriptive message. " +
+      "Only works when running on doltlite (not plain SQLite).",
+    inputSchema: z.object({
+      message: z.string().describe("Commit message — what changed and why"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ message, database }) => {
+    const store = resolveStore(database);
+    try {
+      const result = store.queryOne(
+        `SELECT dolt_commit('-A', '-m', '${message.replace(/'/g, "''")}') as hash`
+      ) as { hash: string } | undefined;
+      return trackResponse("ctx_docs_commit", {
+        content: [{ type: "text" as const, text: `Committed: ${result?.hash ?? "unknown"}\nMessage: ${message}` }],
+      });
+    } catch (e: any) {
+      if (e.message.includes("dolt_commit")) {
+        return trackResponse("ctx_docs_commit", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning). Changes are saved but not version-tracked." }],
+        });
+      }
+      return trackResponse("ctx_docs_commit", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_docs_log",
+  {
+    title: "Project Docs History",
+    description:
+      "Show the dolt commit history for project docs. Each entry shows the commit " +
+      "hash, date, and message. Falls back to docs_log table if dolt is not available.",
+    inputSchema: z.object({
+      limit: z.number().optional().default(10).describe("Number of entries to show"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ limit, database }) => {
+    const store = resolveStore(database);
+    const lines: string[] = ["## Docs History\n"];
+
+    // Try dolt_log first
+    let usedDolt = false;
+    try {
+      const commits = store.queryAll(
+        `SELECT commit_hash, date, message FROM dolt_log ORDER BY date DESC LIMIT ${limit}`
+      ) as Array<{ commit_hash: string; date: string; message: string }>;
+      if (commits.length) {
+        usedDolt = true;
+        lines.push("*Source: dolt_log*\n");
+        for (const c of commits) {
+          lines.push(`- \`${c.commit_hash.slice(0, 12)}\` ${c.date} — ${c.message}`);
+        }
+      }
+    } catch { /* no dolt — fall through */ }
+
+    // Fall back to docs_log
+    if (!usedDolt) {
+      try {
+        const entries = store.queryAll(
+          `SELECT message, tables_changed, created_at FROM docs_log ORDER BY id DESC LIMIT ${limit}`
+        ) as Array<{ message: string; tables_changed: string; created_at: string }>;
+        if (entries.length) {
+          lines.push("*Source: docs_log (plain SQLite — no dolt versioning)*\n");
+          for (const e of entries) {
+            lines.push(`- ${e.created_at} [${e.tables_changed}] ${e.message}`);
+          }
+        } else {
+          lines.push("No history yet.");
+        }
+      } catch {
+        lines.push("No history yet.");
+      }
+    }
+
+    return trackResponse("ctx_docs_log", {
+      content: [{ type: "text" as const, text: lines.join("\n") }],
+    });
+  },
+);
+
+server.registerTool(
+  "ctx_docs_diff",
+  {
+    title: "Project Docs Diff",
+    description:
+      "Show what changed in project docs between two dolt commits, or show " +
+      "uncommitted changes. Only available when running on doltlite.",
+    inputSchema: z.object({
+      table: z.string().optional().default("docs_workarounds").describe("Which docs table to diff: docs_config, docs_workarounds, docs_plans, docs_failures"),
+      from_commit: z.string().optional().describe("Start commit hash. Omit for uncommitted changes (WORKING)."),
+      to_commit: z.string().optional().describe("End commit hash. Omit for latest."),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ table, from_commit, to_commit, database }) => {
+    const store = resolveStore(database);
+    const allowedTables = ["docs_config", "docs_workarounds", "docs_plans", "docs_failures"];
+    if (!allowedTables.includes(table)) {
+      return trackResponse("ctx_docs_diff", {
+        content: [{ type: "text" as const, text: `Error: table must be one of: ${allowedTables.join(", ")}` }],
+        isError: true,
+      });
+    }
+    try {
+      let sql: string;
+      if (from_commit && to_commit) {
+        sql = `SELECT * FROM dolt_diff_${table} WHERE from_commit = '${from_commit}' AND to_commit = '${to_commit}'`;
+      } else if (from_commit) {
+        sql = `SELECT * FROM dolt_diff_${table} WHERE from_commit = '${from_commit}'`;
+      } else {
+        // Uncommitted changes
+        sql = `SELECT * FROM dolt_diff_${table} WHERE to_commit = 'WORKING'`;
+      }
+      const rows = store.queryAll(sql) as Array<Record<string, unknown>>;
+      if (!rows.length) {
+        return trackResponse("ctx_docs_diff", {
+          content: [{ type: "text" as const, text: `No changes in ${table}.` }],
+        });
+      }
+      const cols = Object.keys(rows[0]);
+      const lines = [`## Diff: ${table}\n`, cols.join(" | "), cols.map(() => "---").join(" | ")];
+      for (const row of rows) lines.push(cols.map(c => String(row[c] ?? "")).join(" | "));
+      return trackResponse("ctx_docs_diff", {
+        content: [{ type: "text" as const, text: lines.join("\n") }],
+      });
+    } catch (e: any) {
+      if (e.message.includes("dolt_diff") || e.message.includes("no such table")) {
+        return trackResponse("ctx_docs_diff", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_docs_diff", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_docs_branch",
+  {
+    title: "Manage Docs Branches",
+    description:
+      "Create, list, or switch dolt branches for project docs. Use branches to " +
+      "isolate experimental changes before merging. Only available on doltlite.",
+    inputSchema: z.object({
+      action: z.enum(["list", "create", "checkout", "merge"]).describe("Branch action"),
+      name: z.string().optional().describe("Branch name (required for create/checkout/merge)"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ action, name, database }) => {
+    const store = resolveStore(database);
+    try {
+      switch (action) {
+        case "list": {
+          const branches = store.queryAll(
+            "SELECT name, hash, latest_committer_date FROM dolt_branches ORDER BY name"
+          ) as Array<{ name: string; hash: string; latest_committer_date: string }>;
+          const active = store.queryOne("SELECT active_branch() as b") as { b: string } | undefined;
+          const lines = ["## Branches\n"];
+          for (const b of branches) {
+            const marker = b.name === active?.b ? " **(active)**" : "";
+            lines.push(`- \`${b.name}\`${marker} — ${b.hash.slice(0, 12)} (${b.latest_committer_date})`);
+          }
+          return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: lines.join("\n") }],
+          });
+        }
+        case "create": {
+          if (!name) return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: "Error: name required for create" }], isError: true,
+          });
+          store.queryOne(`SELECT dolt_branch('${name.replace(/'/g, "''")}')`);
+          return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: `Created branch: ${name}` }],
+          });
+        }
+        case "checkout": {
+          if (!name) return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: "Error: name required for checkout" }], isError: true,
+          });
+          store.queryOne(`SELECT dolt_checkout('${name.replace(/'/g, "''")}')`);
+          return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: `Switched to branch: ${name}` }],
+          });
+        }
+        case "merge": {
+          if (!name) return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: "Error: name required for merge" }], isError: true,
+          });
+          store.queryOne(`SELECT dolt_merge('${name.replace(/'/g, "''")}')`);
+          return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: `Merged branch: ${name}` }],
+          });
+        }
+      }
+    } catch (e: any) {
+      if (e.message.includes("dolt_")) {
+        return trackResponse("ctx_docs_branch", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_docs_branch", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
 // ─────────────────────────────────────────────────────────
 // Server startup
 // ─────────────────────────────────────────────────────────
