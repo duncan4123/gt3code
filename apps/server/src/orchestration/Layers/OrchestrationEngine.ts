@@ -6,9 +6,6 @@ import type {
 } from "@t3tools/contracts";
 import { OrchestrationCommand } from "@t3tools/contracts";
 import { Deferred, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-
-import { toPersistenceSqlError } from "../../persistence/Errors.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { OrchestrationCommandReceiptRepository } from "../../persistence/Services/OrchestrationCommandReceipts.ts";
 import {
@@ -50,7 +47,6 @@ function commandToAggregateRef(command: OrchestrationCommand): {
 }
 
 const makeOrchestrationEngine = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
   const eventStore = yield* OrchestrationEventStore;
   const commandReceiptRepository = yield* OrchestrationCommandReceiptRepository;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
@@ -146,13 +142,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
           lastSequence: lastSavedEvent.sequence,
           nextReadModel,
         } as const;
-      }).pipe(
-        Effect.catchTag("SqlError", (sqlError) =>
-          Effect.fail(
-            toPersistenceSqlError("OrchestrationEngine.processEnvelope:transaction")(sqlError),
-          ),
-        ),
-      );
+      });
 
       readModel = committedCommand.nextReadModel;
       for (const event of committedCommand.committedEvents) {

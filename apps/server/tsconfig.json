@@ -10,7 +10,10 @@
       {
         "name": "@effect/language-service",
         "namespaceImportPackages": ["@effect/platform-node"],
+        "allowedDuplicatedPackages": ["effect"],
         "diagnosticSeverity": {
+          "duplicatePackage": "off",
+          "catchUnfailableEffect": "warning",
           "importFromBarrel": "error",
           "anyUnknownInErrorContext": "warning",
           "instanceOfSchema": "warning",

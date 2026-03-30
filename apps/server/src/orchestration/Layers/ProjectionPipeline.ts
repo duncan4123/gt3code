@@ -360,10 +360,12 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig;
 
   const listThreadMessageFtsRows = (threadId: string) =>
-    sql.unsafe<{ readonly rowid: number; readonly text: string }>(
-      `SELECT rowid, text FROM projection_thread_messages WHERE thread_id = ?`,
-      [threadId],
-    );
+    sql
+      .unsafe<{ readonly rowid: number; readonly text: string }>(
+        `SELECT rowid, text FROM projection_thread_messages WHERE thread_id = ?`,
+        [threadId],
+      )
+      .pipe(Effect.catchTag("SqlError", (e) => Effect.fail(toPersistenceSqlError("listThreadMessageFtsRows")(e))));
 
   const upsertMessageFtsDocument = (messageId: string, text: string, replaceExisting: boolean) =>
     Effect.gen(function* () {
@@ -382,7 +384,7 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
         );
       }
       yield* sql.unsafe(`INSERT INTO fts.messages_fts(rowid, text) VALUES (?, ?)`, [rowid, text]);
-    });
+    }).pipe(Effect.catchTag("SqlError", (e) => Effect.fail(toPersistenceSqlError("upsertMessageFtsDocument")(e))));
 
   const deleteMessageFtsDocuments = (
     rows: ReadonlyArray<{ readonly rowid: number; readonly text: string }>,
@@ -395,14 +397,19 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
           [rowid, text],
         ),
       { concurrency: 1 },
-    ).pipe(Effect.asVoid);
+    ).pipe(
+      Effect.asVoid,
+      Effect.catchTag("SqlError", (e) => Effect.fail(toPersistenceSqlError("deleteMessageFtsDocuments")(e))),
+    );
 
   const rebuildThreadFtsDocuments = (threadId: string) =>
-    sql.unsafe(
-      `INSERT INTO fts.messages_fts(rowid, text)
+    sql
+      .unsafe(
+        `INSERT INTO fts.messages_fts(rowid, text)
        SELECT rowid, text FROM projection_thread_messages WHERE thread_id = ?`,
-      [threadId],
-    );
+        [threadId],
+      )
+      .pipe(Effect.catchTag("SqlError", (e) => Effect.fail(toPersistenceSqlError("rebuildThreadFtsDocuments")(e))));
 
   const applyProjectsProjection: ProjectorDefinition["apply"] = (event, _attachmentSideEffects) =>
     Effect.gen(function* () {
@@ -1275,13 +1282,7 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
   const projectEvent: OrchestrationProjectionPipelineShape["projectEvent"] = (event) =>
     Effect.gen(function* () {
       for (const projector of projectors) {
-        yield* runProjectorForEvent(projector, event).pipe(
-          Effect.catchTag("SqlError", (sqlError) =>
-            Effect.fail(
-              toPersistenceSqlError(`ProjectionPipeline.projectEvent:${projector.name}`)(sqlError),
-            ),
-          ),
-        );
+        yield* runProjectorForEvent(projector, event);
       }
 
       // Dolt version control — flush prolly-tree skip list to prevent corruption.

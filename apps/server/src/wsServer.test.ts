@@ -53,7 +53,7 @@ import { GitManager, type GitManagerShape } from "./git/Services/GitManager.ts";
 import type { GitCoreShape } from "./git/Services/GitCore.ts";
 import { GitCore } from "./git/Services/GitCore.ts";
 import { GitCommandError, GitManagerError } from "./git/Errors.ts";
-import { MigrationError } from "@effect/sql-sqlite-bun/SqliteMigrator";
+// MigrationError removed — server uses custom migration system
 import { AnalyticsService } from "./telemetry/Services/AnalyticsService.ts";
 import { ServerSettingsService } from "./serverSettings.ts";
 
@@ -487,7 +487,7 @@ describe("WebSocket Server", () => {
     options: {
       persistenceLayer?: Layer.Layer<
         SqlClient.SqlClient,
-        SqlError.SqlError | MigrationError | PlatformError.PlatformError
+        any
       >;
       cwd?: string;
       autoBootstrapProjectFromCwd?: boolean;

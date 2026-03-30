@@ -237,6 +237,8 @@ const terminalContextIdListsEqual = (
 
 interface ChatViewProps {
   threadId: ThreadId;
+  gcOpen?: boolean;
+  onToggleGc?: () => void;
 }
 
 interface PendingPullRequestSetupRequest {
@@ -245,7 +247,7 @@ interface PendingPullRequestSetupRequest {
   scriptId: string;
 }
 
-export default function ChatView({ threadId }: ChatViewProps) {
+export default function ChatView({ threadId, gcOpen = false, onToggleGc }: ChatViewProps) {
   const threads = useStore((store) => store.threads);
   const projects = useStore((store) => store.projects);
   const markThreadVisited = useStore((store) => store.markThreadVisited);
@@ -3575,6 +3577,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
           diffOpen={diffOpen}
+          gcOpen={gcOpen}
           onRunProjectScript={(script) => {
             void runProjectScript(script);
           }}
@@ -3583,6 +3586,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           onDeleteProjectScript={deleteProjectScript}
           onToggleTerminal={toggleTerminalVisibility}
           onToggleDiff={onToggleDiff}
+          onToggleGc={onToggleGc ?? (() => {})}
         />
       </header>
 

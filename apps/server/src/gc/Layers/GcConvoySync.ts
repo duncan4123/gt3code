@@ -19,7 +19,7 @@
  * @module GcConvoySyncLive
  */
 import { Effect, Layer, Ref, Stream } from "effect";
-import { CommandId } from "@t3tools/contracts";
+import { CommandId, type ThreadId } from "@t3tools/contracts";
 
 import { GcApiClient, type GcBead, type GcConvoy, type GcEvent } from "../Services/GcApiClient.ts";
 import { GcConvoySync, type GcConvoySyncShape } from "../Services/GcConvoySync.ts";
@@ -79,12 +79,12 @@ function findThreadsByMeta(
   }>,
   key: string,
   value: string,
-): string[] {
-  const result: string[] = [];
+): ThreadId[] {
+  const result: ThreadId[] = [];
   for (const thread of threads) {
     if (thread.deletedAt !== null) continue;
     const meta = thread.customMetadata as Record<string, string> | undefined;
-    if (meta?.[key] === value) result.push(thread.id);
+    if (meta?.[key] === value) result.push(thread.id as ThreadId);
   }
   return result;
 }
@@ -95,14 +95,13 @@ const makeGcConvoySync = Effect.gen(function* () {
   const runningRef = yield* Ref.make(false);
 
   /** Dispatch a metadata update to a thread, swallowing errors. */
-  const updateThreadMeta = (threadId: string, meta: Record<string, string>) =>
+  const updateThreadMeta = (threadId: ThreadId, meta: Record<string, string>) =>
     engine
       .dispatch({
         type: "thread.meta.update",
         commandId: CommandId.makeUnsafe(crypto.randomUUID()),
         threadId,
         customMetadata: meta,
-        createdAt: new Date().toISOString(),
       })
       .pipe(
         Effect.tapError((error) =>

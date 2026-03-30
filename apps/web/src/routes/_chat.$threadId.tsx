@@ -237,7 +237,7 @@ function ChatThreadRouteView() {
     return (
       <>
         <SidebarInset className="h-dvh  min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-          <ChatView key={threadId} threadId={threadId} renderGcSidebar={false} />
+          <ChatView key={threadId} threadId={threadId} gcOpen={gcOpen} onToggleGc={openGc} />
         </SidebarInset>
         <DiffPanelInlineSidebar
           open={diffOpen || gcOpen}
@@ -258,7 +258,7 @@ function ChatThreadRouteView() {
   return (
     <>
       <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-        <ChatView key={threadId} threadId={threadId} renderGcSidebar={false} />
+        <ChatView key={threadId} threadId={threadId} gcOpen={gcOpen} onToggleGc={openGc} />
       </SidebarInset>
       <DiffPanelSheet diffOpen={diffOpen || gcOpen} onCloseDiff={closePanel}>
         {gcOpen ? (

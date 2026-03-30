@@ -30,7 +30,7 @@ const args = process.argv.slice(2);
 const pathIdx = args.indexOf("--path");
 const dbPath = resolve(
   pathIdx >= 0 && args[pathIdx + 1]
-    ? args[pathIdx + 1]
+    ? args[pathIdx + 1]!
     : `${process.env.HOME}/.t3/dev/state.sqlite`,
 );
 const ftsPath = dbPath.replace(/\.sqlite$/, "-fts.sqlite");

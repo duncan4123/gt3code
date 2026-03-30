@@ -951,6 +951,11 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         return { alive: true, status: thread.session.status };
       }
 
+      case ORCHESTRATION_WS_METHODS.searchThreadMessages: {
+        // TODO: wire FTS5 search query service
+        return { results: [] };
+      }
+
       case WS_METHODS.gcGetThreadContext: {
         const body = stripRequestTag(request.body);
         const snapshot = yield* projectionReadModelQuery.getSnapshot();

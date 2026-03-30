@@ -133,6 +133,7 @@ export interface CodexAppServerStartSessionInput {
   readonly binaryPath: string;
   readonly homePath?: string;
   readonly runtimeMode: RuntimeMode;
+  readonly runtimeEnv?: Record<string, string>;
 }
 
 export interface CodexThreadTurnSnapshot {
