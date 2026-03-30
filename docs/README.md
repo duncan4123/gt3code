@@ -1,10 +1,14 @@
 # Pipeline DB
 
-`pipeline.sqlite` is a **doltlite** database (not standard SQLite). Read it with the doltlite CLI:
+`pipeline.sqlite` is a **doltlite** database (not standard SQLite). Do NOT use `sqlite3` — it can't read the prolly tree format.
+
+## CLI
 
 ```bash
 /data/projects/doltlite/build/doltlite docs/pipeline.sqlite
 ```
+
+If the binary is missing: `cd /data/projects/doltlite/build && ../configure --enable-all && make doltlite`
 
 ## At session start
 
