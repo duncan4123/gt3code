@@ -27,6 +27,10 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
     execute: (row) => {
       const nextAttachmentsJson =
         row.attachments !== undefined ? JSON.stringify(row.attachments) : null;
+      // Keep attachment preservation in caller logic instead of using an
+      // insert-side subquery against projection_thread_messages here.
+      // That UPSERT shape previously triggered a Doltlite corruption bug
+      // under turn-scoped transactions; upstream fix: timsehn/doltlite#241.
       return sql`
         INSERT INTO projection_thread_messages (
           message_id,
