@@ -684,10 +684,20 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
             updatedAt: event.payload.updatedAt,
           });
           // Sync FTS index in the attached btree sidecar using the canonical rowid.
+          // Best-effort: FTS failures must not block the projection pipeline,
+          // otherwise the entire command dispatch chain fails and the session
+          // gets stuck in "running" state permanently (turn/diff display breaks).
           yield* upsertMessageFtsDocument(
             event.payload.messageId,
             nextText,
             existingMessage !== undefined,
+          ).pipe(
+            Effect.catch((e) =>
+              Effect.logWarning("FTS upsert failed (non-fatal)", {
+                messageId: event.payload.messageId,
+                error: String(e),
+              }),
+            ),
           );
           return;
         }
@@ -712,15 +722,30 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
             return;
           }
 
-          const existingFtsRows = yield* listThreadMessageFtsRows(event.payload.threadId);
+          // Snapshot FTS state BEFORE delete (best-effort — returns [] on failure).
+          const existingFtsRows = yield* listThreadMessageFtsRows(event.payload.threadId).pipe(
+            Effect.catch(() =>
+              Effect.succeed(
+                [] as ReadonlyArray<{ readonly rowid: number; readonly text: string }>,
+              ),
+            ),
+          );
           yield* projectionThreadMessageRepository.deleteByThreadId({
             threadId: event.payload.threadId,
           });
-          yield* deleteMessageFtsDocuments(existingFtsRows);
           yield* Effect.forEach(keptRows, projectionThreadMessageRepository.upsert, {
             concurrency: 1,
           }).pipe(Effect.asVoid);
-          yield* rebuildThreadFtsDocuments(event.payload.threadId);
+          // Best-effort FTS rebuild — must not block the projection pipeline.
+          yield* deleteMessageFtsDocuments(existingFtsRows).pipe(
+            Effect.flatMap(() => rebuildThreadFtsDocuments(event.payload.threadId)),
+            Effect.catch((e) =>
+              Effect.logWarning("FTS rebuild failed on revert (non-fatal)", {
+                threadId: event.payload.threadId,
+                error: String(e),
+              }),
+            ),
+          );
           attachmentSideEffects.prunedThreadRelativePaths.set(
             event.payload.threadId,
             collectThreadAttachmentRelativePaths(event.payload.threadId, keptRows),
