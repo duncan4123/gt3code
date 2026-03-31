@@ -18,9 +18,7 @@ export interface GcThreadContext {
 
 export interface GcContextProviderShape {
   /** Get full GC context for a thread based on its custom metadata. */
-  readonly getThreadContext: (
-    metadata: Record<string, string>,
-  ) => Effect.Effect<GcThreadContext>;
+  readonly getThreadContext: (metadata: Record<string, string>) => Effect.Effect<GcThreadContext>;
 
   /** Whether the GC API is available. */
   readonly isAvailable: Effect.Effect<boolean>;

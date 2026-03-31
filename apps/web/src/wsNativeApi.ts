@@ -13,6 +13,7 @@ import {
 
 import { showContextMenuFallback } from "./contextMenuFallback";
 import { WsTransport } from "./wsTransport";
+import type { TransportState } from "./wsTransport";
 
 let instance: { api: NativeApi; transport: WsTransport } | null = null;
 const welcomeListeners = new Set<(payload: WsWelcomePayload) => void>();
@@ -84,6 +85,16 @@ export function onServerProvidersUpdated(
   return () => {
     providersUpdatedListeners.delete(listener);
   };
+}
+
+export function getTransportState(): TransportState {
+  return instance?.transport.getState() ?? "connecting";
+}
+
+export function onTransportStateChange(
+  listener: (state: TransportState) => void,
+): (() => void) | undefined {
+  return instance?.transport.onStateChange(listener);
 }
 
 export function createWsNativeApi(): NativeApi {

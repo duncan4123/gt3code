@@ -124,7 +124,6 @@ export interface CodexAppServerStartSessionInput {
   readonly resumeCursor?: unknown;
   readonly binaryPath: string;
   readonly homePath?: string;
-  readonly providerOptions?: ProviderSessionStartInput["providerOptions"];
   readonly runtimeEnv?: NodeJS.ProcessEnv;
   readonly runtimeMode: RuntimeMode;
 }
@@ -470,7 +469,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         cwd: resolvedCwd,
         env: {
           ...process.env,
-          ...(input.runtimeEnv ?? {}),
+          ...input.runtimeEnv,
           ...(codexHomePath ? { CODEX_HOME: codexHomePath } : {}),
         },
         stdio: ["pipe", "pipe", "pipe"],

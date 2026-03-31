@@ -145,9 +145,7 @@ export function makeServerRuntimeServicesLayer() {
 
   const gcApiLayer = GcApiClientLive;
 
-  const gcContextLayer = GcContextProviderLive.pipe(
-    Layer.provide(gcApiLayer),
-  );
+  const gcContextLayer = GcContextProviderLive.pipe(Layer.provide(gcApiLayer));
 
   const gcIngestionLayer = GcEventIngestionLive.pipe(
     Layer.provide(gcApiLayer),

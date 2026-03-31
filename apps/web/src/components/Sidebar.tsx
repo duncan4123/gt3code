@@ -69,6 +69,7 @@ import { serverConfigQueryOptions } from "../lib/serverReactQuery";
 import { readNativeApi } from "../nativeApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { GcStatusIndicator } from "./GcStatusIndicator";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
@@ -2122,6 +2123,9 @@ export default function Sidebar() {
 
           <SidebarSeparator />
           <SidebarFooter className="p-2">
+            <div className="flex items-center justify-between px-1 pb-1">
+              <GcStatusIndicator />
+            </div>
             <SidebarUpdatePill />
             <SidebarMenu>
               <SidebarMenuItem>

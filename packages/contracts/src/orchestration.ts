@@ -270,6 +270,9 @@ export const OrchestrationLatestTurn = Schema.Struct({
 });
 export type OrchestrationLatestTurn = typeof OrchestrationLatestTurn.Type;
 
+export const CustomMetadata = Schema.Record(Schema.String, Schema.String);
+export type CustomMetadata = typeof CustomMetadata.Type;
+
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
@@ -291,6 +294,7 @@ export const OrchestrationThread = Schema.Struct({
   activities: Schema.Array(OrchestrationThreadActivity),
   checkpoints: Schema.Array(OrchestrationCheckpointSummary),
   session: Schema.NullOr(OrchestrationSession),
+  customMetadata: Schema.optional(CustomMetadata).pipe(Schema.withDecodingDefault(() => ({}))),
 });
 export type OrchestrationThread = typeof OrchestrationThread.Type;
 
@@ -370,6 +374,7 @@ const ThreadMetaUpdateCommand = Schema.Struct({
   modelSelection: Schema.optional(ModelSelection),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  customMetadata: Schema.optional(CustomMetadata),
 });
 
 const ThreadRuntimeModeSetCommand = Schema.Struct({
@@ -681,6 +686,7 @@ export const ThreadMetaUpdatedPayload = Schema.Struct({
   modelSelection: Schema.optional(ModelSelection),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  customMetadata: Schema.optional(CustomMetadata),
   updatedAt: IsoDateTime,
 });
 

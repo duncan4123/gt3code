@@ -521,6 +521,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             updatedAt: event.payload.updatedAt,
             archivedAt: null,
             deletedAt: null,
+            customMetadata: "{}",
           });
           return;
 
@@ -570,6 +571,14 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...(event.payload.branch !== undefined ? { branch: event.payload.branch } : {}),
             ...(event.payload.worktreePath !== undefined
               ? { worktreePath: event.payload.worktreePath }
+              : {}),
+            ...(event.payload.customMetadata !== undefined
+              ? {
+                  customMetadata: JSON.stringify({
+                    ...JSON.parse(existingRow.value.customMetadata || "{}"),
+                    ...event.payload.customMetadata,
+                  }),
+                }
               : {}),
             updatedAt: event.payload.updatedAt,
           });

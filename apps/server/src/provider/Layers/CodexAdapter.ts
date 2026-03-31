@@ -1398,7 +1398,6 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         provider: "codex",
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
         ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
-        ...(input.providerOptions !== undefined ? { providerOptions: input.providerOptions } : {}),
         runtimeEnv: {
           ...process.env,
           ...readGcSessionEnv(input.threadId),
