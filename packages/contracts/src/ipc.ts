@@ -186,6 +186,9 @@ export interface NativeApi {
     removeBackupRemote: (input: ServerRemoveBackupRemoteInput) => Promise<void>;
     pushBackup: (input: ServerPushBackupInput) => Promise<ServerPushBackupResult>;
   };
+  gc: {
+    getThreadContext: (input: { threadId: string }) => Promise<GcThreadContext>;
+  };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
@@ -196,4 +199,49 @@ export interface NativeApi {
     replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationEvent[]>;
     onDomainEvent: (callback: (event: OrchestrationEvent) => void) => () => void;
   };
+}
+
+export interface GcBeadContext {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly status: string;
+  readonly priority: number;
+  readonly issueType: string;
+  readonly assignee?: string;
+  readonly labels?: ReadonlyArray<string>;
+  readonly ephemeral?: boolean;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface GcConvoyContext {
+  readonly id: string;
+  readonly title: string;
+  readonly status: string;
+  readonly children: ReadonlyArray<{
+    readonly id: string;
+    readonly title: string;
+    readonly status: string;
+  }>;
+  readonly closedCount: number;
+  readonly totalCount: number;
+}
+
+export interface GcFormulaContext {
+  readonly name: string;
+  readonly description: string;
+  readonly version: number;
+  readonly steps: ReadonlyArray<{
+    readonly id: string;
+    readonly title: string;
+    readonly description: string;
+    readonly needs?: ReadonlyArray<string>;
+  }>;
+}
+
+export interface GcThreadContext {
+  readonly bead: GcBeadContext | null;
+  readonly convoy: GcConvoyContext | null;
+  readonly formula: GcFormulaContext | null;
 }

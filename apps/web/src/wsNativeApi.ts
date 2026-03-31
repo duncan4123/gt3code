@@ -219,6 +219,9 @@ export function createWsNativeApi(): NativeApi {
       removeBackupRemote: (input) => transport.request(WS_METHODS.serverRemoveBackupRemote, input),
       pushBackup: (input) => transport.request(WS_METHODS.serverPushBackup, input),
     },
+    gc: {
+      getThreadContext: (input) => transport.request(WS_METHODS.gcGetThreadContext, input),
+    },
     orchestration: {
       getSnapshot: () => transport.request(ORCHESTRATION_WS_METHODS.getSnapshot),
       dispatchCommand: (command) =>

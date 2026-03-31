@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  countGcAgents,
   createThreadJumpHintVisibilityController,
+  getGcMetadata,
   getVisibleSidebarThreadIds,
   resolveAdjacentThreadId,
   getFallbackThreadIdAfterDelete,
   getVisibleThreadsForProject,
+  groupThreadsByVirtualConvoy,
   getProjectSortTimestamp,
   hasUnseenCompletion,
   isContextMenuPointerDown,
@@ -411,6 +414,101 @@ describe("resolveThreadStatusPill", () => {
         hasPendingUserInput: false,
       }),
     ).toMatchObject({ label: "Completed", pulse: false });
+  });
+
+  it("shows drained when gc state is drained and the thread is not running", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          session: {
+            ...baseThread.session,
+            status: "ready",
+          },
+        },
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+        gcState: "drained",
+      }),
+    ).toMatchObject({ label: "Drained", pulse: false });
+  });
+});
+
+describe("getGcMetadata", () => {
+  it("returns gc metadata only when the thread is gc managed", () => {
+    expect(
+      getGcMetadata({
+        "gc.agent": "convoymaster",
+        "gc.convoy": "convoy-1",
+        "gc.convoyTitle": "Convoy One",
+        "gc.state": "active",
+      }),
+    ).toMatchObject({
+      isGcManaged: true,
+      agent: "convoymaster",
+      convoy: "convoy-1",
+      convoyTitle: "Convoy One",
+      state: "active",
+    });
+  });
+});
+
+describe("countGcAgents", () => {
+  it("counts only gc-managed threads inside the project", () => {
+    expect(
+      countGcAgents(
+        [
+          { projectId: "project-1", customMetadata: { "gc.agent": "mayor" } },
+          { projectId: "project-1", customMetadata: { "gc.agent": "worker" } },
+          { projectId: "project-1", customMetadata: {} },
+          { projectId: "project-2", customMetadata: { "gc.agent": "other" } },
+        ],
+        "project-1",
+      ),
+    ).toBe(2);
+  });
+});
+
+describe("groupThreadsByVirtualConvoy", () => {
+  it("groups convoy threads and preserves standalone threads", () => {
+    const threadA = {
+      id: "thread-a",
+      customMetadata: {
+        "gc.agent": "worker-a",
+        "gc.convoy": "convoy-1",
+        "gc.convoyTitle": "Convoy One",
+        "gc.convoyStatus": "open",
+        "gc.convoyClosedCount": "1",
+        "gc.convoyTotalCount": "3",
+      },
+    };
+    const threadB = {
+      id: "thread-b",
+      customMetadata: {
+        "gc.agent": "worker-b",
+        "gc.convoy": "convoy-1",
+        "gc.convoyTitle": "Convoy One",
+      },
+    };
+    const threadC = {
+      id: "thread-c",
+      customMetadata: {
+        "gc.agent": "worker-c",
+      },
+    };
+
+    const result = groupThreadsByVirtualConvoy([threadA, threadB, threadC]);
+
+    expect(result.standaloneThreads).toEqual([threadC]);
+    expect(result.convoyGroups).toHaveLength(1);
+    expect(result.convoyGroups[0]).toMatchObject({
+      id: "convoy-1",
+      label: "Convoy One",
+      status: "open",
+      closedCount: 1,
+      totalCount: 3,
+    });
+    expect(result.convoyGroups[0]?.threads).toEqual([threadA, threadB]);
   });
 });
 

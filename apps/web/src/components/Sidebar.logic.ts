@@ -18,6 +18,18 @@ type SidebarProject = {
   updatedAt?: string | undefined;
 };
 type SidebarThreadSortInput = Pick<Thread, "createdAt" | "updatedAt" | "messages">;
+export interface ConvoyThreadLike {
+  customMetadata?: Record<string, string>;
+}
+
+export interface VirtualConvoyGroup<TThread extends ConvoyThreadLike> {
+  id: string;
+  label: string;
+  status: string | undefined;
+  closedCount: number | null;
+  totalCount: number | null;
+  threads: TThread[];
+}
 
 export type ThreadTraversalDirection = "previous" | "next";
 
@@ -28,7 +40,9 @@ export interface ThreadStatusPill {
     | "Completed"
     | "Pending Approval"
     | "Awaiting Input"
-    | "Plan Ready";
+    | "Plan Ready"
+    | "Drained"
+    | "Stopped";
   colorClass: string;
   dotClass: string;
   pulse: boolean;
@@ -41,6 +55,8 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
   Connecting: 3,
   "Plan Ready": 2,
   Completed: 1,
+  Drained: 0,
+  Stopped: 0,
 };
 
 type ThreadStatusInput = Pick<
@@ -144,6 +160,123 @@ export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
   return completedAt > lastVisitedAt;
 }
 
+export function getGcMetadata(customMetadata?: Record<string, string>): {
+  isGcManaged: boolean;
+  agent: string | undefined;
+  rig: string | undefined;
+  city: string | undefined;
+  bead: string | undefined;
+  beadTitle: string | undefined;
+  molecule: string | undefined;
+  formula: string | undefined;
+  convoy: string | undefined;
+  convoyTitle: string | undefined;
+  convoyStatus: string | undefined;
+  convoyClosedCount: string | undefined;
+  convoyTotalCount: string | undefined;
+  doltPort: string | undefined;
+  doltDatabase: string | undefined;
+  state: string | undefined;
+  provider: string | undefined;
+} {
+  if (!customMetadata || !customMetadata["gc.agent"]) {
+    return {
+      isGcManaged: false,
+      agent: undefined,
+      rig: undefined,
+      city: undefined,
+      bead: undefined,
+      beadTitle: undefined,
+      molecule: undefined,
+      formula: undefined,
+      convoy: undefined,
+      convoyTitle: undefined,
+      convoyStatus: undefined,
+      convoyClosedCount: undefined,
+      convoyTotalCount: undefined,
+      doltPort: undefined,
+      doltDatabase: undefined,
+      state: undefined,
+      provider: undefined,
+    };
+  }
+
+  return {
+    isGcManaged: true,
+    agent: customMetadata["gc.agent"],
+    rig: customMetadata["gc.rig"],
+    city: customMetadata["gc.city"],
+    bead: customMetadata["gc.bead"],
+    beadTitle: customMetadata["gc.beadTitle"],
+    molecule: customMetadata["gc.molecule"],
+    formula: customMetadata["gc.formula"],
+    convoy: customMetadata["gc.convoy"],
+    convoyTitle: customMetadata["gc.convoyTitle"],
+    convoyStatus: customMetadata["gc.convoyStatus"],
+    convoyClosedCount: customMetadata["gc.convoyClosedCount"],
+    convoyTotalCount: customMetadata["gc.convoyTotalCount"],
+    doltPort: customMetadata["gc.doltPort"],
+    doltDatabase: customMetadata["gc.doltDatabase"],
+    state: customMetadata["gc.state"],
+    provider: customMetadata["gc.provider"],
+  };
+}
+
+export function isThreadArchived(customMetadata?: Record<string, string>): boolean {
+  const state = customMetadata?.["gc.state"];
+  return state === "drained" || state === "archived";
+}
+
+export function countGcAgents(
+  threads: ReadonlyArray<{ projectId: string; customMetadata?: Record<string, string> }>,
+  projectId: string,
+): number {
+  return threads.filter(
+    (thread) => thread.projectId === projectId && thread.customMetadata?.["gc.agent"],
+  ).length;
+}
+
+export function groupThreadsByVirtualConvoy<TThread extends ConvoyThreadLike>(
+  threads: ReadonlyArray<TThread>,
+): {
+  standaloneThreads: TThread[];
+  convoyGroups: VirtualConvoyGroup<TThread>[];
+} {
+  const standaloneThreads: TThread[] = [];
+  const convoyGroupsById = new Map<string, VirtualConvoyGroup<TThread>>();
+
+  for (const thread of threads) {
+    const gcMeta = getGcMetadata(thread.customMetadata);
+    const convoyId = gcMeta.convoy?.trim();
+    if (!convoyId) {
+      standaloneThreads.push(thread);
+      continue;
+    }
+
+    const existingGroup = convoyGroupsById.get(convoyId);
+    if (existingGroup) {
+      existingGroup.threads.push(thread);
+      continue;
+    }
+
+    convoyGroupsById.set(convoyId, {
+      id: convoyId,
+      label: gcMeta.convoyTitle?.trim() || convoyId,
+      status: gcMeta.convoyStatus,
+      closedCount: gcMeta.convoyClosedCount ? Number(gcMeta.convoyClosedCount) : null,
+      totalCount: gcMeta.convoyTotalCount ? Number(gcMeta.convoyTotalCount) : null,
+      threads: [thread],
+    });
+  }
+
+  return {
+    standaloneThreads,
+    convoyGroups: Array.from(convoyGroupsById.values()).toSorted((left, right) =>
+      left.label.localeCompare(right.label),
+    ),
+  };
+}
+
 export function shouldClearThreadSelectionOnMouseDown(target: HTMLElement | null): boolean {
   if (target === null) return true;
   return !target.closest(THREAD_SELECTION_SAFE_SELECTOR);
@@ -242,8 +375,27 @@ export function resolveThreadStatusPill(input: {
   thread: ThreadStatusInput;
   hasPendingApprovals: boolean;
   hasPendingUserInput: boolean;
+  gcState?: string | undefined;
 }): ThreadStatusPill | null {
-  const { hasPendingApprovals, hasPendingUserInput, thread } = input;
+  const { hasPendingApprovals, hasPendingUserInput, thread, gcState } = input;
+
+  if (gcState === "drained" && thread.session?.status !== "running") {
+    return {
+      label: "Drained",
+      colorClass: "text-zinc-500 dark:text-zinc-400/70",
+      dotClass: "bg-zinc-400 dark:bg-zinc-500/70",
+      pulse: false,
+    };
+  }
+
+  if (gcState === "stopped" && thread.session?.status !== "running") {
+    return {
+      label: "Stopped",
+      colorClass: "text-zinc-400 dark:text-zinc-500/60",
+      dotClass: "bg-zinc-300 dark:bg-zinc-600/60",
+      pulse: false,
+    };
+  }
 
   if (hasPendingApprovals) {
     return {

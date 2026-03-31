@@ -433,6 +433,20 @@ describe("wsNativeApi", () => {
     });
   });
 
+  it("forwards gc thread context requests to the websocket gc method", async () => {
+    requestMock.mockResolvedValue({ bead: null, convoy: null, formula: null });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+    await api.gc.getThreadContext({
+      threadId: "thread-1",
+    });
+
+    expect(requestMock).toHaveBeenCalledWith(WS_METHODS.gcGetThreadContext, {
+      threadId: "thread-1",
+    });
+  });
+
   it("forwards context menu metadata to desktop bridge", async () => {
     const showContextMenu = vi.fn().mockResolvedValue("delete");
     Object.defineProperty(getWindowForTest(), "desktopBridge", {

@@ -106,8 +106,12 @@ import {
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { isNonEmpty as isNonEmptyString } from "effect/String";
 import {
+  countGcAgents,
+  getGcMetadata,
   getVisibleSidebarThreadIds,
   getVisibleThreadsForProject,
+  groupThreadsByVirtualConvoy,
+  isThreadArchived,
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
   resolveProjectStatusIndicator,
@@ -1063,6 +1067,12 @@ export default function Sidebar() {
           visibleThreads.filter((thread) => thread.projectId === project.id),
           appSettings.sidebarThreadSortOrder,
         );
+        const activeProjectThreads = projectThreads.filter(
+          (thread) => !isThreadArchived(thread.customMetadata),
+        );
+        const archivedThreads = projectThreads.filter((thread) =>
+          isThreadArchived(thread.customMetadata),
+        );
         const threadStatuses = new Map(
           projectThreads.map((thread) => [
             thread.id,
@@ -1070,6 +1080,7 @@ export default function Sidebar() {
               thread,
               hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
               hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
+              gcState: getGcMetadata(thread.customMetadata).state,
             }),
           ]),
         );
@@ -1088,7 +1099,7 @@ export default function Sidebar() {
           hiddenThreads,
           visibleThreads: visibleProjectThreads,
         } = getVisibleThreadsForProject({
-          threads: projectThreads,
+          threads: activeProjectThreads,
           activeThreadId,
           isThreadListExpanded,
           previewLimit: THREAD_PREVIEW_LIMIT,
@@ -1109,6 +1120,7 @@ export default function Sidebar() {
           project,
           projectStatus,
           projectThreads,
+          archivedThreads,
           threadStatuses,
           renderedThreads,
           showEmptyThreadState,
@@ -1254,17 +1266,22 @@ export default function Sidebar() {
       project,
       projectStatus,
       projectThreads,
+      archivedThreads,
       threadStatuses,
       renderedThreads,
       showEmptyThreadState,
       shouldShowThreadPanel,
       isThreadListExpanded,
     } = renderedProject;
+    const gcAgentCount = countGcAgents(projectThreads, project.id);
+    const { standaloneThreads, convoyGroups } =
+      groupThreadsByVirtualConvoy<(typeof renderedThreads)[number]>(renderedThreads);
     const renderThreadRow = (thread: (typeof projectThreads)[number]) => {
       const isActive = routeThreadId === thread.id;
       const isSelected = selectedThreadIds.has(thread.id);
       const isHighlighted = isActive || isSelected;
       const jumpLabel = threadJumpLabelById.get(thread.id) ?? null;
+      const gcMeta = getGcMetadata(thread.customMetadata);
       const isThreadRunning =
         thread.session?.status === "running" && thread.session.activeTurnId != null;
       const threadStatus = threadStatuses.get(thread.id) ?? null;
@@ -1385,7 +1402,21 @@ export default function Sidebar() {
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <span className="min-w-0 flex-1 truncate text-xs">{thread.title}</span>
+                <span className="min-w-0 flex-1 truncate text-xs">
+                  {gcMeta.isGcManaged ? (
+                    <span
+                      className="mr-1 inline-flex items-center rounded bg-violet-500/15 px-1 py-0 text-[8px] font-semibold uppercase tracking-wide text-violet-600 dark:bg-violet-400/15 dark:text-violet-400/80"
+                      title={
+                        gcMeta.beadTitle
+                          ? `GC agent ${gcMeta.agent ?? ""} working ${gcMeta.beadTitle}`
+                          : `GC agent ${gcMeta.agent ?? ""}`
+                      }
+                    >
+                      GC
+                    </span>
+                  ) : null}
+                  {thread.title}
+                </span>
               )}
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -1559,6 +1590,11 @@ export default function Sidebar() {
             <span className="flex-1 truncate text-xs font-medium text-foreground/90">
               {project.name}
             </span>
+            {gcAgentCount > 0 ? (
+              <span className="rounded bg-violet-500/15 px-1 py-0 text-[8px] font-semibold uppercase tracking-wide text-violet-600 dark:bg-violet-400/15 dark:text-violet-400/80">
+                GC {gcAgentCount}
+              </span>
+            ) : null}
           </SidebarMenuButton>
           <Tooltip>
             <TooltipTrigger
@@ -1607,7 +1643,38 @@ export default function Sidebar() {
               </div>
             </SidebarMenuSubItem>
           ) : null}
-          {shouldShowThreadPanel && renderedThreads.map((thread) => renderThreadRow(thread))}
+          {shouldShowThreadPanel && standaloneThreads.map((thread) => renderThreadRow(thread))}
+          {shouldShowThreadPanel &&
+            convoyGroups.map((group) => (
+              <div key={group.id} className="w-full">
+                <div className="flex w-full items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground/60">
+                  <FolderIcon className="size-3 shrink-0" />
+                  <span className="truncate">{group.label}</span>
+                  {group.closedCount !== null && group.totalCount !== null ? (
+                    <span className="rounded bg-muted px-1 py-0 text-[9px] text-muted-foreground/75">
+                      {group.closedCount}/{group.totalCount}
+                    </span>
+                  ) : null}
+                  {group.status ? (
+                    <span
+                      className={`rounded px-1 py-0 text-[9px] ${
+                        group.status === "closed"
+                          ? "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-400/80"
+                          : "bg-amber-500/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-300/80"
+                      }`}
+                    >
+                      {group.status}
+                    </span>
+                  ) : null}
+                  <span className="ml-auto text-[9px] text-muted-foreground/45">
+                    {group.threads.length}
+                  </span>
+                </div>
+                <SidebarMenuSub className="mx-0 my-0 w-full translate-x-0 gap-0.5 px-0 py-0">
+                  {group.threads.map((thread) => renderThreadRow(thread))}
+                </SidebarMenuSub>
+              </div>
+            ))}
 
           {project.expanded && hasHiddenThreads && !isThreadListExpanded && (
             <SidebarMenuSubItem className="w-full">
@@ -1642,6 +1709,16 @@ export default function Sidebar() {
               </SidebarMenuSubButton>
             </SidebarMenuSubItem>
           )}
+          {shouldShowThreadPanel && archivedThreads.length > 0 ? (
+            <div className="w-full pt-1 opacity-60">
+              <div className="px-2 py-1 text-[10px] text-muted-foreground/45">
+                Archived ({archivedThreads.length})
+              </div>
+              <SidebarMenuSub className="mx-0 my-0 w-full translate-x-0 gap-0.5 px-0 py-0">
+                {archivedThreads.map((thread) => renderThreadRow(thread))}
+              </SidebarMenuSub>
+            </div>
+          ) : null}
         </SidebarMenuSub>
       </>
     );

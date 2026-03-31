@@ -83,6 +83,7 @@ import { useTheme } from "../hooks/useTheme";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import BranchToolbar from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
+import GcContextSidebar from "./GcContextSidebar";
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import {
@@ -115,6 +116,7 @@ import {
 import { SidebarTrigger } from "./ui/sidebar";
 import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
+import { getGcMetadata } from "./Sidebar.logic";
 import {
   getProviderModelCapabilities,
   getProviderModels,
@@ -495,6 +497,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const diffOpen = rawSearch.diff === "1";
   const activeThreadId = activeThread?.id ?? null;
   const activeLatestTurn = activeThread?.latestTurn ?? null;
+  const activeThreadGcMetadata = useMemo(
+    () => getGcMetadata(activeThread?.customMetadata),
+    [activeThread?.customMetadata],
+  );
   const activeContextWindow = useMemo(
     () => deriveLatestContextWindowSnapshot(activeThread?.activities ?? []),
     [activeThread?.activities],
@@ -690,6 +696,17 @@ export default function ChatView({ threadId }: ChatViewProps) {
     () => derivePendingUserInputs(threadActivities),
     [threadActivities],
   );
+  const gcThreadContextQuery = useQuery({
+    queryKey: ["gc-thread-context", activeThread?.id ?? null],
+    enabled: Boolean(activeThread?.id && activeThreadGcMetadata.isGcManaged),
+    queryFn: async () => {
+      const api = readNativeApi();
+      if (!api || !activeThread?.id) {
+        return null;
+      }
+      return api.gc.getThreadContext({ threadId: activeThread.id });
+    },
+  });
   const activePendingUserInput = pendingUserInputs[0] ?? null;
   const activePendingDraftAnswers = useMemo(
     () =>
@@ -4210,6 +4227,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
           ) : null}
         </div>
         {/* end chat column */}
+
+        {activeThreadGcMetadata.isGcManaged && activeThread?.customMetadata ? (
+          <GcContextSidebar
+            metadata={activeThread.customMetadata}
+            context={gcThreadContextQuery.data ?? null}
+          />
+        ) : null}
 
         {/* Plan sidebar */}
         {planSidebarOpen ? (
