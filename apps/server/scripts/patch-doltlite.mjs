@@ -23,6 +23,9 @@ const doltliteRoot = process.env.DOLTLITE_BUILD_DIR ?? "/data/projects/doltlite"
 const libPath = existsSync(join(doltliteRoot, "libdoltlite.a"))
   ? join(doltliteRoot, "libdoltlite.a")
   : join(doltliteRoot, "build", "libdoltlite.a");
+const headerDir = existsSync(join(doltliteRoot, "build", "sqlite3.h"))
+  ? join(doltliteRoot, "build")
+  : doltliteRoot;
 
 if (!existsSync(libPath)) {
   console.log(`[patch-doltlite] libdoltlite.a not found at ${libPath} — skipping.`);
@@ -79,7 +82,7 @@ const patchedGyp = `\
       'type': 'none',
       'dependencies': ['locate_sqlite3'],
       'direct_dependent_settings': {
-        'include_dirs': ['${doltliteBuildDir}/'],
+        'include_dirs': ['${headerDir}'],
         'libraries': [
           '${libPath}',
           '-lz',
@@ -123,7 +126,7 @@ if (existsSync(addonPath)) {
               const versionFile = join(pkgDir, "build", "Release", ".doltlite-version");
               if (!existsSync(versionFile)) {
                 const gitHash = execSync("git rev-parse --short HEAD", {
-                  cwd: doltliteBuildDir.replace("/build", ""),
+                  cwd: doltliteRoot,
                   encoding: "utf8",
                 }).trim();
                 writeFileSync(
@@ -163,7 +166,7 @@ try {
   // Record doltlite version for runtime verification
   try {
     const gitHash = execSync("git rev-parse --short HEAD", {
-      cwd: doltliteBuildDir.replace("/build", ""),
+      cwd: doltliteRoot,
       encoding: "utf8",
     }).trim();
     const libMtime = new Date(
