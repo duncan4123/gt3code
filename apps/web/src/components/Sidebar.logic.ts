@@ -18,6 +18,7 @@ type SidebarProject = {
   updatedAt?: string | undefined;
 };
 type SidebarThreadSortInput = Pick<Thread, "createdAt" | "updatedAt" | "messages">;
+type SidebarThreadSearchInput = Pick<Thread, "id" | "projectId" | "title">;
 export interface ConvoyThreadLike {
   customMetadata?: Record<string, string>;
 }
@@ -46,6 +47,18 @@ export interface ThreadStatusPill {
   colorClass: string;
   dotClass: string;
   pulse: boolean;
+}
+
+export interface SidebarThreadSearchHit {
+  threadId: string;
+  snippet: string;
+}
+
+export interface SidebarThreadSearchState {
+  isFiltering: boolean;
+  matchingThreadIds: ReadonlySet<string>;
+  snippetByThreadId: ReadonlyMap<string, string>;
+  matchingProjectIds: ReadonlySet<string>;
 }
 
 const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
@@ -287,6 +300,71 @@ export function resolveSidebarNewThreadEnvMode(input: {
   defaultEnvMode: SidebarNewThreadEnvMode;
 }): SidebarNewThreadEnvMode {
   return input.requestedEnvMode ?? input.defaultEnvMode;
+}
+
+export function normalizeThreadSearchQuery(query: string): string | null {
+  const trimmed = query.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const terms = trimmed
+    .split(/\s+/)
+    .map((term) => term.replaceAll('"', "").trim())
+    .filter((term) => term.length > 0);
+  if (terms.length === 0) {
+    return null;
+  }
+
+  return terms.map((term) => `"${term}"`).join(" ");
+}
+
+export function resolveSidebarThreadSearch(input: {
+  query: string;
+  threads: readonly SidebarThreadSearchInput[];
+  ftsHits: readonly SidebarThreadSearchHit[];
+}): SidebarThreadSearchState {
+  const trimmedQuery = input.query.trim();
+  if (trimmedQuery.length === 0) {
+    return {
+      isFiltering: false,
+      matchingThreadIds: new Set(),
+      snippetByThreadId: new Map(),
+      matchingProjectIds: new Set(),
+    };
+  }
+
+  const loweredQuery = trimmedQuery.toLowerCase();
+  const matchingThreadIds = new Set<string>();
+  const snippetByThreadId = new Map<string, string>();
+  const matchingProjectIds = new Set<string>();
+
+  for (const hit of input.ftsHits) {
+    matchingThreadIds.add(hit.threadId);
+    matchingProjectIds.add(
+      input.threads.find((thread) => thread.id === hit.threadId)?.projectId ?? "",
+    );
+    if (!snippetByThreadId.has(hit.threadId)) {
+      snippetByThreadId.set(hit.threadId, hit.snippet);
+    }
+  }
+
+  for (const thread of input.threads) {
+    if (!thread.title.toLowerCase().includes(loweredQuery)) {
+      continue;
+    }
+    matchingThreadIds.add(thread.id);
+    matchingProjectIds.add(thread.projectId);
+  }
+
+  matchingProjectIds.delete("");
+
+  return {
+    isFiltering: true,
+    matchingThreadIds,
+    snippetByThreadId,
+    matchingProjectIds,
+  };
 }
 
 export function getVisibleSidebarThreadIds<TThreadId>(

@@ -70,6 +70,19 @@ export interface ProjectionThreadMessageRepositoryShape {
   readonly deleteByThreadId: (
     input: DeleteProjectionThreadMessagesInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  /**
+   * Full-text search across message content using FTS5.
+   *
+   * Returns matching thread IDs with BM25-ranked snippet highlights.
+   */
+  readonly searchByText: (input: {
+    query: string;
+    limit: number;
+  }) => Effect.Effect<
+    ReadonlyArray<{ threadId: string; snippet: string }>,
+    ProjectionRepositoryError
+  >;
 }
 
 /**

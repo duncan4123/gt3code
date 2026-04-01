@@ -130,10 +130,32 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
       ),
     );
 
+  const searchByText: ProjectionThreadMessageRepositoryShape["searchByText"] = (input) =>
+    sql.unsafe(
+      `SELECT
+        m.thread_id AS "threadId",
+        snippet(messages_fts, 0, '<mark>', '</mark>', '...', 48) AS "snippet"
+      FROM messages_fts
+      JOIN projection_thread_messages m ON m.rowid = messages_fts.rowid
+      WHERE messages_fts MATCH ?
+      GROUP BY m.thread_id
+      ORDER BY bm25(messages_fts)
+      LIMIT ?`,
+      [input.query, input.limit],
+    ).pipe(
+      Effect.map((rows) =>
+        (rows as ReadonlyArray<{ threadId: string; snippet: string }>),
+      ),
+      Effect.mapError(
+        toPersistenceSqlError("ProjectionThreadMessageRepository.searchByText:query"),
+      ),
+    );
+
   return {
     upsert,
     listByThreadId,
     deleteByThreadId,
+    searchByText,
   } satisfies ProjectionThreadMessageRepositoryShape;
 });
 

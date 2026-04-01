@@ -14,6 +14,7 @@ import { ProjectFavicon } from "./ProjectFavicon";
 import { autoAnimate } from "@formkit/auto-animate";
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -53,7 +54,7 @@ import {
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { isLinuxPlatform, isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
+import { cn, isLinuxPlatform, isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
 import { useStore } from "../store";
 import {
   resolveShortcutCommand,
@@ -65,6 +66,7 @@ import {
 } from "../keybindings";
 import { derivePendingApprovals, derivePendingUserInputs } from "../session-logic";
 import { gitStatusQueryOptions } from "../lib/gitReactQuery";
+import { orchestrationSearchThreadMessagesQueryOptions } from "../lib/orchestrationReactQuery";
 import { serverConfigQueryOptions } from "../lib/serverReactQuery";
 import { readNativeApi } from "../nativeApi";
 import { useComposerDraftStore } from "../composerDraftStore";
@@ -86,6 +88,7 @@ import {
   shouldToastDesktopUpdateActionResult,
 } from "./desktopUpdate.logic";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
+import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Menu, MenuGroup, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
@@ -113,10 +116,12 @@ import {
   getVisibleThreadsForProject,
   groupThreadsByVirtualConvoy,
   isThreadArchived,
+  normalizeThreadSearchQuery,
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
   resolveProjectStatusIndicator,
   resolveSidebarNewThreadEnvMode,
+  resolveSidebarThreadSearch,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
@@ -389,6 +394,18 @@ export default function Sidebar() {
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
   });
+  const [threadSearchQuery, setThreadSearchQuery] = useState("");
+  const deferredThreadSearchQuery = useDeferredValue(threadSearchQuery);
+  const normalizedThreadSearchQuery = useMemo(
+    () => normalizeThreadSearchQuery(deferredThreadSearchQuery),
+    [deferredThreadSearchQuery],
+  );
+  const { data: threadSearchResult, isFetching: isThreadSearchFetching } = useQuery(
+    orchestrationSearchThreadMessagesQueryOptions({
+      query: normalizedThreadSearchQuery,
+      enabled: normalizedThreadSearchQuery !== null,
+    }),
+  );
   const { data: keybindings = EMPTY_KEYBINDINGS } = useQuery({
     ...serverConfigQueryOptions(),
     select: (config) => config.keybindings,
@@ -1060,20 +1077,40 @@ export default function Sidebar() {
     () => sortProjectsForSidebar(projects, visibleThreads, appSettings.sidebarProjectSortOrder),
     [appSettings.sidebarProjectSortOrder, projects, visibleThreads],
   );
+  const threadSearchState = useMemo(
+    () =>
+      resolveSidebarThreadSearch({
+        query: deferredThreadSearchQuery,
+        threads: visibleThreads,
+        ftsHits: threadSearchResult?.results ?? [],
+      }),
+    [deferredThreadSearchQuery, threadSearchResult?.results, visibleThreads],
+  );
+  const isThreadSearchActive = threadSearchState.isFiltering;
+  const visibleProjects = useMemo(() => {
+    if (!isThreadSearchActive) {
+      return sortedProjects;
+    }
+    return sortedProjects.filter((project) => threadSearchState.matchingProjectIds.has(project.id));
+  }, [isThreadSearchActive, sortedProjects, threadSearchState.matchingProjectIds]);
+  const matchingThreadCount = threadSearchState.matchingThreadIds.size;
   const isManualProjectSorting = appSettings.sidebarProjectSortOrder === "manual";
   const renderedProjects = useMemo(
     () =>
-      sortedProjects.map((project) => {
+      visibleProjects.map((project) => {
         const projectThreads = sortThreadsForSidebar(
           visibleThreads.filter((thread) => thread.projectId === project.id),
           appSettings.sidebarThreadSortOrder,
         );
-        const activeProjectThreads = projectThreads.filter(
+        const searchFilteredThreads = isThreadSearchActive
+          ? projectThreads.filter((thread) => threadSearchState.matchingThreadIds.has(thread.id))
+          : projectThreads;
+        const activeProjectThreads = searchFilteredThreads.filter(
           (thread) => !isThreadArchived(thread.customMetadata),
         );
-        const archivedThreads = projectThreads.filter((thread) =>
-          isThreadArchived(thread.customMetadata),
-        );
+        const archivedThreads = isThreadSearchActive
+          ? []
+          : searchFilteredThreads.filter((thread) => isThreadArchived(thread.customMetadata));
         const threadStatuses = new Map(
           projectThreads.map((thread) => [
             thread.id,
@@ -1091,10 +1128,11 @@ export default function Sidebar() {
         const activeThreadId = routeThreadId ?? undefined;
         const isThreadListExpanded = expandedThreadListsByProject.has(project.id);
         const pinnedCollapsedThread =
-          !project.expanded && activeThreadId
+          !isThreadSearchActive && !project.expanded && activeThreadId
             ? (projectThreads.find((thread) => thread.id === activeThreadId) ?? null)
             : null;
-        const shouldShowThreadPanel = project.expanded || pinnedCollapsedThread !== null;
+        const shouldShowThreadPanel =
+          isThreadSearchActive || project.expanded || pinnedCollapsedThread !== null;
         const {
           hasHiddenThreads,
           hiddenThreads,
@@ -1102,7 +1140,7 @@ export default function Sidebar() {
         } = getVisibleThreadsForProject({
           threads: activeProjectThreads,
           activeThreadId,
-          isThreadListExpanded,
+          isThreadListExpanded: isThreadSearchActive || isThreadListExpanded,
           previewLimit: THREAD_PREVIEW_LIMIT,
         });
         const hiddenThreadStatus = resolveProjectStatusIndicator(
@@ -1132,8 +1170,10 @@ export default function Sidebar() {
     [
       appSettings.sidebarThreadSortOrder,
       expandedThreadListsByProject,
+      isThreadSearchActive,
       routeThreadId,
-      sortedProjects,
+      threadSearchState,
+      visibleProjects,
       visibleThreads,
     ],
   );
@@ -2013,6 +2053,35 @@ export default function Sidebar() {
                 </div>
               </div>
 
+              <div className="mb-2 px-1">
+                <Input
+                  nativeInput
+                  type="search"
+                  size="sm"
+                  value={threadSearchQuery}
+                  placeholder="Search threads..."
+                  aria-label="Search threads"
+                  onChange={(event) => {
+                    setThreadSearchQuery(event.target.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape" && threadSearchQuery.length > 0) {
+                      event.preventDefault();
+                      setThreadSearchQuery("");
+                    }
+                  }}
+                />
+                {isThreadSearchActive ? (
+                  <div className="mt-1 px-1 text-[10px] text-muted-foreground/60">
+                    {isThreadSearchFetching
+                      ? "Searching thread messages..."
+                      : matchingThreadCount === 0
+                        ? "No matching threads"
+                        : `${matchingThreadCount} matching thread${matchingThreadCount === 1 ? "" : "s"}`}
+                  </div>
+                ) : null}
+              </div>
+
               {shouldShowProjectPathEntry && (
                 <div className="mb-2 px-1">
                   {isElectron && (
@@ -2078,7 +2147,7 @@ export default function Sidebar() {
                 </div>
               )}
 
-              {isManualProjectSorting ? (
+              {isManualProjectSorting && !isThreadSearchActive ? (
                 <DndContext
                   sensors={projectDnDSensors}
                   collisionDetection={projectCollisionDetection}
@@ -2113,6 +2182,11 @@ export default function Sidebar() {
                 </SidebarMenu>
               )}
 
+              {isThreadSearchActive && renderedProjects.length === 0 && (
+                <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
+                  No threads found
+                </div>
+              )}
               {projects.length === 0 && !shouldShowProjectPathEntry && (
                 <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
                   No projects yet

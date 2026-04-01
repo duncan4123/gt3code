@@ -21,7 +21,15 @@ export const ORCHESTRATION_WS_METHODS = {
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
   replayEvents: "orchestration.replayEvents",
+  searchThreadMessages: "orchestration.searchThreadMessages",
 } as const;
+
+export interface OrchestrationSearchThreadMessagesResult {
+  results: ReadonlyArray<{
+    threadId: string;
+    snippet: string;
+  }>;
+}
 
 export const ORCHESTRATION_WS_CHANNELS = {
   domainEvent: "orchestration.domainEvent",

@@ -19,8 +19,10 @@ const nodeModulesDir = join(serverDir, "node_modules");
 
 // ── 1. Locate libdoltlite.a ──────────────────────────────────────────────────
 
-const doltliteBuildDir = process.env.DOLTLITE_BUILD_DIR ?? "/data/projects/doltlite/build";
-const libPath = join(doltliteBuildDir, "libdoltlite.a");
+const doltliteRoot = process.env.DOLTLITE_BUILD_DIR ?? "/data/projects/doltlite";
+const libPath = existsSync(join(doltliteRoot, "libdoltlite.a"))
+  ? join(doltliteRoot, "libdoltlite.a")
+  : join(doltliteRoot, "build", "libdoltlite.a");
 
 if (!existsSync(libPath)) {
   console.log(`[patch-doltlite] libdoltlite.a not found at ${libPath} — skipping.`);
