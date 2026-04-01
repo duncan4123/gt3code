@@ -9,9 +9,11 @@
 import type DatabaseConstructor from "better-sqlite3";
 import type { Database as DatabaseInstance } from "better-sqlite3";
 import { createRequire } from "node:module";
+import { execSync } from "node:child_process";
 import { unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -131,7 +133,39 @@ export function loadDatabase(): typeof DatabaseConstructor {
       } as any;
     } else {
       // Node.js — use better-sqlite3.
-      _Database = require("better-sqlite3") as typeof DatabaseConstructor;
+      // Guard against ABI mismatch: if the native addon was compiled for a
+      // different Node version (e.g. plugin installed under Node X, session
+      // runs Node Y), rebuild automatically and retry once.
+      try {
+        _Database = require("better-sqlite3") as typeof DatabaseConstructor;
+      } catch (err: any) {
+        if (err?.message?.includes("NODE_MODULE_VERSION") ||
+            err?.message?.includes("was compiled against") ||
+            err?.code === "ERR_DLOPEN_FAILED") {
+          const pkgDir = dirname(require.resolve("better-sqlite3/package.json"));
+          process.stderr.write(
+            `[context-mode] ABI mismatch detected (Node ${process.version}), rebuilding better-sqlite3...\n`,
+          );
+          try {
+            execSync("npm rebuild better-sqlite3", {
+              cwd: join(pkgDir, "..",".."),
+              stdio: ["ignore", "pipe", "pipe"],
+              timeout: 60_000,
+            });
+            // Clear Node's module cache so the fresh .node file is loaded
+            delete require.cache[require.resolve("better-sqlite3")];
+            _Database = require("better-sqlite3") as typeof DatabaseConstructor;
+            process.stderr.write("[context-mode] better-sqlite3 rebuilt successfully\n");
+          } catch (rebuildErr: any) {
+            process.stderr.write(
+              `[context-mode] auto-rebuild failed: ${rebuildErr?.message ?? rebuildErr}\n`,
+            );
+            throw err; // rethrow original error
+          }
+        } else {
+          throw err;
+        }
+      }
     }
   }
   return _Database!;
