@@ -12,7 +12,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, writeFileSync, readdirSync } from "node:fs";
+import { existsSync, writeFileSync, readdirSync, mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -101,6 +101,55 @@ if (!pkgDir) {
 
 console.log(`[patch-doltlite] Patching ${pkgDir}`);
 
+// ── 2b. Ensure source files exist (prebuilt installs strip them) ────────────
+
+const bindingGyp = join(pkgDir, "binding.gyp");
+const srcDir = join(pkgDir, "src");
+const depsDir = join(pkgDir, "deps");
+
+if (!existsSync(bindingGyp) || !existsSync(srcDir)) {
+  console.log("[patch-doltlite] Source files missing (prebuilt install). Reinstalling from source...");
+  const parentDir = join(pkgDir, "..");
+
+  // Nuke existing prebuilt install and reinstall with --ignore-scripts.
+  // --ignore-scripts prevents prebuild-install from running, so npm
+  // keeps the full source tree (binding.gyp, src/, deps/).
+  try {
+    rmSync(pkgDir, { recursive: true, force: true });
+    execSync(`npm install better-sqlite3 --ignore-scripts`, {
+      cwd: parentDir,
+      stdio: "inherit",
+      timeout: 120_000,
+    });
+  } catch (installErr) {
+    console.log(`[patch-doltlite] npm install failed: ${installErr.message}`);
+    // Fallback: npm pack to get the source tarball
+    console.log("[patch-doltlite] Trying npm pack to extract source...");
+    mkdirSync(pkgDir, { recursive: true });
+    try {
+      execSync(
+        `npm pack better-sqlite3 --pack-destination /tmp 2>/dev/null && ` +
+        `tar -xzf /tmp/better-sqlite3-*.tgz -C "${pkgDir}" --strip-components=1 && ` +
+        `rm -f /tmp/better-sqlite3-*.tgz`,
+        { stdio: "inherit", timeout: 60_000, shell: true },
+      );
+    } catch (packErr) {
+      console.error(`[patch-doltlite] npm pack fallback failed: ${packErr.message}`);
+    }
+  }
+
+  // Re-resolve pkgDir in case it was recreated
+  if (!existsSync(bindingGyp)) {
+    console.error("[patch-doltlite] Still no binding.gyp after reinstall — aborting.");
+    process.exit(1);
+  }
+  console.log("[patch-doltlite] Source files restored.");
+}
+
+if (!existsSync(depsDir)) {
+  mkdirSync(depsDir, { recursive: true });
+}
+
 // ── 3. Write patched deps/sqlite3.gyp ───────────────────────────────────────
 
 const gypPath = join(pkgDir, "deps", "sqlite3.gyp");
@@ -139,7 +188,7 @@ const addonPath = join(pkgDir, "build", "Release", "better_sqlite3.node");
 if (existsSync(addonPath)) {
   try {
     const result = execSync(
-      `node -e "const DB=require('${pkgDir}'); const db=new DB(':memory:'); try{const v=db.prepare('SELECT doltlite_engine() as e').get(); console.log(v.e)}catch(e){console.log('missing')}; db.close();"`,
+      `"${process.execPath}" -e "const DB=require('${pkgDir}'); const db=new DB(':memory:'); try{const v=db.prepare('SELECT doltlite_engine() as e').get(); console.log(v.e)}catch(e){console.log('missing')}; db.close();"`,
       { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
     ).trim();
     if (result === "prolly") {
@@ -153,12 +202,26 @@ if (existsSync(addonPath)) {
 
 // ── 5. Rebuild ───────────────────────────────────────────────────────────────
 
-console.log("[patch-doltlite] Rebuilding better-sqlite3 against libdoltlite.a ...");
+console.log(`[patch-doltlite] Rebuilding better-sqlite3 against libdoltlite.a (${process.execPath}) ...`);
 try {
-  execSync("npx node-gyp rebuild", {
+  // Pass --target to node-gyp so it downloads headers and builds for
+  // the Node version that will actually load the addon (process.execPath),
+  // not whatever node-gyp happens to be installed under.
+  const targetVersion = process.version;
+  const nodeGypPaths = [
+    join(pkgDir, "node_modules", ".bin", "node-gyp"),
+    join(repoRoot, "node_modules", ".bin", "node-gyp"),
+  ];
+  const nodeGypBin = nodeGypPaths.find((p) => existsSync(p));
+  const rebuildCmd = nodeGypBin
+    ? `"${process.execPath}" "${nodeGypBin}" rebuild --target=${targetVersion}`
+    : `npx node-gyp rebuild --target=${targetVersion}`;
+  console.log(`[patch-doltlite] node-gyp target: ${targetVersion} (from ${process.execPath})`);
+  execSync(rebuildCmd, {
     cwd: pkgDir,
     stdio: "inherit",
     env: { ...process.env, npm_config_nodedir: undefined },
+    shell: true,
   });
   console.log("[patch-doltlite] Rebuild complete.");
 } catch (err) {
@@ -175,7 +238,7 @@ try {
 
 try {
   const result = execSync(
-    `node -e "const DB=require('${pkgDir}'); const db=new DB(':memory:'); console.log(db.prepare('SELECT doltlite_engine() as e').get().e); db.close();"`,
+    `"${process.execPath}" -e "const DB=require('${pkgDir}'); const db=new DB(':memory:'); console.log(db.prepare('SELECT doltlite_engine() as e').get().e); db.close();"`,
     { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
   ).trim();
   if (result === "prolly") {

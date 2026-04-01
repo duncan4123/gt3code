@@ -9,9 +9,11 @@
 import type DatabaseConstructor from "better-sqlite3";
 import type { Database as DatabaseInstance } from "better-sqlite3";
 import { createRequire } from "node:module";
-import { unlinkSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { existsSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -118,20 +120,54 @@ export function loadDatabase(): typeof DatabaseConstructor {
   if (!_Database) {
     const require = createRequire(import.meta.url);
 
-    if ((globalThis as any).Bun) {
-      // Bun runtime — use bun:sqlite directly.
-      // Array.join() prevents esbuild from resolving the specifier at bundle time.
-      const BunDB = require(["bun", "sqlite"].join(":")).Database;
-      _Database = function BunDatabaseFactory(path: string, opts?: any) {
-        const raw = new BunDB(path, {
-          readonly: opts?.readonly,
-          create: true,
-        });
-        return new BunSQLiteAdapter(raw);
-      } as any;
-    } else {
-      // Node.js — use better-sqlite3.
+    // Always try better-sqlite3 first — it's linked against libdoltlite.a.
+    // bun:sqlite is plain SQLite with no doltlite support, so it's only
+    // used as a last resort when better-sqlite3 can't load at all.
+    try {
       _Database = require("better-sqlite3") as typeof DatabaseConstructor;
+    } catch (err: any) {
+      if (err?.message?.includes("NODE_MODULE_VERSION") ||
+          err?.message?.includes("was compiled against") ||
+          err?.code === "ERR_DLOPEN_FAILED") {
+        // ABI mismatch — rebuild via patch-doltlite.mjs to preserve doltlite linkage.
+        const __pkg_dir = dirname(fileURLToPath(import.meta.url));
+        const patchScript = join(__pkg_dir, "..", "scripts", "patch-doltlite.mjs");
+        process.stderr.write(
+          `[context-mode] ABI mismatch detected, rebuilding better-sqlite3 with doltlite...\n`,
+        );
+        try {
+          if (!existsSync(patchScript)) {
+            throw new Error(`patch-doltlite.mjs not found at ${patchScript}`);
+          }
+          execSync(`"${process.execPath}" "${patchScript}"`, {
+            cwd: join(__pkg_dir, ".."),
+            stdio: ["ignore", "pipe", "pipe"],
+            timeout: 120_000,
+          });
+          // Clear module cache so the fresh .node file is loaded
+          delete require.cache[require.resolve("better-sqlite3")];
+          _Database = require("better-sqlite3") as typeof DatabaseConstructor;
+          process.stderr.write("[context-mode] better-sqlite3 rebuilt successfully\n");
+        } catch (rebuildErr: any) {
+          process.stderr.write(
+            `[context-mode] auto-rebuild failed: ${rebuildErr?.message ?? rebuildErr}\n`,
+          );
+          throw err;
+        }
+      } else if ((globalThis as any).Bun && err?.code === "MODULE_NOT_FOUND") {
+        // better-sqlite3 not installed — Bun-only fallback to bun:sqlite (no doltlite).
+        process.stderr.write("[context-mode] better-sqlite3 not found, falling back to bun:sqlite (no doltlite)\n");
+        const BunDB = require(["bun", "sqlite"].join(":")).Database;
+        _Database = function BunDatabaseFactory(path: string, opts?: any) {
+          const raw = new BunDB(path, {
+            readonly: opts?.readonly,
+            create: true,
+          });
+          return new BunSQLiteAdapter(raw);
+        } as any;
+      } else {
+        throw err;
+      }
     }
   }
   return _Database!;
