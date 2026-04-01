@@ -204,16 +204,19 @@ if (existsSync(addonPath)) {
 
 console.log(`[patch-doltlite] Rebuilding better-sqlite3 against libdoltlite.a (${process.execPath}) ...`);
 try {
-  // Try multiple ways to find node-gyp, using process.execPath to ensure
-  // it builds for the correct Node ABI (not whatever's on PATH).
+  // Pass --target to node-gyp so it downloads headers and builds for
+  // the Node version that will actually load the addon (process.execPath),
+  // not whatever node-gyp happens to be installed under.
+  const targetVersion = process.version;
   const nodeGypPaths = [
     join(pkgDir, "node_modules", ".bin", "node-gyp"),
     join(repoRoot, "node_modules", ".bin", "node-gyp"),
   ];
-  let nodeGypBin = nodeGypPaths.find((p) => existsSync(p));
+  const nodeGypBin = nodeGypPaths.find((p) => existsSync(p));
   const rebuildCmd = nodeGypBin
-    ? `"${process.execPath}" "${nodeGypBin}" rebuild`
-    : `"${process.execPath}" -e "require('child_process').execSync('npx node-gyp rebuild', {cwd:'${pkgDir.replace(/'/g, "\\'")}', stdio:'inherit', env:{...process.env, npm_config_nodedir:undefined}})"`;
+    ? `"${process.execPath}" "${nodeGypBin}" rebuild --target=${targetVersion}`
+    : `npx node-gyp rebuild --target=${targetVersion}`;
+  console.log(`[patch-doltlite] node-gyp target: ${targetVersion} (from ${process.execPath})`);
   execSync(rebuildCmd, {
     cwd: pkgDir,
     stdio: "inherit",
