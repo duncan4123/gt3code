@@ -10,7 +10,7 @@ import type DatabaseConstructor from "better-sqlite3";
 import type { Database as DatabaseInstance } from "better-sqlite3";
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
-import { unlinkSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -142,15 +142,21 @@ export function loadDatabase(): typeof DatabaseConstructor {
         if (err?.message?.includes("NODE_MODULE_VERSION") ||
             err?.message?.includes("was compiled against") ||
             err?.code === "ERR_DLOPEN_FAILED") {
-          const pkgDir = dirname(require.resolve("better-sqlite3/package.json"));
+          // Rebuild via patch-doltlite.mjs to preserve doltlite linkage.
+          // No fallback to plain SQLite — doltlite is required.
+          const __pkg_dir = dirname(fileURLToPath(import.meta.url));
+          const patchScript = join(__pkg_dir, "..", "scripts", "patch-doltlite.mjs");
           process.stderr.write(
-            `[context-mode] ABI mismatch detected (Node ${process.version}), rebuilding better-sqlite3...\n`,
+            `[context-mode] ABI mismatch detected (Node ${process.version}), rebuilding better-sqlite3 with doltlite...\n`,
           );
           try {
-            execSync("npm rebuild better-sqlite3", {
-              cwd: join(pkgDir, "..",".."),
+            if (!existsSync(patchScript)) {
+              throw new Error(`patch-doltlite.mjs not found at ${patchScript}`);
+            }
+            execSync(`node ${patchScript}`, {
+              cwd: join(__pkg_dir, ".."),
               stdio: ["ignore", "pipe", "pipe"],
-              timeout: 60_000,
+              timeout: 120_000,
             });
             // Clear Node's module cache so the fresh .node file is loaded
             delete require.cache[require.resolve("better-sqlite3")];
