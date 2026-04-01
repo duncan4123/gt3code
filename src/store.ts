@@ -276,7 +276,9 @@ export class ContentStore {
           try { memDb.close(); } catch { /* ignore */ }
 
           if (addonSupportsDoltlite) {
-            // Addon supports doltlite but file is plain SQLite — recreate
+            // Addon supports doltlite but file is plain SQLite — delete and
+            // recreate. Indexed content is session-ephemeral and re-indexed
+            // automatically. Version control requires doltlite format.
             try { this.#db.close(); } catch { /* ignore */ }
             for (const suffix of ["", "-wal", "-shm"]) {
               try { unlinkSync(this.#dbPath + suffix); } catch { /* ignore */ }
