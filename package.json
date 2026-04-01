@@ -1,6 +1,6 @@
 {
   "name": "context-mode-doltlite",
-  "version": "1.0.59",
+  "version": "1.0.60",
   "type": "module",
   "description": "MCP plugin that saves 98% of your context window. Works with Claude Code, Gemini CLI, VS Code Copilot, OpenCode, and Codex CLI. Sandboxed code execution, FTS5 knowledge base, and intent-driven search.",
   "author": "Mert Koseoğlu",
@@ -87,7 +87,7 @@
     "zod": "^3.25.0"
   },
   "optionalDependencies": {
-    "better-sqlite3": "npm:null@*"
+    "better-sqlite3": "npm:null@^2.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

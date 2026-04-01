@@ -12,7 +12,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, writeFileSync, readdirSync } from "node:fs";
+import { existsSync, writeFileSync, readdirSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -101,6 +101,39 @@ if (!pkgDir) {
 
 console.log(`[patch-doltlite] Patching ${pkgDir}`);
 
+// ── 2b. Ensure source files exist (prebuilt installs strip them) ────────────
+
+const bindingGyp = join(pkgDir, "binding.gyp");
+const srcDir = join(pkgDir, "src");
+const depsDir = join(pkgDir, "deps");
+
+if (!existsSync(bindingGyp) || !existsSync(srcDir)) {
+  console.log("[patch-doltlite] Source files missing (prebuilt install). Reinstalling from source...");
+  const parentDir = join(pkgDir, "..");
+  try {
+    execSync(`"${process.execPath}" -e "require('child_process').execSync('npm install better-sqlite3 --build-from-source --ignore-scripts', {cwd: '${parentDir.replace(/'/g, "\\'")}', stdio: 'inherit'})"`, {
+      stdio: "inherit",
+      timeout: 120_000,
+    });
+  } catch {
+    // Fallback: npm pack + extract to get source files
+    console.log("[patch-doltlite] --build-from-source failed, trying npm pack...");
+    execSync(`cd "${pkgDir}" && npm pack better-sqlite3 --pack-destination /tmp && tar -xzf /tmp/better-sqlite3-*.tgz -C /tmp && cp -r /tmp/package/binding.gyp /tmp/package/src /tmp/package/deps . 2>/dev/null; rm -rf /tmp/better-sqlite3-*.tgz /tmp/package`, {
+      stdio: "inherit",
+      timeout: 60_000,
+      shell: true,
+    });
+  }
+  if (!existsSync(bindingGyp)) {
+    console.error("[patch-doltlite] Still no binding.gyp after reinstall — aborting.");
+    process.exit(1);
+  }
+}
+
+if (!existsSync(depsDir)) {
+  mkdirSync(depsDir, { recursive: true });
+}
+
 // ── 3. Write patched deps/sqlite3.gyp ───────────────────────────────────────
 
 const gypPath = join(pkgDir, "deps", "sqlite3.gyp");
@@ -155,7 +188,17 @@ if (existsSync(addonPath)) {
 
 console.log(`[patch-doltlite] Rebuilding better-sqlite3 against libdoltlite.a (${process.execPath}) ...`);
 try {
-  execSync(`"${process.execPath}" "${join(pkgDir, "node_modules", ".bin", "node-gyp")}" rebuild || npx node-gyp rebuild`, {
+  // Try multiple ways to find node-gyp, using process.execPath to ensure
+  // it builds for the correct Node ABI (not whatever's on PATH).
+  const nodeGypPaths = [
+    join(pkgDir, "node_modules", ".bin", "node-gyp"),
+    join(repoRoot, "node_modules", ".bin", "node-gyp"),
+  ];
+  let nodeGypBin = nodeGypPaths.find((p) => existsSync(p));
+  const rebuildCmd = nodeGypBin
+    ? `"${process.execPath}" "${nodeGypBin}" rebuild`
+    : `"${process.execPath}" -e "require('child_process').execSync('npx node-gyp rebuild', {cwd:'${pkgDir.replace(/'/g, "\\'")}', stdio:'inherit', env:{...process.env, npm_config_nodedir:undefined}})"`;
+  execSync(rebuildCmd, {
     cwd: pkgDir,
     stdio: "inherit",
     env: { ...process.env, npm_config_nodedir: undefined },
