@@ -256,6 +256,37 @@ export class ContentStore {
       dbPath ?? join(tmpdir(), `context-mode-${process.pid}.db`);
     this.#persistent = persistent;
     this.#db = new Database(this.#dbPath, { timeout: 5000 });
+
+    // Auto-upgrade: if the addon supports doltlite but the file is plain
+    // SQLite, recreate it so version-control features are available (#vc-upgrade).
+    if (existsSync(this.#dbPath)) {
+      try {
+        const hasDoltlite = (() => {
+          try { (this.#db as any).prepare("SELECT doltlite_engine()").get(); return true; }
+          catch { return false; }
+        })();
+        if (!hasDoltlite) {
+          // Check if the addon *can* do doltlite by testing an in-memory DB
+          const memDb = new Database(":memory:", { timeout: 1000 });
+          let addonSupportsDoltlite = false;
+          try {
+            (memDb as any).prepare("SELECT doltlite_engine()").get();
+            addonSupportsDoltlite = true;
+          } catch { /* addon is stock SQLite */ }
+          try { memDb.close(); } catch { /* ignore */ }
+
+          if (addonSupportsDoltlite) {
+            // Addon supports doltlite but file is plain SQLite — recreate
+            try { this.#db.close(); } catch { /* ignore */ }
+            for (const suffix of ["", "-wal", "-shm"]) {
+              try { unlinkSync(this.#dbPath + suffix); } catch { /* ignore */ }
+            }
+            this.#db = new Database(this.#dbPath, { timeout: 5000 });
+          }
+        }
+      } catch { /* best effort — continue with current db */ }
+    }
+
     applyWALPragmas(this.#db);
     this.#initSchema();
     this.#prepareStatements();
