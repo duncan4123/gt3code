@@ -104,6 +104,7 @@ console.log(`[patch-doltlite] Patching ${pkgDir}`);
 // ── 3. Write patched deps/sqlite3.gyp ───────────────────────────────────────
 
 const gypPath = join(pkgDir, "deps", "sqlite3.gyp");
+const doltliteBuildDir = resolve(headerPath, "..");
 const patchedGyp = `\
 {
   'includes': ['common.gypi'],
