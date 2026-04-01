@@ -16,7 +16,7 @@ description: |
   Also triggers on ANY MCP tool output that may exceed 20 lines.
   Subagent routing is handled automatically via PreToolUse hook.
   Powered by doltlite — versioned knowledge bases with ctx_commit, ctx_log, ctx_diff, ctx_status.
-  Named persistent databases with database parameter on index/search/batch_execute, list_databases, delete_database.
+  Named persistent databases with database parameter on index/search/batch_execute/commit/log/diff/status, list_databases, delete_database.
   Draft convoy creation with ctx_convoy_create, ctx_bead_create, ctx_dep_add, ctx_convoy_list.
 ---
 
@@ -103,10 +103,10 @@ About to run a command / read a file / call an API?
 | Playwright console/network | `browser_*(filename)` → `ctx_execute_file(path)` | Save to file, analyze in sandbox |
 | MCP output (already in context) | Use directly | Don't re-index — it's already loaded |
 | MCP output (need multi-query) | `ctx_execute` to save → `ctx_index(path)` → `ctx_search` | Save to file first, index server-side |
-| Save knowledge base snapshot | `ctx_commit` | After indexing docs, end of research phase |
-| Check what's been indexed | `ctx_log` | See commit history of knowledge base |
-| Review pending changes | `ctx_diff` | What's changed since last commit |
-| Knowledge base health check | `ctx_status` | Engine, sources, chunks, commits, uncommitted |
+| **Commit knowledge base** | **`ctx_commit`** | **After every fetch_and_index, every 3-5 index calls, at phase transitions — uncommitted data risks corruption. Accepts `database` param for named DBs.** |
+| Check what's been indexed | `ctx_log` | See commit history of knowledge base. Accepts `database` param for named DBs. |
+| Review pending changes | `ctx_diff` | What's changed since last commit. Accepts `database` param for named DBs. |
+| Knowledge base health check | `ctx_status` | Engine, sources, chunks, commits, uncommitted. Accepts `database` param for named DBs. |
 | Create draft convoy | `ctx_convoy_create` | Start staging a new convoy of work |
 | Create draft bead | `ctx_bead_create` | Add a task/gate to a draft convoy |
 | Add bead dependency | `ctx_dep_add` | Wire sequential blocking between beads |
@@ -114,6 +114,10 @@ About to run a command / read a file / call an API?
 | Index into named DB | `ctx_index(..., database: "name")` | Persistent KB that survives restarts |
 | Search named DB | `ctx_search(..., database: "name")` | Query a persistent knowledge base |
 | Batch into named DB | `ctx_batch_execute(..., database: "name")` | Research into persistent KB |
+| Commit named DB | `ctx_commit(..., database: "name")` | Snapshot a persistent knowledge base |
+| Log named DB | `ctx_log(..., database: "name")` | View commit history of a persistent KB |
+| Diff named DB | `ctx_diff(database: "name")` | Uncommitted changes in a persistent KB |
+| Status named DB | `ctx_status(database: "name")` | Health check a persistent knowledge base |
 | List persistent DBs | `list_databases` | See all named knowledge bases |
 | Delete persistent DB | `delete_database` | Remove a named knowledge base |
 
@@ -292,6 +296,8 @@ browser_network_requests(includeStatic: false, filename: "/tmp/network.md")
 
 Subagents automatically receive context-mode tool routing via a PreToolUse hook. You do NOT need to manually add tool names to subagent prompts — the hook injects them. Just write natural task descriptions.
 
+**Subagent commit rule:** Subagents MUST `ctx_commit` before completing their task. A subagent that indexes content without committing leaves a dirty database that may corrupt when the subprocess exits. Include commit expectations in subagent prompts when the task involves research or indexing.
+
 ## Anti-Patterns
 
 - Using `curl http://api/endpoint` via Bash → 50KB floods context. Use `ctx_execute` with fetch instead.
@@ -304,6 +310,8 @@ Subagents automatically receive context-mode tool routing via a PreToolUse hook.
 - Passing ANY large data to `ctx_index(content: ...)` → data enters context as a parameter. **Always** use `ctx_index(path: ...)` to read server-side. The `content` parameter should only be used for small inline text you're composing yourself.
 - Calling an MCP tool (Context7 `query-docs`, GitHub API, etc.) then passing the response to `ctx_index(content: response)` → **doubles** context usage. The response is already in context — use it directly or save to file first.
 - Ignoring `browser_navigate` auto-snapshot → navigation response includes a full page snapshot. Don't rely on it for inspection — call `browser_snapshot(filename)` separately.
+- Indexing many sources without committing → **corruption risk**. Uncommitted data lives in WAL/memory. A crash, MCP restart, or session timeout loses everything. Commit after every `fetch_and_index` and every 3-5 `ctx_index` calls.
+- Ending a session without committing → dirty database state carries into next session. Always `ctx_commit` as final KB operation.
 
 ## Knowledge Base Versioning (Doltlite)
 
@@ -313,17 +321,37 @@ context-mode uses doltlite — a SQLite fork with git-like version control. Ever
 
 | Tool | Purpose | When to Use |
 |------|---------|-------------|
-| `ctx_commit` | Save a named snapshot | After indexing important sources, completing a research phase, before experimental changes |
-| `ctx_log` | View commit history | Understand what was indexed and when, audit agent research activity |
-| `ctx_diff` | Show uncommitted changes | Review what will be saved before committing, check recent indexing activity |
-| `ctx_status` | Knowledge base overview | Quick health check — engine, source count, commit count, pending changes |
+| `ctx_commit` | Save a named snapshot | After indexing important sources, completing a research phase, before experimental changes. Pass `database: "name"` for named DBs. |
+| `ctx_log` | View commit history | Understand what was indexed and when, audit agent research activity. Pass `database: "name"` for named DBs. |
+| `ctx_diff` | Show uncommitted changes | Review what will be saved before committing, check recent indexing activity. Pass `database: "name"` for named DBs. |
+| `ctx_status` | Knowledge base overview | Quick health check — engine, source count, commit count, pending changes. Pass `database: "name"` for named DBs. |
 
-### When to Commit
+### Commit Discipline (MANDATORY)
 
-- **After indexing major documentation** — `ctx_fetch_and_index` + `ctx_commit("indexed React docs v19")`
-- **End of a research phase** — before switching to implementation, commit the research KB state
-- **Before re-indexing** — commit current state so you can compare what changed
-- **At session boundaries** — commit before the session ends to preserve indexed knowledge
+**Uncommitted data is vulnerable to corruption.** Doltlite journals uncommitted changes in memory and WAL state. If the session crashes, the MCP server restarts, or the process is killed, uncommitted indexed content is lost or corrupted. Commits checkpoint the database to a known-good state.
+
+**Commit cadence rules:**
+
+1. **After every `ctx_fetch_and_index` call** — each fetched doc is a commit-worthy event
+2. **After every `ctx_index` of important content** — don't batch more than 3-5 index calls without committing
+3. **Before and after batch_execute** — commit before (preserve current state) and after (checkpoint new data)
+4. **At every phase transition** — research → implementation, exploration → coding, analysis → reporting
+5. **Before session ends** — always commit as the last knowledge base operation
+6. **Before any destructive operation** — re-indexing, deleting sources, experimental changes
+
+**Commit messages should be descriptive:**
+```
+ctx_commit("indexed React docs v19 — hooks API, server components")
+ctx_commit("research complete — 3 API endpoints analyzed, found rate limit bug")
+ctx_commit("pre-reindex checkpoint — about to refresh stale Zod docs")
+```
+
+**Never do this:**
+- Index 10+ sources without committing — one crash loses everything
+- End a session without committing — the next session inherits a dirty DB
+- Assume the MCP server will stay up — treat every commit as your last chance to save
+
+**Rule of thumb:** If you'd be upset losing the work you just did, commit it.
 
 ### Use Cases
 
