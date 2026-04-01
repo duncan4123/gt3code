@@ -139,7 +139,7 @@ export function loadDatabase(): typeof DatabaseConstructor {
           if (!existsSync(patchScript)) {
             throw new Error(`patch-doltlite.mjs not found at ${patchScript}`);
           }
-          execSync(`node ${patchScript}`, {
+          execSync(`"${process.execPath}" "${patchScript}"`, {
             cwd: join(__pkg_dir, ".."),
             stdio: ["ignore", "pipe", "pipe"],
             timeout: 120_000,

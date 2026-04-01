@@ -139,7 +139,7 @@ const addonPath = join(pkgDir, "build", "Release", "better_sqlite3.node");
 if (existsSync(addonPath)) {
   try {
     const result = execSync(
-      `node -e "const DB=require('${pkgDir}'); const db=new DB(':memory:'); try{const v=db.prepare('SELECT doltlite_engine() as e').get(); console.log(v.e)}catch(e){console.log('missing')}; db.close();"`,
+      `"${process.execPath}" -e "const DB=require('${pkgDir}'); const db=new DB(':memory:'); try{const v=db.prepare('SELECT doltlite_engine() as e').get(); console.log(v.e)}catch(e){console.log('missing')}; db.close();"`,
       { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
     ).trim();
     if (result === "prolly") {
@@ -153,12 +153,13 @@ if (existsSync(addonPath)) {
 
 // ── 5. Rebuild ───────────────────────────────────────────────────────────────
 
-console.log("[patch-doltlite] Rebuilding better-sqlite3 against libdoltlite.a ...");
+console.log(`[patch-doltlite] Rebuilding better-sqlite3 against libdoltlite.a (${process.execPath}) ...`);
 try {
-  execSync("npx node-gyp rebuild", {
+  execSync(`"${process.execPath}" "${join(pkgDir, "node_modules", ".bin", "node-gyp")}" rebuild || npx node-gyp rebuild`, {
     cwd: pkgDir,
     stdio: "inherit",
     env: { ...process.env, npm_config_nodedir: undefined },
+    shell: true,
   });
   console.log("[patch-doltlite] Rebuild complete.");
 } catch (err) {
@@ -175,7 +176,7 @@ try {
 
 try {
   const result = execSync(
-    `node -e "const DB=require('${pkgDir}'); const db=new DB(':memory:'); console.log(db.prepare('SELECT doltlite_engine() as e').get().e); db.close();"`,
+    `"${process.execPath}" -e "const DB=require('${pkgDir}'); const db=new DB(':memory:'); console.log(db.prepare('SELECT doltlite_engine() as e').get().e); db.close();"`,
     { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
   ).trim();
   if (result === "prolly") {
