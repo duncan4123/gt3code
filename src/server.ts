@@ -2089,10 +2089,11 @@ server.registerTool(
       "or before making experimental changes to the knowledge base.",
     inputSchema: z.object({
       message: z.string().describe("Commit message describing what was indexed or changed"),
+      database: z.string().optional().describe("Named persistent database to commit. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ message }) => {
-    const store = getStore();
+  async ({ message, database }) => {
+    const store = resolveStore(database);
     try {
       store.exec(`SELECT dolt_add('-A')`);
       const result = store.queryOne(`SELECT dolt_commit('-m', ?)`, message) as Record<string, string> | undefined;
@@ -2125,10 +2126,11 @@ server.registerTool(
       "Use to understand what an agent has indexed and when.",
     inputSchema: z.object({
       limit: z.number().optional().default(10).describe("Max commits to show (default 10)"),
+      database: z.string().optional().describe("Named persistent database to query. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ limit }) => {
-    const store = getStore();
+  async ({ limit, database }) => {
+    const store = resolveStore(database);
     try {
       const rows = store.queryAll(
         `SELECT commit_hash, committer, date, message FROM dolt_log LIMIT ?`, limit
@@ -2173,10 +2175,12 @@ server.registerTool(
       "Show what changed in the knowledge base since the last commit. " +
       "Reports added, modified, and deleted chunks. Use before committing " +
       "to review what will be saved, or to understand recent indexing activity.",
-    inputSchema: z.object({}),
+    inputSchema: z.object({
+      database: z.string().optional().describe("Named persistent database to diff. Omit to use the ephemeral session store."),
+    }),
   },
-  async () => {
-    const store = getStore();
+  async ({ database }) => {
+    const store = resolveStore(database);
     try {
       const status = store.queryAll(
         `SELECT table_name, staged, status FROM dolt_status`
@@ -2218,10 +2222,12 @@ server.registerTool(
       "Show the current state of the knowledge base: engine type, commit count, " +
       "source count, and any uncommitted changes. Quick health check for the " +
       "versioned knowledge base.",
-    inputSchema: z.object({}),
+    inputSchema: z.object({
+      database: z.string().optional().describe("Named persistent database to inspect. Omit to use the ephemeral session store."),
+    }),
   },
-  async () => {
-    const store = getStore();
+  async ({ database }) => {
+    const store = resolveStore(database);
     const lines: string[] = ["## Knowledge Base Status\n"];
 
     // Engine check
@@ -2750,47 +2756,113 @@ server.registerTool(
     title: "Project Docs Diff",
     description:
       "Show what changed in project docs between two dolt commits, or show " +
-      "uncommitted changes. Only available when running on doltlite.",
+      "uncommitted changes. Supports short hashes, HEAD~N refs, and range diffs " +
+      "across multiple commits. Diffs all docs tables by default. Only available on doltlite.",
     inputSchema: z.object({
-      table: z.string().optional().default("docs_workarounds").describe("Which docs table to diff: docs_config, docs_workarounds, docs_plans, docs_failures"),
-      from_commit: z.string().optional().describe("Start commit hash. Omit for uncommitted changes (WORKING)."),
-      to_commit: z.string().optional().describe("End commit hash. Omit for latest."),
+      table: z.string().optional().describe("Which docs table to diff: docs_config, docs_workarounds, docs_plans, docs_failures. Omit to diff all tables."),
+      from_commit: z.string().optional().describe("Start commit (short/full hash or HEAD~N). Omit for uncommitted changes."),
+      to_commit: z.string().optional().describe("End commit (short/full hash or HEAD~N). Omit for HEAD."),
       database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
     }),
   },
   async ({ table, from_commit, to_commit, database }) => {
     const store = resolveStore(database);
     const allowedTables = ["docs_config", "docs_workarounds", "docs_plans", "docs_failures"];
-    if (!allowedTables.includes(table)) {
+    if (table && !allowedTables.includes(table)) {
       return trackResponse("ctx_docs_diff", {
         content: [{ type: "text" as const, text: `Error: table must be one of: ${allowedTables.join(", ")}` }],
         isError: true,
       });
     }
-    try {
-      let sql: string;
-      if (from_commit && to_commit) {
-        sql = `SELECT * FROM dolt_diff_${table} WHERE from_commit = '${from_commit}' AND to_commit = '${to_commit}'`;
-      } else if (from_commit) {
-        sql = `SELECT * FROM dolt_diff_${table} WHERE from_commit = '${from_commit}'`;
-      } else {
-        // Uncommitted changes
-        sql = `SELECT * FROM dolt_diff_${table} WHERE to_commit = 'WORKING'`;
+
+    const resolveRef = (ref: string): string => {
+      if (/^HEAD$/i.test(ref)) {
+        const row = store.queryOne("SELECT commit_hash FROM dolt_log ORDER BY date DESC LIMIT 1") as { commit_hash: string } | undefined;
+        if (!row) throw new Error("No commits yet");
+        return row.commit_hash;
       }
-      const rows = store.queryAll(sql) as Array<Record<string, unknown>>;
-      if (!rows.length) {
+      const m = ref.match(/^HEAD~(\d+)$/i);
+      if (m) {
+        const row = store.queryOne(
+          `SELECT commit_hash FROM dolt_log ORDER BY date DESC LIMIT 1 OFFSET ${parseInt(m[1], 10)}`
+        ) as { commit_hash: string } | undefined;
+        if (!row) throw new Error(`HEAD~${m[1]} not found`);
+        return row.commit_hash;
+      }
+      return ref;
+    };
+
+    const metaCols = new Set(["from_commit", "to_commit", "from_commit_date", "to_commit_date", "diff_type"]);
+
+    try {
+      const from = from_commit ? resolveRef(from_commit) : undefined;
+      const to = to_commit ? resolveRef(to_commit) : undefined;
+      const tables = table ? [table] : allowedTables;
+      const output: string[] = [];
+      let totalChanges = 0;
+
+      for (const t of tables) {
+        let sql: string;
+        if (from && to) {
+          sql = `SELECT * FROM dolt_diff_${t} WHERE to_commit IN (` +
+            `SELECT commit_hash FROM dolt_log ` +
+            `WHERE date > (SELECT date FROM dolt_log WHERE commit_hash LIKE '${from}%' LIMIT 1) ` +
+            `AND date <= (SELECT date FROM dolt_log WHERE commit_hash LIKE '${to}%' LIMIT 1))`;
+        } else if (from) {
+          sql = `SELECT * FROM dolt_diff_${t} WHERE to_commit IN (` +
+            `SELECT commit_hash FROM dolt_log ` +
+            `WHERE date > (SELECT date FROM dolt_log WHERE commit_hash LIKE '${from}%' LIMIT 1))`;
+        } else {
+          sql = `SELECT * FROM dolt_diff_${t} WHERE to_commit = 'WORKING'`;
+        }
+
+        let rows: Array<Record<string, unknown>>;
+        try { rows = store.queryAll(sql) as Array<Record<string, unknown>>; }
+        catch { continue; }
+        if (!rows.length) continue;
+
+        const allCols = Object.keys(rows[0]);
+        const dataCols = allCols
+          .filter(c => c.startsWith("to_") && !metaCols.has(c))
+          .map(c => c.slice(3));
+
+        const added = rows.filter(r => r.diff_type === "added");
+        const modified = rows.filter(r => r.diff_type === "modified");
+        const removed = rows.filter(r => r.diff_type === "removed");
+
+        output.push(`### ${t}`);
+        const fmtRow = (row: Record<string, unknown>, prefix: string) =>
+          dataCols.map(c => { const v = row[`${prefix}_${c}`]; return v != null && v !== "" ? `${c}=${v}` : null; }).filter(Boolean).join(", ");
+
+        for (const row of added) { output.push(`+ ${fmtRow(row, "to")}`); totalChanges++; }
+        for (const row of modified) {
+          const changes = dataCols
+            .filter(c => String(row[`from_${c}`] ?? "") !== String(row[`to_${c}`] ?? ""))
+            .map(c => `${c}: \`${row[`from_${c}`] ?? ""}\` → \`${row[`to_${c}`] ?? ""}\``);
+          output.push(`~ ${changes.join(", ")}`);
+          totalChanges++;
+        }
+        for (const row of removed) { output.push(`- ${fmtRow(row, "from")}`); totalChanges++; }
+        output.push("");
+      }
+
+      if (!totalChanges) {
         return trackResponse("ctx_docs_diff", {
-          content: [{ type: "text" as const, text: `No changes in ${table}.` }],
+          content: [{ type: "text" as const, text: table ? `No changes in ${table}.` : "No changes in any docs table." }],
         });
       }
-      const cols = Object.keys(rows[0]);
-      const lines = [`## Diff: ${table}\n`, cols.join(" | "), cols.map(() => "---").join(" | ")];
-      for (const row of rows) lines.push(cols.map(c => String(row[c] ?? "")).join(" | "));
+
+      const header = from && to
+        ? `## Docs Diff (${from.slice(0, 8)}..${to.slice(0, 8)}) — ${totalChanges} change(s)\n\n`
+        : from
+          ? `## Docs Diff (${from.slice(0, 8)}..HEAD) — ${totalChanges} change(s)\n\n`
+          : `## Uncommitted Docs Changes — ${totalChanges} change(s)\n\n`;
+
       return trackResponse("ctx_docs_diff", {
-        content: [{ type: "text" as const, text: lines.join("\n") }],
+        content: [{ type: "text" as const, text: header + output.join("\n") }],
       });
     } catch (e: any) {
-      if (e.message.includes("dolt_diff") || e.message.includes("no such table")) {
+      if (e.message?.includes("dolt_diff") || e.message?.includes("no such table")) {
         return trackResponse("ctx_docs_diff", {
           content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
         });
@@ -2808,10 +2880,10 @@ server.registerTool(
   {
     title: "Manage Docs Branches",
     description:
-      "Create, list, or switch dolt branches for project docs. Use branches to " +
-      "isolate experimental changes before merging. Only available on doltlite.",
+      "Create, list, switch, merge, or delete dolt branches for project docs. " +
+      "Use branches to isolate experimental changes before merging. Only available on doltlite.",
     inputSchema: z.object({
-      action: z.enum(["list", "create", "checkout", "merge"]).describe("Branch action"),
+      action: z.enum(["list", "create", "checkout", "merge", "delete"]).describe("Branch action"),
       name: z.string().optional().describe("Branch name (required for create/checkout/merge)"),
       database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
     }),
@@ -2822,13 +2894,12 @@ server.registerTool(
       switch (action) {
         case "list": {
           const branches = store.queryAll(
-            "SELECT name, hash, latest_committer_date FROM dolt_branches ORDER BY name"
-          ) as Array<{ name: string; hash: string; latest_committer_date: string }>;
-          const active = store.queryOne("SELECT active_branch() as b") as { b: string } | undefined;
+            "SELECT name, hash, is_current FROM dolt_branches ORDER BY name"
+          ) as Array<{ name: string; hash: string; is_current: number }>;
           const lines = ["## Branches\n"];
           for (const b of branches) {
-            const marker = b.name === active?.b ? " **(active)**" : "";
-            lines.push(`- \`${b.name}\`${marker} — ${b.hash.slice(0, 12)} (${b.latest_committer_date})`);
+            const marker = b.is_current ? " **(active)**" : "";
+            lines.push(`- \`${b.name}\`${marker} — ${b.hash.slice(0, 12)}`);
           }
           return trackResponse("ctx_docs_branch", {
             content: [{ type: "text" as const, text: lines.join("\n") }],
@@ -2859,6 +2930,15 @@ server.registerTool(
           store.queryOne(`SELECT dolt_merge('${name.replace(/'/g, "''")}')`);
           return trackResponse("ctx_docs_branch", {
             content: [{ type: "text" as const, text: `Merged branch: ${name}` }],
+          });
+        }
+        case "delete": {
+          if (!name) return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: "Error: name required for delete" }], isError: true,
+          });
+          store.queryOne(`SELECT dolt_branch('-d', '${name.replace(/'/g, "''")}')`);
+          return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: `Deleted branch: ${name}` }],
           });
         }
       }
