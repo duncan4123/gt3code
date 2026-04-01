@@ -117,7 +117,18 @@ const makeWithDatabase = (
       const db = openDatabase();
       yield* Scope.addFinalizer(
         scope,
-        Effect.sync(() => db.close()),
+        Effect.sync(() => {
+          // PASSIVE checkpoint before close to avoid triggering doltlite GC
+          // compaction. better-sqlite3's close() runs wal_checkpoint(TRUNCATE)
+          // which corrupts the chunk store if the process is killed mid-compaction.
+          // See: /data/projects/doltlite/docs/pipeline.sqlite (failures table)
+          try {
+            db.pragma("wal_checkpoint(PASSIVE)");
+          } catch {
+            /* best-effort */
+          }
+          db.close();
+        }),
       );
 
       const prepareCache = yield* Cache.make({
