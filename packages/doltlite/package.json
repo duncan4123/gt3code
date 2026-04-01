@@ -1,0 +1,15 @@
+{
+  "name": "doltlite",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0"
+  },
+  "scripts": {
+    "patch": "node ../apps/server/scripts/patch-doltlite.mjs"
+  }
+}
