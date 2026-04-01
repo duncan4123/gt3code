@@ -22,9 +22,14 @@ const repoRoot = resolve(scriptDir, "..");
 
 // ── 1. Locate libdoltlite.a ──────────────────────────────────────────────────
 
-const doltliteBuildDir = process.env.DOLTLITE_BUILD_DIR ?? "/data/projects/doltlite/build";
-const libPath = join(doltliteBuildDir, "libdoltlite.a");
-const headerPath = join(doltliteBuildDir, "sqlite3.h");
+const doltliteRoot = process.env.DOLTLITE_BUILD_DIR ?? "/data/projects/doltlite";
+// libdoltlite.a lives in the project root; sqlite3.h in build/ after configure.
+const libPath = existsSync(join(doltliteRoot, "libdoltlite.a"))
+  ? join(doltliteRoot, "libdoltlite.a")
+  : join(doltliteRoot, "build", "libdoltlite.a");
+const headerPath = existsSync(join(doltliteRoot, "build", "sqlite3.h"))
+  ? join(doltliteRoot, "build", "sqlite3.h")
+  : join(doltliteRoot, "sqlite3.h");
 
 if (!existsSync(libPath)) {
   console.log(`[patch-doltlite] libdoltlite.a not found at ${libPath} — skipping.`);
