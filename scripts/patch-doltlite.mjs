@@ -12,7 +12,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, writeFileSync, readdirSync, mkdirSync } from "node:fs";
+import { existsSync, writeFileSync, readdirSync, mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -110,24 +110,40 @@ const depsDir = join(pkgDir, "deps");
 if (!existsSync(bindingGyp) || !existsSync(srcDir)) {
   console.log("[patch-doltlite] Source files missing (prebuilt install). Reinstalling from source...");
   const parentDir = join(pkgDir, "..");
+
+  // Nuke existing prebuilt install and reinstall with --ignore-scripts.
+  // --ignore-scripts prevents prebuild-install from running, so npm
+  // keeps the full source tree (binding.gyp, src/, deps/).
   try {
-    execSync(`"${process.execPath}" -e "require('child_process').execSync('npm install better-sqlite3 --build-from-source --ignore-scripts', {cwd: '${parentDir.replace(/'/g, "\\'")}', stdio: 'inherit'})"`, {
+    rmSync(pkgDir, { recursive: true, force: true });
+    execSync(`npm install better-sqlite3 --ignore-scripts`, {
+      cwd: parentDir,
       stdio: "inherit",
       timeout: 120_000,
     });
-  } catch {
-    // Fallback: npm pack + extract to get source files
-    console.log("[patch-doltlite] --build-from-source failed, trying npm pack...");
-    execSync(`cd "${pkgDir}" && npm pack better-sqlite3 --pack-destination /tmp && tar -xzf /tmp/better-sqlite3-*.tgz -C /tmp && cp -r /tmp/package/binding.gyp /tmp/package/src /tmp/package/deps . 2>/dev/null; rm -rf /tmp/better-sqlite3-*.tgz /tmp/package`, {
-      stdio: "inherit",
-      timeout: 60_000,
-      shell: true,
-    });
+  } catch (installErr) {
+    console.log(`[patch-doltlite] npm install failed: ${installErr.message}`);
+    // Fallback: npm pack to get the source tarball
+    console.log("[patch-doltlite] Trying npm pack to extract source...");
+    mkdirSync(pkgDir, { recursive: true });
+    try {
+      execSync(
+        `npm pack better-sqlite3 --pack-destination /tmp 2>/dev/null && ` +
+        `tar -xzf /tmp/better-sqlite3-*.tgz -C "${pkgDir}" --strip-components=1 && ` +
+        `rm -f /tmp/better-sqlite3-*.tgz`,
+        { stdio: "inherit", timeout: 60_000, shell: true },
+      );
+    } catch (packErr) {
+      console.error(`[patch-doltlite] npm pack fallback failed: ${packErr.message}`);
+    }
   }
+
+  // Re-resolve pkgDir in case it was recreated
   if (!existsSync(bindingGyp)) {
     console.error("[patch-doltlite] Still no binding.gyp after reinstall — aborting.");
     process.exit(1);
   }
+  console.log("[patch-doltlite] Source files restored.");
 }
 
 if (!existsSync(depsDir)) {
