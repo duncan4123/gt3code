@@ -3,15 +3,27 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { runMigrations } from "../Migrations.ts";
 import { ServerConfig } from "../../config.ts";
-import { layer } from "../NodeSqliteClient.ts";
 
 type RuntimeSqliteLayerConfig = {
   readonly filename: string;
 };
 
-const makeRuntimeSqliteLayer = (
+type Loader = {
+  layer: (config: RuntimeSqliteLayerConfig) => Layer.Layer<SqlClient.SqlClient>;
+};
+const defaultSqliteClientLoaders = {
+  bun: () => import("../NodeSqliteClient.ts"),
+  node: () => import("../NodeSqliteClient.ts"),
+} satisfies Record<string, () => Promise<Loader>>;
+
+const makeRuntimeSqliteLayer = Effect.fn("makeRuntimeSqliteLayer")(function* (
   config: RuntimeSqliteLayerConfig,
-): Layer.Layer<SqlClient.SqlClient> => layer(config);
+) {
+  const runtime = process.versions.bun !== undefined ? "bun" : "node";
+  const loader = defaultSqliteClientLoaders[runtime];
+  const clientModule = yield* Effect.promise<Loader>(loader);
+  return clientModule.layer(config);
+}, Layer.unwrap);
 
 const setup = Layer.effectDiscard(
   Effect.gen(function* () {

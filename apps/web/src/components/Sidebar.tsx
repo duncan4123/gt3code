@@ -139,7 +139,7 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "../rpc/serverState";
 import { useSidebarThreadSummaryById } from "../storeSelectors";
-import type { Project } from "../types";
+import type { Project, SidebarThreadSummary } from "../types";
 const THREAD_PREVIEW_LIMIT = 6;
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
@@ -509,9 +509,7 @@ function SidebarThreadRow(props: SidebarThreadRowProps) {
                   <MenuItem onClick={() => void props.handleThreadAction(thread.id, "rename")}>
                     Rename thread
                   </MenuItem>
-                  <MenuItem
-                    onClick={() => void props.handleThreadAction(thread.id, "mark-unread")}
-                  >
+                  <MenuItem onClick={() => void props.handleThreadAction(thread.id, "mark-unread")}>
                     Mark unread
                   </MenuItem>
                   <MenuSeparator />
@@ -1091,7 +1089,7 @@ export default function Sidebar() {
   }, []);
 
   const getThreadWorkspacePath = useCallback(
-    (thread: Pick<SidebarThreadSnapshot, "projectId" | "worktreePath">) =>
+    (thread: Pick<SidebarThreadSummary, "projectId" | "worktreePath">) =>
       thread.worktreePath ?? projectCwdById.get(thread.projectId) ?? null,
     [projectCwdById],
   );
