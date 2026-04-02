@@ -64,6 +64,22 @@ export function useThreadActions() {
     });
   }, []);
 
+  const restartThreadSession = useCallback(async (threadId: ThreadId) => {
+    const api = readNativeApi();
+    if (!api) return;
+    const thread = useStore.getState().threads.find((entry) => entry.id === threadId);
+    if (!thread?.session || thread.session.status === "closed") {
+      return;
+    }
+
+    await api.orchestration.dispatchCommand({
+      type: "thread.session.stop",
+      commandId: newCommandId(),
+      threadId,
+      createdAt: new Date().toISOString(),
+    });
+  }, []);
+
   const deleteThread = useCallback(
     async (threadId: ThreadId, opts: { deletedThreadIds?: ReadonlySet<ThreadId> } = {}) => {
       const api = readNativeApi();
@@ -202,6 +218,7 @@ export function useThreadActions() {
   return {
     archiveThread,
     unarchiveThread,
+    restartThreadSession,
     deleteThread,
     confirmAndDeleteThread,
   };
