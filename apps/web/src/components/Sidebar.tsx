@@ -1,7 +1,7 @@
 import {
-  ArchiveIcon,
   ArrowUpDownIcon,
   ChevronRightIcon,
+  EllipsisIcon,
   FolderIcon,
   GitPullRequestIcon,
   PlusIcon,
@@ -90,7 +90,16 @@ import {
 } from "./desktopUpdate.logic";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
-import { Menu, MenuGroup, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
+import {
+  Menu,
+  MenuGroup,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+} from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import {
   SidebarContent,
@@ -145,6 +154,14 @@ const SIDEBAR_LIST_ANIMATION_OPTIONS = {
   duration: 180,
   easing: "ease-out",
 } as const;
+type ThreadRowMenuAction =
+  | "archive"
+  | "copy-path"
+  | "copy-thread-id"
+  | "delete"
+  | "mark-unread"
+  | "rename"
+  | "restart-session";
 
 type SidebarProjectSnapshot = Project & {
   expanded: boolean;
@@ -272,6 +289,7 @@ interface SidebarThreadRowProps {
     threadId: ThreadId,
     position: { x: number; y: number },
   ) => Promise<void>;
+  handleThreadAction: (threadId: ThreadId, action: ThreadRowMenuAction) => Promise<void>;
   clearSelection: () => void;
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
   cancelRename: () => void;
@@ -297,6 +315,7 @@ function SidebarThreadRow(props: SidebarThreadRowProps) {
   const isHighlighted = isActive || isSelected;
   const isThreadRunning =
     thread.session?.status === "running" && thread.session.activeTurnId != null;
+  const canRestartThreadSession = thread.session != null && thread.session.status !== "closed";
   const threadStatus = resolveThreadStatusPill({
     thread: {
       ...thread,
@@ -308,9 +327,7 @@ function SidebarThreadRow(props: SidebarThreadRowProps) {
   const isConfirmingArchive = props.confirmingArchiveThreadId === thread.id && !isThreadRunning;
   const threadMetaClassName = isConfirmingArchive
     ? "pointer-events-none opacity-0"
-    : !isThreadRunning
-      ? "pointer-events-none transition-opacity duration-150 group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0"
-      : "pointer-events-none";
+    : "pointer-events-none transition-opacity duration-150 group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0";
 
   return (
     <SidebarMenuSubItem
@@ -460,59 +477,70 @@ function SidebarThreadRow(props: SidebarThreadRowProps) {
               >
                 Confirm
               </button>
-            ) : !isThreadRunning ? (
-              props.appSettingsConfirmThreadArchive ? (
-                <div className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity duration-150 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
-                  <button
-                    type="button"
-                    data-thread-selection-safe
-                    data-testid={`thread-archive-${thread.id}`}
-                    aria-label={`Archive ${thread.title}`}
-                    className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                    onPointerDown={(event) => {
-                      event.stopPropagation();
-                    }}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      props.setConfirmingArchiveThreadId(thread.id);
-                      requestAnimationFrame(() => {
-                        props.confirmArchiveButtonRefs.current.get(thread.id)?.focus();
-                      });
-                    }}
+            ) : (
+              <Menu>
+                <MenuTrigger
+                  render={
+                    <SidebarMenuAction
+                      showOnHover
+                      data-thread-selection-safe
+                      data-testid={`thread-actions-${thread.id}`}
+                      aria-label={`Actions for ${thread.title}`}
+                      className="text-muted-foreground hover:text-foreground"
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                      }}
+                    />
+                  }
+                >
+                  <EllipsisIcon className="size-3.5" />
+                </MenuTrigger>
+                <MenuPopup align="end" className="w-44">
+                  {canRestartThreadSession ? (
+                    <MenuItem
+                      onClick={() => void props.handleThreadAction(thread.id, "restart-session")}
+                    >
+                      Restart session
+                    </MenuItem>
+                  ) : null}
+                  <MenuItem onClick={() => void props.handleThreadAction(thread.id, "rename")}>
+                    Rename thread
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => void props.handleThreadAction(thread.id, "mark-unread")}
                   >
-                    <ArchiveIcon className="size-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <div className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity duration-150 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
-                        <button
-                          type="button"
-                          data-thread-selection-safe
-                          data-testid={`thread-archive-${thread.id}`}
-                          aria-label={`Archive ${thread.title}`}
-                          className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                          onPointerDown={(event) => {
-                            event.stopPropagation();
-                          }}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            void props.attemptArchiveThread(thread.id);
-                          }}
-                        >
-                          <ArchiveIcon className="size-3.5" />
-                        </button>
-                      </div>
-                    }
-                  />
-                  <TooltipPopup side="top">Archive</TooltipPopup>
-                </Tooltip>
-              )
-            ) : null}
+                    Mark unread
+                  </MenuItem>
+                  <MenuSeparator />
+                  <MenuItem onClick={() => void props.handleThreadAction(thread.id, "copy-path")}>
+                    Copy path
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => void props.handleThreadAction(thread.id, "copy-thread-id")}
+                  >
+                    Copy thread ID
+                  </MenuItem>
+                  {!isThreadRunning ? (
+                    <>
+                      <MenuSeparator />
+                      <MenuItem onClick={() => void props.handleThreadAction(thread.id, "archive")}>
+                        Archive thread
+                      </MenuItem>
+                    </>
+                  ) : null}
+                  <MenuSeparator />
+                  <MenuItem
+                    variant="destructive"
+                    onClick={() => void props.handleThreadAction(thread.id, "delete")}
+                  >
+                    Delete thread
+                  </MenuItem>
+                </MenuPopup>
+              </Menu>
+            )}
             <span className={threadMetaClassName}>
               {props.showThreadJumpHints && props.jumpLabel ? (
                 <span
@@ -693,7 +721,8 @@ export default function Sidebar() {
   const appSettings = useSettings();
   const { updateSettings } = useUpdateSettings();
   const { activeDraftThread, activeThread, handleNewThread } = useHandleNewThread();
-  const { archiveThread, deleteThread } = useThreadActions();
+  const { archiveThread, confirmAndDeleteThread, deleteThread, restartThreadSession } =
+    useThreadActions();
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
@@ -1055,75 +1084,136 @@ export default function Sidebar() {
       });
     },
   });
+  const beginRenameThread = useCallback((threadId: ThreadId, title: string) => {
+    setRenamingThreadId(threadId);
+    setRenamingTitle(title);
+    renamingCommittedRef.current = false;
+  }, []);
+
+  const getThreadWorkspacePath = useCallback(
+    (thread: Pick<SidebarThreadSnapshot, "projectId" | "worktreePath">) =>
+      thread.worktreePath ?? projectCwdById.get(thread.projectId) ?? null,
+    [projectCwdById],
+  );
+
+  const requestArchiveConfirmation = useCallback((threadId: ThreadId) => {
+    setConfirmingArchiveThreadId(threadId);
+    requestAnimationFrame(() => {
+      confirmArchiveButtonRefs.current.get(threadId)?.focus();
+    });
+  }, []);
+
+  const handleThreadAction = useCallback(
+    async (threadId: ThreadId, action: ThreadRowMenuAction) => {
+      const thread = sidebarThreadsById[threadId];
+      if (!thread) {
+        return;
+      }
+
+      switch (action) {
+        case "rename": {
+          beginRenameThread(threadId, thread.title);
+          return;
+        }
+        case "restart-session": {
+          if (!thread.session || thread.session.status === "closed") {
+            return;
+          }
+          try {
+            await restartThreadSession(threadId);
+            toastManager.add({
+              type: "success",
+              title: "Restart requested",
+              description: "The current session is stopping. Send the next message to start fresh.",
+            });
+          } catch (error) {
+            toastManager.add({
+              type: "error",
+              title: "Failed to restart session",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            });
+          }
+          return;
+        }
+        case "mark-unread": {
+          markThreadUnread(threadId, thread.latestTurn?.completedAt);
+          return;
+        }
+        case "copy-path": {
+          const threadWorkspacePath = getThreadWorkspacePath(thread);
+          if (!threadWorkspacePath) {
+            toastManager.add({
+              type: "error",
+              title: "Path unavailable",
+              description: "This thread does not have a workspace path to copy.",
+            });
+            return;
+          }
+          copyPathToClipboard(threadWorkspacePath, { path: threadWorkspacePath });
+          return;
+        }
+        case "copy-thread-id": {
+          copyThreadIdToClipboard(threadId, { threadId });
+          return;
+        }
+        case "archive": {
+          if (appSettings.confirmThreadArchive) {
+            requestArchiveConfirmation(threadId);
+            return;
+          }
+          await attemptArchiveThread(threadId);
+          return;
+        }
+        case "delete": {
+          await confirmAndDeleteThread(threadId);
+          return;
+        }
+      }
+    },
+    [
+      appSettings.confirmThreadArchive,
+      attemptArchiveThread,
+      beginRenameThread,
+      confirmAndDeleteThread,
+      copyPathToClipboard,
+      copyThreadIdToClipboard,
+      getThreadWorkspacePath,
+      markThreadUnread,
+      requestArchiveConfirmation,
+      restartThreadSession,
+      sidebarThreadsById,
+    ],
+  );
   const handleThreadContextMenu = useCallback(
     async (threadId: ThreadId, position: { x: number; y: number }) => {
       const api = readNativeApi();
       if (!api) return;
       const thread = sidebarThreadsById[threadId];
       if (!thread) return;
-      const threadWorkspacePath =
-        thread.worktreePath ?? projectCwdById.get(thread.projectId) ?? null;
+      const isThreadRunning =
+        thread.session?.status === "running" && thread.session.activeTurnId != null;
       const clicked = await api.contextMenu.show(
         [
+          ...(thread.session && thread.session.status !== "closed"
+            ? ([{ id: "restart-session", label: "Restart session" }] as const)
+            : []),
           { id: "rename", label: "Rename thread" },
           { id: "mark-unread", label: "Mark unread" },
           { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
+          ...(!isThreadRunning ? ([{ id: "archive", label: "Archive thread" }] as const) : []),
           { id: "delete", label: "Delete", destructive: true },
         ],
         position,
       );
 
-      if (clicked === "rename") {
-        setRenamingThreadId(threadId);
-        setRenamingTitle(thread.title);
-        renamingCommittedRef.current = false;
+      if (!clicked) {
         return;
       }
 
-      if (clicked === "mark-unread") {
-        markThreadUnread(threadId, thread.latestTurn?.completedAt);
-        return;
-      }
-      if (clicked === "copy-path") {
-        if (!threadWorkspacePath) {
-          toastManager.add({
-            type: "error",
-            title: "Path unavailable",
-            description: "This thread does not have a workspace path to copy.",
-          });
-          return;
-        }
-        copyPathToClipboard(threadWorkspacePath, { path: threadWorkspacePath });
-        return;
-      }
-      if (clicked === "copy-thread-id") {
-        copyThreadIdToClipboard(threadId, { threadId });
-        return;
-      }
-      if (clicked !== "delete") return;
-      if (appSettings.confirmThreadDelete) {
-        const confirmed = await api.dialogs.confirm(
-          [
-            `Delete thread "${thread.title}"?`,
-            "This permanently clears conversation history for this thread.",
-          ].join("\n"),
-        );
-        if (!confirmed) {
-          return;
-        }
-      }
-      await deleteThread(threadId);
+      await handleThreadAction(threadId, clicked as ThreadRowMenuAction);
     },
-    [
-      appSettings.confirmThreadDelete,
-      copyPathToClipboard,
-      copyThreadIdToClipboard,
-      deleteThread,
-      markThreadUnread,
-      projectCwdById,
-      sidebarThreadsById,
-    ],
+    [handleThreadAction, sidebarThreadsById],
   );
 
   const handleMultiSelectContextMenu = useCallback(
@@ -1736,6 +1826,7 @@ export default function Sidebar() {
                 navigateToThread={navigateToThread}
                 handleMultiSelectContextMenu={handleMultiSelectContextMenu}
                 handleThreadContextMenu={handleThreadContextMenu}
+                handleThreadAction={handleThreadAction}
                 clearSelection={clearSelection}
                 commitRename={commitRename}
                 cancelRename={cancelRename}
