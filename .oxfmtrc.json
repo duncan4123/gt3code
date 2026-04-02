@@ -1,6 +1,8 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "ignorePatterns": [
+    ".beads",
+    ".claude",
     ".plans",
     "dist",
     "dist-electron",

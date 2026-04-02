@@ -169,9 +169,7 @@ try {
       cwd: doltliteRoot,
       encoding: "utf8",
     }).trim();
-    const libMtime = new Date(
-      execSync(`stat -c %Y "${libPath}"`, { encoding: "utf8" }).trim() * 1000,
-    ).toISOString();
+    const libMtime = new Date(statSync(libPath).mtimeMs).toISOString();
     writeFileSync(
       join(pkgDir, "build", "Release", ".doltlite-version"),
       JSON.stringify({

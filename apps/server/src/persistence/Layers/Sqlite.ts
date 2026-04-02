@@ -3,11 +3,11 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { runMigrations } from "../Migrations.ts";
 import { ServerConfig } from "../../config.ts";
-import { layer as doltliteLayer } from "../DoltliteClient.ts";
+import { layer } from "../NodeSqliteClient.ts";
 
 const makeRuntimeSqliteLayer = (config: {
   readonly filename: string;
-}): Layer.Layer<SqlClient.SqlClient> => doltliteLayer({ ...config, wal: true });
+}): Layer.Layer<SqlClient.SqlClient> => layer(config);
 
 const setup = Layer.effectDiscard(
   Effect.gen(function* () {

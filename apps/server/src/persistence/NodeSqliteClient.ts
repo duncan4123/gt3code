@@ -4,7 +4,7 @@
  *
  * @module SqliteClient
  */
-import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { DatabaseSync, type StatementSync } from "doltlite";
 
 import * as Cache from "effect/Cache";
 import * as Config from "effect/Config";

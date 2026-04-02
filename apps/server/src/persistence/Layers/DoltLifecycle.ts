@@ -6,56 +6,85 @@
  * dolt_commit snapshots current state into the prolly tree.
  * dolt_gc compacts unreachable chunks to prevent unbounded file growth.
  */
-import { Effect, Layer, Schedule } from "effect";
+import { Data, Effect, Schedule } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import { DatabaseSync } from "doltlite";
+
+import { ServerConfig } from "../../config.ts";
 
 const COMMIT_INTERVAL_MS = 30_000; // every 30s
 const GC_INTERVAL_MS = 300_000; // every 5 min
+const formatCommitMessage = () => `${new Date().toISOString().slice(0, 19)} auto`;
 
-const doltCommit = Effect.fn("doltCommit")(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  yield* sql.unsafe(`SELECT dolt_add('-A')`);
-  yield* sql.unsafe(
-    `SELECT dolt_commit('-m', '${new Date().toISOString().slice(0, 19)} auto')`,
-  );
-});
+class DoltLifecycleError extends Data.TaggedError("DoltLifecycleError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
-const doltGc = Effect.fn("doltGc")(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  yield* sql.unsafe(`SELECT dolt_gc()`);
-});
-
-const makeDoltLifecycle = Effect.gen(function* () {
+export const startDoltLifecycle = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   // Check if doltlite is active — skip entirely for plain SQLite.
-  const isDoltlite = yield* sql
-    .unsafe("SELECT doltlite_engine() as e")
-    .pipe(
-      Effect.as(true),
-      Effect.catchTag("SqlError", () => Effect.succeed(false)),
-    );
+  const isDoltlite = yield* sql.unsafe("SELECT doltlite_engine() as e").pipe(
+    Effect.as(true),
+    Effect.catchTag("SqlError", () => Effect.succeed(false)),
+  );
 
   if (!isDoltlite) return;
 
-  // Periodic dolt_commit
-  yield* doltCommit().pipe(
-    Effect.catchTag("SqlError", (e: SqlError) =>
-      Effect.logDebug(`dolt_commit skipped: ${e.message}`),
-    ),
-    Effect.repeat(Schedule.spaced(COMMIT_INTERVAL_MS)),
-    Effect.fork,
-  );
+  const { dbPath } = yield* ServerConfig;
 
-  // Periodic dolt_gc
-  yield* doltGc().pipe(
-    Effect.catchTag("SqlError", (e: SqlError) =>
-      Effect.logDebug(`dolt_gc skipped: ${e.message}`),
-    ),
-    Effect.repeat(Schedule.spaced(GC_INTERVAL_MS)),
-    Effect.fork,
+  const makeStatementRunner =
+    (db: DatabaseSync) =>
+    (sqlText: string, params: ReadonlyArray<unknown> = []) =>
+      Effect.try({
+        try: () => {
+          const statement = db.prepare(sqlText);
+          if (statement.columns().length > 0) {
+            statement.get(...(params as any));
+          } else {
+            statement.run(...(params as any));
+          }
+        },
+        catch: (cause) =>
+          new DoltLifecycleError({
+            message: `Failed to execute Dolt lifecycle statement: ${sqlText}`,
+            cause,
+          }),
+      });
+
+  return yield* Effect.acquireUseRelease(
+    Effect.sync(() => new DatabaseSync(dbPath)),
+    (db) =>
+      Effect.gen(function* () {
+        const exec = makeStatementRunner(db);
+
+        // Periodic dolt_commit (dedicated connection avoids blocking user queries)
+        yield* Effect.forkScoped(
+          Effect.gen(function* () {
+            yield* exec("SELECT dolt_add('-A')");
+            yield* exec("SELECT dolt_commit('-m', ?)", [formatCommitMessage()]);
+          }).pipe(
+            Effect.catchTag("DoltLifecycleError", (error) =>
+              Effect.logDebug(`dolt_commit skipped: ${error.message}`),
+            ),
+            Effect.repeat(Schedule.spaced(COMMIT_INTERVAL_MS)),
+          ),
+        );
+
+        // Periodic dolt_gc
+        yield* Effect.forkScoped(
+          exec("SELECT dolt_gc()").pipe(
+            Effect.catchTag("DoltLifecycleError", (error) =>
+              Effect.logDebug(`dolt_gc skipped: ${error.message}`),
+            ),
+            Effect.repeat(Schedule.spaced(GC_INTERVAL_MS)),
+          ),
+        );
+
+        yield* Effect.logInfo("dolt lifecycle started (commit: 30s, gc: 5min)");
+        return yield* Effect.never;
+      }),
+    (db) => Effect.sync(() => db.close()),
   );
 });
-
-export const DoltLifecycleLive = Layer.effectDiscard(makeDoltLifecycle);

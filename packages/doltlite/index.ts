@@ -49,13 +49,19 @@ export class StatementSync {
 export class DatabaseSync {
   #db: any;
 
-  constructor(path: string, options?: { readonly?: boolean; allowExtension?: boolean }) {
+  constructor(
+    path: string,
+    options?: { readOnly?: boolean; readonly?: boolean; allowExtension?: boolean },
+  ) {
+    const isReadOnly = options?.readOnly ?? options?.readonly ?? false;
     this.#db = new BetterSqlite3(path, {
-      readonly: options?.readonly ?? false,
+      readonly: isReadOnly,
       timeout: 5000,
     });
-    // Doltlite manages its own WAL via pager shim — skip explicit WAL pragma.
-    // PASSIVE checkpoint on close to avoid GC compaction corruption.
+    if (path !== ":memory:" && !isReadOnly) {
+      this.#db.pragma("journal_mode = WAL");
+      this.#db.pragma("synchronous = NORMAL");
+    }
   }
 
   prepare(sql: string): StatementSync {
@@ -73,7 +79,9 @@ export class DatabaseSync {
   close(): void {
     try {
       this.#db.pragma("wal_checkpoint(PASSIVE)");
-    } catch { /* best-effort */ }
+    } catch {
+      /* best-effort */
+    }
     this.#db.close();
   }
 }
