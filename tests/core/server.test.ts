@@ -12,7 +12,7 @@
  */
 
 import { strict as assert } from "node:assert";
-import { spawnSync, execSync } from "node:child_process";
+import { spawn, spawnSync, execSync } from "node:child_process";
 import { writeFileSync, mkdtempSync, mkdirSync, rmSync, readFileSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -29,6 +29,54 @@ import { ROUTING_BLOCK } from "../../hooks/routing-block.mjs";
 // ─── Shared setup ───────────────────────────────────────────────────────────
 const runtimes = detectRuntimes();
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+async function collectJsonRpcResponses(
+  proc: ReturnType<typeof spawn>,
+  expectedIds: number[],
+  timeoutMs: number,
+): Promise<Map<number, any>> {
+  return await new Promise((resolve, reject) => {
+    const seen = new Map<number, any>();
+    let buffer = "";
+
+    const cleanup = (done: () => void) => {
+      clearTimeout(timer);
+      proc.stdout?.off("data", onData);
+      proc.off("exit", onExit);
+      done();
+    };
+
+    const onData = (chunk: Buffer) => {
+      buffer += chunk.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const msg = JSON.parse(line);
+          if (typeof msg?.id === "number") seen.set(msg.id, msg);
+          if (expectedIds.every((id) => seen.has(id))) {
+            cleanup(() => resolve(seen));
+            return;
+          }
+        } catch {
+          // ignore non-JSON stdout
+        }
+      }
+    };
+
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      cleanup(() => reject(new Error(`MCP server exited early (${code ?? "null"}${signal ? `, ${signal}` : ""})`)));
+    };
+
+    const timer = setTimeout(() => {
+      cleanup(() => reject(new Error(`Timed out waiting for JSON-RPC ids: ${expectedIds.join(", ")}`)));
+    }, timeoutMs);
+
+    proc.stdout?.on("data", onData);
+    proc.on("exit", onExit);
+  });
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. Non-zero Exit Code Classification (soft-fail)
@@ -1113,5 +1161,80 @@ describe("Session stats reset on /clear", () => {
     );
     expect(routingBlockSrc).toContain("After /clear");
     expect(routingBlockSrc).toContain("reset: true");
+  });
+});
+
+describe("MCP server resilience", () => {
+  test("search error returns MCP error and server stays alive for the next request", async () => {
+    const projectDir = mkdtempSync(join(tmpdir(), "cm-mcp-resilience-"));
+    const repoRoot = resolve(__dirname, "../..");
+    const proc = spawn(process.execPath, ["--import", "tsx", resolve(repoRoot, "src/server.ts")], {
+      cwd: repoRoot,
+      env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    try {
+      proc.stdin!.write(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "vitest", version: "1.0" },
+        },
+      }) + "\n");
+      proc.stdin!.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
+      proc.stdin!.write(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: {
+          name: "ctx_index",
+          arguments: { content: "# Alpha\n\nold content", source: "dup-test" },
+        },
+      }) + "\n");
+      proc.stdin!.write(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: {
+          name: "ctx_index",
+          arguments: { content: "# Beta\n\nnew content", source: "dup-test" },
+        },
+      }) + "\n");
+      proc.stdin!.write(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/call",
+        params: {
+          name: "ctx_search",
+          arguments: { queries: ["new content"] },
+        },
+      }) + "\n");
+      proc.stdin!.write(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 5,
+        method: "tools/call",
+        params: {
+          name: "ctx_stats",
+          arguments: {},
+        },
+      }) + "\n");
+
+      const responses = await collectJsonRpcResponses(proc, [1, 2, 3, 4, 5], 10_000);
+      const search = responses.get(4);
+      const stats = responses.get(5);
+
+      expect(search?.result?.isError).toBe(true);
+      expect(search?.result?.content?.[0]?.text).toContain("Search error:");
+      expect(stats?.result?.isError).not.toBe(true);
+      expect(stats?.result?.content?.[0]?.text).toContain("Session Report");
+      expect(proc.exitCode).toBeNull();
+    } finally {
+      proc.kill("SIGTERM");
+      rmSync(projectDir, { recursive: true, force: true });
+    }
   });
 });

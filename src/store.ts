@@ -459,10 +459,10 @@ export class ContentStore {
       "INSERT INTO sources (label, chunk_count, code_chunk_count, indexed_at) VALUES (?, ?, ?, datetime('now'))",
     );
     this.#stmtInsertChunk = this.#db.prepare(
-      "INSERT INTO chunks (title, content, source_id, content_type) VALUES (?, ?, ?, ?)",
+      "INSERT INTO chunks (rowid, title, content, source_id, content_type) VALUES (?, ?, ?, ?, ?)",
     );
     this.#stmtInsertChunkTrigram = this.#db.prepare(
-      "INSERT INTO chunks_trigram (title, content, source_id, content_type) VALUES (?, ?, ?, ?)",
+      "INSERT INTO chunks_trigram (rowid, title, content, source_id, content_type) VALUES (?, ?, ?, ?, ?)",
     );
     this.#stmtInsertVocab = this.#db.prepare(
       "INSERT OR IGNORE INTO vocabulary (word) VALUES (?)",
@@ -791,10 +791,13 @@ export class ContentStore {
       const info = this.#stmtInsertSource.run(label, chunks.length, codeChunks);
       const sourceId = Number(info.lastInsertRowid);
 
-      for (const chunk of chunks) {
+      for (const [index, chunk] of chunks.entries()) {
         const ct = chunk.hasCode ? "code" : "prose";
-        this.#stmtInsertChunk.run(chunk.title, chunk.content, sourceId, ct);
-        this.#stmtInsertChunkTrigram.run(chunk.title, chunk.content, sourceId, ct);
+        // Use explicit rowids so FTS row references never get reused across
+        // delete-and-reindex cycles for the same source label.
+        const rowid = sourceId * 1_000_000 + index + 1;
+        this.#stmtInsertChunk.run(rowid, chunk.title, chunk.content, sourceId, ct);
+        this.#stmtInsertChunkTrigram.run(rowid, chunk.title, chunk.content, sourceId, ct);
       }
 
       return sourceId;

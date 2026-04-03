@@ -25,6 +25,20 @@ function createStore(): ContentStore {
   return new ContentStore(path);
 }
 
+function hasDoltliteVersioning(): boolean {
+  const store = createStore();
+  try {
+    const engine = store.queryOne("SELECT doltlite_engine() as e") as { e: string } | undefined;
+    return engine?.e === "prolly";
+  } catch {
+    return false;
+  } finally {
+    store.close();
+  }
+}
+
+const DOLTLITE_ENABLED = hasDoltliteVersioning();
+
 describe("Schema & Lifecycle", () => {
   test("creates store with empty stats", () => {
     const store = createStore();
@@ -40,6 +54,295 @@ describe("Schema & Lifecycle", () => {
     store.close();
     // second close should not throw
     assert.doesNotThrow(() => store.close());
+  });
+
+  test("creates draft convoy/bead tables", () => {
+    const store = createStore();
+    const tables = store.queryAll(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('issues', 'dependencies', 'labels', 'comments', 'events') ORDER BY name",
+    ) as Array<{ name: string }>;
+    assert.deepEqual(
+      tables.map((t) => t.name),
+      ["comments", "dependencies", "events", "issues", "labels"],
+    );
+    store.close();
+  });
+});
+
+describe("Draft convoy/bead schema", () => {
+  test("stores convoy, bead, labels, and dependency hierarchy", () => {
+    const store = createStore();
+    const convoyId = "convoy-1";
+    const beadId = "bead-1";
+    const now = "2026-04-03T00:00:00.000Z";
+
+    store.exec(
+      `INSERT INTO issues (id, title, description, issue_type, status, rig, created_at, updated_at, metadata)
+       VALUES ('${convoyId}', 'Integrate context mode', 'Top-level rollout', 'convoy', 'open', 't3code', '${now}', '${now}', '{"phase":"draft"}')`,
+    );
+    store.exec(`INSERT INTO labels (issue_id, label) VALUES ('${convoyId}', 'draft')`);
+
+    store.exec(
+      `INSERT INTO issues (id, title, description, issue_type, status, rig, priority, assignee, created_at, updated_at, metadata)
+       VALUES ('${beadId}', 'Wire doltlite schema', 'Add issue tables', 'task', 'open', 't3code', 1, 'codex', '${now}', '${now}', '{}')`,
+    );
+    store.exec(`INSERT INTO labels (issue_id, label) VALUES ('${beadId}', 'draft')`);
+    store.exec(
+      `INSERT INTO dependencies (issue_id, depends_on_id, type, created_at, created_by)
+       VALUES ('${beadId}', '${convoyId}', 'child-of', '${now}', 'test')`,
+    );
+
+    const convoy = store.queryOne(
+      "SELECT title, issue_type, rig FROM issues WHERE id = ?",
+      convoyId,
+    ) as { title: string; issue_type: string; rig: string } | undefined;
+    assert.equal(convoy?.title, "Integrate context mode");
+    assert.equal(convoy?.issue_type, "convoy");
+    assert.equal(convoy?.rig, "t3code");
+
+    const bead = store.queryOne(
+      "SELECT title, issue_type, priority, assignee FROM issues WHERE id = ?",
+      beadId,
+    ) as { title: string; issue_type: string; priority: number; assignee: string } | undefined;
+    assert.equal(bead?.title, "Wire doltlite schema");
+    assert.equal(bead?.issue_type, "task");
+    assert.equal(bead?.priority, 1);
+    assert.equal(bead?.assignee, "codex");
+
+    const childLink = store.queryOne(
+      "SELECT type, created_by FROM dependencies WHERE issue_id = ? AND depends_on_id = ?",
+      beadId,
+      convoyId,
+    ) as { type: string; created_by: string } | undefined;
+    assert.equal(childLink?.type, "child-of");
+    assert.equal(childLink?.created_by, "test");
+
+    const draftLabels = store.queryAll(
+      "SELECT issue_id FROM labels WHERE label = 'draft' ORDER BY issue_id",
+    ) as Array<{ issue_id: string }>;
+    assert.deepEqual(draftLabels.map((r) => r.issue_id), [beadId, convoyId]);
+    store.close();
+  });
+
+  test("convoy list query returns only draft convoys with ordered beads and blocker counts", () => {
+    const store = createStore();
+    const now = "2026-04-03T00:00:00.000Z";
+    const convoyId = "convoy-list-1";
+    const firstBead = "bead-list-1";
+    const secondBead = "bead-list-2";
+
+    store.exec(
+      `INSERT INTO issues (id, title, description, issue_type, status, rig, created_at, updated_at, metadata)
+       VALUES ('${convoyId}', 'GC integration', 'Draft convoy', 'convoy', 'open', 'gascity', '${now}', '${now}', '{}')`,
+    );
+    store.exec(`INSERT INTO labels (issue_id, label) VALUES ('${convoyId}', 'draft')`);
+
+    store.exec(
+      `INSERT INTO issues (id, title, description, issue_type, status, rig, priority, assignee, created_at, updated_at, metadata)
+       VALUES ('${firstBead}', 'Build bridge UI', 'UI work', 'task', 'open', 't3code', 2, 'alice', '${now}', '${now}', '{}')`,
+    );
+    store.exec(
+      `INSERT INTO issues (id, title, description, issue_type, status, rig, priority, assignee, created_at, updated_at, metadata)
+       VALUES ('${secondBead}', 'Add sync endpoint', 'API work', 'gate', 'open', 'gascity', 1, '', '${now}', '${now}', '{}')`,
+    );
+    store.exec(
+      `INSERT INTO dependencies (issue_id, depends_on_id, type, created_at, created_by)
+       VALUES ('${firstBead}', '${convoyId}', 'child-of', '${now}', 'test')`,
+    );
+    store.exec(
+      `INSERT INTO dependencies (issue_id, depends_on_id, type, created_at, created_by)
+       VALUES ('${secondBead}', '${convoyId}', 'child-of', '${now}', 'test')`,
+    );
+    store.exec(
+      `INSERT INTO dependencies (issue_id, depends_on_id, type, created_at, created_by)
+       VALUES ('${firstBead}', '${secondBead}', 'blocks', '${now}', 'test')`,
+    );
+
+    const convoys = store.queryAll(
+      `SELECT id, title, description, rig, status, created_at FROM issues
+       WHERE issue_type = 'convoy' AND id IN (SELECT issue_id FROM labels WHERE label = 'draft')
+       ORDER BY created_at DESC`,
+    ) as Array<{ id: string; title: string }>;
+    assert.equal(convoys.length, 1);
+    assert.equal(convoys[0].id, convoyId);
+
+    const beads = store.queryAll(
+      `SELECT i.id, i.title, i.issue_type, i.rig, i.priority, i.assignee
+       FROM issues i
+       JOIN dependencies d ON d.issue_id = i.id AND d.depends_on_id = ? AND d.type = 'child-of'
+       WHERE i.issue_type != 'convoy'
+       ORDER BY i.priority, i.created_at`,
+      convoyId,
+    ) as Array<{ id: string; title: string; priority: number; issue_type: string; rig: string; assignee: string }>;
+
+    assert.deepEqual(
+      beads.map((b) => ({ id: b.id, title: b.title, priority: b.priority })),
+      [
+        { id: secondBead, title: "Add sync endpoint", priority: 1 },
+        { id: firstBead, title: "Build bridge UI", priority: 2 },
+      ],
+    );
+
+    const blockerCounts = beads.map((b) => store.queryOne(
+      "SELECT COUNT(*) as n FROM dependencies WHERE issue_id = ? AND type = 'blocks'",
+      b.id,
+    ) as { n: number });
+    assert.deepEqual(blockerCounts.map((r) => r.n), [0, 1]);
+    assert.equal(beads[0].issue_type, "gate");
+    assert.equal(beads[0].rig, "gascity");
+    assert.equal(beads[1].assignee, "alice");
+    store.close();
+  });
+});
+
+describe.runIf(DOLTLITE_ENABLED)("Doltlite version control", () => {
+  test("commits indexed content and records clean history", () => {
+    const store = createStore();
+    try {
+      const engine = store.queryOne("SELECT doltlite_engine() as e") as { e: string } | undefined;
+      assert.equal(engine?.e, "prolly");
+
+      store.index({
+        content: "# Alpha\n\nInitial snapshot content.",
+        source: "alpha-doc",
+      });
+
+      const dirtyBeforeCommit = store.queryAll(
+        "SELECT table_name, staged, status FROM dolt_status",
+      ) as Array<{ table_name: string; staged: number | boolean; status: string }>;
+      assert.ok(dirtyBeforeCommit.length > 0, "Expected uncommitted changes before first commit");
+
+      store.exec(`SELECT dolt_add('-A')`);
+      const firstCommit = store.queryOne(
+        "SELECT dolt_commit('-m', ?) as hash",
+        "initial snapshot",
+      ) as { hash: string } | undefined;
+      assert.match(firstCommit?.hash ?? "", /^[0-9a-f]{40}$/);
+
+      const cleanStatus = store.queryAll(
+        "SELECT table_name, staged, status FROM dolt_status",
+      ) as Array<{ table_name: string; staged: number | boolean; status: string }>;
+      assert.equal(cleanStatus.length, 0, "Working set should be clean after commit");
+
+      const firstLog = store.queryAll(
+        "SELECT commit_hash, message FROM dolt_log LIMIT 1",
+      ) as Array<{ commit_hash: string; message: string }>;
+      assert.equal(firstLog[0]?.message, "initial snapshot");
+      assert.equal(firstLog[0]?.commit_hash, firstCommit?.hash);
+
+      store.index({
+        content: "# Beta\n\nFollow-up snapshot content.",
+        source: "beta-doc",
+      });
+
+      const dirtyAfterSecondIndex = store.queryAll(
+        "SELECT table_name, staged, status FROM dolt_status",
+      ) as Array<{ table_name: string; staged: number | boolean; status: string }>;
+      assert.ok(dirtyAfterSecondIndex.length > 0, "Expected changes after second index");
+
+      store.exec(`SELECT dolt_add('-A')`);
+      const secondCommit = store.queryOne(
+        "SELECT dolt_commit('-m', ?) as hash",
+        "second snapshot",
+      ) as { hash: string } | undefined;
+      assert.match(secondCommit?.hash ?? "", /^[0-9a-f]{40}$/);
+      assert.notEqual(secondCommit?.hash, firstCommit?.hash);
+
+      const log = store.queryAll(
+        "SELECT commit_hash, message FROM dolt_log LIMIT 2",
+      ) as Array<{ commit_hash: string; message: string }>;
+      assert.equal(log.length, 2);
+      assert.equal(log[0]?.message, "second snapshot");
+      assert.equal(log[1]?.message, "initial snapshot");
+    } finally {
+      store.close();
+    }
+  });
+
+  test("supports branch checkout isolation and tags for knowledge base state", () => {
+    const store = createStore();
+    try {
+      store.index({
+        content: "# Main\n\nBase branch content.",
+        source: "main-doc",
+      });
+      store.exec(`SELECT dolt_add('-A')`);
+      const baseCommit = store.queryOne(
+        "SELECT dolt_commit('-m', ?) as hash",
+        "base snapshot",
+      ) as { hash: string } | undefined;
+      assert.match(baseCommit?.hash ?? "", /^[0-9a-f]{40}$/);
+
+      const branchResult = store.queryOne(
+        "SELECT dolt_branch('experiment') as r",
+      ) as { r: number } | undefined;
+      assert.equal(branchResult?.r, 0);
+
+      const checkoutExperiment = store.queryOne(
+        "SELECT dolt_checkout('experiment') as r",
+      ) as { r: number } | undefined;
+      assert.equal(checkoutExperiment?.r, 0);
+
+      const currentExperiment = store.queryAll(
+        "SELECT name, is_current FROM dolt_branches WHERE is_current = 1",
+      ) as Array<{ name: string; is_current: number }>;
+      assert.equal(currentExperiment[0]?.name, "experiment");
+
+      store.index({
+        content: "# Experiment\n\nBranch-only content.",
+        source: "experiment-doc",
+      });
+      store.exec(`SELECT dolt_add('-A')`);
+      const experimentCommit = store.queryOne(
+        "SELECT dolt_commit('-m', ?) as hash",
+        "experiment snapshot",
+      ) as { hash: string } | undefined;
+      assert.match(experimentCommit?.hash ?? "", /^[0-9a-f]{40}$/);
+
+      const experimentCount = store.queryOne(
+        "SELECT COUNT(*) as n FROM sources WHERE label = ?",
+        "experiment-doc",
+      ) as { n: number } | undefined;
+      assert.equal(experimentCount?.n, 1);
+
+      const tagResult = store.queryOne(
+        "SELECT dolt_tag('experiment-v1') as r",
+      ) as { r: number } | undefined;
+      assert.equal(tagResult?.r, 0);
+
+      const tags = store.queryAll(
+        "SELECT name, hash, commit_message FROM dolt_tags ORDER BY name",
+      ) as Array<{ name: string; hash: string; commit_message: string }>;
+      const experimentTag = tags.find((tag) => tag.name === "experiment-v1");
+      assert.equal(experimentTag?.commit_message, "experiment snapshot");
+      assert.equal(experimentTag?.hash, experimentCommit?.hash);
+
+      const checkoutMain = store.queryOne(
+        "SELECT dolt_checkout('main') as r",
+      ) as { r: number } | undefined;
+      assert.equal(checkoutMain?.r, 0);
+
+      const currentMain = store.queryAll(
+        "SELECT name, is_current FROM dolt_branches WHERE is_current = 1",
+      ) as Array<{ name: string; is_current: number }>;
+      assert.equal(currentMain[0]?.name, "main");
+
+      const mainCount = store.queryOne(
+        "SELECT COUNT(*) as n FROM sources WHERE label = ?",
+        "experiment-doc",
+      ) as { n: number } | undefined;
+      assert.equal(mainCount?.n, 0, "Branch-only source should not leak back to main");
+
+      const branches = store.queryAll(
+        "SELECT name FROM dolt_branches ORDER BY name",
+      ) as Array<{ name: string }>;
+      assert.deepEqual(
+        branches.map((branch) => branch.name),
+        ["experiment", "main"],
+      );
+    } finally {
+      store.close();
+    }
   });
 });
 
