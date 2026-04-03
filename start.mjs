@@ -98,7 +98,8 @@ if (cacheMatch) {
 }
 
 // Ensure native dependencies + ABI compatibility (shared with hooks via ensure-deps.mjs)
-import "./hooks/ensure-deps.mjs";
+// MUST be dynamic import — static imports hoist above the prebuilt probe.
+await import("./hooks/ensure-deps.mjs");
 
 // Also install pure-JS deps used by server
 for (const pkg of ["turndown", "turndown-plugin-gfm", "@mixmark-io/domino"]) {
