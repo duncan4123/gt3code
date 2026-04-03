@@ -30,20 +30,34 @@ if (process.env.OPENCLAW_STATE_DIR) {
 }
 
 // ── 2. Install prebuilt better-sqlite3 linked against doltlite ──────
-// Ship prebuilt .node files in prebuilds/<platform>-<arch>/ so doltlite
-// is always available — no runtime patching or node-gyp required.
+// Ship prebuilt .node files in prebuilds/<platform>-<arch>/node.abi<N>.node
+// so doltlite is always available — no runtime patching or node-gyp required.
+// ABI must match the Node.js version that loads the addon (which may differ
+// from the Node.js running this postinstall script — e.g. Claude Code uses
+// /usr/bin/node while dev shells use nvm).
 const prebuildDir = join(pkgRoot, "prebuilds", `${process.platform}-${process.arch}`);
-const prebuildSrc = join(prebuildDir, "better_sqlite3.node");
-if (existsSync(prebuildSrc)) {
+const abi = process.versions.modules;
+const abiMatch = join(prebuildDir, `node.abi${abi}.node`);
+if (existsSync(abiMatch)) {
   const targetDir = join(pkgRoot, "node_modules", "better-sqlite3", "build", "Release");
   mkdirSync(targetDir, { recursive: true });
   const { copyFileSync: cpFile } = await import("node:fs");
-  cpFile(prebuildSrc, join(targetDir, "better_sqlite3.node"));
-  console.log(`[postinstall] Installed doltlite prebuilt for ${process.platform}-${process.arch}`);
+  cpFile(abiMatch, join(targetDir, "better_sqlite3.node"));
+  console.log(`[postinstall] Installed doltlite prebuilt for ${process.platform}-${process.arch} ABI ${abi}`);
 } else {
-  console.error(`[postinstall] FATAL: No doltlite prebuilt for ${process.platform}-${process.arch}`);
-  console.error(`[postinstall] Expected: ${prebuildSrc}`);
-  process.exit(1);
+  // No exact ABI match — list available prebuilds for diagnostics
+  const { readdirSync } = await import("node:fs");
+  let available = [];
+  try { available = readdirSync(prebuildDir).filter(f => f.startsWith("node.abi")); } catch {}
+  console.error(`[postinstall] No doltlite prebuilt for ABI ${abi} (${process.platform}-${process.arch})`);
+  console.error(`[postinstall] Available: ${available.join(", ") || "none"}`);
+  console.error(`[postinstall] Falling back to patch-doltlite.mjs...`);
+  try {
+    execSync(`"${process.execPath}" "${join(pkgRoot, "scripts", "patch-doltlite.mjs")}"`, { stdio: "inherit", timeout: 120000 });
+  } catch {
+    console.error(`[postinstall] FATAL: No prebuilt and patch-doltlite failed. doltlite is required.`);
+    process.exit(1);
+  }
 }
 
 // ── 3. Windows global install — nvm4w junction fix ───────────────────
