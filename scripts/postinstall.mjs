@@ -29,10 +29,22 @@ if (process.env.OPENCLAW_STATE_DIR) {
   console.log("\n  OpenClaw detected. Run: npm run install:openclaw\n");
 }
 
-// ── 2. Doltlite patch (opt-in — skips silently if libdoltlite.a not found) ──
-try {
-  execSync(`node "${join(pkgRoot, "scripts", "patch-doltlite.mjs")}"`, { stdio: "inherit" });
-} catch { /* best effort */ }
+// ── 2. Install prebuilt better-sqlite3 linked against doltlite ──────
+// Ship prebuilt .node files in prebuilds/<platform>-<arch>/ so doltlite
+// is always available — no runtime patching or node-gyp required.
+const prebuildDir = join(pkgRoot, "prebuilds", `${process.platform}-${process.arch}`);
+const prebuildSrc = join(prebuildDir, "better_sqlite3.node");
+if (existsSync(prebuildSrc)) {
+  const targetDir = join(pkgRoot, "node_modules", "better-sqlite3", "build", "Release");
+  mkdirSync(targetDir, { recursive: true });
+  const { copyFileSync: cpFile } = await import("node:fs");
+  cpFile(prebuildSrc, join(targetDir, "better_sqlite3.node"));
+  console.log(`[postinstall] Installed doltlite prebuilt for ${process.platform}-${process.arch}`);
+} else {
+  console.error(`[postinstall] FATAL: No doltlite prebuilt for ${process.platform}-${process.arch}`);
+  console.error(`[postinstall] Expected: ${prebuildSrc}`);
+  process.exit(1);
+}
 
 // ── 3. Windows global install — nvm4w junction fix ───────────────────
 // npm's .cmd shim resolves modules via %~dp0\node_modules\<pkg>\...

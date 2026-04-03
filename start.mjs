@@ -75,6 +75,30 @@ if (cacheMatch) {
 // Ensure native dependencies + ABI compatibility (shared with hooks via ensure-deps.mjs)
 // ensure-deps handles better-sqlite3 install + ABI cache/rebuild automatically (#148, #203)
 import "./hooks/ensure-deps.mjs";
+
+// Probe native addon — if prebuilt is missing or has ABI mismatch, try to install it.
+// Plain SQLite is NOT acceptable — doltlite is required.
+try {
+  const { createRequire } = await import("node:module");
+  const require = createRequire(resolve(__dirname, "package.json"));
+  require("better-sqlite3");
+} catch (e) {
+  // Try installing prebuilt from prebuilds/ directory
+  const prebuildSrc = resolve(__dirname, "prebuilds", `${process.platform}-${process.arch}`, "better_sqlite3.node");
+  const targetDir = resolve(__dirname, "node_modules", "better-sqlite3", "build", "Release");
+  if (existsSync(prebuildSrc)) {
+    const { mkdirSync: mk, copyFileSync: cp } = await import("node:fs");
+    mk(targetDir, { recursive: true });
+    cp(prebuildSrc, resolve(targetDir, "better_sqlite3.node"));
+    console.error("[start] Reinstalled doltlite prebuilt for " + process.platform + "-" + process.arch);
+  } else {
+    console.error("[start] FATAL: better-sqlite3 (doltlite) failed to load and no prebuilt found.");
+    console.error("[start] Expected: " + prebuildSrc);
+    console.error("[start] " + (e?.message ?? e));
+    process.exit(1);
+  }
+}
+
 // Also install pure-JS deps used by server
 for (const pkg of ["turndown", "turndown-plugin-gfm", "@mixmark-io/domino"]) {
   if (!existsSync(resolve(__dirname, "node_modules", pkg))) {
