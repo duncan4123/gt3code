@@ -1,6 +1,23 @@
-# context-mode
+# context-mode-doltlite
 
-Raw tool output floods your context window. Use context-mode MCP tools to keep raw data in the sandbox.
+## Project Docs (docs/pipeline.sqlite)
+
+`docs/pipeline.sqlite` is a doltlite database tracking project state. Query at session start:
+
+```bash
+DL=/data/projects/doltlite/doltlite
+DB=docs/pipeline.sqlite
+$DL $DB "SELECT key, value FROM config;"
+$DL $DB "SELECT name, status FROM workarounds WHERE status = 'active';"
+$DL $DB "SELECT id, title, status FROM plans;"
+```
+
+After updates: `$DL $DB "SELECT dolt_commit('-A', '-m', 'what changed');"`
+See `/data/projects/doltlite/CLAUDE.md` for full docs db workflow.
+
+## Context-Mode Usage
+
+Raw tool output floods your context window. Use context-mode-doltlite MCP tools to keep raw data in the sandbox.
 
 ## Tool Selection
 

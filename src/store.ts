@@ -11,9 +11,9 @@
 import type { Database as DatabaseInstance } from "better-sqlite3";
 import { loadDatabase, applyWALPragmas, closeDB, withRetry } from "./db-base.js";
 import type { PreparedStatement } from "./db-base.js";
-import { readFileSync, readdirSync, unlinkSync, existsSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync, readdirSync, unlinkSync, existsSync, statSync, mkdirSync } from "node:fs";
+import { tmpdir, homedir } from "node:os";
+import { join, basename } from "node:path";
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -258,6 +258,7 @@ function findMinSpan(positionLists: number[][]): number {
 export class ContentStore {
   #db: DatabaseInstance;
   #dbPath: string;
+  #persistent: boolean;
 
   // ── Cached Prepared Statements ──
   // Prepared once at construction, reused on every call to avoid
@@ -298,18 +299,60 @@ export class ContentStore {
   #stmtStats!: PreparedStatement;
   #stmtSourceMeta!: PreparedStatement;
 
-  constructor(dbPath?: string) {
+  constructor(dbPath?: string, persistent = false) {
     const Database = loadDatabase();
     this.#dbPath =
       dbPath ?? join(tmpdir(), `context-mode-${process.pid}.db`);
-    this.#db = new Database(this.#dbPath, { timeout: 30000 });
+    this.#persistent = persistent;
+    this.#db = new Database(this.#dbPath, { timeout: 5000 });
+
+    // Auto-upgrade: if the addon supports doltlite but the file is plain
+    // SQLite, recreate it so version-control features are available (#vc-upgrade).
+    if (existsSync(this.#dbPath)) {
+      try {
+        const hasDoltlite = (() => {
+          try { (this.#db as any).prepare("SELECT doltlite_engine()").get(); return true; }
+          catch { return false; }
+        })();
+        if (!hasDoltlite) {
+          // Check if the addon *can* do doltlite by testing an in-memory DB
+          const memDb = new Database(":memory:", { timeout: 1000 });
+          let addonSupportsDoltlite = false;
+          try {
+            (memDb as any).prepare("SELECT doltlite_engine()").get();
+            addonSupportsDoltlite = true;
+          } catch { /* addon is stock SQLite */ }
+          try { memDb.close(); } catch { /* ignore */ }
+
+          if (addonSupportsDoltlite) {
+            // Addon supports doltlite but file is plain SQLite — delete and
+            // recreate. Indexed content is session-ephemeral and re-indexed
+            // automatically. Version control requires doltlite format.
+            try { this.#db.close(); } catch { /* ignore */ }
+            for (const suffix of ["", "-wal", "-shm"]) {
+              try { unlinkSync(this.#dbPath + suffix); } catch { /* ignore */ }
+            }
+            this.#db = new Database(this.#dbPath, { timeout: 5000 });
+          }
+        }
+      } catch { /* best effort — continue with current db */ }
+    }
+
     applyWALPragmas(this.#db);
     this.#initSchema();
     this.#prepareStatements();
   }
 
+  /** Whether this store uses a persistent (non-ephemeral) database. */
+  get persistent(): boolean { return this.#persistent; }
+
   /** Delete this session's DB files. Call on process exit. */
   cleanup(): void {
+    if (this.#persistent) {
+      // Persistent DBs: close without deleting
+      try { this.#db.close(); } catch { /* ignore */ }
+      return;
+    }
     try {
       this.#db.close();
     } catch { /* ignore */ }
@@ -447,6 +490,45 @@ export class ContentStore {
       );
 
       CREATE INDEX IF NOT EXISTS idx_sources_label ON sources(label);
+
+      -- Version-controlled project docs (pipeline.sqlite pattern)
+      CREATE TABLE IF NOT EXISTS docs_config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated TEXT NOT NULL DEFAULT ''
+      );
+
+      CREATE TABLE IF NOT EXISTS docs_workarounds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        location TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        remove_when TEXT,
+        updated TEXT NOT NULL DEFAULT ''
+      );
+
+      CREATE TABLE IF NOT EXISTS docs_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'planned',
+        created TEXT NOT NULL DEFAULT '',
+        updated TEXT NOT NULL DEFAULT ''
+      );
+
+      CREATE TABLE IF NOT EXISTS docs_failures (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        error TEXT NOT NULL,
+        cause TEXT NOT NULL,
+        fix TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS docs_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message TEXT NOT NULL,
+        tables_changed TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT ''
+      );
     `);
   }
 
@@ -1201,6 +1283,70 @@ export class ContentStore {
   /** The database file path (for status display). */
   get dbPath(): string {
     return this.#dbPath;
+  }
+
+  // ── Named Persistent Databases ──
+
+  /**
+   * Get the standard directory for persistent knowledge bases.
+   */
+  static get persistentDir(): string {
+    return join(homedir(), ".claude", "context-mode");
+  }
+
+  /**
+   * Get the file path for a named persistent database.
+   */
+  static namedDbPath(name: string): string {
+    // Sanitize name to prevent path traversal
+    const safe = name.replace(/[^a-zA-Z0-9_-]/g, "_");
+    return join(ContentStore.persistentDir, `${safe}.db`);
+  }
+
+  /**
+   * Open or create a named persistent knowledge base.
+   */
+  static openNamed(name: string): ContentStore {
+    const dir = ContentStore.persistentDir;
+    mkdirSync(dir, { recursive: true });
+    return new ContentStore(ContentStore.namedDbPath(name), true);
+  }
+
+  /**
+   * List available persistent databases with metadata.
+   */
+  static listPersistent(): Array<{ name: string; path: string; sizeBytes: number }> {
+    const dir = ContentStore.persistentDir;
+    try {
+      return readdirSync(dir)
+        .filter(f => f.endsWith(".db") && !f.endsWith("-wal") && !f.endsWith("-shm"))
+        .map(f => {
+          const path = join(dir, f);
+          const st = statSync(path);
+          return {
+            name: basename(f, ".db"),
+            path,
+            sizeBytes: st.size,
+          };
+        });
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Delete a named persistent database.
+   */
+  static deletePersistent(name: string): boolean {
+    const path = ContentStore.namedDbPath(name);
+    try {
+      for (const suffix of ["", "-wal", "-shm"]) {
+        try { unlinkSync(path + suffix); } catch { /* ignore */ }
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // ── Vocabulary Extraction ──

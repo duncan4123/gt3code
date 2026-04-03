@@ -1,9 +1,16 @@
-# Context Mode
+# Context Mode (Doltlite Fork)
 
-**The other half of the context problem.**
+> Fork of [mksglu/context-mode](https://github.com/mksglu/context-mode) with doltlite-specific extensions.
 
-[![users](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fcdn.jsdelivr.net%2Fgh%2Fmksglu%2Fcontext-mode%40main%2Fstats.json&query=%24.message&label=users&color=brightgreen)](https://www.npmjs.com/package/context-mode) [![npm](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fcdn.jsdelivr.net%2Fgh%2Fmksglu%2Fcontext-mode%40main%2Fstats.json&query=%24.npm&label=npm&color=blue)](https://www.npmjs.com/package/context-mode) [![marketplace](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fcdn.jsdelivr.net%2Fgh%2Fmksglu%2Fcontext-mode%40main%2Fstats.json&query=%24.marketplace&label=marketplace&color=blue)](https://github.com/mksglu/context-mode) [![GitHub stars](https://img.shields.io/github/stars/mksglu/context-mode?style=flat&color=yellow)](https://github.com/mksglu/context-mode/stargazers) [![GitHub forks](https://img.shields.io/github/forks/mksglu/context-mode?style=flat&color=blue)](https://github.com/mksglu/context-mode/network/members) [![Last commit](https://img.shields.io/github/last-commit/mksglu/context-mode?color=green)](https://github.com/mksglu/context-mode/commits) [![License: ELv2](https://img.shields.io/badge/License-ELv2-blue.svg)](LICENSE)
-[![Discord](https://img.shields.io/discord/1478479412700909750?label=Discord&logo=discord&color=5865f2)](https://discord.gg/DCN9jUgN5v)
+[![Last commit](https://img.shields.io/github/last-commit/sfncore/claude-context-mode?color=green)](https://github.com/sfncore/claude-context-mode/commits) [![License: ELv2](https://img.shields.io/badge/License-ELv2-blue.svg)](LICENSE)
+
+## Privacy & Architecture
+
+Context Mode is not a CLI output filter or a cloud analytics dashboard. It operates at the MCP protocol layer — raw data stays in a sandboxed subprocess and never enters your context window. Web pages, API responses, file analysis, Playwright snapshots, log files — everything is processed in complete isolation.
+
+**Nothing leaves your machine.** No telemetry, no cloud sync, no usage tracking, no account required. Your code, your prompts, your session data — all local. The databases live in your home directory (`~/.context-mode/`). With standard SQLite they're ephemeral; with [doltlite](docs/BUILD-DOLTLITE.md) they gain git-like version control (commit, branch, merge, diff).
+
+This is a deliberate architectural choice, not a missing feature. Context optimization should happen at the source, not in a dashboard behind a per-seat subscription. Privacy-first is our philosophy — and every design decision follows from it. [License →](#license)
 
 ## The Problem
 
@@ -28,27 +35,29 @@ Platforms are grouped by install complexity. Hook-capable platforms get automati
 **Install:**
 
 ```bash
-/plugin marketplace add mksglu/context-mode
-/plugin install context-mode@context-mode
+/plugin marketplace add https://github.com/sfncore/claude-context-mode
+/plugin install context-mode-doltlite@context-mode-doltlite
 ```
 
 Restart Claude Code (or run `/reload-plugins`).
 
+**Doltlite (required):** This fork uses doltlite for all database operations — there is no SQLite fallback. Build `libdoltlite.a` and run the patch script before first use. See **[Building with Doltlite](docs/BUILD-DOLTLITE.md)** for the full pipeline.
+
 **Verify:**
 
 ```
-/context-mode:ctx-doctor
+/context-mode-doltlite:ctx-doctor
 ```
 
-All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, and plugin registration.
+All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, plugin registration, and doltlite patch status.
 
-**Routing:** Automatic. The SessionStart hook injects routing instructions at runtime — no file is written to your project. The plugin registers all hooks (PreToolUse, PostToolUse, PreCompact, SessionStart) and 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`).
+**Routing:** Automatic. The SessionStart hook injects routing instructions at runtime — no file is written to your project. The plugin registers all hooks (PreToolUse, PostToolUse, PreCompact, SessionStart) and 19 tools: 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`), 3 utility tools, 2 database management tools, 4 doltlite version control tools, and 4 convoy/work-tracking tools. See [Tools](#tools) for the full list.
 
 | Slash Command | What it does |
 |---|---|
-| `/context-mode:ctx-stats` | Context savings — per-tool breakdown, tokens consumed, savings ratio. |
-| `/context-mode:ctx-doctor` | Diagnostics — runtimes, hooks, FTS5, plugin registration, versions. |
-| `/context-mode:ctx-upgrade` | Pull latest, rebuild, migrate cache, fix hooks. |
+| `/context-mode-doltlite:ctx-stats` | Context savings — per-tool breakdown, tokens consumed, savings ratio. |
+| `/context-mode-doltlite:ctx-doctor` | Diagnostics — runtimes, hooks, FTS5, plugin registration, versions. |
+| `/context-mode-doltlite:ctx-upgrade` | Pull latest, rebuild, migrate cache, fix hooks. |
 
 > **Note:** Slash commands are a Claude Code plugin feature. On other platforms, type `ctx stats`, `ctx doctor`, or `ctx upgrade` in the chat — the model calls the MCP tool automatically. See [Utility Commands](#utility-commands).
 
@@ -56,7 +65,7 @@ All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, and pl
 <summary>Alternative — MCP-only install (no hooks or slash commands)</summary>
 
 ```bash
-claude mcp add context-mode -- npx -y context-mode
+claude mcp add context-mode-doltlite -- npx -y context-mode-doltlite
 ```
 
 This gives you the 6 sandbox tools without automatic routing. The model can still use them — it just won't be nudged to prefer them over raw Bash/Read/WebFetch. Good for trying it out before committing to the full plugin.
@@ -188,7 +197,7 @@ Full hook config including PreCompact: [`configs/vscode-copilot/hooks.json`](con
 </details>
 
 <details>
-<summary><strong>Cursor</strong> — hooks with stop support</summary>
+<summary><strong>Cursor</strong> — hooks without SessionStart</summary>
 
 **Prerequisites:** Node.js 18+, Cursor with agent mode.
 
@@ -228,17 +237,12 @@ Full hook config including PreCompact: [`configs/vscode-copilot/hooks.json`](con
          {
            "command": "context-mode hook cursor posttooluse"
          }
-       ],
-       "stop": [
-         {
-           "command": "context-mode hook cursor stop"
-         }
        ]
      }
    }
    ```
 
-   The `preToolUse` matcher is optional — without it, the hook fires on all tools. The `stop` hook fires when the agent turn ends and can send a followup message to continue the loop. `afterAgentResponse` is also available (fire-and-forget, receives full response text).
+   The `preToolUse` matcher is optional — without it, the hook fires on all tools.
 
 4. Copy the routing rules file. Cursor lacks a SessionStart hook, so the model needs a rules file for routing awareness:
 
@@ -251,7 +255,7 @@ Full hook config including PreCompact: [`configs/vscode-copilot/hooks.json`](con
 
 **Verify:** Open Cursor Settings > MCP and confirm "context-mode" shows as connected. In agent chat, type `ctx stats`.
 
-**Routing:** Hooks enforce routing programmatically via `preToolUse`/`postToolUse`/`stop`. The `.cursor/rules/context-mode.mdc` file provides routing instructions at session start since Cursor's `sessionStart` hook is currently rejected by their validator ([forum report](https://forum.cursor.com/t/unknown-hook-type-sessionstart/149566)). Project `.cursor/hooks.json` overrides `~/.cursor/hooks.json`.
+**Routing:** Hooks enforce routing programmatically via `preToolUse`/`postToolUse`. The `.cursor/rules/context-mode.mdc` file provides routing instructions at session start since Cursor's `sessionStart` hook is currently rejected by their validator ([forum report](https://forum.cursor.com/t/unknown-hook-type-sessionstart/149566)). Project `.cursor/hooks.json` overrides `~/.cursor/hooks.json`.
 
 Full configs: [`configs/cursor/hooks.json`](configs/cursor/hooks.json) | [`configs/cursor/mcp.json`](configs/cursor/mcp.json) | [`configs/cursor/context-mode.mdc`](configs/cursor/context-mode.mdc)
 
@@ -287,69 +291,15 @@ Full configs: [`configs/cursor/hooks.json`](configs/cursor/hooks.json) | [`confi
 
    The `mcp` entry registers the 6 sandbox tools. The `plugin` entry enables hooks — OpenCode calls the plugin's TypeScript functions directly before and after each tool execution, blocking dangerous commands and enforcing sandbox routing.
 
-3. *(Optional)* Copy the routing rules file. OpenCode lacks a SessionStart hook, so the model needs an `AGENTS.md` file for routing awareness:
-
-   ```bash
-   cp node_modules/context-mode/configs/opencode/AGENTS.md AGENTS.md
-   ```
-
-   This tells the model which tools to use and which commands are blocked. Without it, hooks still enforce routing — but the model won't know *why* a command was denied.
-
-4. Restart OpenCode.
+3. Restart OpenCode.
 
 **Verify:** In the OpenCode session, type `ctx stats`. Context-mode tools should appear and respond.
 
-**Routing:** Hooks enforce routing programmatically via `tool.execute.before` and `tool.execute.after`. The optional [`AGENTS.md`](configs/opencode/AGENTS.md) file provides routing instructions for model awareness. The `experimental.session.compacting` hook builds resume snapshots when the conversation compacts.
+**Routing:** Automatic. The plugin intercepts tool calls at runtime via `tool.execute.before` and `tool.execute.after`. No routing file is written to your project. The `experimental.session.compacting` hook builds resume snapshots when the conversation compacts.
 
 > **Note:** OpenCode's SessionStart hook is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)), so startup/resume session restore is not supported. Compaction recovery works fully via the plugin.
 
-Full configs: [`configs/opencode/opencode.json`](configs/opencode/opencode.json) | [`configs/opencode/AGENTS.md`](configs/opencode/AGENTS.md)
-
-</details>
-
-<details>
-<summary><strong>KiloCode</strong> — TypeScript plugin with hooks</summary>
-
-**Prerequisites:** Node.js 18+, KiloCode installed.
-
-**Install:**
-
-1. Install context-mode globally:
-
-   ```bash
-   npm install -g context-mode
-   ```
-
-2. Add to `kilo.json` in your project root (or `~/.config/kilo/kilo.json` for global):
-
-   ```json
-   {
-     "$schema": "https://app.kilo.ai/config.json",
-     "mcp": {
-       "context-mode": {
-         "type": "local",
-         "command": ["context-mode"]
-       }
-     },
-     "plugin": ["context-mode"]
-   }
-   ```
-
-   The `mcp` entry registers the 6 sandbox tools. The `plugin` entry enables hooks — KiloCode calls the plugin's TypeScript functions directly before and after each tool execution, blocking dangerous commands and enforcing sandbox routing.
-
-3. *(Optional)* Copy the routing rules file. KiloCode shares the OpenCode plugin architecture and lacks SessionStart, so the model needs an `AGENTS.md` file for routing awareness:
-
-   ```bash
-   cp node_modules/context-mode/configs/opencode/AGENTS.md AGENTS.md
-   ```
-
-4. Restart KiloCode.
-
-**Verify:** In the KiloCode session, type `ctx stats`. Context-mode tools should appear and respond.
-
-**Routing:** Hooks enforce routing programmatically via `tool.execute.before` and `tool.execute.after`. The optional [`AGENTS.md`](configs/opencode/AGENTS.md) file provides routing instructions for model awareness. The `experimental.session.compacting` hook builds resume snapshots when the conversation compacts.
-
-> **Note:** KiloCode shares the same plugin architecture as OpenCode, using the OpenCodeAdapter with platform-specific configuration paths (`kilo.json` instead of `opencode.json`, `~/.config/kilo/` instead of `~/.config/opencode/`). SessionStart hook availability depends on KiloCode's implementation.
+Full config: [`configs/opencode/opencode.json`](configs/opencode/opencode.json)
 
 </details>
 
@@ -365,7 +315,7 @@ context-mode runs as a native [OpenClaw](https://github.com/openclaw) gateway pl
 1. Clone and install:
 
    ```bash
-   git clone https://github.com/mksglu/context-mode.git
+   git clone https://github.com/sfncore/claude-context-mode.git
    cd context-mode
    npm run install:openclaw
    ```
@@ -393,7 +343,7 @@ Full documentation: [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md)
 </details>
 
 <details>
-<summary><strong>Codex CLI</strong> — hooks + MCP</summary>
+<summary><strong>Codex CLI</strong> — MCP-only, no hooks</summary>
 
 **Prerequisites:** Node.js 18+, Codex CLI installed.
 
@@ -412,21 +362,7 @@ Full documentation: [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md)
    command = "context-mode"
    ```
 
-3. Add hooks for routing enforcement and session tracking. Create `~/.codex/hooks.json`:
-
-   ```json
-   {
-     "hooks": {
-       "PreToolUse": [{ "hooks": [{ "type": "command", "command": "context-mode hook codex pretooluse" }] }],
-       "PostToolUse": [{ "hooks": [{ "type": "command", "command": "context-mode hook codex posttooluse" }] }],
-       "SessionStart": [{ "hooks": [{ "type": "command", "command": "context-mode hook codex sessionstart" }] }]
-     }
-   }
-   ```
-
-   `PreToolUse` enforces sandbox routing (blocks dangerous commands, redirects to MCP tools). `PostToolUse` captures session events. `SessionStart` restores state after compaction.
-
-4. Copy routing instructions (recommended even with hooks for full routing awareness):
+3. Copy routing instructions (Codex CLI has no hook support):
 
    ```bash
    cp node_modules/context-mode/configs/codex/AGENTS.md ./AGENTS.md
@@ -434,11 +370,11 @@ Full documentation: [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md)
 
    For global use: `cp node_modules/context-mode/configs/codex/AGENTS.md ~/.codex/AGENTS.md`. Global applies to all projects. If both exist, Codex CLI merges them.
 
-5. Restart Codex CLI.
+4. Restart Codex CLI.
 
 **Verify:** Start a session and type `ctx stats`. Context-mode tools should appear and respond.
 
-**Routing:** Hooks enforce routing programmatically via PreToolUse. PostToolUse tracks session events. SessionStart restores state. The optional AGENTS.md file provides routing instructions for model awareness. Codex CLI's hook system uses the same JSON stdin/stdout wire protocol as Claude Code but does not support arg or output modification.
+**Routing:** Manual. The `AGENTS.md` file is the only enforcement method (~60% compliance). There is no programmatic interception — the model can run raw `curl`, read large files, or bypass sandbox tools at any time. Hook support PRs [#2904](https://github.com/openai/codex/pull/2904) and [#9796](https://github.com/openai/codex/pull/9796) were closed without merge.
 
 </details>
 
@@ -594,26 +530,24 @@ Full configs: [`configs/kiro/mcp.json`](configs/kiro/mcp.json) | [`configs/kiro/
 1. Clone the extension:
 
    ```bash
-   git clone https://github.com/mksglu/context-mode.git ~/.pi/extensions/context-mode
+   git clone https://github.com/sfncore/claude-context-mode.git ~/.pi/extensions/context-mode
    cd ~/.pi/extensions/context-mode
    npm install
    npm run build
    ```
 
-2. Add to `~/.pi/agent/mcp.json` (or `.pi/mcp.json` for project-level):
+2. Add to `~/.pi/settings/mcp.json` (or `.pi/settings/mcp.json` for project-level):
 
    ```json
    {
      "mcpServers": {
        "context-mode": {
          "command": "node",
-         "args": ["/home/youruser/.pi/extensions/context-mode/node_modules/context-mode/start.mjs"]
+         "args": ["~/.pi/extensions/context-mode/node_modules/context-mode/start.mjs"]
        }
      }
    }
    ```
-
-   > **Note:** JSON does not expand `~`. Replace `/home/youruser` with your actual home directory (run `echo $HOME` to find it).
 
 3. Restart Pi.
 
@@ -663,15 +597,30 @@ npm install -g context-mode
 
 | Tool | What it does | Context saved |
 |---|---|---|
+| **Sandbox** | | |
 | `ctx_batch_execute` | Run multiple commands + search multiple queries in ONE call. | 986 KB → 62 KB |
 | `ctx_execute` | Run code in 11 languages. Only stdout enters context. | 56 KB → 299 B |
 | `ctx_execute_file` | Process files in sandbox. Raw content never leaves. | 45 KB → 155 B |
 | `ctx_index` | Chunk markdown into FTS5 with BM25 ranking. | 60 KB → 40 B |
 | `ctx_search` | Query indexed content with multiple queries in one call. | On-demand retrieval |
-| `ctx_fetch_and_index` | Fetch URL, chunk and index. 24h TTL cache — repeat calls skip network. `force: true` to bypass. | 60 KB → 40 B |
+| `ctx_fetch_and_index` | Fetch URL, detect content type (HTML/JSON/text), chunk and index. | 60 KB → 40 B |
+| **Utility** | | |
 | `ctx_stats` | Show context savings, call counts, and session statistics. | — |
 | `ctx_doctor` | Diagnose installation: runtimes, hooks, FTS5, versions. | — |
 | `ctx_upgrade` | Upgrade to latest version from GitHub, rebuild, reconfigure hooks. | — |
+| **Database Management** | | |
+| `list_databases` | List all named persistent FTS5 databases. | — |
+| `delete_database` | Permanently delete a named persistent database. | — |
+| **Version Control** *(doltlite)* | | |
+| `ctx_commit` | Save a versioned snapshot of the knowledge base. | — |
+| `ctx_log` | View commit history for the current knowledge base. | — |
+| `ctx_diff` | Show changes since the last commit. | — |
+| `ctx_status` | Show current knowledge base state (uncommitted changes). | — |
+| **Convoy / Work Tracking** | | |
+| `ctx_convoy_create` | Create a parent convoy grouping related tasks. | — |
+| `ctx_bead_create` | Create a work bead (issue) in the knowledge base. | — |
+| `ctx_dep_add` | Add a dependency relationship between two beads. | — |
+| `ctx_convoy_list` | List all draft convoys and their beads. | — |
 
 ## How the Sandbox Works
 
@@ -686,6 +635,8 @@ When output exceeds 5 KB and an `intent` is provided, Context Mode switches to i
 ## How the Knowledge Base Works
 
 The `ctx_index` tool chunks markdown content by headings while keeping code blocks intact, then stores them in a **SQLite FTS5** (Full-Text Search 5) virtual table. Search uses **BM25 ranking** — a probabilistic relevance algorithm that scores documents based on term frequency, inverse document frequency, and document length normalization. **Porter stemming** is applied at index time so "running", "runs", and "ran" match the same stem. Titles and headings are weighted **5x** in BM25 scoring for precise navigational queries.
+
+When [doltlite](docs/BUILD-DOLTLITE.md) is active, the knowledge base uses a **prolly tree** storage engine instead of SQLite's B-tree. This adds git-like version control — `ctx_commit`, `ctx_log`, `ctx_diff`, and `ctx_status` expose commit/branch/merge/diff operations on the indexed content. FTS5 search works identically under both engines.
 
 When you call `ctx_search`, it returns relevant content snippets focused around matching query terms — not full documents, not approximations, the actual indexed content with smart extraction around what you're looking for. `ctx_fetch_and_index` extends this to URLs: fetch, convert HTML to markdown, chunk, index. The raw page never enters context. Use the `contentType` parameter to filter results by type (e.g. `code` or `prose`).
 
@@ -710,19 +661,6 @@ Levenshtein distance corrects typos before re-searching. "kuberntes" becomes "ku
 
 Search results use intelligent extraction instead of truncation. Instead of returning the first N characters (which might miss the important part), Context Mode finds where your query terms appear in the content and returns windows around those matches.
 
-### TTL Cache
-
-Indexed content persists in a per-project SQLite database at `~/.context-mode/content/`. When `ctx_fetch_and_index` is called for a URL that was already indexed within the last 24 hours, the fetch is skipped entirely. The model searches the existing index directly.
-
-- **Fresh (<24h):** Returns a cache hint (0.3KB) instead of re-fetching (48KB+). Model proceeds to `ctx_search`.
-- **Stale (>24h):** Re-fetches silently. No user action needed.
-- **`force: true`:** Bypasses cache and re-fetches regardless of TTL.
-- **14-day cleanup:** Content databases and sources older than 14 days are removed on startup.
-
-This means `--continue` sessions preserve indexed docs across restarts. No re-fetching, no wasted context tokens.
-
-`ctx_stats` reports cache performance separately: hits, data avoided, network requests saved, and total context savings including cache.
-
 ### Progressive Throttling
 
 - **Calls 1-3:** Normal results (2 per query)
@@ -737,16 +675,15 @@ Context Mode captures every meaningful event during your session and persists th
 
 Session continuity requires 4 hooks working together:
 
-| Hook | Role | Claude Code | Gemini CLI | VS Code Copilot | Cursor | OpenCode | KiloCode | OpenClaw | Codex CLI | Antigravity | Kiro | Zed | Pi |
-|---|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **PreToolUse** | Enforces sandbox routing before tool execution | Yes | -- | -- | Yes | -- | -- | -- | Yes | -- | Yes | -- | ✓ (via tool_call event) |
-| **PostToolUse** | Captures events after each tool call | Yes | Yes | Yes | Yes | Plugin | Plugin | Plugin | Yes | -- | Yes | -- | ✓ (via tool_result event) |
-| **UserPromptSubmit** | Captures user decisions and corrections | Yes | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
-| **PreCompact** | Builds snapshot before compaction | Yes | Yes | Yes | -- | Plugin | Plugin | Plugin | -- | -- | -- | -- | ✓ (via session_before_compact) |
-| **SessionStart** | Restores state after compaction or resume | Yes | Yes | Yes | -- | -- | -- | Plugin | Yes | -- | -- | -- | ✓ (via session_start event) |
-| | **Session completeness** | **Full** | **High** | **High** | **Partial** | **High** | **High** | **High** | **Partial** | **--** | **Partial** | **--** | **High** |
+| Hook | Role | Claude Code | Gemini CLI | VS Code Copilot | Cursor | OpenCode | OpenClaw | Codex CLI | Antigravity | Kiro | Zed | Pi |
+|---|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **PostToolUse** | Captures events after each tool call | Yes | Yes | Yes | Yes | Plugin | Plugin | -- | -- | Yes | -- | ✓ (via tool_result event) |
+| **UserPromptSubmit** | Captures user decisions and corrections | Yes | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| **PreCompact** | Builds snapshot before compaction | Yes | Yes | Yes | -- | Plugin | Plugin | -- | -- | -- | -- | ✓ (via session_before_compact) |
+| **SessionStart** | Restores state after compaction or resume | Yes | Yes | Yes | -- | -- | Plugin | -- | -- | -- | -- | ✓ (via session_start event) |
+| | **Session completeness** | **Full** | **High** | **High** | **Partial** | **High** | **High** | **--** | **--** | **Partial** | **--** | **High** |
 
-> **Note:** Full session continuity (capture + snapshot + restore) works on **Claude Code**, **Gemini CLI**, and **VS Code Copilot**. **OpenCode** provides **high** session continuity: it captures tool events and injects compaction snapshots via the plugin, but SessionStart is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)), so startup/resume restore is not supported. **KiloCode** shares the same plugin architecture as OpenCode via the OpenCodeAdapter, so its continuity level depends on KiloCode's SessionStart support. **Cursor** captures tool events via `preToolUse`/`postToolUse`, but `sessionStart` is currently rejected by Cursor's validator ([forum report](https://forum.cursor.com/t/unknown-hook-type-sessionstart/149566)), so session restore after compaction is not available yet. **OpenClaw** uses native gateway plugin hooks (`api.on()`) for full session continuity. **Pi Coding Agent** provides high session continuity via extension hooks (`tool_call`, `tool_result`, `session_start`, `session_before_compact`). **Codex CLI** provides hook-based session tracking via PreToolUse/PostToolUse/SessionStart, using the same JSON stdin/stdout protocol as Claude Code. **Antigravity**, **Kiro**, and **Zed** have no hook support in the current release, so session tracking is not available.
+> **Note:** Full session continuity (capture + snapshot + restore) works on **Claude Code**, **Gemini CLI**, **VS Code Copilot**, and **OpenCode**. **Cursor** captures tool events via `preToolUse`/`postToolUse`, but `sessionStart` is currently rejected by Cursor's validator ([forum report](https://forum.cursor.com/t/unknown-hook-type-sessionstart/149566)), so session restore after compaction is not available yet. **OpenCode** uses the `experimental.session.compacting` plugin hook for compaction recovery, but SessionStart is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)), so startup/resume is not supported. **OpenClaw** uses native gateway plugin hooks (`api.on()`) for full session continuity. **Pi Coding Agent** provides high session continuity via extension hooks (`tool_call`, `tool_result`, `session_start`, `session_before_compact`). **Codex CLI**, **Antigravity**, **Kiro**, and **Zed** have no hook support in the current release, so session tracking is not available.
 
 <details>
 <summary><strong>What gets captured</strong></summary>
@@ -825,11 +762,9 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 
 **OpenCode** — Partial. The TypeScript plugin captures PostToolUse events via `tool.execute.after`, but SessionStart is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)). Events are stored but not automatically restored after compaction.
 
-**KiloCode** — Partial. Shares the same plugin architecture as OpenCode via the OpenCodeAdapter. The TypeScript plugin captures PostToolUse events via `tool.execute.after`, but SessionStart availability depends on KiloCode's implementation. Events are stored but may not be automatically restored after compaction.
-
 **OpenClaw / Pi Agent** — High coverage. All tool lifecycle hooks (`after_tool_call`, `before_compaction`, `session_start`) fire via the native gateway plugin. User decisions aren't captured but file edits, git ops, errors, and tasks are fully tracked. Falls back to DB snapshot reconstruction if compaction hooks fail on older gateway versions. See [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md).
 
-**Codex CLI** — Hook-based session tracking. PreToolUse enforces routing, PostToolUse captures events, SessionStart restores state after compaction. Same wire protocol as Claude Code. PreCompact and UserPromptSubmit are not yet available, so compaction snapshots rely on DB reconstruction.
+**Codex CLI** — No session support. No hooks means no event capture. Each compaction or new session starts fresh. Requires manually copying `AGENTS.md` to your project root.
 
 **Antigravity** — No session support. Same as Codex CLI — no hooks, no event capture. Requires manually copying `GEMINI.md` to your project root. Auto-detected via MCP protocol handshake (`clientInfo.name`).
 
@@ -843,22 +778,20 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 
 ## Platform Compatibility
 
-| Feature | Claude Code | Gemini CLI | VS Code Copilot | Cursor | OpenCode | KiloCode | OpenClaw | Codex CLI | Antigravity | Kiro | Zed | Pi |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| MCP Server | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| PreToolUse Hook | Yes | Yes | Yes | Yes | Plugin | Plugin | Plugin | -- | -- | Yes | -- | Yes (extension) |
-| PostToolUse Hook | Yes | Yes | Yes | Yes | Plugin | Plugin | Plugin | -- | -- | Yes | -- | Yes (extension) |
-| SessionStart Hook | Yes | Yes | Yes | -- | -- | -- | Plugin | -- | -- | -- | -- | Yes (extension) |
-| PreCompact Hook | Yes | Yes | Yes | -- | Plugin | Plugin | Plugin | -- | -- | -- | -- | Yes (extension) |
-| Can Modify Args | Yes | Yes | Yes | Yes | Plugin | Plugin | Plugin | -- | -- | -- | -- | Yes (extension) |
-| Can Block Tools | Yes | Yes | Yes | Yes | Plugin | Plugin | Plugin | -- | -- | Yes | -- | Yes (extension) |
-| Utility Commands (ctx) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes (/ctx-stats, /ctx-doctor) |
-| Slash Commands | Yes | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
-| Plugin Marketplace | Yes | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| Feature | Claude Code | Gemini CLI | VS Code Copilot | Cursor | OpenCode | OpenClaw | Codex CLI | Antigravity | Kiro | Zed | Pi |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| MCP Server | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| PreToolUse Hook | Yes | Yes | Yes | Yes | Plugin | Plugin | -- | -- | Yes | -- | Yes (extension) |
+| PostToolUse Hook | Yes | Yes | Yes | Yes | Plugin | Plugin | -- | -- | Yes | -- | Yes (extension) |
+| SessionStart Hook | Yes | Yes | Yes | -- | -- | Plugin | -- | -- | -- | -- | Yes (extension) |
+| PreCompact Hook | Yes | Yes | Yes | -- | Plugin | Plugin | -- | -- | -- | -- | Yes (extension) |
+| Can Modify Args | Yes | Yes | Yes | Yes | Plugin | Plugin | -- | -- | -- | -- | Yes (extension) |
+| Can Block Tools | Yes | Yes | Yes | Yes | Plugin | Plugin | -- | -- | Yes | -- | Yes (extension) |
+| Utility Commands (ctx) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes (/ctx-stats, /ctx-doctor) |
+| Slash Commands | Yes | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| Plugin Marketplace | Yes | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
 
 > **OpenCode** uses a TypeScript plugin paradigm — hooks run as in-process functions via `tool.execute.before`, `tool.execute.after`, and `experimental.session.compacting`, providing the same routing enforcement and session continuity as shell-based hooks. SessionStart is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)), but compaction recovery works via the plugin's compacting hook.
->
-> **KiloCode** shares the same TypeScript plugin architecture as OpenCode via the OpenCodeAdapter, with platform-specific configuration paths (`kilo.json` instead of `opencode.json`, `~/.config/kilo/` instead of `~/.config/opencode/`). Hook capabilities depend on KiloCode's implementation of the plugin interface.
 >
 > **OpenClaw** runs context-mode as a native gateway plugin targeting Pi Agent sessions. Hooks register via `api.on()` (tool/lifecycle) and `api.registerHook()` (commands). All tool interception and compaction hooks are supported. See [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md).
 >
@@ -872,7 +805,7 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 
 Hooks intercept tool calls programmatically — they can block dangerous commands and redirect them to the sandbox before execution. Instruction files guide the model via prompt instructions but cannot block anything. **Always enable hooks where supported.**
 
-> **Note:** Routing instruction files were previously auto-written to project directories on first session start. This was disabled to prevent git tree pollution ([#158](https://github.com/mksglu/context-mode/issues/158), [#164](https://github.com/mksglu/context-mode/issues/164)). Hook-capable platforms (Claude Code, Gemini CLI, VS Code Copilot, OpenCode, OpenClaw) inject routing via hooks and need no file. Non-hook platforms (Codex, Zed, Cursor, Kiro, Antigravity) require a one-time manual copy — see each platform's install section.
+> **Note:** Routing instruction files were previously auto-written to project directories on first session start. This was disabled to prevent git tree pollution ([#158](https://github.com/sfncore/claude-context-mode/issues/158), [#164](https://github.com/sfncore/claude-context-mode/issues/164)). Hook-capable platforms (Claude Code, Gemini CLI, VS Code Copilot, OpenCode, OpenClaw) inject routing via hooks and need no file. Non-hook platforms (Codex, Zed, Cursor, Kiro, Antigravity) require a one-time manual copy — see each platform's install section.
 
 | Platform | Hooks | Instruction File | With Hooks | Without Hooks |
 |---|:---:|---|:---:|:---:|
@@ -930,38 +863,38 @@ Over a full session: 315 KB of raw output becomes 5.4 KB. Session time extends f
 
 ## Try It
 
-These prompts work out of the box. Run `/context-mode:ctx-stats` after each to see the savings.
+These prompts work out of the box. Run `/context-mode-doltlite:ctx-stats` after each to see the savings.
 
 **Deep repo research** — 5 calls, 62 KB context (raw: 986 KB, 94% saved)
 ```
 Research https://github.com/modelcontextprotocol/servers — architecture, tech stack,
-top contributors, open issues, and recent activity. Then run /context-mode:ctx-stats.
+top contributors, open issues, and recent activity. Then run /context-mode-doltlite:ctx-stats.
 ```
 
 **Git history analysis** — 1 call, 5.6 KB context
 ```
 Clone https://github.com/facebook/react and analyze the last 500 commits:
 top contributors, commit frequency by month, and most changed files.
-Then run /context-mode:ctx-stats.
+Then run /context-mode-doltlite:ctx-stats.
 ```
 
 **Web scraping** — 1 call, 3.2 KB context
 ```
 Fetch the Hacker News front page, extract all posts with titles, scores,
-and domains. Group by domain. Then run /context-mode:ctx-stats.
+and domains. Group by domain. Then run /context-mode-doltlite:ctx-stats.
 ```
 
 **Large JSON API** — 7.5 MB raw → 0.9 KB context (99% saved)
 ```
 Create a local server that returns a 7.5 MB JSON with 20,000 records and a secret
 hidden at index 13000. Fetch the endpoint, find the hidden record, and show me
-exactly what's in it. Then run /context-mode:ctx-stats.
+exactly what's in it. Then run /context-mode-doltlite:ctx-stats.
 ```
 
 **Documentation search** — 2 calls, 1.8 KB context
 ```
 Fetch the React useEffect docs, index them, and find the cleanup pattern
-with code examples. Then run /context-mode:ctx-stats.
+with code examples. Then run /context-mode-doltlite:ctx-stats.
 ```
 
 **Session continuity** — compaction recovery with full state
@@ -971,14 +904,6 @@ and error handling." After 20+ tool calls, type: ctx stats to see the session
 event count. When context compacts, the model continues from your last prompt
 with tasks, files, and decisions intact — no re-prompting needed.
 ```
-
-## Privacy & Architecture
-
-Context Mode is not a CLI output filter or a cloud analytics dashboard. It operates at the MCP protocol layer — raw data stays in a sandboxed subprocess and never enters your context window. Web pages, API responses, file analysis, Playwright snapshots, log files — everything is processed in complete isolation.
-
-**Nothing leaves your machine.** No telemetry, no cloud sync, no usage tracking, no account required. Your code, your prompts, your session data — all local. The SQLite databases live in your home directory and die when you're done.
-
-This is a deliberate architectural choice, not a missing feature. Context optimization should happen at the source, not in a dashboard behind a per-seat subscription. Privacy-first is our philosophy — and every design decision follows from it. [License →](#license)
 
 ## Security
 
@@ -1016,7 +941,7 @@ Commands chained with `&&`, `;`, or `|` are split — each part is checked separ
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and TDD guidelines.
 
 ```bash
-git clone https://github.com/mksglu/context-mode.git
+git clone https://github.com/sfncore/claude-context-mode.git
 cd context-mode && npm install && npm test
 ```
 

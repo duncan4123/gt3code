@@ -2,7 +2,7 @@
 import "./suppress-stderr.mjs";
 import "./ensure-deps.mjs";
 /**
- * SessionStart hook for context-mode
+ * SessionStart hook for context-mode-doltlite
  *
  * Provides the agent with XML-structured "Rules of Engagement"
  * at the beginning of each session. Injects session knowledge on
@@ -156,7 +156,7 @@ try {
     const { join: pjoin } = await import("node:path");
     const { homedir } = await import("node:os");
     appendFileSync(
-      pjoin(homedir(), ".claude", "context-mode", "sessionstart-debug.log"),
+      pjoin(homedir(), ".claude", "context-mode-doltlite", "sessionstart-debug.log"),
       `[${new Date().toISOString()}] ${err?.message || err}\n${err?.stack || ""}\n`,
     );
   } catch { /* ignore logging failure */ }

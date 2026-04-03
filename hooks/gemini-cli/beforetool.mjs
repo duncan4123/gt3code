@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import "../suppress-stderr.mjs";
 /**
- * Gemini CLI BeforeTool hook for context-mode
+ * Gemini CLI BeforeTool hook for context-mode-doltlite
  * Thin wrapper — uses shared routing core, no self-heal, no Claude Code-specific logic.
  */
 

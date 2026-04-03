@@ -20,7 +20,7 @@ import { homedir } from "node:os";
 const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
 const { loadSessionDB, loadExtract } = createSessionLoaders(HOOK_DIR);
 const OPTS = VSCODE_OPTS;
-const DEBUG_LOG = join(homedir(), ".vscode", "context-mode", "posttooluse-debug.log");
+const DEBUG_LOG = join(homedir(), ".vscode", "context-mode-doltlite", "posttooluse-debug.log");
 
 try {
   const raw = await readStdin();

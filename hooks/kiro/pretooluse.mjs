@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import "../suppress-stderr.mjs";
 /**
- * Kiro CLI PreToolUse hook for context-mode.
+ * Kiro CLI PreToolUse hook for context-mode-doltlite.
  * Uses exit codes instead of JSON stdout:
  *   - Exit 0: allow (stdout → agent context)
  *   - Exit 2: block (stderr → agent error)
@@ -30,7 +30,7 @@ if (!decision) process.exit(0);
 
 switch (decision.action) {
   case "deny":
-    process.stderr.write(decision.reason ?? "Blocked by context-mode");
+    process.stderr.write(decision.reason ?? "Blocked by context-mode-doltlite");
     process.exit(2);
     break;
 
@@ -43,7 +43,7 @@ switch (decision.action) {
         .replace(/"?\s*$/, "");
       process.stderr.write(msg);
     } else {
-      process.stderr.write(decision.reason ?? "Blocked by context-mode routing");
+      process.stderr.write(decision.reason ?? "Blocked by context-mode-doltlite routing");
     }
     process.exit(2);
     break;

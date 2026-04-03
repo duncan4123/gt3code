@@ -130,6 +130,25 @@ function getStore(): ContentStore {
   return _store;
 }
 
+// ── Named persistent stores (keyed by database name) ──
+const _namedStores = new Map<string, ContentStore>();
+
+/**
+ * Resolve a store by optional database name.
+ * - Omit or empty → ephemeral session store (getStore())
+ * - Provide a name → named persistent store (survives restarts)
+ */
+function resolveStore(database?: string): ContentStore {
+  if (!database) return getStore();
+  const key = database.toLowerCase();
+  let store = _namedStores.get(key);
+  if (!store) {
+    store = ContentStore.openNamed(key);
+    _namedStores.set(key, store);
+  }
+  return store;
+}
+
 // ─────────────────────────────────────────────────────────
 // Session stats — track context consumption per tool
 // ─────────────────────────────────────────────────────────
@@ -945,9 +964,13 @@ server.registerTool(
         .describe(
           "Label for the indexed content (e.g., 'Context7: React useEffect', 'Skill: frontend-design')",
         ),
+      database: z
+        .string()
+        .optional()
+        .describe("Named persistent database to index into. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ content, path, source }) => {
+  async ({ content, path, source, database }) => {
     if (!content && !path) {
       return trackResponse("ctx_index", {
         content: [
@@ -969,7 +992,7 @@ server.registerTool(
           trackIndexed(fs.readFileSync(path).byteLength);
         } catch { /* ignore — file read errors handled by store */ }
       }
-      const store = getStore();
+      const store = resolveStore(database);
       const result = store.index({ content, path, source });
 
       return trackResponse("ctx_index", {
@@ -1059,11 +1082,16 @@ server.registerTool(
         .enum(["code", "prose"])
         .optional()
         .describe("Filter results by content type: 'code' or 'prose'."),
+      database: z
+        .string()
+        .optional()
+        .describe("Named persistent database to search. Omit to search the ephemeral session store."),
     }),
   },
   async (params) => {
     try {
-      const store = getStore();
+      const raw = params as Record<string, unknown>;
+      const store = resolveStore(raw.database as string | undefined);
 
       // Guard: redirect when the index is empty — ctx_search is a follow-up
       // tool that requires prior indexing. Guide the model to the right tool.
@@ -1082,8 +1110,6 @@ server.registerTool(
           isError: true,
         });
       }
-
-      const raw = params as Record<string, unknown>;
 
       // Normalize: accept both query (string) and queries (array)
       const queryList: string[] = [];
@@ -1294,12 +1320,16 @@ server.registerTool(
         .boolean()
         .optional()
         .describe("Skip cache and re-fetch even if content was recently indexed"),
+      database: z
+        .string()
+        .optional()
+        .describe("Named persistent database to index into. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ url, source, force }) => {
+  async ({ url, source, force, database }) => {
     // TTL cache: if source was indexed within 24h, return cached hint
     if (!force) {
-      const store = getStore();
+      const store = resolveStore(database);
       const label = source ?? url;
       const meta = store.getSourceMeta(label);
       if (meta) {
@@ -1350,7 +1380,7 @@ server.registerTool(
       }
 
       // Parse content-type marker from stdout (content is in the temp file)
-      const store = getStore();
+      const store = resolveStore(database);
       const header = (result.stdout || "").trim();
 
       // Read full content from temp file
@@ -1473,9 +1503,13 @@ server.registerTool(
         .optional()
         .default(60000)
         .describe("Max execution time in ms (default: 60s)"),
+      database: z
+        .string()
+        .optional()
+        .describe("Named persistent database to index into and search. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ commands, queries, timeout }) => {
+  async ({ commands, queries, timeout, database }) => {
     // Security: check each command against deny patterns
     for (const cmd of commands) {
       const denied = checkDenyPolicy(cmd.command, "batch_execute");
@@ -1543,7 +1577,7 @@ server.registerTool(
       trackIndexed(totalBytes);
 
       // Index into knowledge base — markdown heading chunking splits by # labels
-      const store = getStore();
+      const store = resolveStore(database);
       const source = `batch:${commands
         .map((c) => c.label)
         .join(",")
@@ -1960,7 +1994,7 @@ server.registerTool(
     } else {
       // Inline fallback: neither CLI file exists (e.g. marketplace installs).
       // Generate a self-contained node -e script that performs the upgrade.
-      const repoUrl = "https://github.com/mksglu/context-mode.git";
+      const repoUrl = "https://github.com/sfncore/claude-context-mode.git";
       const copyDirs = ["build", "hooks", "skills", "scripts", ".claude-plugin"];
       const copyFiles = ["start.mjs", "server.bundle.mjs", "cli.bundle.mjs", "package.json"];
 
@@ -2037,6 +2071,82 @@ server.registerTool(
 );
 
 // ─────────────────────────────────────────────────────────
+// Named persistent databases
+// ─────────────────────────────────────────────────────────
+
+server.registerTool(
+  "list_databases",
+  {
+    title: "List Persistent Databases",
+    description:
+      "List available persistent knowledge bases. Returns names and sizes of file-backed FTS5 databases that survive across sessions.",
+    inputSchema: z.object({}),
+  },
+  async () => {
+    try {
+      const dbs = ContentStore.listPersistent();
+      if (dbs.length === 0) {
+        return trackResponse("list_databases", {
+          content: [{ type: "text" as const, text: "No persistent databases found. Use index(..., database: \"name\") to create one." }],
+        });
+      }
+      const lines = ["## Persistent Knowledge Bases\n", "| Name | Size |", "|------|------|"];
+      for (const db of dbs) {
+        const size = db.sizeBytes < 1024 ? `${db.sizeBytes}B` : db.sizeBytes < 1048576 ? `${(db.sizeBytes / 1024).toFixed(1)}KB` : `${(db.sizeBytes / 1048576).toFixed(1)}MB`;
+        lines.push(`| ${db.name} | ${size} |`);
+      }
+      lines.push(`\nPath: ${ContentStore.persistentDir}`);
+      return trackResponse("list_databases", {
+        content: [{ type: "text" as const, text: lines.join("\n") }],
+      });
+    } catch (err: unknown) {
+      return trackResponse("list_databases", {
+        content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "delete_database",
+  {
+    title: "Delete Persistent Database",
+    description:
+      "Delete a named persistent knowledge base. This permanently removes the database file. Use list_databases to see available databases first.",
+    inputSchema: z.object({
+      name: z.string().describe("Name of the persistent database to delete"),
+    }),
+  },
+  async ({ name }) => {
+    try {
+      // Close it if it's open
+      const key = name.toLowerCase();
+      const open = _namedStores.get(key);
+      if (open) {
+        open.close();
+        _namedStores.delete(key);
+      }
+      const deleted = ContentStore.deletePersistent(name);
+      if (deleted) {
+        return trackResponse("delete_database", {
+          content: [{ type: "text" as const, text: `Deleted persistent database: ${name}` }],
+        });
+      }
+      return trackResponse("delete_database", {
+        content: [{ type: "text" as const, text: `Database not found: ${name}` }],
+        isError: true,
+      });
+    } catch (err: unknown) {
+      return trackResponse("delete_database", {
+        content: [{ type: "text" as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────
 // Doltlite version control tools
 // ─────────────────────────────────────────────────────────
 
@@ -2051,10 +2161,11 @@ server.registerTool(
       "or before making experimental changes to the knowledge base.",
     inputSchema: z.object({
       message: z.string().describe("Commit message describing what was indexed or changed"),
+      database: z.string().optional().describe("Named persistent database to commit. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ message }) => {
-    const store = getStore();
+  async ({ message, database }) => {
+    const store = resolveStore(database);
     try {
       store.exec(`SELECT dolt_add('-A')`);
       const result = store.queryOne(`SELECT dolt_commit('-m', ?)`, message) as Record<string, string> | undefined;
@@ -2087,10 +2198,11 @@ server.registerTool(
       "Use to understand what an agent has indexed and when.",
     inputSchema: z.object({
       limit: z.number().optional().default(10).describe("Max commits to show (default 10)"),
+      database: z.string().optional().describe("Named persistent database to query. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ limit }) => {
-    const store = getStore();
+  async ({ limit, database }) => {
+    const store = resolveStore(database);
     try {
       const rows = store.queryAll(
         `SELECT commit_hash, committer, date, message FROM dolt_log LIMIT ?`, limit
@@ -2135,10 +2247,12 @@ server.registerTool(
       "Show what changed in the knowledge base since the last commit. " +
       "Reports added, modified, and deleted chunks. Use before committing " +
       "to review what will be saved, or to understand recent indexing activity.",
-    inputSchema: z.object({}),
+    inputSchema: z.object({
+      database: z.string().optional().describe("Named persistent database to diff. Omit to use the ephemeral session store."),
+    }),
   },
-  async () => {
-    const store = getStore();
+  async ({ database }) => {
+    const store = resolveStore(database);
     try {
       const status = store.queryAll(
         `SELECT table_name, staged, status FROM dolt_status`
@@ -2180,10 +2294,12 @@ server.registerTool(
       "Show the current state of the knowledge base: engine type, commit count, " +
       "source count, and any uncommitted changes. Quick health check for the " +
       "versioned knowledge base.",
-    inputSchema: z.object({}),
+    inputSchema: z.object({
+      database: z.string().optional().describe("Named persistent database to inspect. Omit to use the ephemeral session store."),
+    }),
   },
-  async () => {
-    const store = getStore();
+  async ({ database }) => {
+    const store = resolveStore(database);
     const lines: string[] = ["## Knowledge Base Status\n"];
 
     // Engine check
@@ -2248,10 +2364,11 @@ server.registerTool(
       description: z.string().optional().default("").describe("What this convoy accomplishes"),
       rig: z.string().optional().default("").describe("Target rig name (e.g. gascity, t3code)"),
       metadata: z.record(z.unknown()).optional().describe("Additional metadata as JSON object"),
+      database: z.string().optional().describe("Named persistent database to store convoy in. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ title, description, rig, metadata }) => {
-    const store = getStore();
+  async ({ title, description, rig, metadata, database }) => {
+    const store = resolveStore(database);
     try {
       const { randomUUID } = await import("node:crypto");
       const id = randomUUID();
@@ -2292,10 +2409,11 @@ server.registerTool(
       issue_type: z.string().optional().default("task").describe("task | gate | formula | session"),
       priority: z.number().optional().default(2).describe("Priority 1-4 (1=highest)"),
       assignee: z.string().optional().describe("Agent assignee"),
+      database: z.string().optional().describe("Named persistent database to store bead in. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ title, description, rig, convoy_id, issue_type, priority, assignee }) => {
-    const store = getStore();
+  async ({ title, description, rig, convoy_id, issue_type, priority, assignee, database }) => {
+    const store = resolveStore(database);
     try {
       const { randomUUID } = await import("node:crypto");
       const id = randomUUID();
@@ -2338,10 +2456,11 @@ server.registerTool(
       issue_id: z.string().describe("ID of the dependent bead (the one that is blocked)"),
       depends_on_id: z.string().describe("ID of the bead it depends on (the blocker)"),
       type: z.string().optional().default("blocks").describe("Relationship type: blocks | child-of | relates-to"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ issue_id, depends_on_id, type }) => {
-    const store = getStore();
+  async ({ issue_id, depends_on_id, type, database }) => {
+    const store = resolveStore(database);
     try {
       const now = new Date().toISOString();
       store.exec(
@@ -2371,10 +2490,11 @@ server.registerTool(
       "Use to review staged work before deploying to production GC.",
     inputSchema: z.object({
       include_beads: z.boolean().optional().default(true).describe("Include child beads under each convoy"),
+      database: z.string().optional().describe("Named persistent database to list convoys from. Omit to use the ephemeral session store."),
     }),
   },
-  async ({ include_beads }) => {
-    const store = getStore();
+  async ({ include_beads, database }) => {
+    const store = resolveStore(database);
     try {
       const convoys = store.queryAll(
         `SELECT id, title, description, rig, status, created_at FROM issues
@@ -2432,6 +2552,483 @@ server.registerTool(
 );
 
 // ─────────────────────────────────────────────────────────
+// Project docs tools (version-controlled knowledge)
+// ─────────────────────────────────────────────────────────
+
+server.registerTool(
+  "ctx_docs_status",
+  {
+    title: "Project Docs Status",
+    description:
+      "Show version-controlled project docs: active workarounds, planned work, " +
+      "config values, and recent changes. Read this at session start to understand " +
+      "the current state of the project.",
+    inputSchema: z.object({
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ database }) => {
+    const store = resolveStore(database);
+    const lines: string[] = ["## Project Docs\n"];
+
+    // Config
+    try {
+      const config = store.queryAll("SELECT key, value FROM docs_config ORDER BY key") as Array<{ key: string; value: string }>;
+      if (config.length) {
+        lines.push("### Config");
+        for (const { key, value } of config) lines.push(`- **${key}**: ${value}`);
+        lines.push("");
+      }
+    } catch { /* table may not exist yet */ }
+
+    // Active workarounds
+    try {
+      const active = store.queryAll("SELECT name, location, remove_when FROM docs_workarounds WHERE status = 'active' ORDER BY id") as Array<Record<string, string>>;
+      if (active.length) {
+        lines.push(`### Active Workarounds (${active.length})`);
+        for (const w of active) lines.push(`- **${w.name}** @ \`${w.location}\` — remove when: ${w.remove_when || "unknown"}`);
+        lines.push("");
+      }
+    } catch { /* table may not exist yet */ }
+
+    // Workarounds to verify
+    try {
+      const verify = store.queryAll("SELECT name, location FROM docs_workarounds WHERE status = 'verify' ORDER BY id") as Array<Record<string, string>>;
+      if (verify.length) {
+        lines.push(`### Needs Verification (${verify.length})`);
+        for (const w of verify) lines.push(`- **${w.name}** @ \`${w.location}\``);
+        lines.push("");
+      }
+    } catch { /* table may not exist yet */ }
+
+    // Plans
+    try {
+      const plans = store.queryAll("SELECT id, title, status FROM docs_plans ORDER BY id") as Array<{ id: number; title: string; status: string }>;
+      if (plans.length) {
+        lines.push(`### Plans (${plans.length})`);
+        for (const p of plans) lines.push(`- [${p.status}] ${p.title}`);
+        lines.push("");
+      }
+    } catch { /* table may not exist yet */ }
+
+    // Recent log
+    try {
+      const log = store.queryAll("SELECT message, created_at FROM docs_log ORDER BY id DESC LIMIT 5") as Array<{ message: string; created_at: string }>;
+      if (log.length) {
+        lines.push("### Recent Changes");
+        for (const entry of log) lines.push(`- ${entry.created_at}: ${entry.message}`);
+        lines.push("");
+      }
+    } catch { /* table may not exist yet */ }
+
+    if (lines.length === 1) lines.push("No project docs yet. Use ctx_docs_update to add entries.");
+
+    return trackResponse("ctx_docs_status", {
+      content: [{ type: "text" as const, text: lines.join("\n") }],
+    });
+  },
+);
+
+server.registerTool(
+  "ctx_docs_query",
+  {
+    title: "Query Project Docs",
+    description:
+      "Run a read-only SQL query against the project docs tables: docs_config, " +
+      "docs_workarounds, docs_plans, docs_failures, docs_log. Use for ad-hoc " +
+      "queries not covered by ctx_docs_status.",
+    inputSchema: z.object({
+      sql: z.string().describe("SQL SELECT query against docs_* tables"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ sql, database }) => {
+    const store = resolveStore(database);
+    const trimmed = sql.trim().toUpperCase();
+    if (!trimmed.startsWith("SELECT")) {
+      return trackResponse("ctx_docs_query", {
+        content: [{ type: "text" as const, text: "Error: ctx_docs_query only supports SELECT. Use ctx_docs_update for mutations." }],
+        isError: true,
+      });
+    }
+    try {
+      const rows = store.queryAll(sql) as Array<Record<string, unknown>>;
+      if (!rows.length) {
+        return trackResponse("ctx_docs_query", {
+          content: [{ type: "text" as const, text: "No results." }],
+        });
+      }
+      const cols = Object.keys(rows[0]);
+      const lines = [cols.join(" | "), cols.map(() => "---").join(" | ")];
+      for (const row of rows) lines.push(cols.map(c => String(row[c] ?? "")).join(" | "));
+      return trackResponse("ctx_docs_query", {
+        content: [{ type: "text" as const, text: lines.join("\n") }],
+      });
+    } catch (e: any) {
+      return trackResponse("ctx_docs_query", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_docs_update",
+  {
+    title: "Update Project Docs",
+    description:
+      "Run an INSERT, UPDATE, or DELETE against project docs tables, with a log " +
+      "message explaining what changed and why. Every mutation is recorded in docs_log " +
+      "for audit trail. Tables: docs_config, docs_workarounds, docs_plans, docs_failures.",
+    inputSchema: z.object({
+      sql: z.string().describe("SQL mutation (INSERT/UPDATE/DELETE) against docs_* tables"),
+      message: z.string().describe("What changed and why — recorded in docs_log"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ sql, message, database }) => {
+    const store = resolveStore(database);
+    const trimmed = sql.trim().toUpperCase();
+    if (trimmed.startsWith("SELECT")) {
+      return trackResponse("ctx_docs_update", {
+        content: [{ type: "text" as const, text: "Error: Use ctx_docs_query for SELECT. ctx_docs_update is for mutations." }],
+        isError: true,
+      });
+    }
+    // Only allow mutations on docs_* tables
+    const allowedTables = ["docs_config", "docs_workarounds", "docs_plans", "docs_failures", "docs_log"];
+    const mentionsDocsTable = allowedTables.some(t => trimmed.includes(t.toUpperCase()));
+    if (!mentionsDocsTable) {
+      return trackResponse("ctx_docs_update", {
+        content: [{ type: "text" as const, text: `Error: Only docs_* tables allowed. Tables: ${allowedTables.join(", ")}` }],
+        isError: true,
+      });
+    }
+    try {
+      store.exec(sql);
+      // Determine which tables were changed
+      const changed = allowedTables.filter(t => trimmed.includes(t.toUpperCase())).join(", ");
+      const now = new Date().toISOString();
+      store.exec(
+        `INSERT INTO docs_log (message, tables_changed, created_at) VALUES ('${message.replace(/'/g, "''")}', '${changed}', '${now}')`
+      );
+      // Try dolt_commit if available
+      try {
+        store.queryOne(`SELECT dolt_commit('-A', '-m', '${message.replace(/'/g, "''")}')`);
+      } catch { /* plain sqlite — no dolt_commit, that's fine */ }
+
+      return trackResponse("ctx_docs_update", {
+        content: [{ type: "text" as const, text: `Updated ${changed}. Logged: "${message}"` }],
+      });
+    } catch (e: any) {
+      return trackResponse("ctx_docs_update", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_docs_commit",
+  {
+    title: "Commit Project Docs",
+    description:
+      "Create a dolt commit of the current docs state. Use after one or more " +
+      "ctx_docs_update calls to checkpoint your changes with a descriptive message. " +
+      "Only works when running on doltlite (not plain SQLite).",
+    inputSchema: z.object({
+      message: z.string().describe("Commit message — what changed and why"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ message, database }) => {
+    const store = resolveStore(database);
+    try {
+      const result = store.queryOne(
+        `SELECT dolt_commit('-A', '-m', '${message.replace(/'/g, "''")}') as hash`
+      ) as { hash: string } | undefined;
+      return trackResponse("ctx_docs_commit", {
+        content: [{ type: "text" as const, text: `Committed: ${result?.hash ?? "unknown"}\nMessage: ${message}` }],
+      });
+    } catch (e: any) {
+      if (e.message.includes("dolt_commit")) {
+        return trackResponse("ctx_docs_commit", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning). Changes are saved but not version-tracked." }],
+        });
+      }
+      return trackResponse("ctx_docs_commit", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_docs_log",
+  {
+    title: "Project Docs History",
+    description:
+      "Show the dolt commit history for project docs. Each entry shows the commit " +
+      "hash, date, and message. Falls back to docs_log table if dolt is not available.",
+    inputSchema: z.object({
+      limit: z.number().optional().default(10).describe("Number of entries to show"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ limit, database }) => {
+    const store = resolveStore(database);
+    const lines: string[] = ["## Docs History\n"];
+
+    // Try dolt_log first
+    let usedDolt = false;
+    try {
+      const commits = store.queryAll(
+        `SELECT commit_hash, date, message FROM dolt_log ORDER BY date DESC LIMIT ${limit}`
+      ) as Array<{ commit_hash: string; date: string; message: string }>;
+      if (commits.length) {
+        usedDolt = true;
+        lines.push("*Source: dolt_log*\n");
+        for (const c of commits) {
+          lines.push(`- \`${c.commit_hash.slice(0, 12)}\` ${c.date} — ${c.message}`);
+        }
+      }
+    } catch { /* no dolt — fall through */ }
+
+    // Fall back to docs_log
+    if (!usedDolt) {
+      try {
+        const entries = store.queryAll(
+          `SELECT message, tables_changed, created_at FROM docs_log ORDER BY id DESC LIMIT ${limit}`
+        ) as Array<{ message: string; tables_changed: string; created_at: string }>;
+        if (entries.length) {
+          lines.push("*Source: docs_log (plain SQLite — no dolt versioning)*\n");
+          for (const e of entries) {
+            lines.push(`- ${e.created_at} [${e.tables_changed}] ${e.message}`);
+          }
+        } else {
+          lines.push("No history yet.");
+        }
+      } catch {
+        lines.push("No history yet.");
+      }
+    }
+
+    return trackResponse("ctx_docs_log", {
+      content: [{ type: "text" as const, text: lines.join("\n") }],
+    });
+  },
+);
+
+server.registerTool(
+  "ctx_docs_diff",
+  {
+    title: "Project Docs Diff",
+    description:
+      "Show what changed in project docs between two dolt commits, or show " +
+      "uncommitted changes. Supports short hashes, HEAD~N refs, and range diffs " +
+      "across multiple commits. Diffs all docs tables by default. Only available on doltlite.",
+    inputSchema: z.object({
+      table: z.string().optional().describe("Which docs table to diff: docs_config, docs_workarounds, docs_plans, docs_failures. Omit to diff all tables."),
+      from_commit: z.string().optional().describe("Start commit (short/full hash or HEAD~N). Omit for uncommitted changes."),
+      to_commit: z.string().optional().describe("End commit (short/full hash or HEAD~N). Omit for HEAD."),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ table, from_commit, to_commit, database }) => {
+    const store = resolveStore(database);
+    const allowedTables = ["docs_config", "docs_workarounds", "docs_plans", "docs_failures"];
+    if (table && !allowedTables.includes(table)) {
+      return trackResponse("ctx_docs_diff", {
+        content: [{ type: "text" as const, text: `Error: table must be one of: ${allowedTables.join(", ")}` }],
+        isError: true,
+      });
+    }
+
+    const resolveRef = (ref: string): string => {
+      if (/^HEAD$/i.test(ref)) {
+        const row = store.queryOne("SELECT commit_hash FROM dolt_log ORDER BY date DESC LIMIT 1") as { commit_hash: string } | undefined;
+        if (!row) throw new Error("No commits yet");
+        return row.commit_hash;
+      }
+      const m = ref.match(/^HEAD~(\d+)$/i);
+      if (m) {
+        const row = store.queryOne(
+          `SELECT commit_hash FROM dolt_log ORDER BY date DESC LIMIT 1 OFFSET ${parseInt(m[1], 10)}`
+        ) as { commit_hash: string } | undefined;
+        if (!row) throw new Error(`HEAD~${m[1]} not found`);
+        return row.commit_hash;
+      }
+      return ref;
+    };
+
+    const metaCols = new Set(["from_commit", "to_commit", "from_commit_date", "to_commit_date", "diff_type"]);
+
+    try {
+      const from = from_commit ? resolveRef(from_commit) : undefined;
+      const to = to_commit ? resolveRef(to_commit) : undefined;
+      const tables = table ? [table] : allowedTables;
+      const output: string[] = [];
+      let totalChanges = 0;
+
+      for (const t of tables) {
+        let sql: string;
+        if (from && to) {
+          sql = `SELECT * FROM dolt_diff_${t} WHERE to_commit IN (` +
+            `SELECT commit_hash FROM dolt_log ` +
+            `WHERE date > (SELECT date FROM dolt_log WHERE commit_hash LIKE '${from}%' LIMIT 1) ` +
+            `AND date <= (SELECT date FROM dolt_log WHERE commit_hash LIKE '${to}%' LIMIT 1))`;
+        } else if (from) {
+          sql = `SELECT * FROM dolt_diff_${t} WHERE to_commit IN (` +
+            `SELECT commit_hash FROM dolt_log ` +
+            `WHERE date > (SELECT date FROM dolt_log WHERE commit_hash LIKE '${from}%' LIMIT 1))`;
+        } else {
+          sql = `SELECT * FROM dolt_diff_${t} WHERE to_commit = 'WORKING'`;
+        }
+
+        let rows: Array<Record<string, unknown>>;
+        try { rows = store.queryAll(sql) as Array<Record<string, unknown>>; }
+        catch { continue; }
+        if (!rows.length) continue;
+
+        const allCols = Object.keys(rows[0]);
+        const dataCols = allCols
+          .filter(c => c.startsWith("to_") && !metaCols.has(c))
+          .map(c => c.slice(3));
+
+        const added = rows.filter(r => r.diff_type === "added");
+        const modified = rows.filter(r => r.diff_type === "modified");
+        const removed = rows.filter(r => r.diff_type === "removed");
+
+        output.push(`### ${t}`);
+        const fmtRow = (row: Record<string, unknown>, prefix: string) =>
+          dataCols.map(c => { const v = row[`${prefix}_${c}`]; return v != null && v !== "" ? `${c}=${v}` : null; }).filter(Boolean).join(", ");
+
+        for (const row of added) { output.push(`+ ${fmtRow(row, "to")}`); totalChanges++; }
+        for (const row of modified) {
+          const changes = dataCols
+            .filter(c => String(row[`from_${c}`] ?? "") !== String(row[`to_${c}`] ?? ""))
+            .map(c => `${c}: \`${row[`from_${c}`] ?? ""}\` → \`${row[`to_${c}`] ?? ""}\``);
+          output.push(`~ ${changes.join(", ")}`);
+          totalChanges++;
+        }
+        for (const row of removed) { output.push(`- ${fmtRow(row, "from")}`); totalChanges++; }
+        output.push("");
+      }
+
+      if (!totalChanges) {
+        return trackResponse("ctx_docs_diff", {
+          content: [{ type: "text" as const, text: table ? `No changes in ${table}.` : "No changes in any docs table." }],
+        });
+      }
+
+      const header = from && to
+        ? `## Docs Diff (${from.slice(0, 8)}..${to.slice(0, 8)}) — ${totalChanges} change(s)\n\n`
+        : from
+          ? `## Docs Diff (${from.slice(0, 8)}..HEAD) — ${totalChanges} change(s)\n\n`
+          : `## Uncommitted Docs Changes — ${totalChanges} change(s)\n\n`;
+
+      return trackResponse("ctx_docs_diff", {
+        content: [{ type: "text" as const, text: header + output.join("\n") }],
+      });
+    } catch (e: any) {
+      if (e.message?.includes("dolt_diff") || e.message?.includes("no such table")) {
+        return trackResponse("ctx_docs_diff", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_docs_diff", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_docs_branch",
+  {
+    title: "Manage Docs Branches",
+    description:
+      "Create, list, switch, merge, or delete dolt branches for project docs. " +
+      "Use branches to isolate experimental changes before merging. Only available on doltlite.",
+    inputSchema: z.object({
+      action: z.enum(["list", "create", "checkout", "merge", "delete"]).describe("Branch action"),
+      name: z.string().optional().describe("Branch name (required for create/checkout/merge)"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default project store."),
+    }),
+  },
+  async ({ action, name, database }) => {
+    const store = resolveStore(database);
+    try {
+      switch (action) {
+        case "list": {
+          const branches = store.queryAll(
+            "SELECT name, hash, is_current FROM dolt_branches ORDER BY name"
+          ) as Array<{ name: string; hash: string; is_current: number }>;
+          const lines = ["## Branches\n"];
+          for (const b of branches) {
+            const marker = b.is_current ? " **(active)**" : "";
+            lines.push(`- \`${b.name}\`${marker} — ${b.hash.slice(0, 12)}`);
+          }
+          return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: lines.join("\n") }],
+          });
+        }
+        case "create": {
+          if (!name) return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: "Error: name required for create" }], isError: true,
+          });
+          store.queryOne(`SELECT dolt_branch('${name.replace(/'/g, "''")}')`);
+          return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: `Created branch: ${name}` }],
+          });
+        }
+        case "checkout": {
+          if (!name) return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: "Error: name required for checkout" }], isError: true,
+          });
+          store.queryOne(`SELECT dolt_checkout('${name.replace(/'/g, "''")}')`);
+          return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: `Switched to branch: ${name}` }],
+          });
+        }
+        case "merge": {
+          if (!name) return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: "Error: name required for merge" }], isError: true,
+          });
+          store.queryOne(`SELECT dolt_merge('${name.replace(/'/g, "''")}')`);
+          return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: `Merged branch: ${name}` }],
+          });
+        }
+        case "delete": {
+          if (!name) return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: "Error: name required for delete" }], isError: true,
+          });
+          store.queryOne(`SELECT dolt_branch('-d', '${name.replace(/'/g, "''")}')`);
+          return trackResponse("ctx_docs_branch", {
+            content: [{ type: "text" as const, text: `Deleted branch: ${name}` }],
+          });
+        }
+      }
+    } catch (e: any) {
+      if (e.message.includes("dolt_")) {
+        return trackResponse("ctx_docs_branch", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_docs_branch", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────
 // Server startup
 // ─────────────────────────────────────────────────────────
 
@@ -2446,6 +3043,11 @@ async function main() {
   const shutdown = () => {
     executor.cleanupBackgrounded();
     if (_store) _store.close(); // persist DB for --continue sessions
+    // Close named stores without deleting their files
+    for (const [, ns] of _namedStores) {
+      try { ns.close(); } catch { /* ignore */ }
+    }
+    _namedStores.clear();
   };
   const gracefulShutdown = async () => {
     shutdown();

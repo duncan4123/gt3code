@@ -2,7 +2,7 @@
 import "../suppress-stderr.mjs";
 import "../ensure-deps.mjs";
 /**
- * Cursor sessionStart hook for context-mode.
+ * Cursor sessionStart hook for context-mode-doltlite.
  */
 
 import { createRoutingBlock } from "../routing-block.mjs";

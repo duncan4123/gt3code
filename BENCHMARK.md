@@ -60,8 +60,8 @@
 | React useEffect docs | Context7 | 5.9 KB | 1,494 B | 75% | 16 | 4 |
 | Next.js App Router docs | Context7 | 6.5 KB | 3,311 B | 50% | 5 | 5 |
 | Tailwind CSS docs | Context7 | 4.0 KB | 620 B | 85% | 5 | 5 |
-| Skill prompt (main) | context-mode | 4.4 KB | 932 B | 79% | 15 | 6 |
-| Skill references (4 files) | context-mode | 33.2 KB | 2,412 B | 93% | 51 | 32 |
+| Skill prompt (main) | context-mode-doltlite | 4.4 KB | 932 B | 79% | 15 | 6 |
+| Skill references (4 files) | context-mode-doltlite | 33.2 KB | 2,412 B | 93% | 51 | 32 |
 
 **Subtotal: 60.3 KB raw → 11.0 KB context (82% savings)**
 
@@ -76,7 +76,7 @@
 
 ## Part 3: Smart Truncation
 
-*When output exceeds the limit, context-mode keeps the first 60% + last 40% of lines — preserving both initial context and final error messages.*
+*When output exceeds the limit, context-mode-doltlite keeps the first 60% + last 40% of lines — preserving both initial context and final error messages.*
 
 | Before (v0.2) | After (v0.3) |
 |---|---|
@@ -110,7 +110,7 @@ Claude's context window: **200,000 tokens**
 
 ### Scenario: Full debugging session
 
-| Tool Calls | Without context-mode | With context-mode |
+| Tool Calls | Without context-mode-doltlite | With context-mode-doltlite |
 |---|---|---|
 | Context7 docs (3 queries) | 16.4 KB | 5.6 KB |
 | Playwright snapshot | 56.2 KB | 299 B |

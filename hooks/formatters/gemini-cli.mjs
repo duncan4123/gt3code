@@ -27,7 +27,7 @@ export function formatDecision(decision) {
       return {
         hookSpecificOutput: {
           decision: "deny",
-          reason: decision.reason ?? "Blocked by context-mode",
+          reason: decision.reason ?? "Blocked by context-mode-doltlite",
         },
       };
 

@@ -1,5 +1,5 @@
 {
-  "name": "context-mode",
+  "name": "context-mode-doltlite",
   "description": "Context-mode hooks for context window protection",
   "hooks": {
     "preToolUse": [
