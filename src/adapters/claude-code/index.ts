@@ -21,6 +21,7 @@ import {
   mkdirSync,
   copyFileSync,
   accessSync,
+  existsSync,
   readdirSync,
   chmodSync,
   constants,
@@ -42,13 +43,15 @@ import type {
   PreCompactResponse,
   SessionStartResponse,
   HookRegistration,
-  RoutingInstructionsConfig,
 } from "../types.js";
 import {
   HOOK_TYPES,
   HOOK_SCRIPTS,
+  REQUIRED_HOOKS,
   PRE_TOOL_USE_MATCHER_PATTERN,
   isContextModeHook,
+  isAnyContextModeHook,
+  extractHookScriptPath,
   buildHookCommand,
   type HookType,
 } from "./hooks.js";
@@ -497,6 +500,58 @@ export class ClaudeCodeAdapter implements HookAdapter {
     const hooks = (settings.hooks ?? {}) as Record<string, unknown>;
     const changes: string[] = [];
 
+    // Remove stale context-mode hook entries across ALL hook types (fixes #187).
+    // After a marketplace auto-update or version change, settings.json may contain
+    // hardcoded paths pointing to deleted version directories (e.g., .../0.9.17/hooks/...).
+    // Clean these before registering fresh entries to prevent SessionStart errors.
+    for (const hookType of Object.keys(hooks)) {
+      const entries = hooks[hookType];
+      if (!Array.isArray(entries)) continue;
+
+      const filtered = entries.filter((entry: Record<string, unknown>) => {
+        const typedEntry = entry as { hooks?: Array<{ command?: string }> };
+        if (!isAnyContextModeHook(typedEntry)) return true; // preserve non-context-mode hooks
+
+        // Keep CLI dispatcher entries (path-independent, never stale)
+        const commands = typedEntry.hooks ?? [];
+        const hasOnlyDispatcherCommands = commands.every(
+          (h) => !h.command || !extractHookScriptPath(h.command),
+        );
+        if (hasOnlyDispatcherCommands) return true;
+
+        // For node path commands, check if the referenced script file exists
+        return commands.every((h) => {
+          const scriptPath = h.command ? extractHookScriptPath(h.command) : null;
+          if (!scriptPath) return true; // not a path-based command
+          return existsSync(scriptPath);
+        });
+      });
+
+      const removed = entries.length - filtered.length;
+      if (removed > 0) {
+        hooks[hookType] = filtered;
+        changes.push(`Removed ${removed} stale ${hookType} hook(s)`);
+      }
+    }
+
+    // If plugin hooks.json already covers all required hooks, skip settings.json
+    // registration entirely (Issue #198). Plugin installs don't need settings.json
+    // entries — hooks.json with ${CLAUDE_PLUGIN_ROOT} is the source of truth.
+    const pluginHooks = this.readPluginHooks(pluginRoot);
+    if (pluginHooks) {
+      const allCovered = REQUIRED_HOOKS.every((ht) =>
+        this.checkHookType(undefined, pluginHooks, ht),
+      );
+      if (allCovered) {
+        // Still write cleaned settings (stale removal) but don't add new entries
+        settings.hooks = hooks;
+        this.writeSettings(settings);
+        changes.push("Skipped settings.json registration — plugin hooks.json is sufficient");
+        return changes;
+      }
+    }
+
+    // Register fresh hooks for required hook types
     const hookTypes: HookType[] = [
       HOOK_TYPES.PRE_TOOL_USE,
       HOOK_TYPES.SESSION_START,
@@ -604,41 +659,6 @@ export class ClaudeCodeAdapter implements HookAdapter {
       writeFileSync(ipPath, JSON.stringify(ipRaw, null, 2) + "\n", "utf-8");
     } catch {
       /* best effort */
-    }
-  }
-
-  // ── Routing Instructions (soft enforcement) ────────────
-
-  getRoutingInstructionsConfig(): RoutingInstructionsConfig {
-    return {
-      fileName: "CLAUDE.md",
-      globalPath: resolve(homedir(), ".claude", "CLAUDE.md"),
-      projectRelativePath: "CLAUDE.md",
-    };
-  }
-
-  writeRoutingInstructions(projectDir: string, pluginRoot: string): string | null {
-    const config = this.getRoutingInstructionsConfig();
-    const targetPath = resolve(projectDir, config.projectRelativePath);
-    const sourcePath = resolve(pluginRoot, "configs", "claude-code", config.fileName);
-
-    try {
-      const content = readFileSync(sourcePath, "utf-8");
-
-      // Check if file exists and already has context-mode instructions
-      try {
-        const existing = readFileSync(targetPath, "utf-8");
-        if (existing.includes("context-mode")) return null;
-        // Append to existing file
-        writeFileSync(targetPath, existing.trimEnd() + "\n\n" + content, "utf-8");
-        return targetPath;
-      } catch {
-        // File doesn't exist — create it
-        writeFileSync(targetPath, content, "utf-8");
-        return targetPath;
-      }
-    } catch {
-      return null;
     }
   }
 

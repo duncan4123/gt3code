@@ -11,13 +11,12 @@
  * Constraints:
  *   - No SessionStart hook (OpenCode doesn't support it — #14808, #5409)
  *   - No context injection (canInjectSessionContext: false)
+ *   - No routing file auto-write (avoid dirtying project trees)
  *   - Session cleanup happens at plugin init (no SessionStart)
  */
 
-import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { SessionDB } from "./session/db.js";
@@ -25,7 +24,7 @@ import { extractEvents } from "./session/extract.js";
 import type { HookInput } from "./session/extract.js";
 import { buildResumeSnapshot } from "./session/snapshot.js";
 import type { SessionEvent } from "./types.js";
-import { OpenCodeAdapter } from "./adapters/opencode/index.js";
+import { AdapterPlatformType, OpenCodeAdapter } from "./adapters/opencode/index.js";
 
 // ── Types ─────────────────────────────────────────────────
 
@@ -73,25 +72,8 @@ interface CompactingHookOutput {
 }
 
 // ── Helpers ───────────────────────────────────────────────
-
-function getSessionDir(): string {
-  const dir = join(
-    homedir(),
-    ".config",
-    "opencode",
-    "context-mode",
-    "sessions",
-  );
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-function getDBPath(projectDir: string): string {
-  const hash = createHash("sha256")
-    .update(projectDir)
-    .digest("hex")
-    .slice(0, 16);
-  return join(getSessionDir(), `${hash}.db`);
+function getPlatform(): AdapterPlatformType {
+  return process.env.KILO ? "kilo" : "opencode";
 }
 
 // ── Plugin Factory ────────────────────────────────────────
@@ -99,29 +81,23 @@ function getDBPath(projectDir: string): string {
 /**
  * OpenCode plugin factory. Called once when OpenCode loads the plugin.
  * Returns an object mapping hook event names to async handler functions.
- */
+*/
 export const ContextModePlugin = async (ctx: PluginContext) => {
   // Resolve build dir from compiled JS location
+  const adapter = new OpenCodeAdapter(getPlatform());
   const buildDir = dirname(fileURLToPath(import.meta.url));
-
+  
   // Load routing module (ESM .mjs, lives outside build/ in hooks/)
   const routingPath = resolve(buildDir, "..", "hooks", "core", "routing.mjs");
   const routing = await import(pathToFileURL(routingPath).href);
   await routing.initSecurity(buildDir);
-
+  
   // Initialize session
   const projectDir = ctx.directory;
-  const db = new SessionDB({ dbPath: getDBPath(projectDir) });
+  const db = new SessionDB({ dbPath: adapter.getSessionDBPath(projectDir) });
   const sessionId = randomUUID();
   db.ensureSession(sessionId, projectDir);
-
-  // Auto-write AGENTS.md on startup for OpenCode projects
-  try {
-    new OpenCodeAdapter().writeRoutingInstructions(projectDir, resolve(buildDir, ".."));
-  } catch {
-    // best effort — never break plugin init
-  }
-
+  
   // Clean up old sessions on startup (replaces SessionStart hook)
   db.cleanupOldSessions(0);
 

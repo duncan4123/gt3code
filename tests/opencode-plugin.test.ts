@@ -1,3 +1,4 @@
+import "./setup-home";
 /**
  * Tests for the OpenCode TypeScript plugin entry point.
  *
@@ -8,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -58,14 +59,13 @@ describe("ContextModePlugin", () => {
       expect(typeof plugin["experimental.session.compacting"]).toBe("function");
     });
 
-    it("writes AGENTS.md routing instructions on startup", async () => {
+    it("does not write AGENTS.md routing instructions on startup", async () => {
       const projectDir = join(tempDir, "factory-startup-routing");
       mkdirSync(projectDir, { recursive: true });
       await createTestPlugin(projectDir);
 
       const agentsPath = join(projectDir, "AGENTS.md");
-      expect(existsSync(agentsPath)).toBe(true);
-      expect(readFileSync(agentsPath, "utf-8")).toContain("context-mode");
+      expect(existsSync(agentsPath)).toBe(false);
     });
   });
 

@@ -144,12 +144,46 @@ const sessionStats = {
   sessionStart: Date.now(),
 };
 
+/**
+ * Reset session stats to zero. Called when /clear flag is detected.
+ * The SessionStart hook writes a .clear-stats flag file on /clear,
+ * and the server checks for it before each tool call.
+ */
+function resetSessionStats(): void {
+  sessionStats.calls = {};
+  sessionStats.bytesReturned = {};
+  sessionStats.bytesIndexed = 0;
+  sessionStats.bytesSandboxed = 0;
+  sessionStats.cacheHits = 0;
+  sessionStats.cacheBytesSaved = 0;
+  sessionStats.sessionStart = Date.now();
+
+  // Also reset FTS5 content store — drop and recreate on next getStore() call
+  if (_store) {
+    try { _store.cleanup(); } catch { /* best effort */ }
+    _store = null;
+  }
+}
+
+/** Check for .clear-stats flag and reset stats if found. */
+function checkClearStatsFlag(): void {
+  const sessDir = join(homedir(), ".claude", "context-mode", "sessions");
+  try {
+    const flags = readdirSync(sessDir).filter((f) => f.endsWith(".clear-stats"));
+    for (const f of flags) {
+      unlinkSync(join(sessDir, f));
+    }
+    if (flags.length > 0) resetSessionStats();
+  } catch { /* best effort */ }
+}
+
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
 };
 
 function trackResponse(toolName: string, response: ToolResult): ToolResult {
+  checkClearStatsFlag();
   const bytes = response.content.reduce(
     (sum, c) => sum + Buffer.byteLength(c.text),
     0,
@@ -377,6 +411,44 @@ export function extractSnippet(
   return parts.join("\n\n");
 }
 
+export function formatBatchQueryResults(
+  store: ContentStore,
+  queries: string[],
+  source: string,
+  maxOutput = 80 * 1024,
+): string[] {
+  const sections: string[] = [];
+  let outputSize = 0;
+
+  for (const query of queries) {
+    if (outputSize > maxOutput) {
+      sections.push(`## ${query}\n(output cap reached — use search(queries: ["${query}"]) for details)\n`);
+      continue;
+    }
+
+    const results = store.searchWithFallback(query, 3, source, undefined, "exact");
+    sections.push(`## ${query}`);
+    sections.push("");
+    if (results.length > 0) {
+      for (const result of results) {
+        const snippet = extractSnippet(result.content, query, 3000, result.highlighted);
+        sections.push(`### ${result.title}`);
+        sections.push(snippet);
+        sections.push("");
+        outputSize += snippet.length + result.title.length;
+      }
+      continue;
+    }
+
+    sections.push("No matching sections found.");
+    sections.push("");
+  }
+
+  sections.push(`\n> **Tip:** Results are scoped to this batch only. To search across all indexed sources, use \`ctx_search(queries: [...])\`.`);
+
+  return sections;
+}
+
 // ─────────────────────────────────────────────────────────
 // Tool: execute
 // ─────────────────────────────────────────────────────────
@@ -551,6 +623,16 @@ __cm_main().catch(e=>{console.error(e);process.exitCode=1});${background ? '\nse
             isError,
           });
         }
+        // Auto-index large error output into FTS5 — no data loss
+        if (Buffer.byteLength(output) > LARGE_OUTPUT_THRESHOLD) {
+          trackIndexed(Buffer.byteLength(output));
+          return trackResponse("ctx_execute", {
+            content: [
+              { type: "text" as const, text: intentSearch(output, "errors failures exceptions", isError ? `execute:${language}:error` : `execute:${language}`) },
+            ],
+            isError,
+          });
+        }
         return trackResponse("ctx_execute", {
           content: [
             { type: "text" as const, text: output },
@@ -569,6 +651,11 @@ __cm_main().catch(e=>{console.error(e);process.exitCode=1});${background ? '\nse
             { type: "text" as const, text: intentSearch(stdout, intent, `execute:${language}`) },
           ],
         });
+      }
+
+      // Auto-index large stdout into FTS5 — return pointer, not raw content
+      if (Buffer.byteLength(stdout) > LARGE_OUTPUT_THRESHOLD) {
+        return trackResponse("ctx_execute", indexStdout(stdout, `execute:${language}`));
       }
 
       return trackResponse("ctx_execute", {
@@ -614,6 +701,7 @@ function indexStdout(
 // ─────────────────────────────────────────────────────────
 
 const INTENT_SEARCH_THRESHOLD = 5_000; // bytes — ~80-100 lines
+const LARGE_OUTPUT_THRESHOLD = 102_400; // 100KB — auto-index into FTS5, return pointer
 
 function intentSearch(
   stdout: string,
@@ -766,6 +854,16 @@ server.registerTool(
             isError,
           });
         }
+        // Auto-index large error output into FTS5 — no data loss
+        if (Buffer.byteLength(output) > LARGE_OUTPUT_THRESHOLD) {
+          trackIndexed(Buffer.byteLength(output));
+          return trackResponse("ctx_execute_file", {
+            content: [
+              { type: "text" as const, text: intentSearch(output, "errors failures exceptions", isError ? `file:${path}:error` : `file:${path}`) },
+            ],
+            isError,
+          });
+        }
         return trackResponse("ctx_execute_file", {
           content: [
             { type: "text" as const, text: output },
@@ -783,6 +881,11 @@ server.registerTool(
             { type: "text" as const, text: intentSearch(stdout, intent, `file:${path}`) },
           ],
         });
+      }
+
+      // Auto-index large stdout into FTS5 — return pointer, not raw content
+      if (Buffer.byteLength(stdout) > LARGE_OUTPUT_THRESHOLD) {
+        return trackResponse("ctx_execute_file", indexStdout(stdout, `file:${path}`));
       }
 
       return trackResponse("ctx_execute_file", {
@@ -1250,7 +1353,7 @@ server.registerTool(
       const store = getStore();
       const header = (result.stdout || "").trim();
 
-      // Read full content from temp file (bypasses smartTruncate)
+      // Read full content from temp file
       let markdown: string;
       try {
         markdown = readFileSync(outputPath, "utf-8").trim();
@@ -1381,9 +1484,8 @@ server.registerTool(
 
     try {
       // Execute each command individually so every command gets its own
-      // smartTruncate budget (~100KB). Previously, all commands were
-      // concatenated into a single script where smartTruncate (60% head +
-      // 40% tail) could silently drop middle commands. (Issue #61)
+      // output capture. Full stdout is preserved and indexed into FTS5.
+      // (Issue #61, #197)
       const perCommandOutputs: string[] = [];
       const startTime = Date.now();
       let timedOut = false;
@@ -1458,50 +1560,9 @@ server.registerTool(
         sectionTitles.push(s.title);
       }
 
-      // Run all search queries — 3 results each, smart snippets
-      // Three-tier fallback: scoped → boosted → global
-      const MAX_OUTPUT = 80 * 1024; // 80KB total output cap
-      const queryResults: string[] = [];
-      let outputSize = 0;
-
-      for (const query of queries) {
-        if (outputSize > MAX_OUTPUT) {
-          queryResults.push(`## ${query}\n(output cap reached — use search(queries: ["${query}"]) for details)\n`);
-          continue;
-        }
-
-        // Tier 1: scoped search with fallback (porter → trigram → fuzzy)
-        let results = store.searchWithFallback(query, 3, source);
-        let crossSource = false;
-
-        // Tier 2: global fallback (no source filter) — warn about cross-source (Issue #61)
-        if (results.length === 0) {
-          results = store.searchWithFallback(query, 3);
-          crossSource = results.length > 0;
-        }
-
-        queryResults.push(`## ${query}`);
-        if (crossSource) {
-          queryResults.push(
-            `> **Note:** No results in current batch output. Showing results from previously indexed content.`,
-          );
-        }
-        queryResults.push("");
-        if (results.length > 0) {
-          for (const r of results) {
-            // Use larger snippet (3KB) for batch_execute to reduce tiny-fragment issue (Issue #61)
-            const snippet = extractSnippet(r.content, query, 3000, r.highlighted);
-            const sourceTag = crossSource ? ` _(source: ${r.source})_` : "";
-            queryResults.push(`### ${r.title}${sourceTag}`);
-            queryResults.push(snippet);
-            queryResults.push("");
-            outputSize += snippet.length + r.title.length;
-          }
-        } else {
-          queryResults.push("No matching sections found.");
-          queryResults.push("");
-        }
-      }
+      // Run all search queries — source scoped only.
+      // Cross-source search remains available via explicit search().
+      const queryResults = formatBatchQueryResults(store, queries, source);
 
       // Get searchable terms for edge cases where follow-up is needed
       const distinctiveTerms = store.getDistinctiveTerms
@@ -1550,9 +1611,20 @@ server.registerTool(
       "Returns context consumption statistics for the current session. " +
       "Shows total bytes returned to context, breakdown by tool, call counts, " +
       "estimated token usage, and context savings ratio.",
-    inputSchema: z.object({}),
+    inputSchema: z.object({
+      reset: z.boolean().optional().describe("Reset all stats and FTS5 store to zero. Use after /clear."),
+    }),
   },
-  async () => {
+  async ({ reset }) => {
+    // Check for clear flag BEFORE reading stats
+    checkClearStatsFlag();
+
+    if (reset) {
+      resetSessionStats();
+      return trackResponse("ctx_stats", {
+        content: [{ type: "text" as const, text: "Session stats and search index reset." }],
+      });
+    }
     const totalBytesReturned = Object.values(sessionStats.bytesReturned).reduce(
       (sum, b) => sum + b,
       0,
@@ -1895,7 +1967,7 @@ server.registerTool(
       // Write inline script to a temp .mjs file — avoids quote-escaping issues
       // across cmd.exe, PowerShell, and bash (node -e '...' breaks on Windows).
       const scriptLines = [
-        `import{execSync}from"node:child_process";`,
+        `import{execFileSync}from"node:child_process";`,
         `import{cpSync,rmSync,existsSync,mkdtempSync}from"node:fs";`,
         `import{join}from"node:path";`,
         `import{tmpdir}from"node:os";`,
@@ -1903,10 +1975,10 @@ server.registerTool(
         `const T=mkdtempSync(join(tmpdir(),"ctx-upgrade-"));`,
         `try{`,
         `console.log("- [x] Starting inline upgrade (no CLI found)");`,
-        `execSync("git clone --depth 1 ${repoUrl} \\""+T+"\\"",{stdio:"inherit"});`,
+        `execFileSync("git",["clone","--depth","1","${repoUrl}",T],{stdio:"inherit"});`,
         `console.log("- [x] Cloned latest source");`,
-        `execSync("npm install",{cwd:T,stdio:"inherit"});`,
-        `execSync("npm run build",{cwd:T,stdio:"inherit"});`,
+        `execFileSync("npm",["install"],{cwd:T,stdio:"inherit"});`,
+        `execFileSync("npm",["run","build"],{cwd:T,stdio:"inherit"});`,
         `console.log("- [x] Built from source");`,
         ...copyDirs.map(
           (d) =>
@@ -1917,7 +1989,7 @@ server.registerTool(
             `if(existsSync(join(T,${JSON.stringify(f)})))cpSync(join(T,${JSON.stringify(f)}),join(P,${JSON.stringify(f)}),{force:true});`,
         ),
         `console.log("- [x] Copied build artifacts");`,
-        `execSync("npm install --production",{cwd:P,stdio:"inherit"});`,
+        `execFileSync("npm",["install","--production"],{cwd:P,stdio:"inherit"});`,
         `console.log("- [x] Installed production dependencies");`,
         `console.log("## context-mode upgrade complete");`,
         `}catch(e){`,
@@ -2389,26 +2461,15 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // Write routing instructions for hookless platforms (e.g. Codex CLI, Antigravity)
+  // Log detected MCP client for diagnostics
   try {
     const { detectPlatform, getAdapter } = await import("./adapters/detect.js");
     const clientInfo = server.server.getClientVersion();
     const signal = detectPlatform(clientInfo ?? undefined);
-    const adapter = await getAdapter(signal.platform);
+    await getAdapter(signal.platform);
     if (clientInfo) {
       console.error(`MCP client: ${clientInfo.name} v${clientInfo.version} → ${signal.platform}`);
     }
-    // Routing file auto-write DISABLED for all platforms (#158, #164).
-    // Writing to project dirs dirties git trees and env var detection at
-    // MCP startup is unreliable. Routing is injected via SessionStart hooks
-    // for hook-capable platforms. Non-hook platforms rely on manual setup
-    // until `context-mode init` command is implemented.
-    // if (!adapter.capabilities.sessionStart) {
-    //   const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-    //   const projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.env.CODEX_HOME ?? process.cwd();
-    //   const written = adapter.writeRoutingInstructions(projectDir, pluginRoot);
-    //   if (written) console.error(`Wrote routing instructions: ${written}`);
-    // }
   } catch { /* best effort — don't block server startup */ }
 
   console.error(`Context Mode MCP server v${VERSION} running on stdio`);

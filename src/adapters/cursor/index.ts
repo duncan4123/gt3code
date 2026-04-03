@@ -32,7 +32,6 @@ import type {
   PostToolUseResponse,
   SessionStartResponse,
   HookRegistration,
-  RoutingInstructionsConfig,
 } from "../types.js";
 import {
   HOOK_TYPES as CURSOR_HOOK_NAMES,
@@ -45,6 +44,14 @@ import {
   type HookType,
   type CursorHookCommandEntry,
 } from "./hooks.js";
+
+interface StopEvent {
+  sessionId: string;
+  status: string;
+  loopCount: number;
+  generationId?: string;
+  transcriptPath?: string;
+}
 
 interface CursorHookInput {
   tool_name?: string;
@@ -169,6 +176,35 @@ export class CursorAdapter implements HookAdapter {
     return { additional_context: response.context ?? "" };
   }
 
+  parseStopInput(raw: unknown): StopEvent {
+    const input = raw as {
+      conversation_id: string;
+      generation_id?: string;
+      status: string;
+      loop_count: number;
+      transcript_path?: string | null;
+    };
+    return {
+      sessionId: input.conversation_id ?? `pid-${process.ppid}`,
+      status: input.status ?? "completed",
+      loopCount: input.loop_count ?? 0,
+      generationId: input.generation_id,
+      transcriptPath: input.transcript_path ?? undefined,
+    };
+  }
+
+  formatStopResponse(response: { followupMessage?: string }): Record<string, unknown> {
+    if (response.followupMessage) {
+      return { followup_message: response.followupMessage };
+    }
+    return {};
+  }
+
+  parseAfterAgentResponseInput(raw: unknown): { text: string } {
+    const input = raw as { text?: string };
+    return { text: input.text ?? "" };
+  }
+
   getSettingsPath(): string {
     return resolve(".cursor", "hooks.json");
   }
@@ -218,6 +254,22 @@ export class CursorAdapter implements HookAdapter {
         {
           type: "command",
           command: buildHookCommand(CURSOR_HOOK_NAMES.SESSION_START),
+          loop_limit: null,
+          failClosed: false,
+        },
+      ],
+      [CURSOR_HOOK_NAMES.STOP]: [
+        {
+          type: "command",
+          command: buildHookCommand(CURSOR_HOOK_NAMES.STOP),
+          loop_limit: null,
+          failClosed: false,
+        },
+      ],
+      [CURSOR_HOOK_NAMES.AFTER_AGENT_RESPONSE]: [
+        {
+          type: "command",
+          command: buildHookCommand(CURSOR_HOOK_NAMES.AFTER_AGENT_RESPONSE),
           loop_limit: null,
           failClosed: false,
         },
@@ -389,6 +441,20 @@ export class CursorAdapter implements HookAdapter {
       failClosed: false,
     }, changes);
 
+    this.upsertHookEntry(hooks, CURSOR_HOOK_NAMES.STOP, {
+      type: "command",
+      command: buildHookCommand(CURSOR_HOOK_NAMES.STOP),
+      loop_limit: null,
+      failClosed: false,
+    }, changes);
+
+    this.upsertHookEntry(hooks, CURSOR_HOOK_NAMES.AFTER_AGENT_RESPONSE, {
+      type: "command",
+      command: buildHookCommand(CURSOR_HOOK_NAMES.AFTER_AGENT_RESPONSE),
+      loop_limit: null,
+      failClosed: false,
+    }, changes);
+
     settings.version = 1;
     settings.hooks = hooks;
     this.writeSettings(settings as unknown as Record<string, unknown>);
@@ -426,19 +492,6 @@ export class CursorAdapter implements HookAdapter {
 
   updatePluginRegistry(_pluginRoot: string, _version: string): void {
     // Cursor manages extensions and native hooks internally.
-  }
-
-  getRoutingInstructionsConfig(): RoutingInstructionsConfig {
-    return {
-      fileName: "AGENTS.md",
-      globalPath: "",
-      projectRelativePath: "AGENTS.md",
-    };
-  }
-
-  writeRoutingInstructions(_projectDir: string, _pluginRoot: string): string | null {
-    // Native Cursor hook support ships independently from any instruction-file story.
-    return null;
   }
 
   private getCandidateHookConfigPaths(): string[] {

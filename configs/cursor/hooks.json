@@ -11,6 +11,11 @@
       {
         "command": "context-mode hook cursor posttooluse"
       }
+    ],
+    "stop": [
+      {
+        "command": "context-mode hook cursor stop"
+      }
     ]
   }
 }

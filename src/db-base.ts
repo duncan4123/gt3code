@@ -205,6 +205,41 @@ export function defaultDBPath(prefix: string = "context-mode"): string {
 }
 
 // ─────────────────────────────────────────────────────────
+// Retry helper
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Retry a DB operation with exponential backoff on SQLITE_BUSY errors.
+ * Catches errors containing "SQLITE_BUSY" or "database is locked" and
+ * retries up to 3 times with delays: 100ms, 500ms, 2000ms.
+ * If all retries fail, throws a descriptive error.
+ * Pass custom delays for testing (e.g., [0, 0, 0] to skip waits).
+ */
+export function withRetry<T>(fn: () => T, delays: number[] = [100, 500, 2000]): T {
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      return fn();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("SQLITE_BUSY") && !msg.includes("database is locked")) {
+        throw err;
+      }
+      lastError = err instanceof Error ? err : new Error(msg);
+      if (attempt < delays.length) {
+        const delay = delays[attempt];
+        const start = Date.now();
+        while (Date.now() - start < delay) { /* busy-wait for sync retry */ }
+      }
+    }
+  }
+  throw new Error(
+    `SQLITE_BUSY: database is locked after ${delays.length} retries. ` +
+    `Original error: ${lastError?.message}`
+  );
+}
+
+// ─────────────────────────────────────────────────────────
 // Base class
 // ─────────────────────────────────────────────────────────
 
@@ -216,6 +251,30 @@ export function defaultDBPath(prefix: string = "context-mode"): string {
  *
  * The `db` getter exposes the raw `DatabaseInstance` to subclasses only.
  */
+/**
+ * Track all live DatabaseInstance objects so we can close them on process exit.
+ * Prevents better-sqlite3 segfaults caused by V8 garbage-collecting Database
+ * objects after the native addon context is already torn down.
+ *
+ * Uses a global symbol so the set and exit handler survive vitest's module
+ * re-imports within the same fork process (ESM isolate mode clears
+ * module-level state but globalThis persists).
+ */
+const _kLiveDBs = Symbol.for("__context_mode_live_dbs__");
+const _liveDBs: Set<DatabaseInstance> = (() => {
+  const g = globalThis as Record<symbol, Set<DatabaseInstance> | undefined>;
+  if (!g[_kLiveDBs]) {
+    g[_kLiveDBs] = new Set<DatabaseInstance>();
+    process.on("exit", () => {
+      for (const db of g[_kLiveDBs]!) {
+        try { db.close(); } catch { /* already closed */ }
+      }
+      g[_kLiveDBs]!.clear();
+    });
+  }
+  return g[_kLiveDBs]!;
+})();
+
 export abstract class SQLiteBase {
   readonly #dbPath: string;
   readonly #db: DatabaseInstance;
@@ -223,7 +282,8 @@ export abstract class SQLiteBase {
   constructor(dbPath: string) {
     const Database = loadDatabase();
     this.#dbPath = dbPath;
-    this.#db = new Database(dbPath, { timeout: 5000 });
+    this.#db = new Database(dbPath, { timeout: 30000 });
+    _liveDBs.add(this.#db);
     applyWALPragmas(this.#db);
     this.initSchema();
     this.prepareStatements();
@@ -247,7 +307,12 @@ export abstract class SQLiteBase {
 
   /** Close the database connection without deleting files. */
   close(): void {
+    _liveDBs.delete(this.#db);
     closeDB(this.#db);
+  }
+
+  protected withRetry<T>(fn: () => T): T {
+    return withRetry(fn);
   }
 
   /**
@@ -255,6 +320,7 @@ export abstract class SQLiteBase {
    * Call on process exit or at end of session lifecycle.
    */
   cleanup(): void {
+    _liveDBs.delete(this.#db);
     closeDB(this.#db);
     deleteDBFiles(this.#dbPath);
   }

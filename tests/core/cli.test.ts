@@ -70,7 +70,8 @@ describe("cli.bundle.mjs — marketplace install support", () => {
   it("cli.ts upgrade doctor call prefers cli.bundle.mjs with fallback", () => {
     const src = readFileSync(resolve(ROOT, "src", "cli.ts"), "utf-8");
     expect(src).toContain("cli.bundle.mjs");
-    expect(src).toContain("build", "cli.js");
+    expect(src).toContain("build");
+    expect(src).toContain("cli.js");
     // Must use existsSync for fallback
     expect(src).toContain("existsSync");
   });
@@ -82,9 +83,9 @@ describe("cli.bundle.mjs — marketplace install support", () => {
     expect(upgradeStart).toBeGreaterThan(-1);
     const upgradeSrc = src.slice(upgradeStart);
     // Must rebuild native addons between production deps and global install
-    const depsIdx = upgradeSrc.indexOf("npm install --production");
-    const rebuildIdx = upgradeSrc.indexOf('execSync("npm rebuild better-sqlite3"');
-    const globalIdx = upgradeSrc.indexOf("npm install -g");
+    const depsIdx = upgradeSrc.indexOf('"install", "--production"');
+    const rebuildIdx = upgradeSrc.indexOf('"rebuild", "better-sqlite3"');
+    const globalIdx = upgradeSrc.indexOf('"install", "-g"');
     expect(depsIdx).toBeGreaterThan(-1);
     expect(rebuildIdx).toBeGreaterThan(-1);
     expect(globalIdx).toBeGreaterThan(-1);
@@ -200,15 +201,15 @@ describe("CLI Hook Path Tests", () => {
 // ── ABI-aware native binary caching (#148) ────────────────────────────
 
 /**
- * Extract ensureNativeCompat from start.mjs at test time.
- * start.mjs is the entry point with side effects, so we can't import it directly.
- * Instead we extract the function source via regex, wrap it as a temp ESM module,
+ * Extract ensureNativeCompat from hooks/ensure-deps.mjs at test time.
+ * ensure-deps.mjs is the shared bootstrap with side effects (auto-runs on import),
+ * so we extract the function source via regex, wrap it as a temp ESM module,
  * and dynamically import it — tests always run against the real code.
  */
 async function loadEnsureNativeCompat(): Promise<(pluginRoot: string) => void> {
-  const src = readFileSync(resolve(ROOT, "start.mjs"), "utf-8");
-  const match = src.match(/^function ensureNativeCompat\b[\s\S]*?^}/m);
-  if (!match) throw new Error("ensureNativeCompat not found in start.mjs");
+  const src = readFileSync(resolve(ROOT, "hooks", "ensure-deps.mjs"), "utf-8");
+  const match = src.match(/^export function ensureNativeCompat\b[\s\S]*?^}/m);
+  if (!match) throw new Error("ensureNativeCompat not found in hooks/ensure-deps.mjs");
 
   const tmpFile = join(tmpdir(), `abi-test-${Date.now()}.mjs`);
   writeFileSync(tmpFile, [
@@ -216,7 +217,7 @@ async function loadEnsureNativeCompat(): Promise<(pluginRoot: string) => void> {
     'import { resolve } from "node:path";',
     'import { createRequire } from "node:module";',
     'import { execSync } from "node:child_process";',
-    `export ${match[0]}`,
+    `${match[0]}`,
   ].join("\n"));
 
   try {
@@ -253,10 +254,11 @@ describe("ABI-aware native binary caching (#148)", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  test("start.mjs contains ensureNativeCompat function", () => {
-    const src = readFileSync(resolve(ROOT, "start.mjs"), "utf-8");
+  test("ensure-deps.mjs contains ensureNativeCompat function", () => {
+    const src = readFileSync(resolve(ROOT, "hooks", "ensure-deps.mjs"), "utf-8");
     expect(src).toContain("function ensureNativeCompat");
-    expect(src).toContain("ensureNativeCompat(__dirname)");
+    // ensure-deps.mjs auto-runs the function with root on import
+    expect(src).toContain("ensureNativeCompat(root)");
   });
 
   test("cache hit: copies cached ABI binary to active path", async () => {
@@ -538,13 +540,12 @@ describe("Cross-OS compatibility", () => {
     expect(pkg.scripts["install:openclaw"]).not.toMatch(/^bash /);
   });
 
-  it("cli.ts chmod in setup/upgrade is guarded by platform check", () => {
-    // execSync('chmod +x ...') must only run on non-Windows
-    // Find the chmod +x line and check for win32 guard nearby
-    const chmodIdx = src.indexOf('chmod +x');
+  it("cli.ts chmodSync in setup/upgrade is guarded by platform check", () => {
+    // chmodSync must only run on non-Windows
+    const chmodIdx = src.indexOf('chmodSync(binPath');
     expect(chmodIdx).toBeGreaterThan(-1);
-    // Must have a platform guard before the chmod call
-    const contextBefore = src.slice(Math.max(0, chmodIdx - 300), chmodIdx);
+    // Must have a platform guard before the chmodSync call
+    const contextBefore = src.slice(Math.max(0, chmodIdx - 500), chmodIdx);
     expect(contextBefore).toMatch(/process\.platform\s*!==\s*["']win32["']/);
   });
 });
@@ -619,16 +620,16 @@ describe("start.mjs CLI self-heal", () => {
     expect(src).toContain("writeFileSync");
   });
 
-  test("start.mjs CLI self-heal is after ensureNativeCompat and before server import", () => {
+  test("start.mjs CLI self-heal is after ensure-deps import and before server import", () => {
     const src = readFileSync(resolve(ROOT, "start.mjs"), "utf-8");
-    const nativeCompatIdx = src.indexOf("ensureNativeCompat(__dirname)");
+    const ensureDepsIdx = src.indexOf("ensure-deps.mjs");
     const selfHealIdx = src.indexOf('cli.bundle.mjs');
     const serverImportIdx = src.indexOf('server.bundle.mjs');
-    expect(nativeCompatIdx).toBeGreaterThan(-1);
+    expect(ensureDepsIdx).toBeGreaterThan(-1);
     expect(selfHealIdx).toBeGreaterThan(-1);
     expect(serverImportIdx).toBeGreaterThan(-1);
-    // Self-heal must be between ensureNativeCompat call and server import
-    expect(selfHealIdx).toBeGreaterThan(nativeCompatIdx);
+    // Self-heal must be between ensure-deps import and server import
+    expect(selfHealIdx).toBeGreaterThan(ensureDepsIdx);
     expect(selfHealIdx).toBeLessThan(serverImportIdx);
   });
 });
@@ -712,5 +713,176 @@ describe("Package exports", () => {
     expect(mod.toUnixPath).toBeUndefined();
     expect(mod.doctor).toBeUndefined();
     expect(mod.upgrade).toBeUndefined();
+  });
+});
+
+// ── Issue #181: upgrade must not delete sibling version dirs mid-session ──
+
+describe("Cache dir safety (#181)", () => {
+  const CLI_SOURCE = readFileSync(resolve(ROOT, "src/cli.ts"), "utf-8");
+  const PRETOOLUSE_SOURCE = readFileSync(resolve(ROOT, "hooks/pretooluse.mjs"), "utf-8");
+
+  test("cli.ts upgrade does not rmSync sibling cache version dirs", () => {
+    // The upgrade function must NOT contain a loop that deletes sibling version dirs.
+    // Old pattern: filter dirs !== myDir → rmSync each in a loop
+    const hasStaleCleanup = CLI_SOURCE.includes("stale cache dir");
+    expect(hasStaleCleanup).toBe(false);
+  });
+
+  test("pretooluse.mjs does not nuke stale version dirs", () => {
+    // Step 4 "Nuke stale version dirs" must not exist
+    const hasNukeBlock = PRETOOLUSE_SOURCE.includes("Nuke stale version dirs");
+    expect(hasNukeBlock).toBe(false);
+  });
+
+  test("sessionstart.mjs has age-gated lazy cleanup for old cache dirs", () => {
+    const SESSION_SOURCE = readFileSync(resolve(ROOT, "hooks/sessionstart.mjs"), "utf-8");
+    // Must contain age-gated cleanup logic (>1 hour check)
+    expect(SESSION_SOURCE).toContain("lazy cleanup");
+    expect(SESSION_SOURCE).toContain("3600000"); // 1 hour in ms
+  });
+});
+
+// ── Issue #185: upgrade must not use execSync (shell) ──
+
+describe("Shell-free upgrade (#185)", () => {
+  const CLI_SOURCE = readFileSync(resolve(ROOT, "src/cli.ts"), "utf-8");
+  const SERVER_SOURCE = readFileSync(resolve(ROOT, "src/server.ts"), "utf-8");
+
+  test("cli.ts upgrade function uses execFileSync, not execSync", () => {
+    // Extract upgrade function body (from "async function upgrade" to end of file)
+    const upgradeStart = CLI_SOURCE.indexOf("async function upgrade");
+    expect(upgradeStart).toBeGreaterThan(-1);
+    const upgradeBody = CLI_SOURCE.slice(upgradeStart);
+
+    // Must not contain execSync( calls (but execFileSync is fine)
+    const execSyncCalls = upgradeBody.match(/(?<!File)execSync\s*\(/g);
+    expect(execSyncCalls).toBeNull();
+  });
+
+  test("cli.ts uses chmodSync instead of execSync chmod", () => {
+    const upgradeStart = CLI_SOURCE.indexOf("async function upgrade");
+    const upgradeBody = CLI_SOURCE.slice(upgradeStart);
+
+    // Must not shell out for chmod
+    expect(upgradeBody).not.toContain('chmod +x');
+    // Must use fs.chmodSync instead
+    expect(upgradeBody).toContain("chmodSync");
+  });
+
+  test("server.ts inline fallback uses execFileSync, not execSync", () => {
+    // The inline script template must use execFileSync
+    const inlineStart = SERVER_SOURCE.indexOf("Inline fallback");
+    expect(inlineStart).toBeGreaterThan(-1);
+    const inlineSection = SERVER_SOURCE.slice(inlineStart, SERVER_SOURCE.indexOf("cmd =", inlineStart + 500));
+
+    // Generated script lines must import execFileSync
+    expect(inlineSection).toContain("execFileSync");
+    expect(inlineSection).not.toMatch(/(?<!File)execSync/);
+  });
+});
+
+// ── Issue #186: temp dirs must be dot-prefixed to hide from VS Code ──
+
+describe("Hidden temp dirs (#186)", () => {
+  test("executor.ts uses dot-prefixed temp dir to avoid VS Code auto-open", () => {
+    const EXEC_SOURCE = readFileSync(resolve(ROOT, "src/executor.ts"), "utf-8");
+    // Must use .ctx-mode- prefix (dot-hidden) not ctx-mode-
+    expect(EXEC_SOURCE).toContain('.ctx-mode-');
+    expect(EXEC_SOURCE).not.toMatch(/tmpdir\(\),\s*"ctx-mode-"/);
+  });
+});
+
+// ── Issue #187 follow-up: self-heal must fix ALL hook types, not just PreToolUse ──
+
+describe("Self-heal covers all hook types (#187)", () => {
+  const PRETOOLUSE_SOURCE = readFileSync(resolve(ROOT, "hooks/pretooluse.mjs"), "utf-8");
+
+  test("pretooluse.mjs self-heal iterates all hook types in settings.json", () => {
+    // Must NOT be scoped to only PreToolUse
+    // Old pattern: settings.hooks?.PreToolUse (only one type)
+    // New pattern: iterates Object.keys(settings.hooks) or similar
+    const selfHealSection = PRETOOLUSE_SOURCE.slice(
+      PRETOOLUSE_SOURCE.indexOf("Update hook path"),
+      PRETOOLUSE_SOURCE.indexOf("lazy cleanup"),
+    );
+    // Must iterate all hook types, not just PreToolUse
+    expect(selfHealSection).not.toContain("hooks?.PreToolUse");
+    expect(selfHealSection).toMatch(/Object\.keys|for\s*\(\s*const\s+\w+\s+(of|in)\s+.*hooks/);
+  });
+
+  test("pretooluse.mjs self-heal fixes all context-mode hook scripts", () => {
+    const selfHealSection = PRETOOLUSE_SOURCE.slice(
+      PRETOOLUSE_SOURCE.indexOf("Update hook path"),
+      PRETOOLUSE_SOURCE.indexOf("lazy cleanup"),
+    );
+    // Must match any .mjs hook script, not just pretooluse.mjs
+    expect(selfHealSection).toMatch(/\.mjs/);
+    expect(selfHealSection).toContain("context-mode");
+  });
+});
+
+// ── PR #183 fix: path traversal prevention in OpenClaw sessionKey ──
+
+describe("OpenClaw sessionKey safety (#183)", () => {
+  const WR_SOURCE = readFileSync(resolve(ROOT, "src/openclaw/workspace-router.ts"), "utf-8");
+
+  test("workspace regex only allows safe characters (no path traversal)", () => {
+    // Must use [a-zA-Z0-9_-]+ not [^:]+ to prevent ../../ in agent name
+    expect(WR_SOURCE).toContain('[a-zA-Z0-9_-]+');
+  });
+
+  test("workspace path is scoped to /openclaw/workspace- prefix", () => {
+    // extractWorkspace must only match recognised /openclaw/workspace-<name> paths
+    expect(WR_SOURCE).toContain('/openclaw/workspace-');
+    // workspaceFromKey derives workspace from sessionKey agent:<name>:<channel>
+    expect(WR_SOURCE).toContain('`/openclaw/workspace-');
+  });
+});
+
+// ── PR #190 fix: getRuntimeSummary handles full bun path ──
+
+describe("Runtime summary bun detection (#190)", () => {
+  const RT_SOURCE = readFileSync(resolve(ROOT, "src", "runtime.ts"), "utf-8");
+
+  test("getRuntimeSummary does not use exact === bun comparison", () => {
+    // Full path like /home/user/.bun/bin/bun must be detected
+    const summaryStart = RT_SOURCE.indexOf("getRuntimeSummary");
+    const summaryBody = RT_SOURCE.slice(summaryStart, RT_SOURCE.indexOf("\nexport", summaryStart + 10));
+    expect(summaryBody).not.toContain('=== "bun"');
+  });
+});
+
+// ── Plugin root detection for Opencode/Kilocode platforms ────────────────
+
+describe("Plugin root detection (#PR refactor/opencode-improvements)", () => {
+  const CLI_SOURCE = readFileSync(resolve(ROOT, "src", "cli.ts"), "utf-8");
+
+  test("cachePluginRoot uses LOCALAPPDATA on Windows", () => {
+    const cacheRootStart = CLI_SOURCE.indexOf("function cachePluginRoot");
+    const cacheRootBody = CLI_SOURCE.slice(cacheRootStart, cacheRootStart + 500);
+    expect(cacheRootBody).toContain("process.env.LOCALAPPDATA");
+    expect(cacheRootBody).toContain('process.platform === "win32"');
+  });
+
+  test("cachePluginRoot uses ~/.cache as default on non-Windows", () => {
+    const cacheRootStart = CLI_SOURCE.indexOf("function cachePluginRoot");
+    const cacheRootBody = CLI_SOURCE.slice(cacheRootStart, cacheRootStart + 500);
+    expect(cacheRootBody).toContain('".cache"');
+    expect(cacheRootBody).toContain("homedir");
+  });
+
+  test("getPluginRoot uses cache path for opencode platform", () => {
+    const getPluginRootStart = CLI_SOURCE.indexOf("function getPluginRoot");
+    const getPluginRootBody = CLI_SOURCE.slice(getPluginRootStart, getPluginRootStart + 300);
+    expect(getPluginRootBody).toContain("'opencode'");
+    expect(getPluginRootBody).toContain("cachePluginRoot");
+  });
+
+  test("getPluginRoot uses cache path for kilo platform", () => {
+    const getPluginRootStart = CLI_SOURCE.indexOf("function getPluginRoot");
+    const getPluginRootBody = CLI_SOURCE.slice(getPluginRootStart, getPluginRootStart + 300);
+    expect(getPluginRootBody).toContain("'kilo'");
+    expect(getPluginRootBody).toContain("cachePluginRoot");
   });
 });
