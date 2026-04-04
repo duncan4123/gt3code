@@ -3,7 +3,7 @@
     "context-mode": {
       "command": "node",
       "args": [
-        "/home/ubuntu/.claude/plugins/marketplaces/context-mode/start.mjs"
+        "${CLAUDE_PLUGIN_ROOT}/start.mjs"
       ]
     }
   }
