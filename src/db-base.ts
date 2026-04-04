@@ -123,7 +123,7 @@ export function loadDatabase(): typeof DatabaseConstructor {
     // start.mjs sets globalThis.__DOLTLITE_NATIVE_PATH and copies
     // the ABI-matched prebuilt before this code runs.
     try {
-      _Database = require("better-sqlite3") as typeof DatabaseConstructor;
+      _Database = require("../vendor/better-sqlite3") as typeof DatabaseConstructor;
     } catch (err: any) {
       throw err;
     }

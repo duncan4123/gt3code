@@ -322,7 +322,7 @@ async function doctor(): Promise<number> {
   try {
     const { createRequire } = await import("node:module");
     const req = createRequire(import.meta.url);
-    const Database = req("better-sqlite3") as typeof import("better-sqlite3");
+    const Database = req("../vendor/better-sqlite3") as typeof import("better-sqlite3");
     const db = new Database(":memory:");
     db.exec("CREATE VIRTUAL TABLE fts_test USING fts5(content)");
     db.exec("INSERT INTO fts_test(content) VALUES ('hello world')");
