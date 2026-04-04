@@ -9,9 +9,9 @@
 import type DatabaseConstructor from "better-sqlite3";
 import type { Database as DatabaseInstance } from "better-sqlite3";
 import { createRequire } from "node:module";
-import { unlinkSync } from "node:fs";
+import { unlinkSync, existsSync, mkdirSync, copyFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // ─────────────────────────────────────────────────────────
@@ -119,9 +119,31 @@ export function loadDatabase(): typeof DatabaseConstructor {
   if (!_Database) {
     const require = createRequire(import.meta.url);
 
-    // Vendored better-sqlite3 linked against libdoltlite.a.
-    // start.mjs sets globalThis.__DOLTLITE_NATIVE_PATH and copies
-    // the ABI-matched prebuilt before this code runs.
+    // Self-bootstrap: if start.mjs didn't run (Claude Code sometimes
+    // launches server.bundle.mjs directly), install the ABI-matched
+    // prebuilt native binary before requiring the vendored module.
+    if (!globalThis.__DOLTLITE_NATIVE_PATH) {
+      const baseDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+      const abi = process.versions.modules;
+      const prebuildSrc = join(baseDir, "prebuilds", `${process.platform}-${process.arch}`, `node.abi${abi}.node`);
+      const targetDir = join(baseDir, "vendor", "better-sqlite3", "build", "Release");
+      const targetBin = join(targetDir, "better_sqlite3.node");
+
+      if (existsSync(prebuildSrc)) {
+        let needsCopy = !existsSync(targetBin);
+        if (!needsCopy) {
+          try {
+            if (statSync(prebuildSrc).size !== statSync(targetBin).size) needsCopy = true;
+          } catch { needsCopy = true; }
+        }
+        if (needsCopy) {
+          mkdirSync(targetDir, { recursive: true });
+          copyFileSync(prebuildSrc, targetBin);
+        }
+        globalThis.__DOLTLITE_NATIVE_PATH = targetBin;
+      }
+    }
+
     try {
       _Database = require("../vendor/better-sqlite3") as typeof DatabaseConstructor;
     } catch (err: any) {
