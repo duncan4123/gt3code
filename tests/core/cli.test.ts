@@ -51,6 +51,26 @@ describe("cli.bundle.mjs — marketplace install support", () => {
     expect(shebangsAfterLine1).toHaveLength(0);
   });
 
+  // ── Bundle path safety (esbuild ../  trap) ────────────────
+  // Source files in src/ use ".." to reach project root, but esbuild
+  // bundles to root — so ".." goes ABOVE the project. Any ".." in
+  // require/resolve/join paths inside bundles is almost certainly wrong.
+  // See: v1.0.76 ../vendor bug, v1.0.77 ../prebuilds bug.
+
+  for (const bundle of ["server.bundle.mjs", "cli.bundle.mjs", "hooks/session-db.bundle.mjs"]) {
+    it(`${bundle} has no "../vendor" or "../prebuilds" paths (esbuild ../ trap)`, () => {
+      const content = readFileSync(resolve(ROOT, bundle), "utf-8");
+      const dangerousPatterns = [
+        /"\.\.\/(vendor|prebuilds)/g,
+        /'\.\.\/(vendor|prebuilds)/g,
+      ];
+      for (const pattern of dangerousPatterns) {
+        const matches = content.match(pattern);
+        expect(matches, `Found dangerous ../ path in ${bundle}: ${matches}`).toBeNull();
+      }
+    });
+  }
+
   // ── Source code contracts ──────────────────────────────────
 
   it("cli.ts getPluginRoot handles both build/ and root locations", () => {
