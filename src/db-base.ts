@@ -123,7 +123,9 @@ export function loadDatabase(): typeof DatabaseConstructor {
     // launches server.bundle.mjs directly), install the ABI-matched
     // prebuilt native binary before requiring the vendored module.
     if (!globalThis.__DOLTLITE_NATIVE_PATH) {
-      const baseDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+      // From src/: dirname gives src/, prebuilds/ won't exist → skip (start.mjs handles it)
+      // From bundle at root: dirname gives plugin root where prebuilds/ lives
+      const baseDir = dirname(fileURLToPath(import.meta.url));
       const abi = process.versions.modules;
       const prebuildSrc = join(baseDir, "prebuilds", `${process.platform}-${process.arch}`, `node.abi${abi}.node`);
       const targetDir = join(baseDir, "vendor", "better-sqlite3", "build", "Release");
