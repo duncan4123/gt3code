@@ -79,7 +79,15 @@ if (cacheMatch) {
   const { createRequire } = await import("node:module");
   const req = createRequire(resolve(__dirname, "package.json"));
   let needsCopy = false;
-  try { req("better-sqlite3"); } catch { needsCopy = true; }
+  try {
+    const DB = req("better-sqlite3");
+    const db = new DB(":memory:");
+    try {
+      const row = db.prepare("SELECT doltlite_engine() AS e").get();
+      if (row?.e !== "prolly") needsCopy = true;
+    } catch { needsCopy = true; }
+    db.close();
+  } catch { needsCopy = true; }
   if (needsCopy) {
     const abi = process.versions.modules;
     const prebuildSrc = resolve(__dirname, "prebuilds", `${process.platform}-${process.arch}`, `node.abi${abi}.node`);
