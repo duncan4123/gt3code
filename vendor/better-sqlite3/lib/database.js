@@ -45,7 +45,22 @@ function Database(filenameGiven, options) {
 	// Load the native addon
 	let addon;
 	if (nativeBinding == null) {
-		addon = DEFAULT_ADDON || (DEFAULT_ADDON = require(globalThis.__DOLTLITE_NATIVE_PATH || path.join(__dirname, '..', 'build', 'Release', 'better_sqlite3.node')));
+		addon = DEFAULT_ADDON || (DEFAULT_ADDON = (() => {
+			// 1. Explicit path from start.mjs or self-bootstrap
+			if (globalThis.__DOLTLITE_NATIVE_PATH && fs.existsSync(globalThis.__DOLTLITE_NATIVE_PATH)) {
+				return require(globalThis.__DOLTLITE_NATIVE_PATH);
+			}
+			// 2. Standard build/Release location (npm install / start.mjs copy)
+			const buildPath = path.join(__dirname, '..', 'build', 'Release', 'better_sqlite3.node');
+			if (fs.existsSync(buildPath)) return require(buildPath);
+			// 3. Direct from prebuilds — no copy needed (marketplace/fresh install)
+			//    __dirname = vendor/better-sqlite3/lib → three ".." to reach project root
+			const abi = process.versions.modules;
+			const prebuildPath = path.join(__dirname, '..', '..', '..', 'prebuilds', `${process.platform}-${process.arch}`, `node.abi${abi}.node`);
+			if (fs.existsSync(prebuildPath)) return require(prebuildPath);
+			// 4. Let it fail with a clear error
+			return require(buildPath);
+		})());
 	} else if (typeof nativeBinding === 'string') {
 		// See <https://webpack.js.org/api/module-variables/#__non_webpack_require__-webpack-specific>
 		const requireFunc = typeof __non_webpack_require__ === 'function' ? __non_webpack_require__ : require;

@@ -14,6 +14,11 @@ import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __DOLTLITE_NATIVE_PATH: string | undefined;
+}
+
 // ─────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────

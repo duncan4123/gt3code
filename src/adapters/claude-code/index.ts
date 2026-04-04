@@ -534,19 +534,35 @@ export class ClaudeCodeAdapter implements HookAdapter {
       }
     }
 
-    // If plugin hooks.json already covers all required hooks, skip settings.json
-    // registration entirely (Issue #198). Plugin installs don't need settings.json
-    // entries — hooks.json with ${CLAUDE_PLUGIN_ROOT} is the source of truth.
+    // If plugin hooks.json already covers all required hooks, remove ALL
+    // context-mode hooks from settings.json (Issue #198, #187). Plugin installs
+    // don't need settings.json entries — hooks.json with ${CLAUDE_PLUGIN_ROOT}
+    // is the source of truth and auto-resolves to the current version.
     const pluginHooks = this.readPluginHooks(pluginRoot);
     if (pluginHooks) {
       const allCovered = REQUIRED_HOOKS.every((ht) =>
         this.checkHookType(undefined, pluginHooks, ht),
       );
       if (allCovered) {
-        // Still write cleaned settings (stale removal) but don't add new entries
-        settings.hooks = hooks;
+        // Actively strip all context-mode hooks from settings.json — they're
+        // duplicates of hooks.json and become stale when versions change.
+        for (const hookType of Object.keys(hooks)) {
+          const entries = hooks[hookType];
+          if (!Array.isArray(entries)) continue;
+          const filtered = entries.filter((entry: Record<string, unknown>) => {
+            return !isAnyContextModeHook(entry as { hooks?: Array<{ command?: string }> });
+          });
+          const removed = entries.length - filtered.length;
+          if (removed > 0) {
+            hooks[hookType] = filtered.length > 0 ? filtered : undefined;
+            changes.push(`Removed ${removed} redundant ${hookType} hook(s) from settings.json`);
+          }
+        }
+        // Clean up empty hooks object
+        const remaining = Object.entries(hooks).filter(([, v]) => v !== undefined && (Array.isArray(v) ? v.length > 0 : true));
+        settings.hooks = remaining.length > 0 ? Object.fromEntries(remaining) : undefined;
         this.writeSettings(settings);
-        changes.push("Skipped settings.json registration — plugin hooks.json is sufficient");
+        changes.push("Plugin hooks.json is authoritative — settings.json hooks cleaned");
         return changes;
       }
     }
