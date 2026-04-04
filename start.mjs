@@ -78,6 +78,26 @@ if (cacheMatch) {
 {
   const { createRequire } = await import("node:module");
   const req = createRequire(resolve(__dirname, "package.json"));
+  const abi = process.versions.modules;
+  const prebuildSrc = resolve(__dirname, "prebuilds", `${process.platform}-${process.arch}`, `node.abi${abi}.node`);
+  const bsqlPkg = resolve(__dirname, "node_modules", "better-sqlite3", "package.json");
+  const targetDir = resolve(__dirname, "node_modules", "better-sqlite3", "build", "Release");
+
+  // Step 1: Ensure the full better-sqlite3 npm module exists (not just the binary)
+  if (!existsSync(bsqlPkg)) {
+    console.error("[start] better-sqlite3 module missing — installing...");
+    try {
+      execSync("npm install better-sqlite3 --no-package-lock --no-save --ignore-scripts --silent", {
+        cwd: __dirname, stdio: "pipe", timeout: 120000,
+      });
+      console.error("[start] better-sqlite3 module installed.");
+    } catch (e) {
+      console.error("[start] FATAL: could not install better-sqlite3:", e.message);
+      process.exit(1);
+    }
+  }
+
+  // Step 2: Verify doltlite engine — copy prebuilt if vanilla or wrong ABI
   let needsCopy = false;
   try {
     const DB = req("better-sqlite3");
@@ -88,10 +108,8 @@ if (cacheMatch) {
     } catch { needsCopy = true; }
     db.close();
   } catch { needsCopy = true; }
+
   if (needsCopy) {
-    const abi = process.versions.modules;
-    const prebuildSrc = resolve(__dirname, "prebuilds", `${process.platform}-${process.arch}`, `node.abi${abi}.node`);
-    const targetDir = resolve(__dirname, "node_modules", "better-sqlite3", "build", "Release");
     if (existsSync(prebuildSrc)) {
       const { mkdirSync: mk, copyFileSync: cp } = await import("node:fs");
       mk(targetDir, { recursive: true });
