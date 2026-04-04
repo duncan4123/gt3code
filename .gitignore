@@ -20,3 +20,4 @@ context-mode-guidance-*/
 .opencode/
 node-compile-cache/
 *.archived
+vendor/better-sqlite3/build/

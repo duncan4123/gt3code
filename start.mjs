@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execSync } from "node:child_process";
-import { existsSync, chmodSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { existsSync, chmodSync, readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -72,60 +72,41 @@ if (cacheMatch) {
   }
 }
 
-// Install ABI-matched prebuilt BEFORE anything tries to load better-sqlite3.
-// ensure-deps.mjs and server.bundle.mjs both load better-sqlite3, so the
-// correct binary must be in place first. Plain SQLite is NOT acceptable.
+// Install ABI-matched doltlite prebuilt into vendor/better-sqlite3.
+// JS files are vendored in git — only the native .node binary varies by ABI.
 {
-  const { createRequire } = await import("node:module");
-  const req = createRequire(resolve(__dirname, "package.json"));
   const abi = process.versions.modules;
   const prebuildSrc = resolve(__dirname, "prebuilds", `${process.platform}-${process.arch}`, `node.abi${abi}.node`);
-  const bsqlPkg = resolve(__dirname, "node_modules", "better-sqlite3", "package.json");
-  const targetDir = resolve(__dirname, "node_modules", "better-sqlite3", "build", "Release");
+  const targetDir = resolve(__dirname, "vendor", "better-sqlite3", "build", "Release");
+  const targetBin = resolve(targetDir, "better_sqlite3.node");
 
-  // Step 1: Ensure the full better-sqlite3 npm module exists (not just the binary)
-  if (!existsSync(bsqlPkg)) {
-    console.error("[start] better-sqlite3 module missing — installing...");
-    try {
-      execSync("npm install better-sqlite3 --no-package-lock --no-save --ignore-scripts --silent", {
-        cwd: __dirname, stdio: "pipe", timeout: 120000,
-      });
-      console.error("[start] better-sqlite3 module installed.");
-    } catch (e) {
-      console.error("[start] FATAL: could not install better-sqlite3:", e.message);
-      process.exit(1);
-    }
-  }
+  // Set global so vendored database.js finds the native binary
+  globalThis.__DOLTLITE_NATIVE_PATH = targetBin;
 
-  // Step 2: Verify doltlite engine — copy prebuilt if vanilla or wrong ABI
-  let needsCopy = false;
-  try {
-    const DB = req("better-sqlite3");
-    const db = new DB(":memory:");
+  // Copy prebuilt if missing or wrong size (stale)
+  let needsCopy = !existsSync(targetBin);
+  if (!needsCopy) {
+    const { statSync } = await import("node:fs");
     try {
-      const row = db.prepare("SELECT doltlite_engine() AS e").get();
-      if (row?.e !== "prolly") needsCopy = true;
+      const srcSize = statSync(prebuildSrc).size;
+      const tgtSize = statSync(targetBin).size;
+      if (srcSize !== tgtSize) needsCopy = true;
     } catch { needsCopy = true; }
-    db.close();
-  } catch { needsCopy = true; }
+  }
 
   if (needsCopy) {
     if (existsSync(prebuildSrc)) {
       const { mkdirSync: mk, copyFileSync: cp } = await import("node:fs");
       mk(targetDir, { recursive: true });
-      cp(prebuildSrc, resolve(targetDir, "better_sqlite3.node"));
+      cp(prebuildSrc, targetBin);
       console.error("[start] Installed doltlite prebuilt for " + process.platform + "-" + process.arch + " ABI " + abi);
     } else {
-      console.error("[start] FATAL: better-sqlite3 (doltlite) failed to load.");
-      console.error("[start] No prebuilt for ABI " + abi + " at " + prebuildSrc);
+      console.error("[start] FATAL: no doltlite prebuilt for ABI " + abi);
+      console.error("[start] Available prebuilds: " + (existsSync(resolve(__dirname, "prebuilds")) ? readdirSync(resolve(__dirname, "prebuilds", `${process.platform}-${process.arch}`)).join(", ") : "none"));
       process.exit(1);
     }
   }
 }
-
-// Ensure native dependencies + ABI compatibility (shared with hooks via ensure-deps.mjs)
-// MUST be dynamic import — static imports hoist above the prebuilt probe.
-await import("./hooks/ensure-deps.mjs");
 
 // Also install pure-JS deps used by server
 for (const pkg of ["turndown", "turndown-plugin-gfm", "@mixmark-io/domino"]) {
