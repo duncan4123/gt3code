@@ -110,18 +110,17 @@ function getVersion(cmd: string): string {
 }
 
 export function detectRuntimes(): RuntimeMap {
-  const hasBun = bunExists();
-  const bun = hasBun ? bunCommand() : null;
-
+  // Always use the same Node.js that runs the MCP server for JS/TS.
+  // Bun resolves native modules from its own cache (~/.bun/install/cache/),
+  // which doesn't have the doltlite-linked better-sqlite3 binary.
+  // One runtime = one module path = one native binary = reliable.
   return {
-    javascript: bun ?? process.execPath,
-    typescript: bun
-      ? bun
-      : commandExists("tsx")
-        ? "tsx"
-        : commandExists("ts-node")
-          ? "ts-node"
-          : null,
+    javascript: process.execPath,
+    typescript: commandExists("tsx")
+      ? "tsx"
+      : commandExists("ts-node")
+        ? "ts-node"
+        : null,
     python: commandExists("python3")
       ? "python3"
       : commandExists("python")

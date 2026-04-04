@@ -54,7 +54,9 @@
     ".mcp.json",
     "openclaw.plugin.json",
     "start.mjs",
+    "prebuilds",
     "scripts/postinstall.mjs",
+    "scripts/patch-doltlite.mjs",
     "README.md",
     "LICENSE"
   ],

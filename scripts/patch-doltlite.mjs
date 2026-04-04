@@ -21,25 +21,40 @@ const scriptDir = resolve(fileURLToPath(import.meta.url), "..");
 const repoRoot = resolve(scriptDir, "..");
 
 // ── 1. Locate libdoltlite.a ──────────────────────────────────────────────────
+// Priority: DOLTLITE_BUILD_DIR env → context-mode-build/ (structured) → root (legacy)
 
 const doltliteRoot = process.env.DOLTLITE_BUILD_DIR ?? "/data/projects/doltlite";
-// libdoltlite.a lives in the project root; sqlite3.h in build/ after configure.
-const libPath = existsSync(join(doltliteRoot, "libdoltlite.a"))
-  ? join(doltliteRoot, "libdoltlite.a")
-  : join(doltliteRoot, "build", "libdoltlite.a");
-const headerPath = existsSync(join(doltliteRoot, "build", "sqlite3.h"))
-  ? join(doltliteRoot, "build", "sqlite3.h")
-  : join(doltliteRoot, "sqlite3.h");
+const cmBuild = join(doltliteRoot, "context-mode-build");
+
+let libPath, headerPath;
+
+if (existsSync(join(cmBuild, "lib", "libdoltlite.a"))) {
+  // Structured context-mode-build/ directory (from `make context-mode`)
+  libPath = join(cmBuild, "lib", "libdoltlite.a");
+  headerPath = join(cmBuild, "include", "sqlite3.h");
+} else if (existsSync(join(doltliteRoot, "libdoltlite.a"))) {
+  // Legacy: lib in project root, header in build/
+  libPath = join(doltliteRoot, "libdoltlite.a");
+  headerPath = existsSync(join(doltliteRoot, "build", "sqlite3.h"))
+    ? join(doltliteRoot, "build", "sqlite3.h")
+    : join(doltliteRoot, "sqlite3.h");
+} else {
+  libPath = join(doltliteRoot, "build", "libdoltlite.a");
+  headerPath = existsSync(join(doltliteRoot, "build", "sqlite3.h"))
+    ? join(doltliteRoot, "build", "sqlite3.h")
+    : join(doltliteRoot, "sqlite3.h");
+}
 
 if (!existsSync(libPath)) {
   console.log(`[patch-doltlite] libdoltlite.a not found at ${libPath} — skipping.`);
-  console.log("[patch-doltlite] Set DOLTLITE_BUILD_DIR to enable doltlite support.");
+  console.log("[patch-doltlite] Run: cd /data/projects/doltlite && make context-mode");
+  console.log("[patch-doltlite] Or set DOLTLITE_BUILD_DIR to a custom doltlite checkout.");
   process.exit(0);
 }
 
 if (!existsSync(headerPath)) {
   console.log(`[patch-doltlite] sqlite3.h not found at ${headerPath} — skipping.`);
-  console.log("[patch-doltlite] Run: cp /data/projects/doltlite/sqlite3.h /data/projects/doltlite/build/");
+  console.log("[patch-doltlite] Run: cd /data/projects/doltlite && make context-mode");
   process.exit(0);
 }
 

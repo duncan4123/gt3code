@@ -43,7 +43,10 @@ if (existsSync(abiMatch)) {
   mkdirSync(targetDir, { recursive: true });
   const { copyFileSync: cpFile } = await import("node:fs");
   cpFile(abiMatch, join(targetDir, "better_sqlite3.node"));
-  console.log(`[postinstall] Installed doltlite prebuilt for ${process.platform}-${process.arch} ABI ${abi}`);
+  const { readFileSync } = await import("node:fs");
+  let dlVersion = "";
+  try { dlVersion = " (doltlite " + readFileSync(join(pkgRoot, "prebuilds", "VERSION"), "utf8").trim() + ")"; } catch {}
+  console.log(`[postinstall] Installed doltlite prebuilt for ${process.platform}-${process.arch} ABI ${abi}${dlVersion}`);
 } else {
   // No exact ABI match — list available prebuilds for diagnostics
   const { readdirSync } = await import("node:fs");
