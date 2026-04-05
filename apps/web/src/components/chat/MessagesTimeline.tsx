@@ -22,6 +22,7 @@ import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
   CheckIcon,
+  ChevronRightIcon,
   CircleAlertIcon,
   EyeIcon,
   GlobeIcon,
@@ -34,6 +35,8 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
+import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "../ui/collapsible";
+import { ToolCallDetail } from "./ToolCallDetail";
 import { clamp } from "effect/Number";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImagePreview";
 import { ProposedPlanCard } from "./ProposedPlanCard";
@@ -85,6 +88,7 @@ interface MessagesTimelineProps {
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
+  activityPayloadById: ReadonlyMap<string, unknown>;
   onVirtualizerSnapshot?: (snapshot: {
     totalSize: number;
     measurements: ReadonlyArray<{
@@ -120,6 +124,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   resolvedTheme,
   timestampFormat,
   workspaceRoot,
+  activityPayloadById,
   onVirtualizerSnapshot,
 }: MessagesTimelineProps) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
@@ -220,6 +225,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       if (!row) return 96;
       return estimateMessagesTimelineRowHeight(row, {
         expandedWorkGroups,
+        expandedToolEntryIds,
         timelineWidthPx,
         turnDiffSummaryByAssistantMessageId,
       });
@@ -303,6 +309,14 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }));
   }, []);
 
+  const [expandedToolEntryIds, setExpandedToolEntryIds] = useState<Record<string, boolean>>({});
+  const onToggleToolEntry = useCallback((entryId: string) => {
+    setExpandedToolEntryIds((current) => ({
+      ...current,
+      [entryId]: !current[entryId],
+    }));
+  }, []);
+
   const renderRowContent = (row: TimelineRow) => (
     <div
       className="pb-4"
@@ -346,7 +360,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               )}
               <div className="space-y-0.5">
                 {visibleEntries.map((workEntry) => (
-                  <SimpleWorkEntryRow key={`work-row:${workEntry.id}`} workEntry={workEntry} />
+                  <SimpleWorkEntryRow
+                    key={`work-row:${workEntry.id}`}
+                    workEntry={workEntry}
+                    isExpanded={expandedToolEntryIds[workEntry.id] ?? false}
+                    onToggle={() => onToggleToolEntry(workEntry.id)}
+                    payload={activityPayloadById.get(workEntry.id)}
+                  />
                 ))}
               </div>
             </div>
@@ -834,8 +854,11 @@ function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
 
 const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   workEntry: TimelineWorkEntry;
+  isExpanded: boolean;
+  onToggle: () => void;
+  payload?: unknown;
 }) {
-  const { workEntry } = props;
+  const { workEntry, isExpanded, onToggle, payload } = props;
   const iconConfig = workToneIcon(workEntry.tone);
   const EntryIcon = workEntryIcon(workEntry);
   const heading = toolWorkEntryHeading(workEntry);
@@ -845,47 +868,61 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
 
   return (
-    <div className="rounded-lg px-1 py-1">
-      <div className="flex items-center gap-2 transition-[opacity,translate] duration-200">
-        <span
-          className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
-        >
-          <EntryIcon className="size-3" />
-        </span>
-        <div className="min-w-0 flex-1 overflow-hidden">
-          <p
-            className={cn(
-              "truncate text-[11px] leading-5",
-              workToneClass(workEntry.tone),
-              preview ? "text-muted-foreground/70" : "",
-            )}
-            title={displayText}
+    <Collapsible open={isExpanded}>
+      <CollapsibleTrigger
+        onClick={onToggle}
+        className="w-full cursor-pointer rounded-lg px-1 py-1 text-left transition-colors duration-100 hover:bg-muted/30"
+      >
+        <div className="flex items-center gap-2 transition-[opacity,translate] duration-200">
+          <span
+            className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
           >
-            <span className={cn("text-foreground/80", workToneClass(workEntry.tone))}>
-              {heading}
-            </span>
-            {preview && <span className="text-muted-foreground/55"> - {preview}</span>}
-          </p>
-        </div>
-      </div>
-      {hasChangedFiles && !previewIsChangedFiles && (
-        <div className="mt-1 flex flex-wrap gap-1 pl-6">
-          {workEntry.changedFiles?.slice(0, 4).map((filePath) => (
-            <span
-              key={`${workEntry.id}:${filePath}`}
-              className="rounded-md border border-border/55 bg-background/75 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/75"
-              title={filePath}
+            <EntryIcon className="size-3" />
+          </span>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <p
+              className={cn(
+                "truncate text-[11px] leading-5",
+                workToneClass(workEntry.tone),
+                preview ? "text-muted-foreground/70" : "",
+              )}
+              title={displayText}
             >
-              {filePath}
-            </span>
-          ))}
-          {(workEntry.changedFiles?.length ?? 0) > 4 && (
-            <span className="px-1 text-[10px] text-muted-foreground/55">
-              +{(workEntry.changedFiles?.length ?? 0) - 4}
-            </span>
-          )}
+              <span className={cn("text-foreground/80", workToneClass(workEntry.tone))}>
+                {heading}
+              </span>
+              {preview && <span className="text-muted-foreground/55"> - {preview}</span>}
+            </p>
+          </div>
+          <ChevronRightIcon
+            className={cn(
+              "size-3 shrink-0 text-muted-foreground/40 transition-transform duration-200",
+              isExpanded && "rotate-90",
+            )}
+          />
         </div>
-      )}
-    </div>
+        {hasChangedFiles && !previewIsChangedFiles && !isExpanded && (
+          <div className="mt-1 flex flex-wrap gap-1 pl-6">
+            {workEntry.changedFiles?.slice(0, 4).map((filePath) => (
+              <span
+                key={`${workEntry.id}:${filePath}`}
+                className="rounded-md border border-border/55 bg-background/75 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/75"
+                title={filePath}
+              >
+                {filePath}
+              </span>
+            ))}
+            {(workEntry.changedFiles?.length ?? 0) > 4 && (
+              <span className="px-1 text-[10px] text-muted-foreground/55">
+                +{(workEntry.changedFiles?.length ?? 0) - 4}
+              </span>
+            )}
+          </div>
+        )}
+      </CollapsibleTrigger>
+      <CollapsiblePanel>
+        <ToolCallDetail workEntry={workEntry} payload={payload} />
+      </CollapsiblePanel>
+    </Collapsible>
   );
 });
