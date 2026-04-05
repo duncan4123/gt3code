@@ -1,20 +1,22 @@
 /**
- * DoltLifecycle — periodic dolt_commit and dolt_gc on the main SqlClient.
+ * DoltLifecycle — periodic dolt_commit on the main SqlClient.
  *
  * Uses the same connection as the pipeline so Dolt maintenance stays
  * serialized with runtime writes.
+ *
+ * NOTE: dolt_gc is NOT run automatically. GC cleans up unreachable chunks
+ * from branch operations, which don't apply to our linear single-branch
+ * usage. Running GC triggered the prolly_mutate.c streamingMerge bug
+ * (doltlite#247), corrupting the event store. Call GC explicitly from
+ * settings/admin UI only when needed (e.g. after branch cleanup).
  */
 import { Effect, Layer, Schedule } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { ProviderService } from "../../provider/Services/ProviderService.ts";
-
 const COMMIT_INTERVAL_MS = 30_000;
-const GC_INTERVAL_MS = 300_000;
 
 export const startDoltLifecycle = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  const providerService = yield* ProviderService;
 
   const isDoltlite = yield* sql.unsafe("SELECT doltlite_engine() as e").pipe(
     Effect.as(true),
@@ -37,23 +39,7 @@ export const startDoltLifecycle = Effect.gen(function* () {
     ),
   );
 
-  yield* Effect.forkScoped(
-    Effect.gen(function* () {
-      const sessions = yield* providerService.listSessions();
-      const hasActiveTurn = sessions.some((session) => session.activeTurnId !== undefined);
-      if (hasActiveTurn) {
-        yield* Effect.logDebug("dolt_gc skipped: active turns still running");
-        return;
-      }
-
-      yield* sql.unsafe(`SELECT dolt_gc()`);
-    }).pipe(
-      Effect.catch((error) => Effect.logDebug(`dolt_gc skipped: ${error}`)),
-      Effect.repeat(Schedule.spaced(GC_INTERVAL_MS)),
-    ),
-  );
-
-  yield* Effect.logInfo("dolt lifecycle started (commit: 30s, gc: 5min)");
+  yield* Effect.logInfo("dolt lifecycle started (commit: 30s)");
 });
 
 export const DoltLifecycleLive = Layer.effectDiscard(startDoltLifecycle);
