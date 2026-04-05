@@ -204,6 +204,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     return Math.min(firstCurrentTurnRowIndex, firstTailRowIndex);
   }, [activeTurnInProgress, activeTurnStartedAt, rows]);
 
+  const [expandedToolEntryIds, setExpandedToolEntryIds] = useState<Record<string, boolean>>({});
+
   const virtualizedRowCount = clamp(firstUnvirtualizedRowIndex, {
     minimum: 0,
     maximum: rows.length,
@@ -309,7 +311,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }));
   }, []);
 
-  const [expandedToolEntryIds, setExpandedToolEntryIds] = useState<Record<string, boolean>>({});
   const onToggleToolEntry = useCallback((entryId: string) => {
     setExpandedToolEntryIds((current) => ({
       ...current,

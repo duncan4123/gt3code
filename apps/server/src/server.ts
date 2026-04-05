@@ -11,7 +11,7 @@ import {
 import { fixPath } from "./os-jank";
 import { websocketRpcRouteLayer } from "./ws";
 import { OpenLive } from "./open";
-import { DoltLifecycleLive } from "./persistence/Layers/DoltLifecycle";
+import { startDoltLifecycle } from "./persistence/Layers/DoltLifecycle";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
 import { ServerLifecycleEventsLive } from "./serverLifecycleEvents";
 import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
@@ -160,10 +160,7 @@ const ProviderLayerLive = Layer.unwrap(
   }),
 );
 
-const PersistenceLayerLive = Layer.empty.pipe(
-  Layer.provideMerge(SqlitePersistenceLayerLive),
-  Layer.provideMerge(DoltLifecycleLive),
-);
+const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
 
 const GitLayerLive = Layer.empty.pipe(
   Layer.provideMerge(
@@ -231,6 +228,7 @@ export const makeServerLayer = Layer.unwrap(
         yield* HttpServer.HttpServer;
         const startup = yield* ServerRuntimeStartup;
         yield* startup.markHttpListening;
+        yield* startDoltLifecycle;
       }),
     );
 

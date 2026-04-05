@@ -10,7 +10,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, writeFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, writeFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -79,8 +79,9 @@ const patchedGyp = `\
     },
     {
       'target_name': 'sqlite3',
-      'type': 'none',
+      'type': 'static_library',
       'dependencies': ['locate_sqlite3'],
+      'sources': ['doltlite_stubs.c'],
       'direct_dependent_settings': {
         'include_dirs': ['${headerDir}'],
         'libraries': [
@@ -95,6 +96,25 @@ const patchedGyp = `\
 `;
 
 writeFileSync(gypPath, patchedGyp);
+
+// Write stub implementations for symbols that libdoltlite.a doesn't provide
+// but better-sqlite3's C++ code references (SQLITE_ENABLE_COLUMN_METADATA).
+const stubsPath = join(pkgDir, "deps", "doltlite_stubs.c");
+writeFileSync(
+  stubsPath,
+  `\
+/* Stubs for SQLITE_ENABLE_COLUMN_METADATA symbols missing from libdoltlite.a.
+   better-sqlite3 references these in src/util/data.cpp but doltlite doesn't
+   compile with SQLITE_ENABLE_COLUMN_METADATA. Return NULL = "no metadata". */
+const char *sqlite3_column_origin_name(void *stmt, int col) { return 0; }
+const void *sqlite3_column_origin_name16(void *stmt, int col) { return 0; }
+const char *sqlite3_column_table_name(void *stmt, int col) { return 0; }
+const void *sqlite3_column_table_name16(void *stmt, int col) { return 0; }
+const char *sqlite3_column_database_name(void *stmt, int col) { return 0; }
+const void *sqlite3_column_database_name16(void *stmt, int col) { return 0; }
+`,
+);
+console.log("[patch-doltlite] Wrote doltlite_stubs.c (COLUMN_METADATA stubs)");
 console.log("[patch-doltlite] Wrote patched deps/sqlite3.gyp");
 
 // ── 4. Check if rebuild is needed (avoid redundant rebuilds) ─────────────────
