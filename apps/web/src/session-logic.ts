@@ -473,7 +473,7 @@ export function deriveWorkLogEntries(
 }
 
 function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): boolean {
-  if (activity.kind !== "tool.updated" && activity.kind !== "tool.completed") {
+  if (!isToolLifecycleActivityKind(activity.kind)) {
     return false;
   }
 
@@ -529,6 +529,16 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   return entry;
 }
 
+const TOOL_LIFECYCLE_ACTIVITY_KINDS: ReadonlySet<string> = new Set([
+  "tool.updated",
+  "tool.completed",
+  "tool.progress",
+]);
+
+function isToolLifecycleActivityKind(kind: string): boolean {
+  return TOOL_LIFECYCLE_ACTIVITY_KINDS.has(kind);
+}
+
 function collapseDerivedWorkLogEntries(
   entries: ReadonlyArray<DerivedWorkLogEntry>,
 ): DerivedWorkLogEntry[] {
@@ -548,10 +558,10 @@ function shouldCollapseToolLifecycleEntries(
   previous: DerivedWorkLogEntry,
   next: DerivedWorkLogEntry,
 ): boolean {
-  if (previous.activityKind !== "tool.updated" && previous.activityKind !== "tool.completed") {
+  if (!isToolLifecycleActivityKind(previous.activityKind)) {
     return false;
   }
-  if (next.activityKind !== "tool.updated" && next.activityKind !== "tool.completed") {
+  if (!isToolLifecycleActivityKind(next.activityKind)) {
     return false;
   }
   if (previous.activityKind === "tool.completed") {
@@ -596,7 +606,7 @@ function mergeChangedFiles(
 }
 
 function deriveToolLifecycleCollapseKey(entry: DerivedWorkLogEntry): string | undefined {
-  if (entry.activityKind !== "tool.updated" && entry.activityKind !== "tool.completed") {
+  if (!isToolLifecycleActivityKind(entry.activityKind)) {
     return undefined;
   }
   const normalizedLabel = normalizeCompactToolLabel(entry.toolTitle ?? entry.label);
@@ -668,7 +678,7 @@ function extractToolTitle(payload: Record<string, unknown> | null): string | nul
   return asTrimmedString(payload?.title);
 }
 
-function stripTrailingExitCode(value: string): {
+export function stripTrailingExitCode(value: string): {
   output: string | null;
   exitCode?: number | undefined;
 } {

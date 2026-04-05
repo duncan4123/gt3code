@@ -21,6 +21,7 @@ import {
   hasActionableProposedPlan,
   hasToolActivityForTurn,
   isLatestTurnSettled,
+  stripTrailingExitCode,
 } from "./session-logic";
 
 function makeActivity(overrides: {
@@ -822,6 +823,53 @@ describe("deriveWorkLogEntries", () => {
       command: "sed -n 1,40p /tmp/app.ts",
       itemType: "dynamic_tool_call",
       toolTitle: "Tool call",
+    });
+  });
+
+  it("treats tool.progress entries as part of the same lifecycle chain", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "tool-progress",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "tool.progress",
+        summary: "MCP tool call progress",
+        payload: {
+          itemType: "mcp_tool_call",
+          title: "ctx_batch_execute",
+          detail: "Gathering repo metadata",
+        },
+      }),
+      makeActivity({
+        id: "tool-progress-2",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "tool.progress",
+        summary: "MCP tool call progress",
+        payload: {
+          itemType: "mcp_tool_call",
+          title: "ctx_batch_execute",
+          detail: "Streaming shell output",
+        },
+      }),
+      makeActivity({
+        id: "tool-progress-complete",
+        createdAt: "2026-02-23T00:00:03.000Z",
+        kind: "tool.completed",
+        summary: "MCP tool call completed",
+        payload: {
+          itemType: "mcp_tool_call",
+          title: "ctx_batch_execute",
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      id: "tool-progress-complete",
+      toolTitle: "ctx_batch_execute",
+      itemType: "mcp_tool_call",
+      detail: "Streaming shell output",
     });
   });
 
