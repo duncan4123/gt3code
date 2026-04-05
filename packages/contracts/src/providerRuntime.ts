@@ -503,6 +503,8 @@ const ToolProgressPayload = Schema.Struct({
   toolUseId: Schema.optional(TrimmedNonEmptyStringSchema),
   toolName: Schema.optional(TrimmedNonEmptyStringSchema),
   summary: Schema.optional(TrimmedNonEmptyStringSchema),
+  title: Schema.optional(TrimmedNonEmptyStringSchema),
+  itemType: Schema.optional(ToolLifecycleItemType),
   elapsedSeconds: Schema.optional(Schema.Number),
 });
 export type ToolProgressPayload = typeof ToolProgressPayload.Type;

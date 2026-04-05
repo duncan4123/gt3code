@@ -1989,6 +1989,48 @@ describe("ProviderRuntimeIngestion", () => {
     expect(checkpoint?.checkpointRef).toBe("provider-diff:evt-turn-diff-updated");
   });
 
+  it("projects tool progress events into normalized thread activities", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    harness.emit({
+      type: "tool.progress",
+      eventId: asEventId("evt-tool-progress"),
+      provider: "codex",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-progress"),
+      payload: {
+        itemType: "mcp_tool_call",
+        toolName: "ctx_batch_execute",
+        summary: "Streaming ctx_batch_execute output",
+        toolUseId: "tool-use-123",
+        elapsedSeconds: 12,
+      },
+    });
+
+    const thread = await waitForThread(harness.engine, (entry) =>
+      entry.activities.some(
+        (activity: ProviderRuntimeTestActivity) => activity.kind === "tool.progress",
+      ),
+    );
+
+    const progressActivity = thread.activities.find(
+      (activity: ProviderRuntimeTestActivity) => activity.id === "evt-tool-progress",
+    );
+    const progressPayload =
+      progressActivity?.payload && typeof progressActivity.payload === "object"
+        ? (progressActivity.payload as Record<string, unknown>)
+        : null;
+
+    expect(progressActivity?.tone).toBe("tool");
+    expect(progressActivity?.summary).toBe("Streaming ctx_batch_execute output");
+    expect(progressPayload?.itemType).toBe("mcp_tool_call");
+    expect(progressPayload?.toolUseId).toBe("tool-use-123");
+    expect(progressPayload?.elapsedSeconds).toBe(12);
+    expect(progressPayload?.detail).toBe("Streaming ctx_batch_execute output");
+  });
+
   it("projects context window updates into normalized thread activities", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();

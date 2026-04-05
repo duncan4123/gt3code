@@ -21,13 +21,13 @@ SELECT * FROM sync_procedure ORDER BY step;
 
 ## Tables
 
-| Table | Purpose |
-|-------|---------|
-| `bugs` | Open issues with this branch |
-| `workarounds` | Active workarounds and when to remove them |
-| `custom_files` | Files we changed vs upstream (path, type, purpose) |
-| `sync_procedure` | Steps to sync with upstream |
-| `config` | Branch-specific configuration |
+| Table            | Purpose                                            |
+| ---------------- | -------------------------------------------------- |
+| `bugs`           | Open issues with this branch                       |
+| `workarounds`    | Active workarounds and when to remove them         |
+| `custom_files`   | Files we changed vs upstream (path, type, purpose) |
+| `sync_procedure` | Steps to sync with upstream                        |
+| `config`         | Branch-specific configuration                      |
 
 ## Dolt branches
 

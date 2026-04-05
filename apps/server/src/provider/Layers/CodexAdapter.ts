@@ -961,14 +961,19 @@ function mapToRuntimeEvents(
   }
 
   if (event.method === "item/mcpToolCall/progress") {
+    const toolName = asString(payload?.toolName);
+    const summary = asString(payload?.summary);
+    const resolvedTitle = summary ?? toolName ?? "MCP tool call";
     return [
       {
         ...runtimeEventBase(event, canonicalThreadId),
         type: "tool.progress",
         payload: {
+          ...(resolvedTitle ? { title: resolvedTitle } : {}),
+          itemType: "mcp_tool_call",
           ...(asString(payload?.toolUseId) ? { toolUseId: asString(payload?.toolUseId) } : {}),
-          ...(asString(payload?.toolName) ? { toolName: asString(payload?.toolName) } : {}),
-          ...(asString(payload?.summary) ? { summary: asString(payload?.summary) } : {}),
+          ...(toolName ? { toolName } : {}),
+          ...(summary ? { summary } : {}),
           ...(asNumber(payload?.elapsedSeconds) !== undefined
             ? { elapsedSeconds: asNumber(payload?.elapsedSeconds) }
             : {}),

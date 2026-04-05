@@ -493,6 +493,32 @@ function runtimeEventToActivities(
       ];
     }
 
+    case "tool.progress": {
+      const summary =
+        event.payload.summary ??
+        (event.payload.toolName ? `${event.payload.toolName} progress` : "Tool progress");
+      return [
+        {
+          id: event.eventId,
+          createdAt: event.createdAt,
+          tone: "tool",
+          kind: "tool.progress",
+          summary,
+          payload: {
+            ...(event.payload.itemType ? { itemType: event.payload.itemType } : {}),
+            ...(event.payload.toolName ? { title: event.payload.toolName } : {}),
+            ...(event.payload.summary ? { detail: truncateDetail(event.payload.summary) } : {}),
+            ...(event.payload.toolUseId ? { toolUseId: event.payload.toolUseId } : {}),
+            ...(event.payload.elapsedSeconds !== undefined
+              ? { elapsedSeconds: event.payload.elapsedSeconds }
+              : {}),
+          },
+          turnId: toTurnId(event.turnId) ?? null,
+          ...maybeSequence,
+        },
+      ];
+    }
+
     default:
       break;
   }

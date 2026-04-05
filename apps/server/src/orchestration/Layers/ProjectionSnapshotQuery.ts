@@ -683,7 +683,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             activities: activitiesByThread.get(row.threadId) ?? [],
             checkpoints: checkpointsByThread.get(row.threadId) ?? [],
             session: sessionsByThread.get(row.threadId) ?? null,
-            customMetadata: JSON.parse((row as Record<string, unknown>).customMetadata as string || "{}"),
+            customMetadata: JSON.parse(
+              ((row as Record<string, unknown>).customMetadata as string) || "{}",
+            ),
           }));
 
           const snapshot = {

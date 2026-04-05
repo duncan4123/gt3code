@@ -164,8 +164,8 @@ export function estimateMessagesTimelineRowHeight(
 function estimateWorkRowHeight(
   row: Extract<MessagesTimelineRow, { kind: "work" }>,
   input: {
-    expandedWorkGroups?: Readonly<Record<string, boolean>>;
-    expandedToolEntryIds?: Readonly<Record<string, boolean>>;
+    expandedWorkGroups?: Readonly<Record<string, boolean>> | undefined;
+    expandedToolEntryIds?: Readonly<Record<string, boolean>> | undefined;
   },
 ): number {
   const isExpanded = input.expandedWorkGroups?.[row.id] ?? false;

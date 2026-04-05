@@ -58,7 +58,16 @@ export function getGcMetadata(customMetadata?: Record<string, string>): {
   provider: string | undefined;
 } {
   if (!customMetadata || !customMetadata["gc.agent"]) {
-    return { isGcManaged: false, agent: undefined, rig: undefined, city: undefined, bead: undefined, beadTitle: undefined, state: undefined, provider: undefined };
+    return {
+      isGcManaged: false,
+      agent: undefined,
+      rig: undefined,
+      city: undefined,
+      bead: undefined,
+      beadTitle: undefined,
+      state: undefined,
+      provider: undefined,
+    };
   }
   return {
     isGcManaged: true,
@@ -73,10 +82,11 @@ export function getGcMetadata(customMetadata?: Record<string, string>): {
 }
 
 /** Count GC-managed threads per project. */
-export function countGcAgents(threads: ReadonlyArray<{ projectId: string; customMetadata?: Record<string, string> }>, projectId: string): number {
-  return threads.filter(
-    (t) => t.projectId === projectId && t.customMetadata?.["gc.agent"],
-  ).length;
+export function countGcAgents(
+  threads: ReadonlyArray<{ projectId: string; customMetadata?: Record<string, string> }>,
+  projectId: string,
+): number {
+  return threads.filter((t) => t.projectId === projectId && t.customMetadata?.["gc.agent"]).length;
 }
 
 type ThreadStatusInput = Pick<
