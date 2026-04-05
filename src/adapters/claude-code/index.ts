@@ -231,9 +231,9 @@ export class ClaudeCodeAdapter implements HookAdapter {
       "Read",
       "Grep",
       "Task",
-      "mcp__plugin_context-mode_context-mode__ctx_execute",
-      "mcp__plugin_context-mode_context-mode__ctx_execute_file",
-      "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
+      "mcp__plugin_context-mode_context-mode-doltlite__ctx_execute",
+      "mcp__plugin_context-mode_context-mode-doltlite__ctx_execute_file",
+      "mcp__plugin_context-mode_context-mode-doltlite__ctx_batch_execute",
     ];
 
     return {

@@ -43,9 +43,9 @@ export const PRE_TOOL_USE_MATCHERS = [
   "Grep",
   "Agent",
   "Task",
-  "mcp__plugin_context-mode_context-mode__ctx_execute",
-  "mcp__plugin_context-mode_context-mode__ctx_execute_file",
-  "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
+  "mcp__plugin_context-mode_context-mode-doltlite__ctx_execute",
+  "mcp__plugin_context-mode_context-mode-doltlite__ctx_execute_file",
+  "mcp__plugin_context-mode_context-mode-doltlite__ctx_batch_execute",
 ] as const;
 
 /**
