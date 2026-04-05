@@ -48,6 +48,7 @@ export class StatementSync {
 
 export class DatabaseSync {
   #db: any;
+  #isDoltlite = false;
 
   constructor(
     path: string,
@@ -58,7 +59,16 @@ export class DatabaseSync {
       readonly: isReadOnly,
       timeout: 5000,
     });
-    if (path !== ":memory:" && !isReadOnly) {
+    try {
+      this.#db.prepare("SELECT doltlite_engine()").get();
+      this.#isDoltlite = true;
+    } catch {
+      /* standard SQLite */
+    }
+    if (path !== ":memory:" && !isReadOnly && !this.#isDoltlite) {
+      // Skip WAL under doltlite — it manages its own journal and WAL mode
+      // breaks read-your-own-writes, causing UNIQUE constraint violations
+      // when multiple events are appended to the same stream.
       this.#db.pragma("journal_mode = WAL");
       this.#db.pragma("synchronous = NORMAL");
     }
@@ -77,10 +87,12 @@ export class DatabaseSync {
   }
 
   close(): void {
-    try {
-      this.#db.pragma("wal_checkpoint(PASSIVE)");
-    } catch {
-      /* best-effort */
+    if (!this.#isDoltlite) {
+      try {
+        this.#db.pragma("wal_checkpoint(PASSIVE)");
+      } catch {
+        /* best-effort */
+      }
     }
     this.#db.close();
   }
