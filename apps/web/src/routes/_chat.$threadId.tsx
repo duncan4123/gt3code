@@ -1,6 +1,6 @@
-import { ThreadId } from "@t3tools/contracts";
+import { ThreadId, parseGcMeta } from "@t3tools/contracts";
 import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/react-router";
-import { Suspense, lazy, type ReactNode, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import ChatView from "../components/ChatView";
 import { DiffWorkerPoolProvider } from "../components/DiffWorkerPoolProvider";
@@ -22,6 +22,7 @@ import { Sheet, SheetPopup } from "../components/ui/sheet";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 
 const DiffPanel = lazy(() => import("../components/DiffPanel"));
+const GcPanel = lazy(() => import("../components/GcPanel"));
 const DIFF_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1180px)";
 const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
 const DIFF_INLINE_DEFAULT_WIDTH = "clamp(28rem,48vw,44rem)";
@@ -172,6 +173,13 @@ function ChatThreadRouteView() {
     Object.hasOwn(store.draftThreadsByThreadId, threadId),
   );
   const routeThreadExists = threadExists || draftThreadExists;
+  const threadCustomMetadata = useStore(
+    (store) => store.threads.find((t) => t.id === threadId)?.customMetadata,
+  );
+  const isGcManaged = useMemo(
+    () => parseGcMeta(threadCustomMetadata).isGcManaged,
+    [threadCustomMetadata],
+  );
   const diffOpen = search.diff === "1";
   const shouldUseDiffSheet = useMediaQuery(DIFF_INLINE_LAYOUT_MEDIA_QUERY);
   // TanStack Router keeps active route components mounted across param-only navigations
@@ -222,7 +230,18 @@ function ChatThreadRouteView() {
     return (
       <>
         <SidebarInset className="h-dvh  min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-          <ChatView threadId={threadId} />
+          <div className="flex h-full min-h-0">
+            <div className="min-w-0 flex-1">
+              <ChatView threadId={threadId} />
+            </div>
+            {isGcManaged && (
+              <div className="w-64 shrink-0 border-l border-border overflow-y-auto">
+                <Suspense fallback={null}>
+                  <GcPanel threadId={threadId} />
+                </Suspense>
+              </div>
+            )}
+          </div>
         </SidebarInset>
         <DiffPanelInlineSidebar
           diffOpen={diffOpen}
@@ -237,7 +256,18 @@ function ChatThreadRouteView() {
   return (
     <>
       <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-        <ChatView threadId={threadId} />
+        <div className="flex h-full min-h-0">
+          <div className="min-w-0 flex-1">
+            <ChatView threadId={threadId} />
+          </div>
+          {isGcManaged && (
+            <div className="w-64 shrink-0 border-l border-border overflow-y-auto">
+              <Suspense fallback={null}>
+                <GcPanel threadId={threadId} />
+              </Suspense>
+            </div>
+          )}
+        </div>
       </SidebarInset>
       <DiffPanelSheet diffOpen={diffOpen} onCloseDiff={closeDiff}>
         {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
