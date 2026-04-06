@@ -69,6 +69,11 @@ import {
   ServerUpsertKeybindingResult,
 } from "./server";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings";
+import {
+  GcGetThreadContextInput,
+  GcThreadContextResult,
+  GcGetThreadContextError,
+} from "./gc";
 
 export const WS_METHODS = {
   // Project registry methods
@@ -108,6 +113,9 @@ export const WS_METHODS = {
   serverUpsertKeybinding: "server.upsertKeybinding",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
+
+  // Gas City
+  gcGetThreadContext: "gc.getThreadContext",
 
   // Streaming subscriptions
   subscribeOrchestrationDomainEvents: "subscribeOrchestrationDomainEvents",
@@ -321,6 +329,12 @@ export const WsSubscribeServerLifecycleRpc = Rpc.make(WS_METHODS.subscribeServer
   stream: true,
 });
 
+export const WsGcGetThreadContextRpc = Rpc.make(WS_METHODS.gcGetThreadContext, {
+  payload: GcGetThreadContextInput,
+  success: GcThreadContextResult,
+  error: GcGetThreadContextError,
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -356,4 +370,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
+  WsGcGetThreadContextRpc,
 );

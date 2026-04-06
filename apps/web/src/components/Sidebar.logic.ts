@@ -47,39 +47,7 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
 };
 
 /** Extract gc.* metadata from a thread's customMetadata. */
-export function getGcMetadata(customMetadata?: Record<string, string>): {
-  isGcManaged: boolean;
-  agent: string | undefined;
-  rig: string | undefined;
-  city: string | undefined;
-  bead: string | undefined;
-  beadTitle: string | undefined;
-  state: string | undefined;
-  provider: string | undefined;
-} {
-  if (!customMetadata || !customMetadata["gc.agent"]) {
-    return {
-      isGcManaged: false,
-      agent: undefined,
-      rig: undefined,
-      city: undefined,
-      bead: undefined,
-      beadTitle: undefined,
-      state: undefined,
-      provider: undefined,
-    };
-  }
-  return {
-    isGcManaged: true,
-    agent: customMetadata["gc.agent"],
-    rig: customMetadata["gc.rig"],
-    city: customMetadata["gc.city"],
-    bead: customMetadata["gc.bead"],
-    beadTitle: customMetadata["gc.beadTitle"],
-    state: customMetadata["gc.state"],
-    provider: customMetadata["gc.provider"],
-  };
-}
+export { parseGcMeta as getGcMetadata } from "@t3tools/contracts";
 
 /** Count GC-managed threads per project. */
 export function countGcAgents(

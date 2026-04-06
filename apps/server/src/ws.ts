@@ -46,6 +46,8 @@ import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries";
 import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem";
 import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePaths";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner";
+import { GcContextProvider, GcApiClientLive, GcContextProviderLive } from "./gc";
+import { GcGetThreadContextError } from "@t3tools/contracts";
 
 const WsRpcLayer = WsRpcGroup.toLayer(
   Effect.gen(function* () {
@@ -708,6 +710,29 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           }),
           { "rpc.aggregate": "server" },
         ),
+
+      // Gas City
+      [WS_METHODS.gcGetThreadContext]: ({ threadId }) =>
+        observeRpcEffect(
+          WS_METHODS.gcGetThreadContext,
+          Effect.gen(function* () {
+            const snapshot = yield* projectionSnapshotQuery.getSnapshot();
+            const thread = snapshot.threads.find((t) => t.id === threadId);
+            if (!thread?.customMetadata) {
+              return { bead: null, convoy: null, formula: null };
+            }
+            const gcCtx = yield* GcContextProvider;
+            return yield* gcCtx.getThreadContext(thread.customMetadata);
+          }).pipe(
+            Effect.mapError(
+              (error) =>
+                new GcGetThreadContextError({
+                  message: error instanceof Error ? error.message : "Failed to get GC context",
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "gc" },
+        ),
     });
   }),
 );
@@ -720,7 +745,13 @@ export const websocketRpcRouteLayer = Layer.unwrap(
         "rpc.transport": "websocket",
         "rpc.system": "effect-rpc",
       },
-    }).pipe(Effect.provide(Layer.mergeAll(WsRpcLayer, RpcSerialization.layerJson)));
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(WsRpcLayer, RpcSerialization.layerJson).pipe(
+          Layer.provideMerge(GcContextProviderLive.pipe(Layer.provide(GcApiClientLive))),
+        ),
+      ),
+    );
     return HttpRouter.add(
       "GET",
       "/ws",
