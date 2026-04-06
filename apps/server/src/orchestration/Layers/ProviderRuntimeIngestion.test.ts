@@ -1998,7 +1998,7 @@ describe("ProviderRuntimeIngestion", () => {
     const now = new Date().toISOString();
 
     harness.emit({
-      type: "tool.progress",
+      type: "item.updated",
       eventId: asEventId("evt-tool-progress"),
       provider: "codex",
       createdAt: now,
@@ -2006,16 +2006,14 @@ describe("ProviderRuntimeIngestion", () => {
       turnId: asTurnId("turn-progress"),
       payload: {
         itemType: "mcp_tool_call",
-        toolName: "ctx_batch_execute",
-        summary: "Streaming ctx_batch_execute output",
-        toolUseId: "tool-use-123",
-        elapsedSeconds: 12,
+        title: "ctx_batch_execute",
+        detail: "Streaming ctx_batch_execute output",
       },
     });
 
     const thread = await waitForThread(harness.engine, (entry) =>
       entry.activities.some(
-        (activity: ProviderRuntimeTestActivity) => activity.kind === "tool.progress",
+        (activity: ProviderRuntimeTestActivity) => activity.kind === "tool.updated",
       ),
     );
 
@@ -2028,10 +2026,8 @@ describe("ProviderRuntimeIngestion", () => {
         : null;
 
     expect(progressActivity?.tone).toBe("tool");
-    expect(progressActivity?.summary).toBe("Streaming ctx_batch_execute output");
+    expect(progressActivity?.summary).toBe("ctx_batch_execute");
     expect(progressPayload?.itemType).toBe("mcp_tool_call");
-    expect(progressPayload?.toolUseId).toBe("tool-use-123");
-    expect(progressPayload?.elapsedSeconds).toBe(12);
     expect(progressPayload?.detail).toBe("Streaming ctx_batch_execute output");
   });
 

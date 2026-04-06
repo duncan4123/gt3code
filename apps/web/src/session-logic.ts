@@ -477,7 +477,9 @@ function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): bool
   if (!isToolLifecycleActivityKind(activity.kind)) {
     return false;
   }
-  return activity.payload.detail?.startsWith("ExitPlanMode:") ?? false;
+  return "detail" in activity.payload &&
+    typeof activity.payload.detail === "string" &&
+    activity.payload.detail.startsWith("ExitPlanMode:");
 }
 
 function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
@@ -531,9 +533,9 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
 }
 
 const TOOL_LIFECYCLE_ACTIVITY_KINDS: ReadonlySet<string> = new Set([
+  "tool.started",
   "tool.updated",
   "tool.completed",
-  "tool.progress",
 ]);
 
 function isToolLifecycleActivityKind(kind: string): boolean {

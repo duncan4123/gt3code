@@ -823,22 +823,20 @@ describe("deriveWorkLogEntries", () => {
       makeActivity({
         id: "tool-progress",
         createdAt: "2026-02-23T00:00:01.000Z",
-        kind: "tool.progress",
+        kind: "tool.updated",
         summary: "MCP tool call progress",
         payload: {
           itemType: "mcp_tool_call",
-          title: "ctx_batch_execute",
           detail: "Gathering repo metadata",
         },
       }),
       makeActivity({
         id: "tool-progress-2",
         createdAt: "2026-02-23T00:00:02.000Z",
-        kind: "tool.progress",
+        kind: "tool.updated",
         summary: "MCP tool call progress",
         payload: {
           itemType: "mcp_tool_call",
-          title: "ctx_batch_execute",
           detail: "Streaming shell output",
         },
       }),

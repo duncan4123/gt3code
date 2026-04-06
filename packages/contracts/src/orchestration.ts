@@ -259,6 +259,9 @@ export const OrchestrationThreadActivityKind = Schema.Literals([
   "provider.turn.interrupt.failed",
   "provider.approval.respond.failed",
   "provider.user-input.respond.failed",
+  "setup-script.requested",
+  "setup-script.started",
+  "setup-script.failed",
 ]);
 export type OrchestrationThreadActivityKind = typeof OrchestrationThreadActivityKind.Type;
 
@@ -371,6 +374,12 @@ const ProviderFailureActivityPayload = Schema.Struct({
   requestId: Schema.optional(TrimmedNonEmptyString),
 });
 
+const SetupScriptActivityPayload = Schema.Struct({
+  detail: Schema.optional(TrimmedNonEmptyString),
+  worktreePath: Schema.optional(TrimmedNonEmptyString),
+  name: Schema.optional(TrimmedNonEmptyString),
+});
+
 function makeThreadActivitySchema<
   Kind extends OrchestrationThreadActivityKind,
   Payload extends Schema.Schema<any>,
@@ -426,6 +435,9 @@ export const OrchestrationThreadActivity = Schema.Union([
     "error",
     ProviderFailureActivityPayload,
   ),
+  makeThreadActivitySchema("setup-script.requested", "info", SetupScriptActivityPayload),
+  makeThreadActivitySchema("setup-script.started", "info", SetupScriptActivityPayload),
+  makeThreadActivitySchema("setup-script.failed", "error", SetupScriptActivityPayload),
 ]);
 export type OrchestrationThreadActivity = typeof OrchestrationThreadActivity.Type;
 

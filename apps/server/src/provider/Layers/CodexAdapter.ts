@@ -1066,13 +1066,13 @@ function mapToRuntimeEvents(
     return [
       {
         ...runtimeEventBase(event, canonicalThreadId),
-        type: "tool.progress",
+        type: "item.updated",
         payload: {
-          ...(resolvedTitle ? { title: resolvedTitle } : {}),
+          title: resolvedTitle,
           itemType: "mcp_tool_call",
+          ...(summary ? { detail: summary } : {}),
           ...(asString(payload?.toolUseId) ? { toolUseId: asString(payload?.toolUseId) } : {}),
           ...(toolName ? { toolName } : {}),
-          ...(summary ? { summary } : {}),
           ...(asNumber(payload?.elapsedSeconds) !== undefined
             ? { elapsedSeconds: asNumber(payload?.elapsedSeconds) }
             : {}),
