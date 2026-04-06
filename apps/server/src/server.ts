@@ -229,6 +229,14 @@ export const makeServerLayer = Layer.unwrap(
         const startup = yield* ServerRuntimeStartup;
         yield* startup.markHttpListening;
         yield* startDoltLifecycle;
+
+        // Write port file for external integrations (e.g. gascity t3bridge)
+        const portFilePath = `${config.baseDir}/ws-port`;
+        yield* Effect.tryPromise(() =>
+          import("node:fs/promises").then((fs) =>
+            fs.writeFile(portFilePath, `${config.port}`, "utf8"),
+          ),
+        ).pipe(Effect.catchAll(() => Effect.void));
       }),
     );
 
