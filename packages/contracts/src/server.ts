@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { ServerAcpAgentStatus } from "./acp";
 import {
   IsoDateTime,
   NonNegativeInt,
@@ -88,6 +89,7 @@ export const ServerConfig = Schema.Struct({
   keybindings: ResolvedKeybindingsConfig,
   issues: ServerConfigIssues,
   providers: ServerProviders,
+  acpAgentServers: Schema.Array(ServerAcpAgentStatus),
   availableEditors: Schema.Array(EditorId),
   observability: ServerObservability,
   settings: ServerSettings,
@@ -123,6 +125,7 @@ export type ServerConfigProviderStatusesPayload = typeof ServerConfigProviderSta
 
 export const ServerConfigSettingsUpdatedPayload = Schema.Struct({
   settings: ServerSettings,
+  acpAgentServers: Schema.Array(ServerAcpAgentStatus),
 });
 export type ServerConfigSettingsUpdatedPayload = typeof ServerConfigSettingsUpdatedPayload.Type;
 

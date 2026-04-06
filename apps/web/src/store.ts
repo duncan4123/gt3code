@@ -1,9 +1,10 @@
 import {
+  type ModelSelection,
+  ProviderKind,
   type OrchestrationEvent,
   type OrchestrationMessage,
   type OrchestrationProposedPlan,
   type ProjectId,
-  type ProviderKind,
   ThreadId,
   type OrchestrationReadModel,
   type OrchestrationSession,
@@ -11,13 +12,14 @@ import {
   type OrchestrationThread,
   type OrchestrationSessionStatus,
 } from "@t3tools/contracts";
+import { Schema } from "effect";
 import { resolveModelSlugForProvider } from "@t3tools/shared/model";
 import { create } from "zustand";
 import {
-  findLatestProposedPlan,
-  hasActionableProposedPlan,
   derivePendingApprovals,
   derivePendingUserInputs,
+  findLatestProposedPlan,
+  hasActionableProposedPlan,
 } from "./session-logic";
 import { sanitizeThreadErrorMessage } from "./rpc/transportError";
 import { type ChatMessage, type Project, type SidebarThreadSummary, type Thread } from "./types";
@@ -81,9 +83,7 @@ function updateProject(
   return changed ? next : projects;
 }
 
-function normalizeModelSelection<T extends { provider: "codex" | "claudeAgent"; model: string }>(
-  selection: T,
-): T {
+function normalizeModelSelection<T extends ModelSelection>(selection: T): T {
   return {
     ...selection,
     model: resolveModelSlugForProvider(selection.provider, selection.model),
@@ -497,7 +497,7 @@ function toLegacySessionStatus(
 }
 
 function toLegacyProvider(providerName: string | null): ProviderKind {
-  if (providerName === "codex" || providerName === "claudeAgent") {
+  if (Schema.is(ProviderKind)(providerName)) {
     return providerName;
   }
   return "codex";

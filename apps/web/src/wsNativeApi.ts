@@ -92,6 +92,7 @@ export function createWsNativeApi(): NativeApi {
       upsertKeybinding: rpcClient.server.upsertKeybinding,
       getSettings: rpcClient.server.getSettings,
       updateSettings: rpcClient.server.updateSettings,
+      listAcpRegistry: rpcClient.server.listAcpRegistry,
     },
     orchestration: {
       getSnapshot: rpcClient.orchestration.getSnapshot,

@@ -135,6 +135,7 @@ function createBaseServerConfig(): ServerConfig {
         models: [],
       },
     ],
+    acpAgentServers: [],
     availableEditors: [],
     observability: {
       logsDirectoryPath: "/repo/project/.t3/logs",

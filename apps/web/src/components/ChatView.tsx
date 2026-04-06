@@ -124,7 +124,12 @@ import {
   resolveSelectableProvider,
 } from "../providerModels";
 import { useSettings } from "../hooks/useSettings";
-import { resolveAppModelSelection } from "../modelSelection";
+import {
+  getModelSelectionOptions,
+  isBuiltInProviderKind,
+  resolveAppModelSelection,
+  resolveBuiltInSelectableProvider,
+} from "../modelSelection";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import {
   type ComposerImageAttachment,
@@ -995,6 +1000,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
     : null;
   const serverConfig = useServerConfig();
   const providerStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
+  const acpAgents = settings.providers.acp.enabled
+    ? settings.providers.acp.agentServers.filter((agent) => agent.enabled)
+    : [];
   const unlockedSelectedProvider = resolveSelectableProvider(
     providerStatuses,
     selectedProviderByThreadId ?? threadProvider ?? "codex",
@@ -1022,13 +1030,34 @@ export default function ChatView({ threadId }: ChatViewProps) {
   );
   const selectedPromptEffort = composerProviderState.promptEffort;
   const selectedModelOptionsForDispatch = composerProviderState.modelOptionsForDispatch;
+  const selectedAcpAgentId =
+    (composerDraft.modelSelectionByProvider.acp?.provider === "acp"
+      ? composerDraft.modelSelectionByProvider.acp.agentServerId
+      : undefined) ??
+    (activeThread?.modelSelection.provider === "acp"
+      ? activeThread.modelSelection.agentServerId
+      : undefined) ??
+    (activeProject?.defaultModelSelection?.provider === "acp"
+      ? activeProject.defaultModelSelection.agentServerId
+      : undefined) ??
+    acpAgents[0]?.id ??
+    null;
   const selectedModelSelection = useMemo<ModelSelection>(
-    () => ({
-      provider: selectedProvider,
-      model: selectedModel,
-      ...(selectedModelOptionsForDispatch ? { options: selectedModelOptionsForDispatch } : {}),
-    }),
-    [selectedModel, selectedModelOptionsForDispatch, selectedProvider],
+    () =>
+      selectedProvider === "acp"
+        ? {
+            provider: "acp",
+            agentServerId: selectedAcpAgentId ?? "default",
+            model: "default",
+          }
+        : {
+            provider: selectedProvider,
+            model: selectedModel,
+            ...(selectedModelOptionsForDispatch
+              ? { options: selectedModelOptionsForDispatch }
+              : {}),
+          },
+    [selectedAcpAgentId, selectedModel, selectedModelOptionsForDispatch, selectedProvider],
   );
   const selectedModelForPicker = selectedModel;
   const phase = derivePhase(activeThread?.session ?? null);
@@ -1412,6 +1441,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
       codex: providerStatuses.find((provider) => provider.provider === "codex")?.models ?? [],
       claudeAgent:
         providerStatuses.find((provider) => provider.provider === "claudeAgent")?.models ?? [],
+      cursor: providerStatuses.find((provider) => provider.provider === "cursor")?.models ?? [],
+      acp: [],
     }),
     [providerStatuses],
   );
@@ -2034,8 +2065,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
         input.modelSelection !== undefined &&
         (input.modelSelection.model !== serverThread.modelSelection.model ||
           input.modelSelection.provider !== serverThread.modelSelection.provider ||
-          JSON.stringify(input.modelSelection.options ?? null) !==
-            JSON.stringify(serverThread.modelSelection.options ?? null))
+          JSON.stringify(getModelSelectionOptions(input.modelSelection) ?? null) !==
+            JSON.stringify(getModelSelectionOptions(serverThread.modelSelection) ?? null))
       ) {
         await api.orchestration.dispatchCommand({
           type: "thread.meta.update",
@@ -3020,14 +3051,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         }
       }
       const title = truncate(titleSeed);
-      const threadCreateModelSelection: ModelSelection = {
-        provider: selectedProvider,
-        model:
-          selectedModel ||
-          activeProject.defaultModelSelection?.model ||
-          DEFAULT_MODEL_BY_PROVIDER.codex,
-        ...(selectedModelSelection.options ? { options: selectedModelSelection.options } : {}),
-      };
+      const threadCreateModelSelection = selectedModelSelection;
 
       // Auto-title from first message
       if (isFirstMessage && isServerThread) {
@@ -3543,7 +3567,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
         scheduleComposerFocus();
         return;
       }
-      const resolvedProvider = resolveSelectableProvider(providerStatuses, provider);
+      if (!isBuiltInProviderKind(provider)) {
+        scheduleComposerFocus();
+        return;
+      }
+      const resolvedProvider = resolveBuiltInSelectableProvider(providerStatuses, provider);
       const resolvedModel = resolveAppModelSelection(
         resolvedProvider,
         settings,
@@ -3566,6 +3594,25 @@ export default function ChatView({ threadId }: ChatViewProps) {
       setStickyComposerModelSelection,
       providerStatuses,
       settings,
+    ],
+  );
+  const onAcpAgentSelect = useCallback(
+    (agentServerId: string) => {
+      if (!activeThread) return;
+      const nextModelSelection: ModelSelection = {
+        provider: "acp",
+        agentServerId,
+        model: "default",
+      };
+      setComposerDraftModelSelection(activeThread.id, nextModelSelection);
+      setStickyComposerModelSelection(nextModelSelection);
+      scheduleComposerFocus();
+    },
+    [
+      activeThread,
+      scheduleComposerFocus,
+      setComposerDraftModelSelection,
+      setStickyComposerModelSelection,
     ],
   );
   const setPromptFromTraits = useCallback(
@@ -4242,6 +4289,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
                           lockedProvider={lockedProvider}
                           providers={providerStatuses}
                           modelOptionsByProvider={modelOptionsByProvider}
+                          acpAgents={acpAgents}
+                          activeAcpAgentId={selectedAcpAgentId}
                           {...(composerProviderState.modelPickerIconClassName
                             ? {
                                 activeProviderIconClassName:
@@ -4249,6 +4298,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
                               }
                             : {})}
                           onProviderModelChange={onProviderModelSelect}
+                          onAcpAgentSelect={onAcpAgentSelect}
                         />
 
                         {isComposerFooterCompact ? (

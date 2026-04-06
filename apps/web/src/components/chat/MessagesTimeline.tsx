@@ -51,6 +51,7 @@ import {
   type MessagesTimelineRow,
 } from "./MessagesTimeline.logic";
 import { TerminalContextInlineChip } from "./TerminalContextInlineChip";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   deriveDisplayedUserMessageState,
   type ParsedTerminalContextEntry,
@@ -863,67 +864,69 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   const iconConfig = workToneIcon(workEntry.tone);
   const EntryIcon = workEntryIcon(workEntry);
   const heading = toolWorkEntryHeading(workEntry);
-  const preview = workEntryPreview(workEntry);
+  const rawPreview = workEntryPreview(workEntry);
+  const preview =
+    rawPreview &&
+    normalizeCompactToolLabel(rawPreview).toLowerCase() ===
+      normalizeCompactToolLabel(heading).toLowerCase()
+      ? null
+      : rawPreview;
   const displayText = preview ? `${heading} - ${preview}` : heading;
   const hasChangedFiles = (workEntry.changedFiles?.length ?? 0) > 0;
   const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
 
   return (
-    <Collapsible open={isExpanded}>
-      <CollapsibleTrigger
-        onClick={onToggle}
-        className="w-full cursor-pointer rounded-lg px-1 py-1 text-left transition-colors duration-100 hover:bg-muted/30"
-      >
-        <div className="flex items-center gap-2 transition-[opacity,translate] duration-200">
-          <span
-            className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
-          >
-            <EntryIcon className="size-3" />
-          </span>
-          <div className="min-w-0 flex-1 overflow-hidden">
-            <p
-              className={cn(
-                "truncate text-[11px] leading-5",
-                workToneClass(workEntry.tone),
-                preview ? "text-muted-foreground/70" : "",
-              )}
+    <div className="rounded-lg px-1 py-1">
+      <div className="flex items-center gap-2 transition-[opacity,translate] duration-200">
+        <span
+          className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
+        >
+          <EntryIcon className="size-3" />
+        </span>
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <Tooltip>
+            <TooltipTrigger
+              className="block min-w-0 w-full text-left"
               title={displayText}
+              aria-label={displayText}
             >
-              <span className={cn("text-foreground/80", workToneClass(workEntry.tone))}>
-                {heading}
-              </span>
-              {preview && <span className="text-muted-foreground/55"> - {preview}</span>}
-            </p>
-          </div>
-          <ChevronRightIcon
-            className={cn(
-              "size-3 shrink-0 text-muted-foreground/40 transition-transform duration-200",
-              isExpanded && "rotate-90",
-            )}
-          />
-        </div>
-        {hasChangedFiles && !previewIsChangedFiles && !isExpanded && (
-          <div className="mt-1 flex flex-wrap gap-1 pl-6">
-            {workEntry.changedFiles?.slice(0, 4).map((filePath) => (
-              <span
-                key={`${workEntry.id}:${filePath}`}
-                className="rounded-md border border-border/55 bg-background/75 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/75"
-                title={filePath}
+              <p
+                className={cn(
+                  "truncate text-[11px] leading-5",
+                  workToneClass(workEntry.tone),
+                  preview ? "text-muted-foreground/70" : "",
+                )}
               >
-                {filePath}
-              </span>
-            ))}
-            {(workEntry.changedFiles?.length ?? 0) > 4 && (
-              <span className="px-1 text-[10px] text-muted-foreground/55">
-                +{(workEntry.changedFiles?.length ?? 0) - 4}
-              </span>
-            )}
-          </div>
-        )}
-      </CollapsibleTrigger>
-      <CollapsiblePanel>
-        <ToolCallDetail workEntry={workEntry} payload={payload} />
-      </CollapsiblePanel>
-    </Collapsible>
+                <span className={cn("text-foreground/80", workToneClass(workEntry.tone))}>
+                  {heading}
+                </span>
+                {preview && <span className="text-muted-foreground/55"> - {preview}</span>}
+              </p>
+            </TooltipTrigger>
+            <TooltipPopup className="max-w-[min(720px,calc(100vw-2rem))]">
+              <p className="whitespace-pre-wrap wrap-break-word text-xs leading-5">{displayText}</p>
+            </TooltipPopup>
+          </Tooltip>
+        </div>
+      </div>
+      {hasChangedFiles && !previewIsChangedFiles && (
+        <div className="mt-1 flex flex-wrap gap-1 pl-6">
+          {workEntry.changedFiles?.slice(0, 4).map((filePath) => (
+            <span
+              key={`${workEntry.id}:${filePath}`}
+              className="rounded-md border border-border/55 bg-background/75 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/75"
+              title={filePath}
+            >
+              {filePath}
+            </span>
+          ))}
+          {(workEntry.changedFiles?.length ?? 0) > 4 && (
+            <span className="px-1 text-[10px] text-muted-foreground/55">
+              +{(workEntry.changedFiles?.length ?? 0) - 4}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   );
 });

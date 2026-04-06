@@ -8,6 +8,7 @@ import { render } from "vitest-browser-react";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { TraitsMenuContent } from "./TraitsPicker";
 import { useComposerDraftStore } from "../../composerDraftStore";
+import { getModelSelectionOptions } from "../../modelSelection";
 
 async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: string }) {
   const threadId = ThreadId.makeUnsafe("thread-compact-menu");
@@ -27,7 +28,9 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
       [provider]: {
         provider,
         model,
-        ...(props?.modelSelection?.options ? { options: props.modelSelection.options } : {}),
+        ...(getModelSelectionOptions(props?.modelSelection)
+          ? { options: getModelSelectionOptions(props?.modelSelection) }
+          : {}),
       },
     },
     activeProvider: provider,
@@ -42,7 +45,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
   const host = document.createElement("div");
   document.body.append(host);
   const onPromptChange = vi.fn();
-  const providerOptions = props?.modelSelection?.options;
+  const providerOptions = getModelSelectionOptions(props?.modelSelection);
   const models =
     provider === "claudeAgent"
       ? [
@@ -94,23 +97,25 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
             },
           },
         ]
-      : [
-          {
-            slug: "gpt-5.4",
-            name: "GPT-5.4",
-            isCustom: false,
-            capabilities: {
-              reasoningEffortLevels: [
-                { value: "xhigh", label: "Extra High" },
-                { value: "high", label: "High", isDefault: true },
-              ],
-              supportsFastMode: true,
-              supportsThinkingToggle: false,
-              contextWindowOptions: [],
-              promptInjectedEffortLevels: [],
+      : provider === "codex"
+        ? [
+            {
+              slug: "gpt-5.4",
+              name: "GPT-5.4",
+              isCustom: false,
+              capabilities: {
+                reasoningEffortLevels: [
+                  { value: "xhigh", label: "Extra High" },
+                  { value: "high", label: "High", isDefault: true },
+                ],
+                supportsFastMode: true,
+                supportsThinkingToggle: false,
+                contextWindowOptions: [],
+                promptInjectedEffortLevels: [],
+              },
             },
-          },
-        ];
+          ]
+        : [];
   const screen = await render(
     <CompactComposerControlsMenu
       activePlan={false}

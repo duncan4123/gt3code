@@ -1,5 +1,6 @@
 import { Cause, Effect, Layer, Option, Queue, Ref, Schema, Stream } from "effect";
 import {
+  AcpRegistryListError,
   CommandId,
   EventId,
   type OrchestrationCommand,
@@ -37,6 +38,8 @@ import {
   observeRpcStream,
   observeRpcStreamEffect,
 } from "./observability/RpcInstrumentation";
+import { AcpAgentRegistry } from "./provider/Services/AcpAgentRegistry";
+import { AcpRegistryClient } from "./provider/Services/AcpRegistryClient";
 import { ProviderRegistry } from "./provider/Services/ProviderRegistry";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents";
 import { ServerRuntimeStartup } from "./serverRuntimeStartup";
@@ -58,6 +61,8 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     const git = yield* GitCore;
     const terminalManager = yield* TerminalManager;
     const providerRegistry = yield* ProviderRegistry;
+    const acpAgentRegistry = yield* AcpAgentRegistry;
+    const acpRegistryClient = yield* AcpRegistryClient;
     const config = yield* ServerConfig;
     const lifecycleEvents = yield* ServerLifecycleEvents;
     const serverSettings = yield* ServerSettingsService;
@@ -324,10 +329,19 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         );
     };
 
+    const loadAcpAgentStatuses = acpAgentRegistry.listStatuses.pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("failed to load ACP agent statuses", {
+          error: error instanceof Error ? error.message : String(error),
+        }).pipe(Effect.andThen(Effect.succeed([]))),
+      ),
+    );
+
     const loadServerConfig = Effect.gen(function* () {
       const keybindingsConfig = yield* keybindings.loadConfigState;
       const providers = yield* providerRegistry.getProviders;
       const settings = yield* serverSettings.getSettings;
+      const acpAgentServers = yield* loadAcpAgentStatuses;
 
       return {
         cwd: config.cwd,
@@ -335,6 +349,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         keybindings: keybindingsConfig.keybindings,
         issues: keybindingsConfig.issues,
         providers,
+        acpAgentServers,
         availableEditors: resolveAvailableEditors(),
         observability: {
           logsDirectoryPath: config.logsDir,
@@ -525,6 +540,20 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(WS_METHODS.serverUpdateSettings, serverSettings.updateSettings(patch), {
           "rpc.aggregate": "server",
         }),
+      [WS_METHODS.serverListAcpRegistry]: (_input) =>
+        observeRpcEffect(
+          WS_METHODS.serverListAcpRegistry,
+          acpRegistryClient.listAgents.pipe(
+            Effect.mapError(
+              (cause) =>
+                new AcpRegistryListError({
+                  detail: cause instanceof Error ? cause.message : "Failed to load ACP registry",
+                  ...(cause !== undefined ? { cause } : {}),
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "server" },
+        ),
       [WS_METHODS.projectsSearchEntries]: (input) =>
         observeRpcEffect(
           WS_METHODS.projectsSearchEntries,
@@ -675,11 +704,16 @@ const WsRpcLayer = WsRpcGroup.toLayer(
               })),
             );
             const settingsUpdates = serverSettings.streamChanges.pipe(
-              Stream.map((settings) => ({
-                version: 1 as const,
-                type: "settingsUpdated" as const,
-                payload: { settings },
-              })),
+              Stream.mapEffect((settings) =>
+                Effect.gen(function* () {
+                  const acpAgentServers = yield* loadAcpAgentStatuses;
+                  return {
+                    version: 1 as const,
+                    type: "settingsUpdated" as const,
+                    payload: { settings, acpAgentServers },
+                  };
+                }),
+              ),
             );
 
             return Stream.concat(
