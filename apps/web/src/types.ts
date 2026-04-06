@@ -128,6 +128,7 @@ export interface SidebarThreadSummary {
   hasPendingApprovals: boolean;
   hasPendingUserInput: boolean;
   hasActionableProposedPlan: boolean;
+  customMetadata?: Record<string, string>;
 }
 
 export interface ThreadSession {

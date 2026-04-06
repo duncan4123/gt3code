@@ -127,6 +127,7 @@ import {
   getGcMetadata,
   countGcAgents,
 } from "./Sidebar.logic";
+import { groupThreadsByConvoy, type VirtualConvoyGroup } from "@t3tools/contracts";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
@@ -1437,6 +1438,11 @@ export default function Sidebar() {
           : visibleProjectThreads.map((thread) => thread.id);
         const showEmptyThreadState = project.expanded && projectThreads.length === 0;
 
+        // Group threads by convoy for virtual folder rendering
+        const { standaloneThreads: standaloneThreadIds, convoyGroups } = groupThreadsByConvoy(
+          projectThreads,
+        );
+
         return {
           hasHiddenThreads,
           hiddenThreadStatus,
@@ -1447,6 +1453,11 @@ export default function Sidebar() {
           showEmptyThreadState,
           shouldShowThreadPanel,
           isThreadListExpanded,
+          convoyGroups: convoyGroups.map((g) => ({
+            ...g,
+            threadIds: g.threads.map((t) => t.id),
+          })),
+          standaloneThreadIds: standaloneThreadIds.map((t) => t.id),
         };
       }),
     [
@@ -1592,6 +1603,7 @@ export default function Sidebar() {
       showEmptyThreadState,
       shouldShowThreadPanel,
       isThreadListExpanded,
+      convoyGroups,
     } = renderedProject;
     return (
       <>
@@ -1715,6 +1727,21 @@ export default function Sidebar() {
               </div>
             </SidebarMenuSubItem>
           ) : null}
+          {shouldShowThreadPanel &&
+            convoyGroups.length > 0 &&
+            convoyGroups.map((group) => (
+              <SidebarMenuSubItem key={`convoy-${group.id}`} className="w-full">
+                <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold tracking-wide text-muted-foreground/60 uppercase">
+                  <FolderIcon className="size-3 shrink-0" />
+                  <span className="truncate">{group.label}</span>
+                  {group.closedCount != null && group.totalCount != null && (
+                    <span className="ml-auto shrink-0 tabular-nums">
+                      {group.closedCount}/{group.totalCount}
+                    </span>
+                  )}
+                </div>
+              </SidebarMenuSubItem>
+            ))}
           {shouldShowThreadPanel &&
             renderedThreadIds.map((threadId) => (
               <SidebarThreadRow

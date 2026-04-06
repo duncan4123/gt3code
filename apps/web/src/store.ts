@@ -232,6 +232,7 @@ function buildSidebarThreadSummary(thread: Thread): SidebarThreadSummary {
     hasActionableProposedPlan: hasActionableProposedPlan(
       findLatestProposedPlan(thread.proposedPlans, thread.latestTurn?.turnId ?? null),
     ),
+    ...(thread.customMetadata ? { customMetadata: thread.customMetadata } : {}),
   };
 }
 
