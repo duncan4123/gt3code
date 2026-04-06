@@ -49,6 +49,7 @@ import type {
 } from "./orchestration";
 import { EditorId } from "./editor";
 import { ServerSettings, ServerSettingsPatch } from "./settings";
+import type { GcGetThreadContextInput, GcThreadContextResult } from "./gc";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -186,5 +187,8 @@ export interface NativeApi {
         onResubscribe?: () => void;
       },
     ) => () => void;
+  };
+  gc?: {
+    getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
   };
 }

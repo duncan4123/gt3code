@@ -99,6 +99,9 @@ export interface WsRpcClient {
     readonly replayEvents: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.replayEvents>;
     readonly onDomainEvent: RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>;
   };
+  readonly gc: {
+    readonly getThreadContext: RpcUnaryMethod<typeof WS_METHODS.gcGetThreadContext>;
+  };
 }
 
 let sharedWsRpcClient: WsRpcClient | null = null;
@@ -225,6 +228,10 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
           listener,
           options,
         ),
+    },
+    gc: {
+      getThreadContext: (input) =>
+        transport.request((client) => client[WS_METHODS.gcGetThreadContext](input)),
     },
   };
 }
