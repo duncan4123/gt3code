@@ -650,7 +650,21 @@ function configureApplicationMenu(): void {
         { role: process.platform === "darwin" ? "close" : "quit" },
       ],
     },
-    { role: "editMenu" },
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        // No accelerator — let Chromium handle Ctrl/Cmd+V natively so that
+        // clipboard images reach the renderer as a DOM paste event with files.
+        { role: "paste", accelerator: "" },
+        { type: "separator" },
+        { role: "selectAll" },
+      ],
+    },
     {
       label: "View",
       submenu: [
@@ -1444,6 +1458,14 @@ async function bootstrap(): Promise<void> {
   const baseUrl = `ws://127.0.0.1:${backendPort}`;
   backendWsUrl = `${baseUrl}/?token=${encodeURIComponent(backendAuthToken)}`;
   writeDesktopLogHeader(`bootstrap resolved websocket endpoint baseUrl=${baseUrl}`);
+
+  // Write WS URL for external integrations (e.g. gascity t3bridge)
+  const wsUrlForBridge = `ws://127.0.0.1:${backendPort}/ws?token=${backendAuthToken}`;
+  const t3Home = process.env.T3_HOME ?? Path.join(OS.homedir(), ".t3");
+  try {
+    FS.writeFileSync(Path.join(t3Home, "ws-url"), wsUrlForBridge, "utf8");
+  } catch { /* best-effort */ }
+  writeDesktopLogHeader(`wrote ws-url for external integrations`);
 
   registerIpcHandlers();
   writeDesktopLogHeader("bootstrap ipc handlers registered");

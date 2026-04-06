@@ -230,15 +230,6 @@ export const makeServerLayer = Layer.unwrap(
         yield* startup.markHttpListening;
         yield* startDoltLifecycle;
 
-        // Write WS URL file for external integrations (e.g. gascity t3bridge)
-        const wsUrl = config.authToken
-          ? `ws://127.0.0.1:${config.port}/ws?token=${config.authToken}`
-          : `ws://127.0.0.1:${config.port}/ws`;
-        yield* Effect.tryPromise(() =>
-          import("node:fs/promises").then((fs) =>
-            fs.writeFile(`${config.baseDir}/ws-url`, wsUrl, "utf8"),
-          ),
-        ).pipe(Effect.catchAll(() => Effect.void));
       }),
     );
 
