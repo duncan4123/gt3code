@@ -43,6 +43,8 @@ export interface WorkLogEntry {
   toolTitle?: string;
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
+  /** Raw activity kind for downstream rendering (e.g. "gc.bead.claimed"). */
+  activityKind?: string;
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
@@ -468,7 +470,7 @@ export function deriveWorkLogEntries(
     .filter((activity) => !isPlanBoundaryToolActivity(activity))
     .map(toDerivedWorkLogEntry);
   return collapseDerivedWorkLogEntries(entries).map(
-    ({ activityKind: _activityKind, collapseKey: _collapseKey, ...entry }) => entry,
+    ({ collapseKey: _collapseKey, ...entry }) => entry,
   );
 }
 

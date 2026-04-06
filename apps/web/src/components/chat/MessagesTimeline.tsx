@@ -1,4 +1,5 @@
 import { type MessageId, type TurnId } from "@t3tools/contracts";
+import GcActivityCard, { isGcWorkEntry } from "./GcActivityCard";
 import {
   memo,
   useCallback,
@@ -860,6 +861,14 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   payload?: unknown;
 }) {
   const { workEntry, isExpanded, onToggle, payload } = props;
+
+  // GC activity — delegate to GcActivityCard for richer rendering
+  if (workEntry.activityKind && isGcWorkEntry(workEntry.activityKind)) {
+    return (
+      <GcActivityCard kind={workEntry.activityKind} summary={workEntry.label} payload={payload} />
+    );
+  }
+
   const iconConfig = workToneIcon(workEntry.tone);
   const EntryIcon = workEntryIcon(workEntry);
   const heading = toolWorkEntryHeading(workEntry);
