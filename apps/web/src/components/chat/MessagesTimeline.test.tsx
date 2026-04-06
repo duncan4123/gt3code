@@ -167,6 +167,7 @@ describe("MessagesTimeline", () => {
             },
           },
         ]}
+        activityPayloadById={new Map()}
         completionDividerBeforeEntryId={null}
         completionSummary={null}
         turnDiffSummaryByAssistantMessageId={new Map()}

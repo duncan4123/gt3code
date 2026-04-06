@@ -529,7 +529,6 @@ function runtimeEventToActivities(
       ];
     }
 
-
     default:
       break;
   }

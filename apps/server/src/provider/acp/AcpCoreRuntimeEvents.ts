@@ -2,6 +2,7 @@ import {
   type RuntimeEventRawSource,
   RuntimeItemId,
   type CanonicalRequestType,
+  type CanonicalToolLifecycleData,
   type EventId,
   type ProviderApprovalDecision,
   type ProviderKind,
@@ -181,7 +182,9 @@ export function makeAcpToolCallEvent(input: {
       ...(runtimeStatus ? { status: runtimeStatus } : {}),
       ...(input.toolCall.title ? { title: input.toolCall.title } : {}),
       ...(input.toolCall.detail ? { detail: input.toolCall.detail } : {}),
-      ...(Object.keys(input.toolCall.data).length > 0 ? { data: input.toolCall.data } : {}),
+      ...(Object.keys(input.toolCall.data).length > 0
+        ? { data: input.toolCall.data as CanonicalToolLifecycleData }
+        : {}),
     },
     raw: {
       source: "acp.jsonrpc",

@@ -52,7 +52,6 @@ Docs:
 
 Use these as implementation references when designing protocol handling, UX flows, and operational safeguards.
 
-
 # context-mem Integration
 
 context-mem is active in this project. It compresses tool outputs via 14 content-aware summarizers (99% token savings) and serves optimized context through MCP.

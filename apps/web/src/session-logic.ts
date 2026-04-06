@@ -477,9 +477,11 @@ function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): bool
   if (!isToolLifecycleActivityKind(activity.kind)) {
     return false;
   }
-  return "detail" in activity.payload &&
+  return (
+    "detail" in activity.payload &&
     typeof activity.payload.detail === "string" &&
-    activity.payload.detail.startsWith("ExitPlanMode:");
+    activity.payload.detail.startsWith("ExitPlanMode:")
+  );
 }
 
 function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
