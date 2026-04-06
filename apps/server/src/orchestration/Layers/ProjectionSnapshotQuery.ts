@@ -6,6 +6,7 @@ import {
   OrchestrationCheckpointFile,
   OrchestrationProposedPlanId,
   OrchestrationReadModel,
+  OrchestrationThreadActivity,
   ProjectScript,
   TurnId,
   type OrchestrationCheckpointSummary,
@@ -15,7 +16,6 @@ import {
   type OrchestrationProject,
   type OrchestrationSession,
   type OrchestrationThread,
-  type OrchestrationThreadActivity,
   ModelSelection,
   ProjectId,
   ThreadId,
@@ -576,16 +576,18 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           for (const row of activityRows) {
             updatedAt = maxIso(updatedAt, row.createdAt);
             const threadActivities = activitiesByThread.get(row.threadId) ?? [];
-            threadActivities.push({
-              id: row.activityId,
-              tone: row.tone,
-              kind: row.kind,
-              summary: row.summary,
-              payload: row.payload,
-              turnId: row.turnId,
-              ...(row.sequence !== null ? { sequence: row.sequence } : {}),
-              createdAt: row.createdAt,
-            });
+            threadActivities.push(
+              Schema.decodeUnknownSync(OrchestrationThreadActivity)({
+                id: row.activityId,
+                tone: row.tone,
+                kind: row.kind,
+                summary: row.summary,
+                payload: row.payload,
+                turnId: row.turnId,
+                ...(row.sequence !== null ? { sequence: row.sequence } : {}),
+                createdAt: row.createdAt,
+              }),
+            );
             activitiesByThread.set(row.threadId, threadActivities);
           }
 

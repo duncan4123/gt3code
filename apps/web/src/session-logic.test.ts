@@ -3,6 +3,7 @@ import {
   MessageId,
   ThreadId,
   TurnId,
+  type OrchestrationThreadActivityKind,
   type OrchestrationThreadActivity,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
@@ -27,7 +28,7 @@ import {
 function makeActivity(overrides: {
   id?: string;
   createdAt?: string;
-  kind?: string;
+  kind?: OrchestrationThreadActivityKind;
   summary?: string;
   tone?: OrchestrationThreadActivity["tone"];
   payload?: Record<string, unknown>;
@@ -44,7 +45,7 @@ function makeActivity(overrides: {
     payload,
     turnId: overrides.turnId ? TurnId.makeUnsafe(overrides.turnId) : null,
     ...(overrides.sequence !== undefined ? { sequence: overrides.sequence } : {}),
-  };
+  } as OrchestrationThreadActivity;
 }
 
 describe("derivePendingApprovals", () => {
@@ -698,9 +699,8 @@ describe("deriveWorkLogEntries", () => {
         payload: {
           itemType: "command_execution",
           data: {
-            item: {
-              command: ["bun", "run", "lint"],
-            },
+            kind: "command_execution",
+            command: "bun run lint",
           },
         },
       }),
@@ -722,12 +722,11 @@ describe("deriveWorkLogEntries", () => {
           status: "completed",
           detail: '{ "dev": "vite dev --port 3000" } <exited with exit code 0>',
           data: {
-            item: {
-              command: ["bun", "run", "dev"],
-              result: {
-                content: '{ "dev": "vite dev --port 3000" } <exited with exit code 0>',
-                exitCode: 0,
-              },
+            kind: "command_execution",
+            command: "bun run dev",
+            result: {
+              content: '{ "dev": "vite dev --port 3000" } <exited with exit code 0>',
+              exitCode: 0,
             },
           },
         },
@@ -752,12 +751,8 @@ describe("deriveWorkLogEntries", () => {
         payload: {
           itemType: "file_change",
           data: {
-            item: {
-              changes: [
-                { path: "apps/web/src/components/ChatView.tsx" },
-                { filename: "apps/web/src/session-logic.ts" },
-              ],
-            },
+            kind: "file_change",
+            changedFiles: ["apps/web/src/components/ChatView.tsx", "apps/web/src/session-logic.ts"],
           },
         },
       }),
@@ -793,9 +788,7 @@ describe("deriveWorkLogEntries", () => {
           title: "Tool call",
           detail: 'Read: {"file_path":"/tmp/app.ts"}',
           data: {
-            item: {
-              command: ["sed", "-n", "1,40p", "/tmp/app.ts"],
-            },
+            kind: "generic",
           },
         },
       }),
@@ -820,7 +813,6 @@ describe("deriveWorkLogEntries", () => {
       createdAt: "2026-02-23T00:00:03.000Z",
       label: "Tool call completed",
       detail: 'Read: {"file_path":"/tmp/app.ts"}',
-      command: "sed -n 1,40p /tmp/app.ts",
       itemType: "dynamic_tool_call",
       toolTitle: "Tool call",
     });
@@ -1104,7 +1096,7 @@ describe("hasToolActivityForTurn", () => {
   it("returns true only for matching tool activity in the target turn", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({ id: "tool-1", turnId: "turn-1", kind: "tool.completed", tone: "tool" }),
-      makeActivity({ id: "info-1", turnId: "turn-2", kind: "turn.completed", tone: "info" }),
+      makeActivity({ id: "info-1", turnId: "turn-2", kind: "task.completed", tone: "info" }),
     ];
 
     expect(hasToolActivityForTurn(activities, TurnId.makeUnsafe("turn-1"))).toBe(true);
