@@ -3,6 +3,7 @@ import {
   MessageId,
   ThreadId,
   TurnId,
+  type OrchestrationThreadActivityKind,
   type OrchestrationThreadActivity,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
@@ -21,12 +22,13 @@ import {
   hasActionableProposedPlan,
   hasToolActivityForTurn,
   isLatestTurnSettled,
+  stripTrailingExitCode,
 } from "./session-logic";
 
 function makeActivity(overrides: {
   id?: string;
   createdAt?: string;
-  kind?: string;
+  kind?: OrchestrationThreadActivityKind;
   summary?: string;
   tone?: OrchestrationThreadActivity["tone"];
   payload?: Record<string, unknown>;
@@ -43,7 +45,7 @@ function makeActivity(overrides: {
     payload,
     turnId: overrides.turnId ? TurnId.makeUnsafe(overrides.turnId) : null,
     ...(overrides.sequence !== undefined ? { sequence: overrides.sequence } : {}),
-  };
+  } as OrchestrationThreadActivity;
 }
 
 describe("derivePendingApprovals", () => {
@@ -697,9 +699,8 @@ describe("deriveWorkLogEntries", () => {
         payload: {
           itemType: "command_execution",
           data: {
-            item: {
-              command: ["bun", "run", "lint"],
-            },
+            kind: "command_execution",
+            command: "bun run lint",
           },
         },
       }),
@@ -721,12 +722,11 @@ describe("deriveWorkLogEntries", () => {
           status: "completed",
           detail: '{ "dev": "vite dev --port 3000" } <exited with exit code 0>',
           data: {
-            item: {
-              command: ["bun", "run", "dev"],
-              result: {
-                content: '{ "dev": "vite dev --port 3000" } <exited with exit code 0>',
-                exitCode: 0,
-              },
+            kind: "command_execution",
+            command: "bun run dev",
+            result: {
+              content: '{ "dev": "vite dev --port 3000" } <exited with exit code 0>',
+              exitCode: 0,
             },
           },
         },
@@ -751,12 +751,8 @@ describe("deriveWorkLogEntries", () => {
         payload: {
           itemType: "file_change",
           data: {
-            item: {
-              changes: [
-                { path: "apps/web/src/components/ChatView.tsx" },
-                { filename: "apps/web/src/session-logic.ts" },
-              ],
-            },
+            kind: "file_change",
+            changedFiles: ["apps/web/src/components/ChatView.tsx", "apps/web/src/session-logic.ts"],
           },
         },
       }),
@@ -767,6 +763,164 @@ describe("deriveWorkLogEntries", () => {
       "apps/web/src/components/ChatView.tsx",
       "apps/web/src/session-logic.ts",
     ]);
+  });
+
+  it("drops duplicated tool detail when it only repeats the title", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "read-file-generic",
+        kind: "tool.completed",
+        summary: "Read File",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "Read File",
+          detail: "Read File",
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry?.toolTitle).toBe("Read File");
+    expect(entry?.detail).toBeUndefined();
+  });
+
+  it("uses grep raw output summaries instead of repeating the generic tool label", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "grep-update",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "tool.updated",
+        summary: "grep",
+        payload: {
+          itemType: "web_search",
+          title: "grep",
+          detail: "grep",
+          data: {
+            toolCallId: "tool-grep-1",
+            kind: "search",
+            rawInput: {},
+          },
+        },
+      }),
+      makeActivity({
+        id: "grep-complete",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "tool.completed",
+        summary: "grep",
+        payload: {
+          itemType: "web_search",
+          title: "grep",
+          detail: "grep",
+          data: {
+            toolCallId: "tool-grep-1",
+            kind: "search",
+            rawOutput: {
+              totalFiles: 19,
+              truncated: false,
+            },
+          },
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      id: "grep-complete",
+      toolTitle: "grep",
+      detail: "19 files",
+      itemType: "web_search",
+    });
+  });
+
+  it("uses completed read-file output previews and still collapses the same tool call", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "read-update",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "tool.updated",
+        summary: "Read File",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "Read File",
+          detail: "Read File",
+          data: {
+            toolCallId: "tool-read-1",
+            kind: "read",
+            rawInput: {},
+          },
+        },
+      }),
+      makeActivity({
+        id: "read-complete",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "tool.completed",
+        summary: "Read File",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "Read File",
+          detail: "Read File",
+          data: {
+            toolCallId: "tool-read-1",
+            kind: "read",
+            rawOutput: {
+              content:
+                'import * as Effect from "effect/Effect"\nimport * as Layer from "effect/Layer"\n',
+            },
+          },
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      id: "read-complete",
+      toolTitle: "Read File",
+      detail: 'import * as Effect from "effect/Effect"',
+      itemType: "dynamic_tool_call",
+    });
+  });
+
+  it("collapses legacy completed tool rows that are missing tool metadata", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "legacy-read-update",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "tool.updated",
+        summary: "Read File",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "Read File",
+          detail: "Read File",
+          data: {
+            toolCallId: "tool-read-legacy",
+            kind: "read",
+            rawInput: {},
+          },
+        },
+      }),
+      makeActivity({
+        id: "legacy-read-complete",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "tool.completed",
+        summary: "Read File",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "Read File",
+          detail: "Read File",
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      id: "legacy-read-complete",
+      toolTitle: "Read File",
+      itemType: "dynamic_tool_call",
+    });
+    expect(entries[0]?.detail).toBeUndefined();
   });
 
   it("collapses repeated lifecycle updates for the same tool call into one entry", () => {
@@ -792,9 +946,7 @@ describe("deriveWorkLogEntries", () => {
           title: "Tool call",
           detail: 'Read: {"file_path":"/tmp/app.ts"}',
           data: {
-            item: {
-              command: ["sed", "-n", "1,40p", "/tmp/app.ts"],
-            },
+            kind: "generic",
           },
         },
       }),
@@ -819,9 +971,53 @@ describe("deriveWorkLogEntries", () => {
       createdAt: "2026-02-23T00:00:03.000Z",
       label: "Tool call completed",
       detail: 'Read: {"file_path":"/tmp/app.ts"}',
-      command: "sed -n 1,40p /tmp/app.ts",
       itemType: "dynamic_tool_call",
       toolTitle: "Tool call",
+    });
+  });
+
+  it("treats tool.progress entries as part of the same lifecycle chain", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "tool-progress",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "tool.updated",
+        summary: "MCP tool call progress",
+        payload: {
+          itemType: "mcp_tool_call",
+          detail: "Gathering repo metadata",
+        },
+      }),
+      makeActivity({
+        id: "tool-progress-2",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "tool.updated",
+        summary: "MCP tool call progress",
+        payload: {
+          itemType: "mcp_tool_call",
+          detail: "Streaming shell output",
+        },
+      }),
+      makeActivity({
+        id: "tool-progress-complete",
+        createdAt: "2026-02-23T00:00:03.000Z",
+        kind: "tool.completed",
+        summary: "MCP tool call completed",
+        payload: {
+          itemType: "mcp_tool_call",
+          title: "ctx_batch_execute",
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      id: "tool-progress-complete",
+      toolTitle: "ctx_batch_execute",
+      itemType: "mcp_tool_call",
+      detail: "Streaming shell output",
     });
   });
 
@@ -1056,7 +1252,7 @@ describe("hasToolActivityForTurn", () => {
   it("returns true only for matching tool activity in the target turn", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({ id: "tool-1", turnId: "turn-1", kind: "tool.completed", tone: "tool" }),
-      makeActivity({ id: "info-1", turnId: "turn-2", kind: "turn.completed", tone: "info" }),
+      makeActivity({ id: "info-1", turnId: "turn-2", kind: "task.completed", tone: "info" }),
     ];
 
     expect(hasToolActivityForTurn(activities, TurnId.makeUnsafe("turn-1"))).toBe(true);
@@ -1161,13 +1357,13 @@ describe("deriveActiveWorkStartedAt", () => {
 });
 
 describe("PROVIDER_OPTIONS", () => {
-  it("advertises Claude as available while keeping Cursor as a placeholder", () => {
+  it("advertises Codex, Claude, and Cursor as available providers", () => {
     const claude = PROVIDER_OPTIONS.find((option) => option.value === "claudeAgent");
     const cursor = PROVIDER_OPTIONS.find((option) => option.value === "cursor");
     expect(PROVIDER_OPTIONS).toEqual([
       { value: "codex", label: "Codex", available: true },
       { value: "claudeAgent", label: "Claude", available: true },
-      { value: "cursor", label: "Cursor", available: false },
+      { value: "cursor", label: "Cursor", available: true },
     ]);
     expect(claude).toEqual({
       value: "claudeAgent",
@@ -1177,7 +1373,7 @@ describe("PROVIDER_OPTIONS", () => {
     expect(cursor).toEqual({
       value: "cursor",
       label: "Cursor",
-      available: false,
+      available: true,
     });
   });
 });

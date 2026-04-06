@@ -160,6 +160,7 @@ function createBaseTimelineProps(input: {
     nowIso: isoAt(10_000),
     expandedWorkGroups: input.expandedWorkGroups ?? {},
     onToggleWorkGroup: () => {},
+    activityPayloadById: new Map<string, unknown>(),
     onOpenTurnDiff: () => {},
     revertTurnCountByUserMessageId: new Map(),
     onRevertUserMessage: () => {},

@@ -686,18 +686,24 @@ describe("incremental orchestration updates", () => {
           {
             id: EventId.makeUnsafe("activity-1"),
             tone: "info",
-            kind: "step",
+            kind: "turn.plan.updated",
             summary: "one",
-            payload: {},
+            payload: {
+              plan: [{ step: "one", status: "completed" }],
+              explanation: null,
+            },
             turnId: TurnId.makeUnsafe("turn-1"),
             createdAt: "2026-02-27T00:00:00.000Z",
           },
           {
             id: EventId.makeUnsafe("activity-2"),
             tone: "info",
-            kind: "step",
+            kind: "turn.plan.updated",
             summary: "two",
-            payload: {},
+            payload: {
+              plan: [{ step: "two", status: "completed" }],
+              explanation: null,
+            },
             turnId: TurnId.makeUnsafe("turn-2"),
             createdAt: "2026-02-27T00:00:02.000Z",
           },

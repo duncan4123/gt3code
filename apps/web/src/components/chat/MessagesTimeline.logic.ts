@@ -134,12 +134,16 @@ export function estimateMessagesTimelineRowHeight(
   input: {
     timelineWidthPx: number | null;
     expandedWorkGroups?: Readonly<Record<string, boolean>>;
+    expandedToolEntryIds?: Readonly<Record<string, boolean>>;
     turnDiffSummaryByAssistantMessageId?: ReadonlyMap<MessageId, TurnDiffSummary>;
   },
 ): number {
   switch (row.kind) {
     case "work":
-      return estimateWorkRowHeight(row, input);
+      return estimateWorkRowHeight(row, {
+        expandedWorkGroups: input.expandedWorkGroups,
+        expandedToolEntryIds: input.expandedToolEntryIds,
+      });
     case "proposed-plan":
       return estimateTimelineProposedPlanHeight(row.proposedPlan);
     case "working":
@@ -160,18 +164,32 @@ export function estimateMessagesTimelineRowHeight(
 function estimateWorkRowHeight(
   row: Extract<MessagesTimelineRow, { kind: "work" }>,
   input: {
-    expandedWorkGroups?: Readonly<Record<string, boolean>>;
+    expandedWorkGroups?: Readonly<Record<string, boolean>> | undefined;
+    expandedToolEntryIds?: Readonly<Record<string, boolean>> | undefined;
   },
 ): number {
   const isExpanded = input.expandedWorkGroups?.[row.id] ?? false;
   const hasOverflow = row.groupedEntries.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
-  const visibleEntries =
+  const visibleCount =
     hasOverflow && !isExpanded ? MAX_VISIBLE_WORK_LOG_ENTRIES : row.groupedEntries.length;
   const onlyToolEntries = row.groupedEntries.every((entry) => entry.tone === "tool");
   const showHeader = hasOverflow || !onlyToolEntries;
 
+  // Resolve actual visible entries for expanded tool height calculation
+  const visibleEntries =
+    hasOverflow && !isExpanded
+      ? row.groupedEntries.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES)
+      : row.groupedEntries;
+
+  let expandedToolHeight = 0;
+  for (const entry of visibleEntries) {
+    if (input.expandedToolEntryIds?.[entry.id]) {
+      expandedToolHeight += 320;
+    }
+  }
+
   // Card chrome, optional header, and one compact work-entry row per visible entry.
-  return 28 + (showHeader ? 26 : 0) + visibleEntries * 32;
+  return 28 + (showHeader ? 26 : 0) + visibleCount * 32 + expandedToolHeight;
 }
 
 function estimateTimelineProposedPlanHeight(proposedPlan: ProposedPlan): number {

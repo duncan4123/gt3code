@@ -11,6 +11,7 @@ import {
 import { fixPath } from "./os-jank";
 import { websocketRpcRouteLayer } from "./ws";
 import { OpenLive } from "./open";
+import { startDoltLifecycle } from "./persistence/Layers/DoltLifecycle";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
 import { ServerLifecycleEventsLive } from "./serverLifecycleEvents";
 import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
@@ -19,12 +20,17 @@ import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionD
 import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime";
 import { makeCodexAdapterLive } from "./provider/Layers/CodexAdapter";
 import { makeClaudeAdapterLive } from "./provider/Layers/ClaudeAdapter";
+import { makeCursorAdapterLive } from "./provider/Layers/CursorAdapter";
+import { makeAcpAdapterLive } from "./provider/Layers/AcpAdapter";
+import { AcpAgentRegistryLive } from "./provider/Layers/AcpAgentRegistry";
 import { ProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry";
 import { makeProviderServiceLive } from "./provider/Layers/ProviderService";
+import { AcpRegistryClientLive } from "./provider/acp/AcpRegistryClient";
 import { OrchestrationEngineLive } from "./orchestration/Layers/OrchestrationEngine";
 import { OrchestrationProjectionPipelineLive } from "./orchestration/Layers/ProjectionPipeline";
 import { OrchestrationEventStoreLive } from "./persistence/Layers/OrchestrationEventStore";
 import { OrchestrationCommandReceiptRepositoryLive } from "./persistence/Layers/OrchestrationCommandReceipts";
+import { ProjectionTurnRepositoryLive } from "./persistence/Layers/ProjectionTurns";
 import { CheckpointDiffQueryLive } from "./checkpointing/Layers/CheckpointDiffQuery";
 import { OrchestrationProjectionSnapshotQueryLive } from "./orchestration/Layers/ProjectionSnapshotQuery";
 import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore";
@@ -98,6 +104,7 @@ const PlatformServicesLive = Layer.unwrap(
 );
 
 const ReactorLayerLive = Layer.empty.pipe(
+  Layer.provideMerge(ProjectionTurnRepositoryLive),
   Layer.provideMerge(OrchestrationReactorLive),
   Layer.provideMerge(ProviderRuntimeIngestionLive),
   Layer.provideMerge(ProviderCommandReactorLive),
@@ -130,6 +137,13 @@ const CheckpointingLayerLive = Layer.empty.pipe(
   Layer.provideMerge(CheckpointStoreLive),
 );
 
+const AcpAgentRegistryWithSettingsLive = AcpAgentRegistryLive.pipe(
+  Layer.provide(ServerSettingsLive),
+);
+const AcpRegistryClientWithSettingsLive = AcpRegistryClientLive.pipe(
+  Layer.provide(ServerSettingsLive),
+);
+
 const ProviderLayerLive = Layer.unwrap(
   Effect.gen(function* () {
     const { providerEventLogPath } = yield* ServerConfig;
@@ -148,9 +162,17 @@ const ProviderLayerLive = Layer.unwrap(
     const claudeAdapterLayer = makeClaudeAdapterLive(
       nativeEventLogger ? { nativeEventLogger } : undefined,
     );
+    const cursorAdapterLayer = makeCursorAdapterLive(
+      nativeEventLogger ? { nativeEventLogger } : undefined,
+    );
+    const acpAdapterLayer = makeAcpAdapterLive(
+      nativeEventLogger ? { nativeEventLogger } : undefined,
+    ).pipe(Layer.provide(AcpAgentRegistryWithSettingsLive));
     const adapterRegistryLayer = ProviderAdapterRegistryLive.pipe(
       Layer.provide(codexAdapterLayer),
       Layer.provide(claudeAdapterLayer),
+      Layer.provide(cursorAdapterLayer),
+      Layer.provide(acpAdapterLayer),
       Layer.provideMerge(providerSessionDirectoryLayer),
     );
     return makeProviderServiceLive(
@@ -189,12 +211,14 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(CheckpointingLayerLive),
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
+  Layer.provideMerge(ServerSettingsLive),
+  Layer.provideMerge(AcpAgentRegistryWithSettingsLive),
+  Layer.provideMerge(AcpRegistryClientWithSettingsLive),
   Layer.provideMerge(ProviderLayerLive),
   Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provideMerge(KeybindingsLive),
   Layer.provideMerge(ProviderRegistryLive),
-  Layer.provideMerge(ServerSettingsLive),
   Layer.provideMerge(WorkspaceLayerLive),
   Layer.provideMerge(ProjectFaviconResolverLive),
 
@@ -227,6 +251,7 @@ export const makeServerLayer = Layer.unwrap(
         yield* HttpServer.HttpServer;
         const startup = yield* ServerRuntimeStartup;
         yield* startup.markHttpListening;
+        yield* startDoltLifecycle;
       }),
     );
 
@@ -248,8 +273,4 @@ export const makeServerLayer = Layer.unwrap(
 );
 
 // Important: Only `ServerConfig` should be provided by the CLI layer!!! Don't let other requirements leak into the launch layer.
-export const runServer = Layer.launch(makeServerLayer) satisfies Effect.Effect<
-  never,
-  any,
-  ServerConfig
->;
+export const runServer = Layer.launch(makeServerLayer);

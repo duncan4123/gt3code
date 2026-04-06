@@ -54,6 +54,154 @@ import { Popover, PopoverPopup, PopoverTrigger } from "./ui/popover";
 import { Switch } from "./ui/switch";
 import { Textarea } from "./ui/textarea";
 
+interface ActionPreset {
+  name: string;
+  command: string;
+  icon: ProjectScriptIcon;
+  description: string;
+}
+
+const GC_PRESETS: ActionPreset[] = [
+  {
+    name: "GC Status",
+    command: "gc status",
+    icon: "configure",
+    description: "City-wide agent overview\nUsage: gc status [--json]",
+  },
+  {
+    name: "GC Mail",
+    command: "gc mail inbox",
+    icon: "configure",
+    description:
+      "List unread messages\nUsage: gc mail inbox\nOther: gc mail check, gc mail send, gc mail read <id>",
+  },
+  {
+    name: "GC Hook",
+    command: "gc hook --inject",
+    icon: "play",
+    description: "Check for available work (hook output)\nUsage: gc hook [agent] [--inject]",
+  },
+  {
+    name: "GC Doctor",
+    command: "gc doctor",
+    icon: "debug",
+    description: "Workspace health check\nUsage: gc doctor",
+  },
+  {
+    name: "GC Sling",
+    command: "gc sling ",
+    icon: "play",
+    description:
+      'Route work to an agent — edit command to add target\nUsage: gc sling <agent> <bead-or-text>\nExample: gc sling mayor "fix the login bug"',
+  },
+  {
+    name: "GC Sessions",
+    command: "gc session list",
+    icon: "configure",
+    description:
+      "List active agent sessions\nUsage: gc session list\nOther: gc session peek <agent>, gc session logs <agent>",
+  },
+  {
+    name: "GC Convoys",
+    command: "gc convoy list",
+    icon: "configure",
+    description:
+      "List open convoys with progress\nUsage: gc convoy list\nOther: gc convoy status <id>, gc convoy create",
+  },
+];
+
+const T3_PRESETS: ActionPreset[] = [
+  {
+    name: "Dev",
+    command: "bun dev",
+    icon: "play",
+    description: "Start server + web",
+  },
+  {
+    name: "Dev Server",
+    command: "bun dev:server",
+    icon: "play",
+    description: "Start just the server",
+  },
+  {
+    name: "Dev Web",
+    command: "bun dev:web",
+    icon: "play",
+    description: "Start just the frontend",
+  },
+  {
+    name: "Test",
+    command: "bun run test",
+    icon: "test",
+    description: "Run all tests",
+  },
+  {
+    name: "Type Check",
+    command: "bun typecheck",
+    icon: "lint",
+    description: "TypeScript type check",
+  },
+  {
+    name: "Lint",
+    command: "bun lint",
+    icon: "lint",
+    description: "Run linter",
+  },
+  {
+    name: "Build",
+    command: "bun build",
+    icon: "build",
+    description: "Build all packages",
+  },
+  {
+    name: "Format",
+    command: "bun fmt",
+    icon: "configure",
+    description: "Format source files",
+  },
+];
+
+const BD_PRESETS: ActionPreset[] = [
+  {
+    name: "BD Status",
+    command: "bd status",
+    icon: "configure",
+    description:
+      "Issue database overview & statistics\nUsage: bd status [--assigned] [--no-activity]",
+  },
+  {
+    name: "BD Ready",
+    command: "bd ready",
+    icon: "play",
+    description: "Show open issues with no blockers\nUsage: bd ready",
+  },
+  {
+    name: "BD Blocked",
+    command: "bd blocked",
+    icon: "debug",
+    description: "Show blocked issues\nUsage: bd blocked",
+  },
+  {
+    name: "BD Preflight",
+    command: "bd preflight",
+    icon: "lint",
+    description: "PR readiness checklist\nUsage: bd preflight",
+  },
+  {
+    name: "BD Doctor",
+    command: "bd doctor",
+    icon: "debug",
+    description: "Check & fix beads installation health\nUsage: bd doctor",
+  },
+  {
+    name: "BD List",
+    command: "bd list ",
+    icon: "play",
+    description:
+      "List issues — edit command to filter\nUsage: bd list [--type <type>] [--assigned] [--state open|closed]\nExample: bd list --assigned --state open",
+  },
+];
+
 const SCRIPT_ICONS: Array<{ id: ProjectScriptIcon; label: string }> = [
   { id: "play", label: "Play" },
   { id: "test", label: "Test" },
@@ -376,6 +524,39 @@ export default function ProjectScriptsControl({
           </DialogHeader>
           <DialogPanel>
             <form id={addScriptFormId} className="space-y-4" onSubmit={submitAddScript}>
+              {!isEditing && (
+                <div className="space-y-3">
+                  {(
+                    [
+                      { label: "T3 Code", presets: T3_PRESETS },
+                      { label: "GC", presets: GC_PRESETS },
+                      { label: "BD", presets: BD_PRESETS },
+                    ] as const
+                  ).map(({ label, presets }) => (
+                    <div key={label} className="space-y-1.5">
+                      <Label className="text-muted-foreground">{label}</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {presets.map((preset) => (
+                          <button
+                            key={preset.name}
+                            type="button"
+                            title={preset.description}
+                            className="flex items-center gap-1.5 rounded-md border border-border/70 px-2 py-1 text-xs hover:bg-accent/60 hover:border-border transition-colors"
+                            onClick={() => {
+                              setName(preset.name);
+                              setCommand(preset.command);
+                              setIcon(preset.icon);
+                            }}
+                          >
+                            <ScriptIcon icon={preset.icon} className="size-3" />
+                            {preset.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="script-name">Name</Label>
                 <div className="flex items-center gap-2">

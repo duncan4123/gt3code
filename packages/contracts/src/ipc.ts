@@ -27,6 +27,7 @@ import type {
   ServerProviderUpdatedPayload,
   ServerUpsertKeybindingResult,
 } from "./server";
+import type { AcpRegistryListResult } from "./acp";
 import type {
   TerminalClearInput,
   TerminalCloseInput,
@@ -171,6 +172,7 @@ export interface NativeApi {
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
+    listAcpRegistry: () => Promise<AcpRegistryListResult>;
   };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;

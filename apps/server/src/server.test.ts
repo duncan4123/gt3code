@@ -3,6 +3,7 @@ import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 
 import {
+  AcpRegistryListError,
   CommandId,
   DEFAULT_SERVER_SETTINGS,
   GitCommandError,
@@ -56,6 +57,14 @@ import {
   type ProjectionSnapshotQueryShape,
 } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { PersistenceSqlError } from "./persistence/Errors.ts";
+import {
+  AcpAgentRegistry,
+  type AcpAgentRegistryShape,
+} from "./provider/Services/AcpAgentRegistry.ts";
+import {
+  AcpRegistryClient,
+  type AcpRegistryClientShape,
+} from "./provider/Services/AcpRegistryClient.ts";
 import {
   ProviderRegistry,
   type ProviderRegistryShape,
@@ -248,6 +257,8 @@ const buildAppUnderTest = (options?: {
   layers?: {
     keybindings?: Partial<KeybindingsShape>;
     providerRegistry?: Partial<ProviderRegistryShape>;
+    acpAgentRegistry?: Partial<AcpAgentRegistryShape>;
+    acpRegistryClient?: Partial<AcpRegistryClientShape>;
     serverSettings?: Partial<ServerSettingsShape>;
     open?: Partial<OpenShape>;
     gitCore?: Partial<GitCoreShape>;
@@ -311,6 +322,23 @@ const buildAppUnderTest = (options?: {
           refresh: () => Effect.succeed([]),
           streamChanges: Stream.empty,
           ...options?.layers?.providerRegistry,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(AcpAgentRegistry)({
+          getAgentServers: Effect.succeed([]),
+          listStatuses: Effect.succeed([]),
+          ...options?.layers?.acpAgentRegistry,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(AcpRegistryClient)({
+          listAgents: Effect.fail(
+            new AcpRegistryListError({
+              detail: "ACP registry client not configured for test",
+            }),
+          ),
+          ...options?.layers?.acpRegistryClient,
         }),
       ),
       Layer.provide(
@@ -957,6 +985,18 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
   it.effect("routes websocket rpc subscribeServerConfig streams snapshot then update", () =>
     Effect.gen(function* () {
       const providers = [] as const;
+      const acpAgentServers = [
+        {
+          agentServerId: "demo-agent",
+          displayName: "Demo Agent",
+          enabled: true,
+          installed: true,
+          status: "ready" as const,
+          authStatus: "unknown" as const,
+          checkedAt: "2026-01-02T00:00:00.000Z",
+          version: "1.0.0",
+        },
+      ] as const;
       const changeEvent = {
         keybindings: [],
         issues: [],
@@ -978,6 +1018,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           providerRegistry: {
             getProviders: Effect.succeed(providers),
           },
+          acpAgentRegistry: {
+            listStatuses: Effect.succeed(acpAgentServers),
+          },
         },
       });
 
@@ -995,6 +1038,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         assert.deepEqual(first.config.keybindings, []);
         assert.deepEqual(first.config.issues, []);
         assert.deepEqual(first.config.providers, providers);
+        assert.deepEqual(first.config.acpAgentServers, acpAgentServers);
         assert.equal(first.config.observability.logsDirectoryPath.endsWith("/logs"), true);
         assert.equal(first.config.observability.localTracingEnabled, true);
         assert.equal(first.config.observability.otlpTracesUrl, "http://localhost:4318/v1/traces");
@@ -1045,6 +1089,107 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         type: "providerStatuses",
         payload: { providers },
       });
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect(
+    "routes websocket rpc subscribeServerConfig emits ACP statuses with settings updates",
+    () =>
+      Effect.gen(function* () {
+        const nextSettings = {
+          ...DEFAULT_SERVER_SETTINGS,
+          providers: {
+            ...DEFAULT_SERVER_SETTINGS.providers,
+            acp: {
+              ...DEFAULT_SERVER_SETTINGS.providers.acp,
+              enabled: true,
+              agentServers: [
+                {
+                  id: "demo-agent",
+                  name: "Demo Agent",
+                  enabled: true,
+                  source: "manual" as const,
+                  distributionType: "manual" as const,
+                  launch: {
+                    command: "demo-agent",
+                    args: [],
+                  },
+                },
+              ],
+            },
+          },
+        };
+        const acpAgentServers = [
+          {
+            agentServerId: "demo-agent",
+            displayName: "Demo Agent",
+            enabled: true,
+            installed: true,
+            status: "ready" as const,
+            authStatus: "unknown" as const,
+            checkedAt: "2026-01-02T00:00:00.000Z",
+            version: null,
+          },
+        ] as const;
+
+        yield* buildAppUnderTest({
+          layers: {
+            keybindings: {
+              loadConfigState: Effect.succeed({
+                keybindings: [],
+                issues: [],
+              }),
+              streamChanges: Stream.empty,
+            },
+            serverSettings: {
+              streamChanges: Stream.succeed(nextSettings),
+            },
+            acpAgentRegistry: {
+              listStatuses: Effect.succeed(acpAgentServers),
+            },
+          },
+        });
+
+        const wsUrl = yield* getWsServerUrl("/ws");
+        const events = yield* Effect.scoped(
+          withWsRpcClient(wsUrl, (client) =>
+            client[WS_METHODS.subscribeServerConfig]({}).pipe(Stream.take(2), Stream.runCollect),
+          ),
+        );
+
+        const [, second] = Array.from(events);
+        assert.deepEqual(second, {
+          version: 1,
+          type: "settingsUpdated",
+          payload: {
+            settings: nextSettings,
+            acpAgentServers,
+          },
+        });
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("routes websocket rpc server.listAcpRegistry", () =>
+    Effect.gen(function* () {
+      const registry = {
+        registryVersion: "1.0.0",
+        agents: [],
+      } as const;
+
+      yield* buildAppUnderTest({
+        layers: {
+          acpRegistryClient: {
+            listAgents: Effect.succeed(registry),
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const response = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.serverListAcpRegistry]({})),
+      );
+
+      assert.deepEqual(response, registry);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

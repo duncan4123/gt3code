@@ -1015,14 +1015,18 @@ function startBackend(): void {
   }
 
   const captureBackendLogs = app.isPackaged && backendLogSink !== null;
-  const child = ChildProcess.spawn(process.execPath, [backendEntry, "--bootstrap-fd", "3"], {
+  // Use system node instead of Electron binary to avoid ABI mismatch with
+  // native modules (better-sqlite3/doltlite). The server is pure Node.js.
+  // Resolve real node binary — bare "node" may hit bun's shim in PATH.
+  const nodeExe =
+    process.env.T3CODE_NODE_PATH ||
+    ChildProcess.execSync("which -a node", { encoding: "utf8" })
+      .split("\n")
+      .find((p) => p.includes("nvm") || p === "/usr/bin/node" || p === "/usr/local/bin/node") ||
+    "node";
+  const child = ChildProcess.spawn(nodeExe, [backendEntry, "--bootstrap-fd", "3"], {
     cwd: resolveBackendCwd(),
-    // In Electron main, process.execPath points to the Electron binary.
-    // Run the child in Node mode so this backend process does not become a GUI app instance.
-    env: {
-      ...backendChildEnv(),
-      ELECTRON_RUN_AS_NODE: "1",
-    },
+    env: backendChildEnv(),
     stdio: captureBackendLogs
       ? ["ignore", "pipe", "pipe", "pipe"]
       : ["ignore", "inherit", "inherit", "pipe"],

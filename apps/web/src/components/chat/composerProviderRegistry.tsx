@@ -4,14 +4,18 @@ import {
   type ServerProviderModel,
   type ThreadId,
 } from "@t3tools/contracts";
-import { isClaudeUltrathinkPrompt, resolveEffort } from "@t3tools/shared/model";
-import type { ReactNode } from "react";
-import { getProviderModelCapabilities } from "../../providerModels";
-import { TraitsMenuContent, TraitsPicker } from "./TraitsPicker";
 import {
+  isClaudeUltrathinkPrompt,
   normalizeClaudeModelOptionsWithCapabilities,
   normalizeCodexModelOptionsWithCapabilities,
+  resolveEffort,
 } from "@t3tools/shared/model";
+import type { ReactNode } from "react";
+import {
+  getProviderModelCapabilities,
+  normalizeCursorModelOptionsWithCapabilities,
+} from "../../providerModels";
+import { shouldRenderTraitsControls, TraitsMenuContent, TraitsPicker } from "./TraitsPicker";
 
 export type ComposerProviderStateInput = {
   provider: ProviderKind;
@@ -63,16 +67,20 @@ function getProviderStateFromCapabilities(
       ? providerOptions.effort
       : "reasoningEffort" in providerOptions
         ? providerOptions.reasoningEffort
-        : null
+        : "reasoning" in providerOptions
+          ? providerOptions.reasoning
+          : null
     : null;
 
   const promptEffort = resolveEffort(caps, rawEffort) ?? null;
 
   // Normalize options for dispatch
-  const normalizedOptions =
-    provider === "codex"
-      ? normalizeCodexModelOptionsWithCapabilities(caps, providerOptions)
-      : normalizeClaudeModelOptionsWithCapabilities(caps, providerOptions);
+  const normalizedOptions = {
+    codex: normalizeCodexModelOptionsWithCapabilities(caps, providerOptions),
+    cursor: normalizeCursorModelOptionsWithCapabilities(caps, providerOptions),
+    claudeAgent: normalizeClaudeModelOptionsWithCapabilities(caps, providerOptions),
+    acp: undefined,
+  }[provider];
 
   // Ultrathink styling (driven by capabilities data, not provider identity)
   const ultrathinkActive =
@@ -93,67 +101,129 @@ function getProviderStateFromCapabilities(
 const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
   codex: {
     getState: (input) => getProviderStateFromCapabilities(input),
-    renderTraitsMenuContent: ({
-      threadId,
-      model,
-      models,
-      modelOptions,
-      prompt,
-      onPromptChange,
-    }) => (
-      <TraitsMenuContent
-        provider="codex"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
-      <TraitsPicker
-        provider="codex"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
+    renderTraitsMenuContent: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) =>
+      shouldRenderTraitsControls({
+        provider: "codex",
+        models,
+        model,
+        modelOptions,
+        prompt,
+      }) ? (
+        <TraitsMenuContent
+          provider="codex"
+          models={models}
+          threadId={threadId}
+          model={model}
+          modelOptions={modelOptions}
+          prompt={prompt}
+          onPromptChange={onPromptChange}
+        />
+      ) : null,
+    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) =>
+      shouldRenderTraitsControls({
+        provider: "codex",
+        models,
+        model,
+        modelOptions,
+        prompt,
+      }) ? (
+        <TraitsPicker
+          provider="codex"
+          models={models}
+          threadId={threadId}
+          model={model}
+          modelOptions={modelOptions}
+          prompt={prompt}
+          onPromptChange={onPromptChange}
+        />
+      ) : null,
   },
   claudeAgent: {
     getState: (input) => getProviderStateFromCapabilities(input),
-    renderTraitsMenuContent: ({
-      threadId,
-      model,
-      models,
-      modelOptions,
-      prompt,
-      onPromptChange,
-    }) => (
-      <TraitsMenuContent
-        provider="claudeAgent"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
-      <TraitsPicker
-        provider="claudeAgent"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
+    renderTraitsMenuContent: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) =>
+      shouldRenderTraitsControls({
+        provider: "claudeAgent",
+        models,
+        model,
+        modelOptions,
+        prompt,
+      }) ? (
+        <TraitsMenuContent
+          provider="claudeAgent"
+          models={models}
+          threadId={threadId}
+          model={model}
+          modelOptions={modelOptions}
+          prompt={prompt}
+          onPromptChange={onPromptChange}
+        />
+      ) : null,
+    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) =>
+      shouldRenderTraitsControls({
+        provider: "claudeAgent",
+        models,
+        model,
+        modelOptions,
+        prompt,
+      }) ? (
+        <TraitsPicker
+          provider="claudeAgent"
+          models={models}
+          threadId={threadId}
+          model={model}
+          modelOptions={modelOptions}
+          prompt={prompt}
+          onPromptChange={onPromptChange}
+        />
+      ) : null,
+  },
+  cursor: {
+    getState: (input) => getProviderStateFromCapabilities(input),
+    renderTraitsMenuContent: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) =>
+      shouldRenderTraitsControls({
+        provider: "cursor",
+        models,
+        model,
+        modelOptions,
+        prompt,
+      }) ? (
+        <TraitsMenuContent
+          provider="cursor"
+          models={models}
+          threadId={threadId}
+          model={model}
+          modelOptions={modelOptions}
+          prompt={prompt}
+          onPromptChange={onPromptChange}
+        />
+      ) : null,
+    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) =>
+      shouldRenderTraitsControls({
+        provider: "cursor",
+        models,
+        model,
+        modelOptions,
+        prompt,
+      }) ? (
+        <TraitsPicker
+          provider="cursor"
+          models={models}
+          threadId={threadId}
+          model={model}
+          modelOptions={modelOptions}
+          prompt={prompt}
+          onPromptChange={onPromptChange}
+        />
+      ) : null,
+  },
+  acp: {
+    getState: (input) => ({
+      provider: input.provider,
+      promptEffort: null,
+      modelOptionsForDispatch: undefined,
+    }),
+    renderTraitsMenuContent: () => null,
+    renderTraitsPicker: () => null,
   },
 };
 

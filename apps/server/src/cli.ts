@@ -15,6 +15,7 @@ import {
 import { readBootstrapEnvelope } from "./bootstrap";
 import { expandHomePath, resolveBaseDir } from "./os-jank";
 import { runServer } from "./server";
+import { ServerSettingsLive } from "./serverSettings";
 
 const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 
@@ -360,7 +361,10 @@ const rootCommand = Command.make("t3", commandFlags).pipe(
     Effect.gen(function* () {
       const logLevel = yield* GlobalFlag.LogLevel;
       const config = yield* resolveServerConfig(flags, logLevel);
-      return yield* runServer.pipe(Effect.provideService(ServerConfig, config));
+      return yield* runServer.pipe(
+        Effect.provide(ServerSettingsLive),
+        Effect.provideService(ServerConfig, config),
+      );
     }),
   ),
 );

@@ -15,7 +15,7 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "bun run src/bin.ts",
+    "dev": "cd ../.. && tsx --watch apps/server/src/bin.ts",
     "build": "node scripts/cli.ts build",
     "start": "node dist/bin.mjs",
     "prepare": "effect-language-service patch",
@@ -28,6 +28,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
     "@pierre/diffs": "^1.1.0-beta.16",
+    "doltlite": "workspace:*",
     "effect": "catalog:",
     "node-pty": "^1.1.0",
     "open": "^10.1.0"
@@ -40,6 +41,7 @@
     "@t3tools/web": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "effect-acp": "workspace:*",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -71,6 +71,7 @@ const rpcClientMock = {
     upsertKeybinding: vi.fn(),
     getSettings: vi.fn(),
     updateSettings: vi.fn(),
+    listAcpRegistry: vi.fn(),
     subscribeConfig: vi.fn(),
     subscribeLifecycle: vi.fn(),
   },
@@ -158,6 +159,7 @@ const baseServerConfig: ServerConfig = {
   keybindings: [],
   issues: [],
   providers: defaultProviders,
+  acpAgentServers: [],
   availableEditors: ["cursor"],
   observability: {
     logsDirectoryPath: "/tmp/workspace/.config/logs",

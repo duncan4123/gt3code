@@ -6,6 +6,7 @@ import {
   OrchestrationCheckpointFile,
   OrchestrationProposedPlanId,
   OrchestrationReadModel,
+  OrchestrationThreadActivity,
   ProjectScript,
   TurnId,
   type OrchestrationCheckpointSummary,
@@ -15,7 +16,6 @@ import {
   type OrchestrationProject,
   type OrchestrationSession,
   type OrchestrationThread,
-  type OrchestrationThreadActivity,
   ModelSelection,
   ProjectId,
   ThreadId,
@@ -201,7 +201,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
-          deleted_at AS "deletedAt"
+          deleted_at AS "deletedAt",
+          custom_metadata AS "customMetadata"
         FROM projection_threads
         ORDER BY created_at ASC, thread_id ASC
       `,
@@ -575,16 +576,18 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           for (const row of activityRows) {
             updatedAt = maxIso(updatedAt, row.createdAt);
             const threadActivities = activitiesByThread.get(row.threadId) ?? [];
-            threadActivities.push({
-              id: row.activityId,
-              tone: row.tone,
-              kind: row.kind,
-              summary: row.summary,
-              payload: row.payload,
-              turnId: row.turnId,
-              ...(row.sequence !== null ? { sequence: row.sequence } : {}),
-              createdAt: row.createdAt,
-            });
+            threadActivities.push(
+              Schema.decodeUnknownSync(OrchestrationThreadActivity)({
+                id: row.activityId,
+                tone: row.tone,
+                kind: row.kind,
+                summary: row.summary,
+                payload: row.payload,
+                turnId: row.turnId,
+                ...(row.sequence !== null ? { sequence: row.sequence } : {}),
+                createdAt: row.createdAt,
+              }),
+            );
             activitiesByThread.set(row.threadId, threadActivities);
           }
 
@@ -682,6 +685,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             activities: activitiesByThread.get(row.threadId) ?? [],
             checkpoints: checkpointsByThread.get(row.threadId) ?? [],
             session: sessionsByThread.get(row.threadId) ?? null,
+            customMetadata: JSON.parse(
+              ((row as Record<string, unknown>).customMetadata as string) || "{}",
+            ),
           }));
 
           const snapshot = {

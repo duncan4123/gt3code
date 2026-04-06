@@ -316,9 +316,8 @@ export function projectEvent(
 
     case "thread.meta-updated":
       return decodeForEvent(ThreadMetaUpdatedPayload, event.payload, event.type, "payload").pipe(
-        Effect.map((payload) => ({
-          ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
+        Effect.map((payload) => {
+          const threadUpdate: Record<string, unknown> = {
             ...(payload.title !== undefined ? { title: payload.title } : {}),
             ...(payload.modelSelection !== undefined
               ? { modelSelection: payload.modelSelection }
@@ -326,8 +325,20 @@ export function projectEvent(
             ...(payload.branch !== undefined ? { branch: payload.branch } : {}),
             ...(payload.worktreePath !== undefined ? { worktreePath: payload.worktreePath } : {}),
             updatedAt: payload.updatedAt,
-          }),
-        })),
+          };
+          // Merge customMetadata additively: new keys override, existing keys preserved.
+          if (payload.customMetadata !== undefined) {
+            const existing = nextBase.threads.find((t) => t.id === payload.threadId);
+            threadUpdate.customMetadata = {
+              ...(existing?.customMetadata ?? {}),
+              ...payload.customMetadata,
+            };
+          }
+          return {
+            ...nextBase,
+            threads: updateThread(nextBase.threads, payload.threadId, threadUpdate),
+          };
+        }),
       );
 
     case "thread.runtime-mode-set":

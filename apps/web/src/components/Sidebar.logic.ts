@@ -27,7 +27,9 @@ export interface ThreadStatusPill {
     | "Completed"
     | "Pending Approval"
     | "Awaiting Input"
-    | "Plan Ready";
+    | "Plan Ready"
+    | "Drained"
+    | "Stopped";
   colorClass: string;
   dotClass: string;
   pulse: boolean;
@@ -40,7 +42,52 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
   Connecting: 3,
   "Plan Ready": 2,
   Completed: 1,
+  Drained: 0,
+  Stopped: 0,
 };
+
+/** Extract gc.* metadata from a thread's customMetadata. */
+export function getGcMetadata(customMetadata?: Record<string, string>): {
+  isGcManaged: boolean;
+  agent: string | undefined;
+  rig: string | undefined;
+  city: string | undefined;
+  bead: string | undefined;
+  beadTitle: string | undefined;
+  state: string | undefined;
+  provider: string | undefined;
+} {
+  if (!customMetadata || !customMetadata["gc.agent"]) {
+    return {
+      isGcManaged: false,
+      agent: undefined,
+      rig: undefined,
+      city: undefined,
+      bead: undefined,
+      beadTitle: undefined,
+      state: undefined,
+      provider: undefined,
+    };
+  }
+  return {
+    isGcManaged: true,
+    agent: customMetadata["gc.agent"],
+    rig: customMetadata["gc.rig"],
+    city: customMetadata["gc.city"],
+    bead: customMetadata["gc.bead"],
+    beadTitle: customMetadata["gc.beadTitle"],
+    state: customMetadata["gc.state"],
+    provider: customMetadata["gc.provider"],
+  };
+}
+
+/** Count GC-managed threads per project. */
+export function countGcAgents(
+  threads: ReadonlyArray<{ projectId: string; customMetadata?: Record<string, string> }>,
+  projectId: string,
+): number {
+  return threads.filter((t) => t.projectId === projectId && t.customMetadata?.["gc.agent"]).length;
+}
 
 type ThreadStatusInput = Pick<
   SidebarThreadSummary,
@@ -310,8 +357,27 @@ export function resolveThreadRowClassName(input: {
 
 export function resolveThreadStatusPill(input: {
   thread: ThreadStatusInput;
+  gcState?: string | undefined;
 }): ThreadStatusPill | null {
-  const { thread } = input;
+  const { thread, gcState } = input;
+
+  // GC lifecycle states take priority when session is not actively running.
+  if (gcState === "drained" && thread.session?.status !== "running") {
+    return {
+      label: "Drained",
+      colorClass: "text-zinc-500 dark:text-zinc-400/70",
+      dotClass: "bg-zinc-400 dark:bg-zinc-500/70",
+      pulse: false,
+    };
+  }
+  if (gcState === "stopped" && thread.session?.status !== "running") {
+    return {
+      label: "Stopped",
+      colorClass: "text-zinc-400 dark:text-zinc-500/60",
+      dotClass: "bg-zinc-300 dark:bg-zinc-600/60",
+      pulse: false,
+    };
+  }
 
   if (thread.hasPendingApprovals) {
     return {

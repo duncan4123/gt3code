@@ -22,6 +22,7 @@ import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
   CheckIcon,
+  ChevronRightIcon,
   CircleAlertIcon,
   EyeIcon,
   GlobeIcon,
@@ -34,6 +35,8 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
+import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "../ui/collapsible";
+import { ToolCallDetail } from "./ToolCallDetail";
 import { clamp } from "effect/Number";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImagePreview";
 import { ProposedPlanCard } from "./ProposedPlanCard";
@@ -48,6 +51,7 @@ import {
   type MessagesTimelineRow,
 } from "./MessagesTimeline.logic";
 import { TerminalContextInlineChip } from "./TerminalContextInlineChip";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   deriveDisplayedUserMessageState,
   type ParsedTerminalContextEntry,
@@ -85,6 +89,7 @@ interface MessagesTimelineProps {
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
+  activityPayloadById: ReadonlyMap<string, unknown>;
   onVirtualizerSnapshot?: (snapshot: {
     totalSize: number;
     measurements: ReadonlyArray<{
@@ -120,6 +125,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   resolvedTheme,
   timestampFormat,
   workspaceRoot,
+  activityPayloadById,
   onVirtualizerSnapshot,
 }: MessagesTimelineProps) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
@@ -199,6 +205,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     return Math.min(firstCurrentTurnRowIndex, firstTailRowIndex);
   }, [activeTurnInProgress, activeTurnStartedAt, rows]);
 
+  const [expandedToolEntryIds, setExpandedToolEntryIds] = useState<Record<string, boolean>>({});
+
   const virtualizedRowCount = clamp(firstUnvirtualizedRowIndex, {
     minimum: 0,
     maximum: rows.length,
@@ -220,6 +228,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       if (!row) return 96;
       return estimateMessagesTimelineRowHeight(row, {
         expandedWorkGroups,
+        expandedToolEntryIds,
         timelineWidthPx,
         turnDiffSummaryByAssistantMessageId,
       });
@@ -303,6 +312,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }));
   }, []);
 
+  const onToggleToolEntry = useCallback((entryId: string) => {
+    setExpandedToolEntryIds((current) => ({
+      ...current,
+      [entryId]: !current[entryId],
+    }));
+  }, []);
+
   const renderRowContent = (row: TimelineRow) => (
     <div
       className="pb-4"
@@ -346,7 +362,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
               )}
               <div className="space-y-0.5">
                 {visibleEntries.map((workEntry) => (
-                  <SimpleWorkEntryRow key={`work-row:${workEntry.id}`} workEntry={workEntry} />
+                  <SimpleWorkEntryRow
+                    key={`work-row:${workEntry.id}`}
+                    workEntry={workEntry}
+                    isExpanded={expandedToolEntryIds[workEntry.id] ?? false}
+                    onToggle={() => onToggleToolEntry(workEntry.id)}
+                    payload={activityPayloadById.get(workEntry.id)}
+                  />
                 ))}
               </div>
             </div>
@@ -834,12 +856,21 @@ function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
 
 const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   workEntry: TimelineWorkEntry;
+  isExpanded: boolean;
+  onToggle: () => void;
+  payload?: unknown;
 }) {
-  const { workEntry } = props;
+  const { workEntry, isExpanded, onToggle, payload } = props;
   const iconConfig = workToneIcon(workEntry.tone);
   const EntryIcon = workEntryIcon(workEntry);
   const heading = toolWorkEntryHeading(workEntry);
-  const preview = workEntryPreview(workEntry);
+  const rawPreview = workEntryPreview(workEntry);
+  const preview =
+    rawPreview &&
+    normalizeCompactToolLabel(rawPreview).toLowerCase() ===
+      normalizeCompactToolLabel(heading).toLowerCase()
+      ? null
+      : rawPreview;
   const displayText = preview ? `${heading} - ${preview}` : heading;
   const hasChangedFiles = (workEntry.changedFiles?.length ?? 0) > 0;
   const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
@@ -853,19 +884,29 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
           <EntryIcon className="size-3" />
         </span>
         <div className="min-w-0 flex-1 overflow-hidden">
-          <p
-            className={cn(
-              "truncate text-[11px] leading-5",
-              workToneClass(workEntry.tone),
-              preview ? "text-muted-foreground/70" : "",
-            )}
-            title={displayText}
-          >
-            <span className={cn("text-foreground/80", workToneClass(workEntry.tone))}>
-              {heading}
-            </span>
-            {preview && <span className="text-muted-foreground/55"> - {preview}</span>}
-          </p>
+          <Tooltip>
+            <TooltipTrigger
+              className="block min-w-0 w-full text-left"
+              title={displayText}
+              aria-label={displayText}
+            >
+              <p
+                className={cn(
+                  "truncate text-[11px] leading-5",
+                  workToneClass(workEntry.tone),
+                  preview ? "text-muted-foreground/70" : "",
+                )}
+              >
+                <span className={cn("text-foreground/80", workToneClass(workEntry.tone))}>
+                  {heading}
+                </span>
+                {preview && <span className="text-muted-foreground/55"> - {preview}</span>}
+              </p>
+            </TooltipTrigger>
+            <TooltipPopup className="max-w-[min(720px,calc(100vw-2rem))]">
+              <p className="whitespace-pre-wrap wrap-break-word text-xs leading-5">{displayText}</p>
+            </TooltipPopup>
+          </Tooltip>
         </div>
       </div>
       {hasChangedFiles && !previewIsChangedFiles && (

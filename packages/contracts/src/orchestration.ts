@@ -1,5 +1,6 @@
 import { Option, Schema, SchemaIssue, Struct } from "effect";
-import { ClaudeModelOptions, CodexModelOptions } from "./model";
+import { AcpAgentServerId } from "./acp";
+import { ClaudeModelOptions, CodexModelOptions, CursorModelOptions } from "./model";
 import {
   ApprovalRequestId,
   CheckpointRef,
@@ -14,6 +15,10 @@ import {
   TrimmedNonEmptyString,
   TurnId,
 } from "./baseSchemas";
+import { CanonicalJsonValueSchema } from "./jsonValue";
+import { CanonicalToolLifecycleData } from "./toolLifecycle";
+import { ThreadTokenUsageSnapshot } from "./threadUsage";
+import { ProviderUserInputAnswers, UserInputQuestion } from "./userInput";
 
 export const ORCHESTRATION_WS_METHODS = {
   getSnapshot: "orchestration.getSnapshot",
@@ -23,7 +28,11 @@ export const ORCHESTRATION_WS_METHODS = {
   replayEvents: "orchestration.replayEvents",
 } as const;
 
-export const ProviderKind = Schema.Literals(["codex", "claudeAgent"]);
+export const ORCHESTRATION_WS_CHANNELS = {
+  domainEvent: "orchestration.domainEvent",
+} as const;
+
+export const ProviderKind = Schema.Literals(["codex", "claudeAgent", "cursor", "acp"]);
 export type ProviderKind = typeof ProviderKind.Type;
 export const ProviderApprovalPolicy = Schema.Literals([
   "untrusted",
@@ -39,7 +48,7 @@ export const ProviderSandboxMode = Schema.Literals([
 ]);
 export type ProviderSandboxMode = typeof ProviderSandboxMode.Type;
 
-export const DEFAULT_PROVIDER_KIND: ProviderKind = "codex";
+export const DEFAULT_PROVIDER_KIND: ProviderKind = "claudeAgent";
 
 export const CodexModelSelection = Schema.Struct({
   provider: Schema.Literal("codex"),
@@ -55,7 +64,26 @@ export const ClaudeModelSelection = Schema.Struct({
 });
 export type ClaudeModelSelection = typeof ClaudeModelSelection.Type;
 
-export const ModelSelection = Schema.Union([CodexModelSelection, ClaudeModelSelection]);
+export const CursorModelSelection = Schema.Struct({
+  provider: Schema.Literal("cursor"),
+  model: TrimmedNonEmptyString,
+  options: Schema.optionalKey(CursorModelOptions),
+});
+export type CursorModelSelection = typeof CursorModelSelection.Type;
+
+export const AcpModelSelection = Schema.Struct({
+  provider: Schema.Literal("acp"),
+  agentServerId: AcpAgentServerId,
+  model: TrimmedNonEmptyString,
+});
+export type AcpModelSelection = typeof AcpModelSelection.Type;
+
+export const ModelSelection = Schema.Union([
+  CodexModelSelection,
+  ClaudeModelSelection,
+  CursorModelSelection,
+  AcpModelSelection,
+]);
 export type ModelSelection = typeof ModelSelection.Type;
 
 export const RuntimeMode = Schema.Literals(["approval-required", "full-access"]);
@@ -75,9 +103,6 @@ export const ProviderApprovalDecision = Schema.Literals([
   "cancel",
 ]);
 export type ProviderApprovalDecision = typeof ProviderApprovalDecision.Type;
-export const ProviderUserInputAnswers = Schema.Record(Schema.String, Schema.Unknown);
-export type ProviderUserInputAnswers = typeof ProviderUserInputAnswers.Type;
-
 export const PROVIDER_SEND_TURN_MAX_INPUT_CHARS = 120_000;
 export const PROVIDER_SEND_TURN_MAX_ATTACHMENTS = 8;
 export const PROVIDER_SEND_TURN_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -235,16 +260,209 @@ export const OrchestrationThreadActivityTone = Schema.Literals([
 ]);
 export type OrchestrationThreadActivityTone = typeof OrchestrationThreadActivityTone.Type;
 
-export const OrchestrationThreadActivity = Schema.Struct({
+export const OrchestrationThreadActivityKind = Schema.Literals([
+  "approval.requested",
+  "approval.resolved",
+  "runtime.error",
+  "runtime.warning",
+  "turn.plan.updated",
+  "user-input.requested",
+  "user-input.resolved",
+  "task.started",
+  "task.progress",
+  "task.completed",
+  "context-compaction",
+  "context-window.updated",
+  "tool.updated",
+  "tool.completed",
+  "tool.started",
+  "checkpoint.revert.failed",
+  "checkpoint.capture.failed",
+  "checkpoint.captured",
+  "provider.turn.start.failed",
+  "provider.turn.interrupt.failed",
+  "provider.approval.respond.failed",
+  "provider.user-input.respond.failed",
+  "setup-script.requested",
+  "setup-script.started",
+  "setup-script.failed",
+]);
+export type OrchestrationThreadActivityKind = typeof OrchestrationThreadActivityKind.Type;
+
+const OrchestrationThreadActivityBaseFields = {
   id: EventId,
   tone: OrchestrationThreadActivityTone,
-  kind: TrimmedNonEmptyString,
   summary: TrimmedNonEmptyString,
-  payload: Schema.Unknown,
   turnId: Schema.NullOr(TurnId),
   sequence: Schema.optional(NonNegativeInt),
   createdAt: IsoDateTime,
+} as const;
+
+const ApprovalRequestedActivityPayload = Schema.Struct({
+  requestId: Schema.optional(TrimmedNonEmptyString),
+  requestKind: Schema.optional(ProviderRequestKind),
+  requestType: Schema.optional(TrimmedNonEmptyString),
+  detail: Schema.optional(TrimmedNonEmptyString),
 });
+
+const ApprovalResolvedActivityPayload = Schema.Struct({
+  requestId: Schema.optional(TrimmedNonEmptyString),
+  requestKind: Schema.optional(ProviderRequestKind),
+  requestType: Schema.optional(TrimmedNonEmptyString),
+  decision: Schema.optional(TrimmedNonEmptyString),
+});
+
+const RuntimeErrorActivityPayload = Schema.Struct({
+  message: TrimmedNonEmptyString,
+});
+
+const RuntimeWarningActivityPayload = Schema.Struct({
+  message: TrimmedNonEmptyString,
+  detail: Schema.optional(CanonicalJsonValueSchema),
+});
+
+const RuntimePlanStep = Schema.Struct({
+  step: TrimmedNonEmptyString,
+  status: TrimmedNonEmptyString,
+});
+
+const TurnPlanUpdatedActivityPayload = Schema.Struct({
+  plan: Schema.Array(RuntimePlanStep),
+  explanation: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+});
+
+const UserInputRequestedActivityPayload = Schema.Struct({
+  requestId: Schema.optional(TrimmedNonEmptyString),
+  questions: Schema.Array(UserInputQuestion),
+});
+
+const UserInputResolvedActivityPayload = Schema.Struct({
+  requestId: Schema.optional(TrimmedNonEmptyString),
+  answers: ProviderUserInputAnswers,
+});
+
+const TaskStartedActivityPayload = Schema.Struct({
+  taskId: TrimmedNonEmptyString,
+  taskType: Schema.optional(TrimmedNonEmptyString),
+  detail: Schema.optional(TrimmedNonEmptyString),
+});
+
+const TaskProgressActivityPayload = Schema.Struct({
+  taskId: TrimmedNonEmptyString,
+  detail: TrimmedNonEmptyString,
+  summary: Schema.optional(TrimmedNonEmptyString),
+  lastToolName: Schema.optional(TrimmedNonEmptyString),
+  usage: Schema.optional(ThreadTokenUsageSnapshot),
+});
+
+const TaskCompletedActivityPayload = Schema.Struct({
+  taskId: TrimmedNonEmptyString,
+  status: TrimmedNonEmptyString,
+  detail: Schema.optional(TrimmedNonEmptyString),
+  usage: Schema.optional(ThreadTokenUsageSnapshot),
+});
+
+const ContextCompactionActivityPayload = Schema.Struct({
+  state: Schema.Literal("compacted"),
+  detail: Schema.optional(CanonicalJsonValueSchema),
+});
+
+const ToolStartedOrCompletedActivityPayload = Schema.Struct({
+  itemType: TrimmedNonEmptyString,
+  detail: Schema.optional(TrimmedNonEmptyString),
+});
+
+const ToolUpdatedActivityPayload = Schema.Struct({
+  itemType: TrimmedNonEmptyString,
+  status: Schema.optional(TrimmedNonEmptyString),
+  detail: Schema.optional(TrimmedNonEmptyString),
+  data: Schema.optional(CanonicalToolLifecycleData),
+});
+
+const CheckpointRevertFailedActivityPayload = Schema.Struct({
+  turnCount: NonNegativeInt,
+  detail: TrimmedNonEmptyString,
+});
+
+const CheckpointCaptureFailedActivityPayload = Schema.Struct({
+  detail: TrimmedNonEmptyString,
+});
+
+const CheckpointCapturedActivityPayload = Schema.Struct({
+  turnCount: NonNegativeInt,
+  status: OrchestrationCheckpointStatus,
+});
+
+const ProviderFailureActivityPayload = Schema.Struct({
+  detail: TrimmedNonEmptyString,
+  requestId: Schema.optional(TrimmedNonEmptyString),
+});
+
+const SetupScriptActivityPayload = Schema.Struct({
+  detail: Schema.optional(TrimmedNonEmptyString),
+  worktreePath: Schema.optional(TrimmedNonEmptyString),
+  name: Schema.optional(TrimmedNonEmptyString),
+});
+
+function makeThreadActivitySchema<
+  Kind extends OrchestrationThreadActivityKind,
+  Payload extends Schema.Schema<any>,
+>(kind: Kind, tone: OrchestrationThreadActivityTone, payload: Payload) {
+  return Schema.Struct({
+    ...OrchestrationThreadActivityBaseFields,
+    tone: Schema.Literal(tone),
+    kind: Schema.Literal(kind),
+    payload,
+  });
+}
+
+export const OrchestrationThreadActivity = Schema.Union([
+  makeThreadActivitySchema("approval.requested", "approval", ApprovalRequestedActivityPayload),
+  makeThreadActivitySchema("approval.resolved", "approval", ApprovalResolvedActivityPayload),
+  makeThreadActivitySchema("runtime.error", "error", RuntimeErrorActivityPayload),
+  makeThreadActivitySchema("runtime.warning", "info", RuntimeWarningActivityPayload),
+  makeThreadActivitySchema("turn.plan.updated", "info", TurnPlanUpdatedActivityPayload),
+  makeThreadActivitySchema("user-input.requested", "info", UserInputRequestedActivityPayload),
+  makeThreadActivitySchema("user-input.resolved", "info", UserInputResolvedActivityPayload),
+  makeThreadActivitySchema("task.started", "info", TaskStartedActivityPayload),
+  makeThreadActivitySchema("task.progress", "info", TaskProgressActivityPayload),
+  makeThreadActivitySchema("task.completed", "info", TaskCompletedActivityPayload),
+  makeThreadActivitySchema("context-compaction", "info", ContextCompactionActivityPayload),
+  makeThreadActivitySchema("context-window.updated", "info", ThreadTokenUsageSnapshot),
+  makeThreadActivitySchema("tool.updated", "tool", ToolUpdatedActivityPayload),
+  makeThreadActivitySchema("tool.completed", "tool", ToolStartedOrCompletedActivityPayload),
+  makeThreadActivitySchema("tool.started", "tool", ToolStartedOrCompletedActivityPayload),
+  makeThreadActivitySchema(
+    "checkpoint.revert.failed",
+    "error",
+    CheckpointRevertFailedActivityPayload,
+  ),
+  makeThreadActivitySchema(
+    "checkpoint.capture.failed",
+    "error",
+    CheckpointCaptureFailedActivityPayload,
+  ),
+  makeThreadActivitySchema("checkpoint.captured", "info", CheckpointCapturedActivityPayload),
+  makeThreadActivitySchema("provider.turn.start.failed", "error", ProviderFailureActivityPayload),
+  makeThreadActivitySchema(
+    "provider.turn.interrupt.failed",
+    "error",
+    ProviderFailureActivityPayload,
+  ),
+  makeThreadActivitySchema(
+    "provider.approval.respond.failed",
+    "error",
+    ProviderFailureActivityPayload,
+  ),
+  makeThreadActivitySchema(
+    "provider.user-input.respond.failed",
+    "error",
+    ProviderFailureActivityPayload,
+  ),
+  makeThreadActivitySchema("setup-script.requested", "info", SetupScriptActivityPayload),
+  makeThreadActivitySchema("setup-script.started", "info", SetupScriptActivityPayload),
+  makeThreadActivitySchema("setup-script.failed", "error", SetupScriptActivityPayload),
+]);
 export type OrchestrationThreadActivity = typeof OrchestrationThreadActivity.Type;
 
 const OrchestrationLatestTurnState = Schema.Literals([
@@ -265,6 +483,10 @@ export const OrchestrationLatestTurn = Schema.Struct({
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
 });
 export type OrchestrationLatestTurn = typeof OrchestrationLatestTurn.Type;
+
+/** Opaque key-value metadata for external integrations (e.g. gc.* keys from Gas City). */
+export const CustomMetadata = Schema.Record(Schema.String, Schema.String);
+export type CustomMetadata = typeof CustomMetadata.Type;
 
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
@@ -287,6 +509,7 @@ export const OrchestrationThread = Schema.Struct({
   activities: Schema.Array(OrchestrationThreadActivity),
   checkpoints: Schema.Array(OrchestrationCheckpointSummary),
   session: Schema.NullOr(OrchestrationSession),
+  customMetadata: Schema.optional(CustomMetadata).pipe(Schema.withDecodingDefault(() => ({}))),
 });
 export type OrchestrationThread = typeof OrchestrationThread.Type;
 
@@ -366,6 +589,7 @@ const ThreadMetaUpdateCommand = Schema.Struct({
   modelSelection: Schema.optional(ModelSelection),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  customMetadata: Schema.optional(CustomMetadata),
 });
 
 const ThreadRuntimeModeSetCommand = Schema.Struct({
@@ -704,6 +928,7 @@ export const ThreadMetaUpdatedPayload = Schema.Struct({
   modelSelection: Schema.optional(ModelSelection),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
+  customMetadata: Schema.optional(CustomMetadata),
   updatedAt: IsoDateTime,
 });
 
