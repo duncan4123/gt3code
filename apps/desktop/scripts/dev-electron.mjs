@@ -57,9 +57,14 @@ function startApp() {
     return;
   }
 
+  const cdpPort = Number(process.env.ELECTRON_CDP_PORT ?? 9222);
   const app = spawn(
     resolveElectronPath(),
-    [`--t3code-dev-root=${desktopDir}`, "dist-electron/main.js"],
+    [
+      `--remote-debugging-port=${cdpPort}`,
+      `--t3code-dev-root=${desktopDir}`,
+      "dist-electron/main.js",
+    ],
     {
       cwd: desktopDir,
       env: {

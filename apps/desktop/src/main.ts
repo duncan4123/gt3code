@@ -1464,7 +1464,9 @@ async function bootstrap(): Promise<void> {
   const t3Home = process.env.T3_HOME ?? Path.join(OS.homedir(), ".t3");
   try {
     FS.writeFileSync(Path.join(t3Home, "ws-url"), wsUrlForBridge, "utf8");
-  } catch { /* best-effort */ }
+  } catch {
+    /* best-effort */
+  }
   writeDesktopLogHeader(`wrote ws-url for external integrations`);
 
   registerIpcHandlers();

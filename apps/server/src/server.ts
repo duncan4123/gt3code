@@ -229,7 +229,6 @@ export const makeServerLayer = Layer.unwrap(
         const startup = yield* ServerRuntimeStartup;
         yield* startup.markHttpListening;
         yield* startDoltLifecycle;
-
       }),
     );
 
