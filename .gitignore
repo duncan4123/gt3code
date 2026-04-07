@@ -29,3 +29,15 @@ __screenshots__/
 
 # context-mem
 .context-mem/
+.context-mem.json
+
+# Local tooling config
+.mcp.json
+.cursor/
+.vscode/
+.agents/
+skills-lock.json
+
+# GC pack symlinks (created by gastown at runtime)
+scripts/*.sh
+scripts/checks/
