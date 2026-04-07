@@ -287,4 +287,4 @@ const makeGcApiClient = Effect.gen(function* () {
   } satisfies GcApiClientShape;
 });
 
-export const GcApiClientLive = Layer.scoped(GcApiClient)(makeGcApiClient);
+export const GcApiClientLive = Layer.effect(GcApiClient)(makeGcApiClient);
