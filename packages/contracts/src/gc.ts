@@ -51,9 +51,7 @@ export const GcThreadMeta = Schema.Struct({
 export type GcThreadMeta = typeof GcThreadMeta.Type;
 
 /** Extract GcThreadMeta from a raw customMetadata record. */
-export function parseGcMeta(
-  customMetadata?: Record<string, string>,
-): GcThreadMeta {
+export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMeta {
   if (!customMetadata || !customMetadata["gc.agent"]) {
     return {
       isGcManaged: false,
@@ -108,8 +106,7 @@ export const GcActivityKind = {
   PromptSent: "gc.prompt.sent",
   NudgeSent: "gc.nudge.sent",
 } as const;
-export type GcActivityKind =
-  (typeof GcActivityKind)[keyof typeof GcActivityKind];
+export type GcActivityKind = (typeof GcActivityKind)[keyof typeof GcActivityKind];
 
 /** Check if an activity kind is a GC activity. */
 export function isGcActivityKind(kind: string): kind is GcActivityKind {
@@ -131,9 +128,9 @@ export interface VirtualConvoyGroup<TThread> {
 }
 
 /** Partition threads into convoy groups and standalone threads. */
-export function groupThreadsByConvoy<
-  TThread extends { customMetadata?: Record<string, string> },
->(threads: TThread[]): {
+export function groupThreadsByConvoy<TThread extends { customMetadata?: Record<string, string> }>(
+  threads: TThread[],
+): {
   standaloneThreads: TThread[];
   convoyGroups: VirtualConvoyGroup<TThread>[];
 } {
@@ -158,12 +155,8 @@ export function groupThreadsByConvoy<
       id: convoyId,
       label: meta.convoyTitle?.trim() || convoyId,
       status: meta.convoyStatus,
-      closedCount: meta.convoyClosedCount
-        ? Number(meta.convoyClosedCount)
-        : null,
-      totalCount: meta.convoyTotalCount
-        ? Number(meta.convoyTotalCount)
-        : null,
+      closedCount: meta.convoyClosedCount ? Number(meta.convoyClosedCount) : null,
+      totalCount: meta.convoyTotalCount ? Number(meta.convoyTotalCount) : null,
       threads: [thread],
     });
   }

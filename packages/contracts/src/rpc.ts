@@ -69,11 +69,7 @@ import {
   ServerUpsertKeybindingResult,
 } from "./server";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings";
-import {
-  GcGetThreadContextInput,
-  GcThreadContextResult,
-  GcGetThreadContextError,
-} from "./gc";
+import { GcGetThreadContextInput, GcThreadContextResult, GcGetThreadContextError } from "./gc";
 
 export const WS_METHODS = {
   // Project registry methods
