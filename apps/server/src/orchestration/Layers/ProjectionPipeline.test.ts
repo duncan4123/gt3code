@@ -650,14 +650,14 @@ it.layer(
         },
       });
 
-      yield* sql`
-        CREATE TRIGGER fail_thread_messages_projection_state_update
-        BEFORE UPDATE ON projection_state
+      yield* sql.unsafe(`
+        CREATE TRIGGER proj.fail_thread_messages_projection_state_update
+        BEFORE UPDATE ON proj.projection_state
         WHEN NEW.projector = 'projection.thread-messages'
         BEGIN
           SELECT RAISE(ABORT, 'forced-projection-state-failure');
         END;
-      `;
+      `);
 
       const result = yield* Effect.result(
         appendAndProject({
@@ -705,7 +705,7 @@ it.layer(
       const { attachmentsDir } = yield* ServerConfig;
       const attachmentPath = path.join(attachmentsDir, "thread-rollback-att-1.png");
       assert.isFalse(yield* exists(attachmentPath));
-      yield* sql`DROP TRIGGER IF EXISTS fail_thread_messages_projection_state_update`;
+      yield* sql.unsafe(`DROP TRIGGER IF EXISTS proj.fail_thread_messages_projection_state_update`);
     }),
   );
 });

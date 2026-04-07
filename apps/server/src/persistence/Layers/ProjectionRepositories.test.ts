@@ -89,6 +89,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         updatedAt: "2026-03-24T00:00:00.000Z",
         archivedAt: null,
         deletedAt: null,
+        customMetadata: "{}",
       });
 
       const rows = yield* sql<{
