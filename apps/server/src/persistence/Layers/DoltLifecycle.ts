@@ -12,7 +12,7 @@
 import { Effect, Layer, Schedule } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-const COMMIT_INTERVAL_MS = 30_000;
+const COMMIT_INTERVAL_MS = 5 * 60_000; // 5 minutes
 
 export const startDoltLifecycle = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -28,8 +28,7 @@ export const startDoltLifecycle = Effect.gen(function* () {
 
   yield* Effect.forkScoped(
     Effect.gen(function* () {
-      yield* sql.unsafe("SELECT dolt_add('orchestration_events')");
-      yield* sql.unsafe("SELECT dolt_add('orchestration_command_receipts')");
+      yield* sql.unsafe("SELECT dolt_add('-A')");
       yield* sql.unsafe(
         `SELECT dolt_commit('-m', '${new Date().toISOString().slice(0, 19)} auto')`,
       );
@@ -39,7 +38,7 @@ export const startDoltLifecycle = Effect.gen(function* () {
     ),
   );
 
-  yield* Effect.logInfo("dolt lifecycle started (commit: 30s, event store only)");
+  yield* Effect.logInfo("dolt lifecycle started (commit: 5m, event store only)");
 });
 
 export const DoltLifecycleLive = Layer.effectDiscard(startDoltLifecycle);
