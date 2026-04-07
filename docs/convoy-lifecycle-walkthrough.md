@@ -12,12 +12,14 @@
 ## Phase 1: Convoy Created
 
 ### gascity side
+
 - `gc convoy create` creates parent bead (type: "convoy", status: "open") + 4 child beads (type: "task", status: "open", label: `pool:polecat`)
 - Reconciler cycle: `ComputeAwakeSet` sees 4 work beads with `pool:polecat` label, sets `WorkSet["polecat"] = true`
 - `buildDesiredState` scales pool to 3 slots (or whatever `scale_check` returns)
 - 3 session beads created (state: "creating"), reconciler calls `sp.Start()` for each
 
 ### t3code sidebar
+
 ```
 Project: my-rig
   feature-convoy (0/4 done)              <- virtual folder appears
@@ -34,6 +36,7 @@ The convoy folder appears immediately because t3bridge dispatches `thread.create
 ## Phase 2: Work Starts (3 of 4 epics claimed)
 
 ### gascity side
+
 - Each pool slot runs `gc hook --inject` and finds ready beads via `work_query`, claims one
 - 3 beads transition: "open" to "in_progress", assignee set
 - t3bridge dispatches `thread.activity.append` with kind `gc.bead.claimed` for each
@@ -41,6 +44,7 @@ The convoy folder appears immediately because t3bridge dispatches `thread.create
 - Each slot gets a `thread.turn.start` with the bead's prompt
 
 ### t3code sidebar
+
 ```
 Project: my-rig
   feature-convoy (0/4 done)
@@ -57,6 +61,7 @@ Thread titles update to bead titles. Status pills show "Working" (turn running).
 ## Phase 3: First Epic Completes
 
 ### gascity side
+
 - Slot-1's turn completes. Agent calls `bd close <bead-id>`
 - Bead transitions: "in_progress" to "closed"
 - Event: `bead.closed` fires, t3bridge watcher picks it up
@@ -67,6 +72,7 @@ Thread titles update to bead titles. Status pills show "Working" (turn running).
 - `thread.turn.start` with epic #4 prompt
 
 ### merge-agent
+
 - Detects closed bead, starts merge turn
 - Creates worktree for integration branch
 - Cherry-picks/merges slot-1's completed work
@@ -74,6 +80,7 @@ Thread titles update to bead titles. Status pills show "Working" (turn running).
 - Dispatches `thread.activity.append` kind `gc.merge.completed`
 
 ### t3code sidebar
+
 ```
 Project: my-rig
   feature-convoy (1/4 done) ####....
@@ -90,6 +97,7 @@ Progress bar updates. Slot-1's title changed to the new bead. Merge agent shows 
 ## Phase 4: Epics 2 & 3 Complete, Pool Drains
 
 ### gascity side
+
 - Slots 2 and 3 complete their beads, `bead.closed` events fire
 - Convoy progress: 3/4
 - No more unclaimed beads, so slots 2 and 3 have no work
@@ -98,6 +106,7 @@ Progress bar updates. Slot-1's title changed to the new bead. Merge agent shows 
 - merge-agent picks up both completed epics, merges sequentially
 
 ### t3code sidebar
+
 ```
 Project: my-rig
   feature-convoy (3/4 done) ######..
@@ -114,6 +123,7 @@ Drained threads get "Drained" status pill and gray out. They stay in the convoy 
 ## Phase 5: Last Epic Completes, Convoy Auto-Closes
 
 ### gascity side
+
 - Slot-1 completes epic #4, `bead.closed` fires
 - Convoy progress: 4/4
 - `doConvoyAutocloseWith()` fires, parent convoy bead status becomes "closed"
@@ -122,6 +132,7 @@ Drained threads get "Drained" status pill and gray out. They stay in the convoy 
 - merge-agent's turn completes, goes idle
 
 ### t3code sidebar
+
 ```
 Project: my-rig
   feature-convoy (4/4 done) ######## (completed)
@@ -167,19 +178,19 @@ The convoy folder, progress bar, thread status pills, and bead history all updat
 
 ## Key Metadata Keys (set by t3bridge on thread.customMetadata)
 
-| Key | Purpose |
-|-----|---------|
-| `gc.agent` | Agent qualified name |
-| `gc.rig` | Rig name |
-| `gc.city` | City name |
-| `gc.bead` | Current bead ID |
-| `gc.beadTitle` | Current bead title |
-| `gc.state` | Session state (active/asleep/drained) |
-| `gc.provider` | Provider name |
-| `gc.convoy` | Convoy ID |
-| `gc.convoyTitle` | Convoy title |
-| `gc.convoyStatus` | Convoy status |
-| `gc.convoyClosedCount` | Completed beads in convoy |
-| `gc.convoyTotalCount` | Total beads in convoy |
-| `gc.formula` | Formula name (if workflow) |
-| `gc.molecule` | Molecule ID (if workflow instance) |
+| Key                    | Purpose                               |
+| ---------------------- | ------------------------------------- |
+| `gc.agent`             | Agent qualified name                  |
+| `gc.rig`               | Rig name                              |
+| `gc.city`              | City name                             |
+| `gc.bead`              | Current bead ID                       |
+| `gc.beadTitle`         | Current bead title                    |
+| `gc.state`             | Session state (active/asleep/drained) |
+| `gc.provider`          | Provider name                         |
+| `gc.convoy`            | Convoy ID                             |
+| `gc.convoyTitle`       | Convoy title                          |
+| `gc.convoyStatus`      | Convoy status                         |
+| `gc.convoyClosedCount` | Completed beads in convoy             |
+| `gc.convoyTotalCount`  | Total beads in convoy                 |
+| `gc.formula`           | Formula name (if workflow)            |
+| `gc.molecule`          | Molecule ID (if workflow instance)    |

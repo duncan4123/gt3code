@@ -11,6 +11,7 @@ Generated from the `verbatim` branch. Each domain summary focuses on what the do
 The WebSocket RPC layer exposes a single `/ws` endpoint that serves all client-server communication using Effect RPC over WebSocket. It resolves all service dependencies (orchestration engine, git, terminal, provider registry, workspace, settings) and routes incoming RPC calls to the appropriate service, with auth-token gating and OpenTelemetry instrumentation.
 
 **Key types/functions:**
+
 - `WsRpcGroup` -- the unified RPC group containing all method definitions
 - `WS_METHODS` -- constant map of ~30 method names across 7 domains (orchestration, terminal, git, server, projects, shell, subscriptions)
 - `ORCHESTRATION_WS_METHODS` -- orchestration-specific: `getSnapshot`, `dispatchCommand`, `getTurnDiff`, `getFullThreadDiff`, `replayEvents`
@@ -24,6 +25,7 @@ The WebSocket RPC layer exposes a single `/ws` endpoint that serves all client-s
 - `subscribeTerminalEvents` -- streams terminal output/state events
 
 **Gascity integration surface:**
+
 - The RPC group is the primary integration point. Gascity formulas could call `dispatchCommand` to orchestrate threads (create, start turns, interrupt, archive). The `subscribeOrchestrationDomainEvents` stream maps directly to a gascity convoy event feed -- each event carries a monotonic `sequence` and `correlationId` that align with bead tracking. The bootstrap envelope pattern (create thread + worktree + turn atomically) maps to a gascity formula that spins up a new bead. Server config subscriptions could feed gascity's provider health monitoring.
 
 ---
@@ -33,6 +35,7 @@ The WebSocket RPC layer exposes a single `/ws` endpoint that serves all client-s
 The orchestration domain implements an event-sourced CQRS engine for managing projects, threads, turns, messages, approvals, checkpoints, and sessions. Commands are validated by a `decider`, persisted as events through an `OrchestrationEventStore`, and projected into a read model by a `projector`. Reactors subscribe to events to trigger side effects (provider commands, checkpoint creation, runtime ingestion).
 
 **Key types/functions:**
+
 - `OrchestrationEngineService` -- service interface: `dispatch(command)`, `getReadModel()`, `readEvents(fromSeq)`, `streamDomainEvents`
 - `OrchestrationEngineLive` -- Effect Layer implementing the engine with serialized dispatch queue and command deduplication
 - `decider.ts` -- pure decision function: `(readModel, command) => events[]`, validates invariants (thread exists, turn not running, etc.)
@@ -49,6 +52,7 @@ The orchestration domain implements an event-sourced CQRS engine for managing pr
   - `OrchestrationReactor` -- umbrella that starts all reactors as fibers
 
 **Gascity integration surface:**
+
 - The event-sourced architecture is a natural fit for gascity beads. Each `OrchestrationEvent` (22 types) maps to a bead state transition. The `decider` is a pure formula -- gascity could wrap it to validate bead commands externally. The `ProviderCommandReactor` maps to a gascity convoy reactor pattern: events trigger downstream work. `ProviderRuntimeIngestion` is the ingest pipeline that translates provider-native events into domain events -- gascity could add parallel ingest pipelines for additional providers. Checkpoints (git-based) map to bead snapshots.
 
 ---
@@ -58,6 +62,7 @@ The orchestration domain implements an event-sourced CQRS engine for managing pr
 The provider domain manages coding-agent backend sessions (Codex and Claude). It routes session lifecycle (start, send turn, interrupt, stop) through a `ProviderService` facade that resolves the correct adapter via `ProviderAdapterRegistry`. Each adapter (CodexAdapter, ClaudeAdapter) owns the provider-specific protocol: Codex uses JSON-RPC over stdio to `codex app-server`, Claude uses the Claude Agent SDK. Adapters emit a canonical `ProviderRuntimeEvent` stream consumed by the orchestration ingestion pipeline.
 
 **Key types/functions:**
+
 - `ProviderService` -- facade: `startSession()`, `sendTurn()`, `interruptTurn()`, `respondToRequest()`, `respondToUserInput()`, `stopSession()`, `listSessions()`, `getCapabilities()`, `rollbackConversation()`, `streamEvents`
 - `ProviderAdapterShape<TError>` -- adapter contract: `startSession`, `sendTurn`, `interruptTurn`, `respondToRequest`, `respondToUserInput`, `stopSession`, `listSessions`, `hasSession`, `readThread`, `rollbackThread`, `stopAll`, `streamEvents`
 - `ProviderAdapterRegistry` -- resolves adapter by `ProviderKind` ("codex" | "claudeAgent")
@@ -72,6 +77,7 @@ The provider domain manages coding-agent backend sessions (Codex and Claude). It
 - `ProviderRuntimeEvent` -- 30+ canonical event types: `session.state`, `turn.started`, `turn.completed`, `content.stream`, `item.status`, `plan.step`, `approval.requested`, `user-input.requested`, `error`, `session.exit`, etc.
 
 **Gascity integration surface:**
+
 - Each provider adapter is a gascity formula executor -- it runs a coding agent and streams structured events. The `ProviderAdapterShape` interface is the contract a new gascity-native adapter would implement. `ProviderSessionDirectory` maps to gascity's bead-to-executor assignment. The `ProviderRuntimeEvent` stream (30+ types) is the raw event feed that gascity could consume for observability, replay, or multi-agent coordination. Adding a new provider (e.g., a gascity-orchestrated agent pool) means implementing `ProviderAdapterShape` and registering it in `ProviderAdapterRegistry`.
 
 ---
@@ -81,6 +87,7 @@ The provider domain manages coding-agent backend sessions (Codex and Claude). It
 The persistence domain owns all SQLite-backed storage: the event store, projection tables, and provider session runtime state. It uses Effect's `SqliteClient` with a migration framework. Projection tables are populated by `ProjectionPipeline` from the orchestration event stream and serve the read model for snapshot queries.
 
 **Key types/functions:**
+
 - `OrchestrationEventStore` -- service: `append(event)`, `readFromSequence(seq, limit)`, `readAll()`
 - `OrchestrationCommandReceipts` -- service: `find(commandId)`, `insert(receipt)` -- deduplication
 - `ProjectionState` -- stores the last-applied sequence for projection recovery
@@ -100,6 +107,7 @@ The persistence domain owns all SQLite-backed storage: the event store, projecti
 - `Sqlite.ts` (Layer) -- configures SQLite client with WAL mode and runs migrations
 
 **Gascity integration surface:**
+
 - The event store is the system of record. Gascity could read `OrchestrationEventStore.readFromSequence()` to replay history into its own projections. The projection table structure maps to gascity bead state tables. `DoltLifecycle` enables Dolt-based version control of the SQLite state, which maps to gascity's convoy branching model. The migration framework could be extended for gascity-specific projection tables.
 
 ---
@@ -109,6 +117,7 @@ The persistence domain owns all SQLite-backed storage: the event store, projecti
 Defines all process-level server configuration: paths, ports, runtime mode, observability settings. `ServerConfig` is an Effect service providing the shape consumed by all other layers. It derives paths from a base directory and ensures directory structure on startup.
 
 **Key types/functions:**
+
 - `ServerConfig` -- Effect service tag for `ServerConfigShape`
 - `ServerConfigShape` -- interface: `logLevel`, `mode` ("web" | "desktop"), `port`, `host`, `cwd`, `baseDir`, `staticDir`, `devUrl`, `authToken`, `autoBootstrapProjectFromCwd`, `dbPath`, `worktreesDir`, `logsDir`, `settingsPath`, etc.
 - `ServerDerivedPaths` -- derived: `stateDir`, `dbPath`, `keybindingsConfigPath`, `settingsPath`, `worktreesDir`, `attachmentsDir`, `logsDir`, `providerLogsDir`, `terminalLogsDir`, `anonymousIdPath`
@@ -119,6 +128,7 @@ Defines all process-level server configuration: paths, ports, runtime mode, obse
 - `DEFAULT_PORT` -- 3773
 
 **Gascity integration surface:**
+
 - `ServerConfig` is the entry point for gascity to configure T3 Code as a managed service. `autoBootstrapProjectFromCwd` could be set by gascity when spawning T3 instances per workspace. The derived paths structure maps to gascity's per-instance isolation model. The `authToken` enables gascity to secure WebSocket connections.
 
 ---
@@ -128,6 +138,7 @@ Defines all process-level server configuration: paths, ports, runtime mode, obse
 Composes the entire server runtime as a layered Effect dependency graph. It merges all service layers (orchestration, provider, persistence, git, terminal, workspace, keybindings, settings, observability, analytics) into a single `makeServerLayer`, then adds HTTP routing and the WebSocket RPC endpoint.
 
 **Key types/functions:**
+
 - `makeServerLayer` -- the complete server Layer, requires only `ServerConfig`
 - `runServer` -- launches the server layer (Effect.launch)
 - `makeRoutesLayer` -- merges: `attachmentsRouteLayer`, `otlpTracesProxyRouteLayer`, `projectFaviconRouteLayer`, `staticAndDevRouteLayer`, `websocketRpcRouteLayer`
@@ -143,6 +154,7 @@ Composes the entire server runtime as a layered Effect dependency graph. It merg
 - `PlatformServicesLive` -- runtime-detected platform services
 
 **Gascity integration surface:**
+
 - The layer composition pattern is a gascity formula graph. Each service layer is an independently testable unit that gascity could compose selectively. `ReactorLayerLive` is the event-driven automation layer -- gascity convoys could add custom reactors. The platform detection (Bun vs Node) maps to gascity's runtime environment management. `runServer` is what gascity would call to spawn a T3 Code instance.
 
 ---
@@ -152,6 +164,7 @@ Composes the entire server runtime as a layered Effect dependency graph. It merg
 Reads a JSON envelope from a file descriptor at server startup. This enables the desktop app (or any parent process) to pass initial configuration (e.g., project path, auth token) to the server through an fd-pipe rather than CLI arguments or environment variables.
 
 **Key types/functions:**
+
 - `readBootstrapEnvelope(schema, fd, options?)` -- reads one JSON line from fd, decodes with Effect Schema, returns `Option<A>`
 - `BootstrapError` -- tagged error for fd-read/decode failures
 - `resolveFdPath(fd, platform)` -- resolves `/proc/self/fd/N` or `/dev/fd/N` by platform
@@ -159,6 +172,7 @@ Reads a JSON envelope from a file descriptor at server startup. This enables the
 - `makeBootstrapInputStream(fd)` -- creates readable stream from fd with fallback strategies
 
 **Gascity integration surface:**
+
 - The bootstrap envelope pattern maps to gascity's bead initialization protocol. When gascity spawns a T3 Code process as a bead executor, it can pass a bootstrap envelope containing the bead ID, convoy context, and formula parameters through the fd pipe. This avoids environment variable leakage and enables structured initialization.
 
 ---
@@ -168,6 +182,7 @@ Reads a JSON envelope from a file descriptor at server startup. This enables the
 Electron desktop shell that spawns the Node.js server as a child process, creates a BrowserWindow pointed at the server's WebSocket URL, and bridges native OS features (file picker, context menus, theme, auto-update) to the web UI via IPC channels.
 
 **Key types/functions:**
+
 - `DesktopBridge` -- IPC interface exposed to renderer: `getWsUrl`, `pickFolder`, `confirm`, `setTheme`, `showContextMenu`, `openExternal`, `onMenuAction`, `getUpdateState`, `checkForUpdate`, `downloadUpdate`, `installUpdate`, `onUpdateState`
 - `DesktopUpdateState` -- auto-updater state machine: status (idle/checking/available/downloading/downloaded/error), versions, progress
 - `DesktopRuntimeInfo` -- host/app architecture detection (arm64 translation awareness)
@@ -176,6 +191,7 @@ Electron desktop shell that spawns the Node.js server as a child process, create
 - Protocol handler: `t3://` custom protocol for deep linking
 
 **Gascity integration surface:**
+
 - The desktop app is a distribution shell. Gascity could replace or extend it to embed T3 Code as a panel in a gascity desktop client. The `DesktopBridge` IPC interface maps to gascity's host-to-bead communication channel. The auto-updater state machine maps to a gascity formula for managed deployments. The `t3://` protocol handler enables gascity deep links to specific threads/projects.
 
 ---
@@ -187,6 +203,7 @@ Electron desktop shell that spawns the Node.js server as a child process, create
 Zustand store that holds the entire client-side application state: projects, threads, sidebar summaries, and per-project thread indices. It consumes `OrchestrationEvent` from the server via a pure `applyOrchestrationEvent()` reducer and maps server schemas to client-side types. The store is the single source of truth for the UI.
 
 **Key types/functions:**
+
 - `AppState` -- shape: `projects: Project[]`, `threads: Thread[]`, `sidebarThreadsById: Record<string, SidebarThreadSummary>`, `threadIdsByProjectId: Record<string, ThreadId[]>`, `bootstrapComplete: boolean`
 - `useStore` -- Zustand hook
 - `applyOrchestrationEvent(state, event)` -- pure reducer handling all 22 event types
@@ -200,6 +217,7 @@ Zustand store that holds the entire client-side application state: projects, thr
 - Limits: `MAX_THREAD_MESSAGES=2000`, `MAX_THREAD_CHECKPOINTS=500`, `MAX_THREAD_ACTIVITIES=500`
 
 **Gascity integration surface:**
+
 - The store's event-sourced reducer (`applyOrchestrationEvent`) could be reused by gascity to maintain a synchronized read model in a different UI context. `SidebarThreadSummary` provides the minimal projection gascity needs for a dashboard bead list. The `customMetadata` field on `Thread` (opaque key-value, `gc.*` keys) is the designated extension point for gascity-specific metadata on threads.
 
 ---
@@ -209,6 +227,7 @@ Zustand store that holds the entire client-side application state: projects, thr
 Client-side type definitions for the UI layer, mapping from server contracts to UI-friendly shapes.
 
 **Key types/functions:**
+
 - `Thread` -- id, projectId, title, modelSelection, runtimeMode, interactionMode, session, messages, proposedPlans, error, latestTurn, branch, worktreePath, turnDiffSummaries, activities, customMetadata
 - `ChatMessage` -- id, role (user/assistant/system), text, attachments, turnId, createdAt, streaming, completedAt
 - `Project` -- id, name, cwd, defaultModelSelection, scripts
@@ -222,6 +241,7 @@ Client-side type definitions for the UI layer, mapping from server contracts to 
 - `ProjectScript` -- re-export of contract type
 
 **Gascity integration surface:**
+
 - `Thread.customMetadata` is the primary extension point for gascity bead metadata (e.g., `gc.beadId`, `gc.convoyId`, `gc.formulaRef`). `SidebarThreadSummary` is the minimal data shape gascity needs for convoy dashboards. The `ProposedPlan` type maps to gascity formula proposals (plan-then-execute pattern). `TurnDiffSummary` maps to bead checkpoint diffs.
 
 ---
@@ -231,6 +251,7 @@ Client-side type definitions for the UI layer, mapping from server contracts to 
 Pure functions for deriving UI state from thread activities: pending approvals, pending user inputs, work log entries, active plans, proposed plan state, and timeline entries. This is the business logic layer between the store and components.
 
 **Key types/functions:**
+
 - `derivePendingApprovals(activities)` -- extracts open approval requests from activities
 - `derivePendingUserInputs(activities)` -- extracts open user-input requests
 - `deriveWorkLog(activities, latestTurn)` -- builds `WorkLogEntry[]` from activities, collapsing tool lifecycles
@@ -247,6 +268,7 @@ Pure functions for deriving UI state from thread activities: pending approvals, 
 - `TimelineEntry` -- discriminated union: message | proposed-plan | work
 
 **Gascity integration surface:**
+
 - `derivePendingApprovals()` maps to gascity's bead approval queue -- gascity could auto-respond based on formula policies. `deriveActivePlan()` maps to formula step tracking. `deriveTimelineEntries()` provides the unified event feed gascity needs for bead activity dashboards. The `WorkLogEntry` type maps to gascity observability records.
 
 ---
@@ -280,6 +302,7 @@ Key functions: `deriveChatViewState()`, `deriveScrollBehavior()`, `isComposerDis
 **PullRequestThreadDialog.tsx** -- Dialog for creating threads from pull request URLs.
 
 **Gascity integration surface:**
+
 - `Sidebar.tsx` is the primary UI for gascity convoy visualization -- projects map to convoys, threads map to beads. The sort/filter/group logic in `Sidebar.logic.ts` could be extended for gascity-specific grouping (by convoy, formula, status). `PlanSidebar.tsx` maps to gascity formula proposals. `ChatView.tsx` is the bead detail view. Custom metadata (`gc.*`) could drive additional UI elements in these components. `GitActionsControl.tsx` maps to gascity's stacked action patterns.
 
 ---
@@ -289,6 +312,7 @@ Key functions: `deriveChatViewState()`, `deriveScrollBehavior()`, `isComposerDis
 TanStack Router routes defining the page structure.
 
 **Key routes:**
+
 - `__root.tsx` -- Root route: bootstraps server state sync (orchestration events, server config, terminal events, lifecycle events), runs settings migration, manages WebSocket reconnection coordination, and renders the app shell
 - `_chat.tsx` -- Chat layout: renders sidebar + content area
 - `_chat.$threadId.tsx` -- Thread detail page: renders `ChatView` for a specific thread
@@ -300,6 +324,7 @@ TanStack Router routes defining the page structure.
 Key functions in `__root.tsx`: `ServerStateBootstrap()` -- initializes orchestration event subscription, replays missed events, derives batch effects; `EventRouter()` -- routes orchestration events to store updates; `createOrchestrationRecoveryCoordinator()` -- handles sequence gaps with retry logic
 
 **Gascity integration surface:**
+
 - `__root.tsx` is the orchestration event subscription entry point -- gascity could replace or wrap `ServerStateBootstrap` to inject convoy-level event routing. The recovery coordinator maps to gascity's event replay resilience pattern. Routes could be extended with gascity-specific pages (convoy dashboard, formula editor, bead grid view).
 
 ---
@@ -323,6 +348,7 @@ Key functions in `__root.tsx`: `ServerStateBootstrap()` -- initializes orchestra
 **useTheme** -- theme management (light/dark/system).
 
 **Gascity integration surface:**
+
 - `useThreadActions` maps to gascity bead lifecycle operations. `useHandleNewThread` maps to bead creation with formula parameters (branch, worktree, envMode). `useSettings` could be extended to include gascity-specific settings (convoy preferences, formula defaults). These hooks are the API surface gascity UI extensions would consume.
 
 ---
@@ -332,6 +358,7 @@ Key functions in `__root.tsx`: `ServerStateBootstrap()` -- initializes orchestra
 The WebSocket transport layer connects the web UI to the server. `WsTransport` manages the WebSocket connection lifecycle with auto-reconnect and streaming subscription support. `WsRpcClient` wraps the transport with typed RPC methods matching the server's `WsRpcGroup`. `wsNativeApi.ts` adapts the RPC client to the `NativeApi` interface, providing a unified API whether running in desktop (Electron IPC) or web (WebSocket) mode.
 
 **Key types/functions:**
+
 - `WsTransport` -- class: `request(execute)`, `requestStream(connect, listener)`, `subscribe(connect, listener, options)`, `reconnect()`, `dispose()`
 - `WsRpcClient` -- typed interface with domains: `terminal`, `projects`, `shell`, `git`, `server`, `orchestration` -- each with typed method signatures
 - `createWsNativeApi()` -- creates a `NativeApi` instance backed by the WsRpcClient, with desktop bridge fallbacks for dialogs/context menus
@@ -340,6 +367,7 @@ The WebSocket transport layer connects the web UI to the server. `WsTransport` m
 - Subscription retry: auto-reconnect with configurable delay (default 250ms), sequence-aware resubscription
 
 **Gascity integration surface:**
+
 - `NativeApi` is the client-side integration contract. Gascity could provide an alternative `NativeApi` implementation that routes through gascity's own transport (e.g., gascity relay instead of direct WebSocket). The `WsTransport.subscribe()` pattern maps to gascity's event subscription model. The `orchestration` domain on `NativeApi` (`getSnapshot`, `dispatchCommand`, `onDomainEvent`) is the complete client-side bead control surface.
 
 ---
@@ -351,6 +379,7 @@ The WebSocket transport layer connects the web UI to the server. `WsTransport` m
 The canonical domain model for all orchestration state. Defines schemas for projects, threads, messages, turns, sessions, activities, checkpoints, proposed plans, commands, and events using Effect Schema. This is the single source of truth for the wire format between server and client.
 
 **Key types:**
+
 - `OrchestrationThread` -- id, projectId, title, modelSelection, runtimeMode, interactionMode, branch, worktreePath, latestTurn, messages, proposedPlans, activities, checkpoints, session, customMetadata, archivedAt, deletedAt
 - `OrchestrationProject` -- id, title, workspaceRoot, defaultModelSelection, scripts
 - `OrchestrationMessage` -- id, role (user/assistant/system), text, attachments, turnId, streaming
@@ -372,6 +401,7 @@ The canonical domain model for all orchestration state. Defines schemas for proj
 - `ChatAttachment` / `ChatImageAttachment` -- image attachments with size limits
 
 **Gascity integration surface:**
+
 - This is the core schema library gascity needs. `CustomMetadata` with `gc.*` keys is the designated gascity extension point on threads. Every command and event type is a gascity formula operation. The `OrchestrationReadModel` is the bead snapshot format. `ThreadTurnStartBootstrap` (atomic create+worktree+turn) maps to gascity bead initialization. `ProviderKind` could be extended with a `"gascity"` variant for gascity-native agents. `correlationId` on events maps directly to gascity bead correlation.
 
 ---
@@ -381,6 +411,7 @@ The canonical domain model for all orchestration state. Defines schemas for proj
 Schemas for provider session management and provider-level events (as opposed to orchestration events).
 
 **Key types:**
+
 - `ProviderSession` -- provider, status (connecting/ready/running/error/closed), runtimeMode, cwd, model, threadId, resumeCursor, activeTurnId
 - `ProviderSessionStartInput` -- threadId, provider, cwd, modelSelection, resumeCursor, approvalPolicy, sandboxMode, runtimeMode
 - `ProviderSendTurnInput` -- threadId, input, attachments, modelSelection, interactionMode
@@ -392,6 +423,7 @@ Schemas for provider session management and provider-level events (as opposed to
 - `ProviderEvent` -- id, kind (session/notification/request/error), provider, threadId, method, message, turnId, itemId, requestId, textDelta, payload
 
 **Gascity integration surface:**
+
 - `ProviderSessionStartInput` carries all the parameters gascity needs to start a bead executor. `approvalPolicy` and `sandboxMode` map to gascity formula security settings. `resumeCursor` enables gascity bead resume after interruption.
 
 ---
@@ -401,6 +433,7 @@ Schemas for provider session management and provider-level events (as opposed to
 Detailed schemas for the canonical provider runtime event stream -- the normalized event format that both Codex and Claude adapters emit.
 
 **Key types:**
+
 - `ProviderRuntimeEvent` -- 30+ event variants covering the full provider lifecycle
 - `RuntimeEventRawSource` -- "codex.app-server.notification", "codex.app-server.request", "codex.eventmsg", "claude.sdk.message", "claude.sdk.permission", "codex.sdk.thread-event"
 - `RuntimeSessionState` -- starting/ready/running/waiting/stopped/error
@@ -412,6 +445,7 @@ Detailed schemas for the canonical provider runtime event stream -- the normaliz
 - `UserInputQuestion` -- structured user-input question schema
 
 **Gascity integration surface:**
+
 - The 30+ `ProviderRuntimeEvent` types are the granular observability feed gascity needs for bead monitoring. `RuntimeContentStreamKind` distinguishes reasoning from output -- gascity could use this for cost attribution. `RuntimePlanStepStatus` maps to formula step tracking. A gascity adapter would emit these same event types.
 
 ---
@@ -421,12 +455,14 @@ Detailed schemas for the canonical provider runtime event stream -- the normaliz
 Defines all WebSocket RPC method schemas using Effect RPC. Groups ~35 methods into a single `WsRpcGroup` with typed payloads, success types, and error types.
 
 **Key types:**
+
 - `WsRpcGroup` -- the single RPC group containing all method definitions
 - `WS_METHODS` -- 30 method constants across domains: projects (list/add/remove/searchEntries/writeFile), shell (openInEditor), git (pull/status/runStackedAction/listBranches/createWorktree/removeWorktree/createBranch/checkout/init/resolvePullRequest/preparePullRequestThread), terminal (open/write/resize/clear/restart/close), server (getConfig/refreshProviders/upsertKeybinding/getSettings/updateSettings), subscriptions (orchestrationDomainEvents/terminalEvents/serverConfig/serverLifecycle)
 - `ORCHESTRATION_WS_METHODS` -- 5 orchestration methods: getSnapshot, dispatchCommand, getTurnDiff, getFullThreadDiff, replayEvents
 - Each method defined as `Rpc.make(name, { payload, success, error, stream? })` -- fully typed request/response
 
 **Gascity integration surface:**
+
 - The RPC group is the complete API surface for gascity integration. Gascity could consume these as-is via WebSocket, or gascity could define additional RPC methods (e.g., `gascity.syncConvoyState`, `gascity.registerFormula`) by extending the group.
 
 ---
@@ -436,6 +472,7 @@ Defines all WebSocket RPC method schemas using Effect RPC. Groups ~35 methods in
 Model selection, capabilities, and provider-specific option schemas.
 
 **Key types:**
+
 - `ModelSelection` -- union: CodexModelSelection | ClaudeModelSelection
 - `CodexModelOptions` -- reasoningEffort (xhigh/high/medium/low), fastMode
 - `ClaudeModelOptions` -- thinking, effort (low/medium/high/max/ultrathink), fastMode, contextWindow
@@ -445,6 +482,7 @@ Model selection, capabilities, and provider-specific option schemas.
 - `PROVIDER_DISPLAY_NAMES` -- codex: "Codex", claudeAgent: "Claude"
 
 **Gascity integration surface:**
+
 - Model selection maps to gascity formula resource allocation. `ModelCapabilities` tells gascity what options are available per model. The alias system could be extended for gascity-specific model aliases.
 
 ---
@@ -454,6 +492,7 @@ Model selection, capabilities, and provider-specific option schemas.
 Server configuration, provider status, and lifecycle event schemas.
 
 **Key types:**
+
 - `ServerConfig` -- cwd, keybindingsConfigPath, keybindings, issues, providers, availableEditors, observability, settings
 - `ServerProvider` -- provider, enabled, installed, version, status (ready/warning/error/disabled), auth (authenticated/unauthenticated/unknown), models
 - `ServerProviderModel` -- slug, name, isCustom, capabilities
@@ -462,6 +501,7 @@ Server configuration, provider status, and lifecycle event schemas.
 - `ServerLifecycleStreamEvent` -- welcome (cwd, projectName, bootstrapProjectId, bootstrapThreadId) | ready (at)
 
 **Gascity integration surface:**
+
 - `ServerProvider` status feeds gascity health monitoring. `ServerLifecycleStreamEvent.welcome` provides the bootstrap context gascity needs to correlate a T3 instance with a convoy. OTLP endpoints enable gascity to aggregate traces/metrics.
 
 ---
@@ -471,6 +511,7 @@ Server configuration, provider status, and lifecycle event schemas.
 Unified settings schema split between server-authoritative and client-only settings.
 
 **Key types:**
+
 - `ServerSettings` -- enableAssistantStreaming, defaultThreadEnvMode (local/worktree), textGenerationModelSelection, providers (codex: CodexSettings, claudeAgent: ClaudeSettings), observability
 - `ClientSettings` -- confirmThreadArchive, confirmThreadDelete, diffWordWrap, sidebarProjectSortOrder, sidebarThreadSortOrder, timestampFormat
 - `UnifiedSettings` -- `ServerSettings & ClientSettings`
@@ -480,6 +521,7 @@ Unified settings schema split between server-authoritative and client-only setti
 - `ThreadEnvMode` -- "local" | "worktree"
 
 **Gascity integration surface:**
+
 - `ServerSettings` is where gascity-specific defaults would live (e.g., default formula parameters, convoy-level model policies). `defaultThreadEnvMode` maps to gascity's bead isolation strategy. Provider settings enable gascity to configure agent binaries per deployment.
 
 ---
@@ -489,12 +531,14 @@ Unified settings schema split between server-authoritative and client-only setti
 Desktop IPC bridge and the universal `NativeApi` interface that abstracts over desktop (Electron IPC) and web (WebSocket RPC) transports.
 
 **Key types:**
+
 - `NativeApi` -- universal interface: `dialogs` (pickFolder, confirm), `terminal` (open/write/resize/clear/restart/close/onEvent), `projects` (searchEntries, writeFile), `shell` (openInEditor, openExternal), `git` (full branch/worktree/PR API), `contextMenu` (show), `server` (getConfig/refreshProviders/upsertKeybinding/getSettings/updateSettings), `orchestration` (getSnapshot/dispatchCommand/getTurnDiff/getFullThreadDiff/replayEvents/onDomainEvent)
 - `DesktopBridge` -- Electron-specific bridge: getWsUrl, pickFolder, confirm, setTheme, showContextMenu, openExternal, onMenuAction, update state machine
 - `DesktopUpdateState` -- enabled, status, currentVersion, architecture info, versions, downloadPercent, errors
 - `ContextMenuItem<T>` -- generic context menu item
 
 **Gascity integration surface:**
+
 - `NativeApi` is the complete client-side control surface. Gascity could implement a `GascityNativeApi` that wraps the WebSocket transport with convoy-level routing, or inject gascity-specific methods alongside the standard ones. The `orchestration` namespace on `NativeApi` is the bead command/query API.
 
 ---
@@ -504,6 +548,7 @@ Desktop IPC bridge and the universal `NativeApi` interface that abstracts over d
 Runtime utilities consumed by both server and web via explicit subpath exports. No barrel index -- each module is imported individually.
 
 **Subpath exports:**
+
 - `@t3tools/shared/model` -- `resolveModelSlugForProvider()`, `resolveModelCapabilities()`, `isKnownModel()`, model alias resolution, capability definitions
 - `@t3tools/shared/git` -- git-related utilities (branch name validation, worktree path helpers, PR URL parsing)
 - `@t3tools/shared/logging` -- `RotatingFileSink` -- rotating NDJSON file logger with size/count limits
@@ -518,4 +563,5 @@ Runtime utilities consumed by both server and web via explicit subpath exports. 
 - `@t3tools/shared/projectScripts` -- project setup script resolution
 
 **Gascity integration surface:**
+
 - `DrainableWorker` and `KeyedCoalescingWorker` are async coordination primitives gascity could reuse for bead process management. `RotatingFileSink` maps to gascity's log management. `schemaJson` provides the serialization layer for gascity's wire protocol. `deepMerge` enables gascity settings overlays. `Net` port allocation is useful for gascity-spawned T3 instances.
