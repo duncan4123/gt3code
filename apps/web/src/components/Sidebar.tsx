@@ -1439,9 +1439,8 @@ export default function Sidebar() {
         const showEmptyThreadState = project.expanded && projectThreads.length === 0;
 
         // Group threads by convoy for virtual folder rendering
-        const { standaloneThreads: standaloneThreadIds, convoyGroups } = groupThreadsByConvoy(
-          projectThreads,
-        );
+        const { standaloneThreads: standaloneThreadIds, convoyGroups } =
+          groupThreadsByConvoy(projectThreads);
 
         return {
           hasHiddenThreads,

@@ -10,10 +10,7 @@ interface GcPanelProps {
 
 const GcPanel = memo(function GcPanel({ threadId }: GcPanelProps) {
   const thread = useStore((store) => store.threads.find((entry) => entry.id === threadId) ?? null);
-  const gcMeta = useMemo(
-    () => parseGcMeta(thread?.customMetadata),
-    [thread?.customMetadata],
-  );
+  const gcMeta = useMemo(() => parseGcMeta(thread?.customMetadata), [thread?.customMetadata]);
 
   const [threadContext, setThreadContext] = useState<GcThreadContextResult | null>(null);
 
@@ -39,12 +36,7 @@ const GcPanel = memo(function GcPanel({ threadId }: GcPanelProps) {
     return null;
   }
 
-  return (
-    <GcContextSidebar
-      metadata={thread.customMetadata}
-      threadContext={threadContext}
-    />
-  );
+  return <GcContextSidebar metadata={thread.customMetadata} threadContext={threadContext} />;
 });
 
 export default GcPanel;

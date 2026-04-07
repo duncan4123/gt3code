@@ -128,10 +128,7 @@ const GcContextSidebar = memo(function GcContextSidebar({
               label="Convoy"
               value={convoy?.title ?? gcMeta.convoyTitle ?? gcMeta.convoy}
             />
-            <ContextRow
-              label="Status"
-              value={convoy?.status ?? gcMeta.convoyStatus}
-            />
+            <ContextRow label="Status" value={convoy?.status ?? gcMeta.convoyStatus} />
             {convoyProgress && (
               <ProgressBar closed={convoyProgress.closed} total={convoyProgress.total} />
             )}
@@ -146,7 +143,10 @@ const GcContextSidebar = memo(function GcContextSidebar({
                     onClick={() => onSelectWorkedBead?.(child.id)}
                   >
                     <span className="truncate">{child.title}</span>
-                    <Badge variant={child.status === "closed" ? "secondary" : "outline"} className="ml-2 shrink-0">
+                    <Badge
+                      variant={child.status === "closed" ? "secondary" : "outline"}
+                      className="ml-2 shrink-0"
+                    >
                       {child.status}
                     </Badge>
                   </button>
