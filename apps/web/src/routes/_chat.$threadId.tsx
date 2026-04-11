@@ -3,6 +3,7 @@ import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/reac
 import { Suspense, lazy, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import ChatView from "../components/ChatView";
+import GcPanel from "../components/GcPanel";
 import { DiffWorkerPoolProvider } from "../components/DiffWorkerPoolProvider";
 import {
   DiffPanelHeaderSkeleton,
@@ -22,15 +23,11 @@ import { Sheet, SheetPopup } from "../components/ui/sheet";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 
 const DiffPanel = lazy(() => import("../components/DiffPanel"));
-const GcPanel = lazy(() => import("../components/GcPanel"));
 const DIFF_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1180px)";
 const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
 const DIFF_INLINE_DEFAULT_WIDTH = "clamp(28rem,48vw,44rem)";
 const DIFF_INLINE_SIDEBAR_MIN_WIDTH = 26 * 16;
 const COMPOSER_COMPACT_MIN_LEFT_CONTROLS_WIDTH_PX = 208;
-const GC_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_gc_sidebar_width";
-const GC_INLINE_DEFAULT_WIDTH = "clamp(20rem,32vw,24rem)";
-const GC_INLINE_SIDEBAR_MIN_WIDTH = 18 * 16;
 
 type SidebarWidthGuard = (input: { nextWidth: number; wrapper: HTMLElement }) => boolean;
 
@@ -124,28 +121,29 @@ const LazyDiffPanel = (props: { mode: DiffPanelMode }) => {
 };
 
 const DiffPanelInlineSidebar = (props: {
-  diffOpen: boolean;
-  onCloseDiff: () => void;
-  onOpenDiff: () => void;
-  renderDiffContent: boolean;
+  open: boolean;
+  onClose: () => void;
+  onOpen: () => void;
+  renderContent: boolean;
+  children: ReactNode;
 }) => {
-  const { diffOpen, onCloseDiff, onOpenDiff, renderDiffContent } = props;
+  const { open, onClose, onOpen, renderContent, children } = props;
   const shouldAcceptInlineSidebarWidth = useComposerSidebarWidthGuard();
   const onOpenChange = useCallback(
     (open: boolean) => {
       if (open) {
-        onOpenDiff();
+        onOpen();
         return;
       }
-      onCloseDiff();
+      onClose();
     },
-    [onCloseDiff, onOpenDiff],
+    [onClose, onOpen],
   );
 
   return (
     <SidebarProvider
       defaultOpen={false}
-      open={diffOpen}
+      open={open}
       onOpenChange={onOpenChange}
       className="w-auto min-h-0 flex-none bg-transparent"
       style={{ "--sidebar-width": DIFF_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
@@ -160,40 +158,7 @@ const DiffPanelInlineSidebar = (props: {
           storageKey: DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY,
         }}
       >
-        {renderDiffContent ? <LazyDiffPanel mode="sidebar" /> : null}
-        <SidebarRail />
-      </Sidebar>
-    </SidebarProvider>
-  );
-};
-
-const GcPanelPlaceholder = () => (
-  <div className="px-4 py-3 text-[11px] text-muted-foreground/70">Loading GC context...</div>
-);
-
-const GcContextSidebarLayout = (props: { threadId: ThreadId; children: ReactNode }) => {
-  const shouldAcceptInlineSidebarWidth = useComposerSidebarWidthGuard();
-
-  return (
-    <SidebarProvider
-      defaultOpen
-      className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground"
-      style={{ "--sidebar-width": GC_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
-    >
-      {props.children}
-      <Sidebar
-        side="right"
-        collapsible="icon"
-        className="border-l border-border bg-card text-foreground"
-        resizable={{
-          minWidth: GC_INLINE_SIDEBAR_MIN_WIDTH,
-          shouldAcceptWidth: shouldAcceptInlineSidebarWidth,
-          storageKey: GC_INLINE_SIDEBAR_WIDTH_STORAGE_KEY,
-        }}
-      >
-        <Suspense fallback={<GcPanelPlaceholder />}>
-          <GcPanel threadId={props.threadId} />
-        </Suspense>
+        {renderContent ? children : null}
         <SidebarRail />
       </Sidebar>
     </SidebarProvider>
@@ -219,16 +184,21 @@ function ChatThreadRouteView() {
     () => parseGcMeta(threadCustomMetadata).isGcManaged,
     [threadCustomMetadata],
   );
-  const diffOpen = search.diff === "1";
+  const panel = search.panel;
+  const diffOpen = panel === "diff" || search.diff === "1";
+  const gcOpen = isGcManaged && panel === "gc";
   const shouldUseDiffSheet = useMediaQuery(DIFF_INLINE_LAYOUT_MEDIA_QUERY);
   // TanStack Router keeps active route components mounted across param-only navigations
   // unless remountDeps are configured, so this stays warm across thread switches.
   const [hasOpenedDiff, setHasOpenedDiff] = useState(diffOpen);
-  const closeDiff = useCallback(() => {
+  const closePanel = useCallback(() => {
     void navigate({
       to: "/$threadId",
       params: { threadId },
-      search: { diff: undefined },
+      search: (previous) => {
+        const rest = stripDiffSearchParams(previous);
+        return rest;
+      },
     });
   }, [navigate, threadId]);
   const openDiff = useCallback(() => {
@@ -241,6 +211,26 @@ function ChatThreadRouteView() {
       },
     });
   }, [navigate, threadId]);
+  const openGc = useCallback(() => {
+    if (!isGcManaged) {
+      return;
+    }
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      search: (previous) => {
+        const rest = stripDiffSearchParams(previous);
+        return { ...rest, panel: "gc" };
+      },
+    });
+  }, [isGcManaged, navigate, threadId]);
+  const toggleGc = useCallback(() => {
+    if (gcOpen) {
+      closePanel();
+      return;
+    }
+    openGc();
+  }, [closePanel, gcOpen, openGc]);
 
   useEffect(() => {
     if (diffOpen) {
@@ -264,36 +254,41 @@ function ChatThreadRouteView() {
   }
 
   const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
+  const renderRightSidebarContent = diffOpen || gcOpen || hasOpenedDiff;
   const chatView = (
     <SidebarInset className="h-dvh  min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-      <ChatView threadId={threadId} />
+      <ChatView threadId={threadId} gcOpen={gcOpen} onToggleGc={toggleGc} />
     </SidebarInset>
   );
-  const chatLayout = isGcManaged ? (
-    <GcContextSidebarLayout threadId={threadId}>{chatView}</GcContextSidebarLayout>
-  ) : (
-    chatView
-  );
-
   if (!shouldUseDiffSheet) {
     return (
       <>
-        {chatLayout}
+        {chatView}
         <DiffPanelInlineSidebar
-          diffOpen={diffOpen}
-          onCloseDiff={closeDiff}
-          onOpenDiff={openDiff}
-          renderDiffContent={shouldRenderDiffContent}
-        />
+          open={diffOpen || gcOpen}
+          onClose={closePanel}
+          onOpen={diffOpen ? openDiff : openGc}
+          renderContent={renderRightSidebarContent}
+        >
+          {gcOpen ? (
+            <GcPanel threadId={threadId} />
+          ) : shouldRenderDiffContent ? (
+            <LazyDiffPanel mode="sidebar" />
+          ) : null}
+        </DiffPanelInlineSidebar>
       </>
     );
   }
 
   return (
     <>
-      {chatLayout}
-      <DiffPanelSheet diffOpen={diffOpen} onCloseDiff={closeDiff}>
-        {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
+      {chatView}
+      <DiffPanelSheet diffOpen={diffOpen || gcOpen} onCloseDiff={closePanel}>
+        {gcOpen ? (
+          <GcPanel threadId={threadId} />
+        ) : shouldRenderDiffContent ? (
+          <LazyDiffPanel mode="sheet" />
+        ) : null}
       </DiffPanelSheet>
     </>
   );

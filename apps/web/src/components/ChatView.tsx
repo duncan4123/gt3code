@@ -330,6 +330,8 @@ const terminalContextIdListsEqual = (
 
 interface ChatViewProps {
   threadId: ThreadId;
+  gcOpen?: boolean;
+  onToggleGc?: () => void;
 }
 
 interface TerminalLaunchContext {
@@ -574,7 +576,7 @@ function PersistentThreadTerminalDrawer({
   );
 }
 
-export default function ChatView({ threadId }: ChatViewProps) {
+export default function ChatView({ threadId, gcOpen = false, onToggleGc }: ChatViewProps) {
   const serverThread = useThreadById(threadId);
   const setStoreThreadError = useStore((store) => store.setError);
   const markThreadVisited = useUiStateStore((store) => store.markThreadVisited);
@@ -3944,6 +3946,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
           diffOpen={diffOpen}
+          gcOpen={gcOpen}
           onRunProjectScript={(script) => {
             void runProjectScript(script);
           }}
@@ -3952,6 +3955,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           onDeleteProjectScript={deleteProjectScript}
           onToggleTerminal={toggleTerminalVisibility}
           onToggleDiff={onToggleDiff}
+          onToggleGc={onToggleGc ?? (() => {})}
         />
       </header>
 
