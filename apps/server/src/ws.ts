@@ -9,6 +9,7 @@ import {
   type OrchestrationEvent,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetSnapshotError,
+  OrchestrationSearchThreadMessagesError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_WS_METHODS,
   ProjectSearchEntriesError,
@@ -435,6 +436,20 @@ const WsRpcLayer = WsRpcGroup.toLayer(
               (cause) =>
                 new OrchestrationReplayEventsError({
                   message: "Failed to replay orchestration events",
+                  cause,
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "orchestration" },
+        ),
+      [ORCHESTRATION_WS_METHODS.searchThreadMessages]: (input) =>
+        observeRpcEffect(
+          ORCHESTRATION_WS_METHODS.searchThreadMessages,
+          projectionSnapshotQuery.searchThreadMessages(input.query, input.limit).pipe(
+            Effect.mapError(
+              (cause) =>
+                new OrchestrationSearchThreadMessagesError({
+                  message: "Failed to search thread messages",
                   cause,
                 }),
             ),

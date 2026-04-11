@@ -1030,15 +1030,11 @@ export default function ChatView({ threadId }: ChatViewProps) {
     [selectedModel, selectedModelOptionsForDispatch, selectedProvider],
   );
   const selectedModelForPicker = selectedModel;
-  const phase = derivePhase(activeThread?.session ?? null);
+  const phase = derivePhase(activeThread?.session ?? null, activeLatestTurn);
   const threadActivities = activeThread?.activities ?? EMPTY_ACTIVITIES;
   const workLogEntries = useMemo(
     () => deriveWorkLogEntries(threadActivities, activeLatestTurn?.turnId ?? undefined),
     [activeLatestTurn?.turnId, threadActivities],
-  );
-  const activityPayloadById = useMemo(
-    () => new Map(threadActivities.map((a) => [a.id, a.payload as unknown])),
-    [threadActivities],
   );
   const latestTurnHasToolActivity = useMemo(
     () => hasToolActivityForTurn(threadActivities, activeLatestTurn?.turnId),
@@ -4009,7 +4005,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
                 resolvedTheme={resolvedTheme}
                 timestampFormat={timestampFormat}
                 workspaceRoot={activeProject?.cwd ?? undefined}
-                activityPayloadById={activityPayloadById}
               />
             </div>
 

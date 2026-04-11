@@ -86,7 +86,8 @@ export default Effect.gen(function* () {
 
   yield* sql.unsafe(`
     CREATE TABLE IF NOT EXISTS proj.projection_thread_messages (
-      message_id TEXT PRIMARY KEY,
+      row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id TEXT NOT NULL UNIQUE,
       thread_id TEXT NOT NULL,
       turn_id TEXT,
       role TEXT NOT NULL,

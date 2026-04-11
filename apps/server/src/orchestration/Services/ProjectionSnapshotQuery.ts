@@ -10,6 +10,7 @@ import type {
   OrchestrationCheckpointSummary,
   OrchestrationProject,
   OrchestrationReadModel,
+  OrchestrationSearchThreadMessagesResult,
   ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -69,6 +70,11 @@ export interface ProjectionSnapshotQueryShape {
   readonly getThreadCheckpointContext: (
     threadId: ThreadId,
   ) => Effect.Effect<Option.Option<ProjectionThreadCheckpointContext>, ProjectionRepositoryError>;
+
+  readonly searchThreadMessages: (
+    query: string,
+    limit: number,
+  ) => Effect.Effect<OrchestrationSearchThreadMessagesResult, ProjectionRepositoryError>;
 }
 
 /**

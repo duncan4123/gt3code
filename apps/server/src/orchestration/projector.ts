@@ -330,7 +330,7 @@ export function projectEvent(
           if (payload.customMetadata !== undefined) {
             const existing = nextBase.threads.find((t) => t.id === payload.threadId);
             threadUpdate.customMetadata = {
-              ...(existing?.customMetadata ?? {}),
+              ...existing?.customMetadata,
               ...payload.customMetadata,
             };
           }

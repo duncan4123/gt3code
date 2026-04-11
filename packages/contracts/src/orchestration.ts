@@ -21,6 +21,7 @@ export const ORCHESTRATION_WS_METHODS = {
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
   replayEvents: "orchestration.replayEvents",
+  searchThreadMessages: "orchestration.searchThreadMessages",
 } as const;
 
 export const ProviderKind = Schema.Literals(["codex", "claudeAgent"]);
@@ -1045,6 +1046,25 @@ export type OrchestrationReplayEventsInput = typeof OrchestrationReplayEventsInp
 const OrchestrationReplayEventsResult = Schema.Array(OrchestrationEvent);
 export type OrchestrationReplayEventsResult = typeof OrchestrationReplayEventsResult.Type;
 
+export const OrchestrationSearchThreadMessagesInput = Schema.Struct({
+  query: TrimmedNonEmptyString,
+  limit: NonNegativeInt.pipe(Schema.withDecodingDefault(() => 25)),
+});
+export type OrchestrationSearchThreadMessagesInput =
+  typeof OrchestrationSearchThreadMessagesInput.Type;
+
+export const OrchestrationSearchThreadMessagesHit = Schema.Struct({
+  threadId: ThreadId,
+  snippet: Schema.String,
+});
+export type OrchestrationSearchThreadMessagesHit = typeof OrchestrationSearchThreadMessagesHit.Type;
+
+export const OrchestrationSearchThreadMessagesResult = Schema.Struct({
+  results: Schema.Array(OrchestrationSearchThreadMessagesHit),
+});
+export type OrchestrationSearchThreadMessagesResult =
+  typeof OrchestrationSearchThreadMessagesResult.Type;
+
 export const OrchestrationRpcSchemas = {
   getSnapshot: {
     input: OrchestrationGetSnapshotInput,
@@ -1065,6 +1085,10 @@ export const OrchestrationRpcSchemas = {
   replayEvents: {
     input: OrchestrationReplayEventsInput,
     output: OrchestrationReplayEventsResult,
+  },
+  searchThreadMessages: {
+    input: OrchestrationSearchThreadMessagesInput,
+    output: OrchestrationSearchThreadMessagesResult,
   },
 } as const;
 
@@ -1102,6 +1126,14 @@ export class OrchestrationGetFullThreadDiffError extends Schema.TaggedErrorClass
 
 export class OrchestrationReplayEventsError extends Schema.TaggedErrorClass<OrchestrationReplayEventsError>()(
   "OrchestrationReplayEventsError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export class OrchestrationSearchThreadMessagesError extends Schema.TaggedErrorClass<OrchestrationSearchThreadMessagesError>()(
+  "OrchestrationSearchThreadMessagesError",
   {
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect),

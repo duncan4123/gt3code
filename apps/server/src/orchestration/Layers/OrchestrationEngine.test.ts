@@ -146,6 +146,7 @@ describe("OrchestrationEngine", () => {
           getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
           getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
           getThreadCheckpointContext: () => Effect.succeed(Option.none()),
+          searchThreadMessages: () => Effect.succeed({ results: [] }),
         }),
       ),
       Layer.provide(

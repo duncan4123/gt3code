@@ -15,7 +15,7 @@ import {
 
 const ProjectionThreadActivityDbRowSchema = ProjectionThreadActivity.mapFields(
   Struct.assign({
-    payload: Schema.fromJsonString(Schema.Unknown),
+    payload: Schema.String,
     sequence: Schema.NullOr(NonNegativeInt),
   }),
 );
@@ -25,6 +25,18 @@ function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: st
     Schema.isSchemaError(cause)
       ? toPersistenceDecodeError(decodeOperation)(cause)
       : toPersistenceSqlError(sqlOperation)(cause);
+}
+
+function parseThreadActivityPayload(payloadJson: string, activityId: string): unknown {
+  try {
+    return JSON.parse(payloadJson);
+  } catch (error) {
+    return {
+      _tag: "InvalidThreadActivityPayloadJson",
+      activityId,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 const makeProjectionThreadActivityRepository = Effect.gen(function* () {
@@ -129,7 +141,7 @@ const makeProjectionThreadActivityRepository = Effect.gen(function* () {
           tone: row.tone,
           kind: row.kind,
           summary: row.summary,
-          payload: row.payload,
+          payload: parseThreadActivityPayload(row.payload, row.activityId),
           ...(row.sequence !== null ? { sequence: row.sequence } : {}),
           createdAt: row.createdAt,
         })),

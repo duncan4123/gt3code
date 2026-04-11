@@ -2,7 +2,7 @@ import * as React from "react";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import type { SidebarThreadSummary, Thread } from "../types";
 import { cn } from "../lib/utils";
-import { isLatestTurnSettled } from "../session-logic";
+import { isLatestTurnSettled, isSessionActivelyRunning } from "../session-logic";
 
 export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
 export const THREAD_JUMP_HINT_SHOW_DELAY_MS = 100;
@@ -17,6 +17,7 @@ type SidebarThreadSortInput = Pick<Thread, "createdAt" | "updatedAt"> & {
   latestUserMessageAt?: string | null;
   messages?: Pick<Thread["messages"][number], "createdAt" | "role">[];
 };
+type SidebarThreadSearchInput = Pick<Thread, "id" | "projectId" | "title">;
 
 export type ThreadTraversalDirection = "previous" | "next";
 
@@ -33,6 +34,18 @@ export interface ThreadStatusPill {
   colorClass: string;
   dotClass: string;
   pulse: boolean;
+}
+
+export interface SidebarThreadSearchHit {
+  threadId: Thread["id"];
+  snippet: string;
+}
+
+export interface SidebarThreadSearchState {
+  isFiltering: boolean;
+  matchingThreadIds: ReadonlySet<string>;
+  snippetByThreadId: ReadonlyMap<string, string>;
+  matchingProjectIds: ReadonlySet<string>;
 }
 
 const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
@@ -175,6 +188,73 @@ export function resolveSidebarNewThreadEnvMode(input: {
   defaultEnvMode: SidebarNewThreadEnvMode;
 }): SidebarNewThreadEnvMode {
   return input.requestedEnvMode ?? input.defaultEnvMode;
+}
+
+export function normalizeThreadSearchQuery(query: string): string | null {
+  const trimmed = query.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const terms = trimmed
+    .split(/\s+/)
+    .map((term) => term.replaceAll('"', "").trim())
+    .filter((term) => term.length > 0);
+  if (terms.length === 0) {
+    return null;
+  }
+
+  return terms.map((term) => `"${term}"`).join(" ");
+}
+
+export function resolveSidebarThreadSearch(input: {
+  query: string;
+  threads: readonly SidebarThreadSearchInput[];
+  ftsHits: readonly SidebarThreadSearchHit[];
+}): SidebarThreadSearchState {
+  const trimmedQuery = input.query.trim();
+  if (trimmedQuery.length === 0) {
+    return {
+      isFiltering: false,
+      matchingThreadIds: new Set(),
+      snippetByThreadId: new Map(),
+      matchingProjectIds: new Set(),
+    };
+  }
+
+  const loweredQuery = trimmedQuery.toLowerCase();
+  const matchingThreadIds = new Set<string>();
+  const snippetByThreadId = new Map<string, string>();
+  const matchingProjectIds = new Set<string>();
+  const threadProjectById = new Map(
+    input.threads.map((thread) => [thread.id, thread.projectId] as const),
+  );
+
+  for (const hit of input.ftsHits) {
+    matchingThreadIds.add(hit.threadId);
+    const projectId = threadProjectById.get(hit.threadId);
+    if (projectId) {
+      matchingProjectIds.add(projectId);
+    }
+    if (!snippetByThreadId.has(hit.threadId)) {
+      snippetByThreadId.set(hit.threadId, hit.snippet);
+    }
+  }
+
+  for (const thread of input.threads) {
+    if (!thread.title.toLowerCase().includes(loweredQuery)) {
+      continue;
+    }
+    matchingThreadIds.add(thread.id);
+    matchingProjectIds.add(thread.projectId);
+  }
+
+  return {
+    isFiltering: true,
+    matchingThreadIds,
+    snippetByThreadId,
+    matchingProjectIds,
+  };
 }
 
 export function resolveSidebarNewThreadSeedContext(input: {
@@ -365,7 +445,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (thread.session?.status === "running") {
+  if (isSessionActivelyRunning(thread.session, thread.latestTurn)) {
     return {
       label: "Working",
       colorClass: "text-sky-600 dark:text-sky-300/80",

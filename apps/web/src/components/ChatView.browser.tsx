@@ -2329,6 +2329,69 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
+  it("restores the send button when the latest turn completed after a stale running session update", async () => {
+    const baseSnapshot = createSnapshotForTargetUser({
+      targetMessageId: "msg-user-stale-running-session" as MessageId,
+      targetText: "stale running session target",
+      sessionStatus: "running",
+    });
+    const thread = baseSnapshot.threads[0];
+    expect(thread).toBeDefined();
+    if (!thread) {
+      throw new Error("Expected browser test fixture thread.");
+    }
+    const threadSession = thread.session;
+    expect(threadSession).toBeDefined();
+    if (!threadSession) {
+      throw new Error("Expected browser test fixture session.");
+    }
+    const snapshot: OrchestrationReadModel = {
+      ...baseSnapshot,
+      threads: [
+        {
+          ...thread,
+          latestTurn: {
+            turnId: "turn-completed" as TurnId,
+            state: "completed",
+            requestedAt: "2026-03-01T12:00:00.000Z",
+            startedAt: "2026-03-01T12:00:01.000Z",
+            completedAt: "2026-03-01T12:00:05.000Z",
+            assistantMessageId: null,
+          },
+          session: {
+            threadId: thread.id,
+            status: "running",
+            providerName: threadSession.providerName,
+            runtimeMode: threadSession.runtimeMode,
+            activeTurnId: null,
+            lastError: threadSession.lastError,
+            updatedAt: "2026-03-01T12:00:03.000Z",
+          },
+        },
+      ],
+    };
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot,
+    });
+
+    try {
+      useComposerDraftStore.getState().setPrompt(THREAD_ID, "send should be available");
+
+      await vi.waitFor(
+        async () => {
+          const sendButton = await waitForSendButton();
+          expect(sendButton.disabled).toBe(false);
+          expect(document.querySelector('button[aria-label="Stop generation"]')).toBeNull();
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
   it("hides the archive action when the pointer leaves a thread row", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,

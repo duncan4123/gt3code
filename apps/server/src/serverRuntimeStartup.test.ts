@@ -53,6 +53,26 @@ it.effect("enqueueCommand fails queued work when readiness fails", () =>
   ),
 );
 
+it.effect("enqueueCommand rejects new work after shutdown begins", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const commandGate = yield* makeCommandGate;
+
+      yield* commandGate.signalCommandReady;
+      yield* commandGate.beginShutdown(
+        new ServerRuntimeStartupError({
+          message: "server shutting down",
+        }),
+      );
+
+      const error = yield* Effect.flip(
+        commandGate.enqueueCommand(Effect.succeed("should-not-run")),
+      );
+      assert.equal(error.message, "server shutting down");
+    }),
+  ),
+);
+
 it.effect("launchStartupHeartbeat does not block the caller while counts are loading", () =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -71,6 +91,7 @@ it.effect("launchStartupHeartbeat does not block the caller while counts are loa
           getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
           getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
           getThreadCheckpointContext: () => Effect.succeed(Option.none()),
+          searchThreadMessages: () => Effect.succeed({ results: [] }),
         }),
         Effect.provideService(AnalyticsService, {
           record: () => Effect.void,

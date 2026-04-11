@@ -9,7 +9,7 @@ import {
   findFirstAvailableOffset,
   resolveModePortOffsets,
   resolveOffset,
-} from "./dev-runner.ts";
+} from "./dev-runner.impl.ts";
 
 it.layer(NodeServices.layer)("dev-runner", (it) => {
   describe("resolveOffset", () => {

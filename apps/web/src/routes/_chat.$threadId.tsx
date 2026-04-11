@@ -28,6 +28,56 @@ const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
 const DIFF_INLINE_DEFAULT_WIDTH = "clamp(28rem,48vw,44rem)";
 const DIFF_INLINE_SIDEBAR_MIN_WIDTH = 26 * 16;
 const COMPOSER_COMPACT_MIN_LEFT_CONTROLS_WIDTH_PX = 208;
+const GC_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_gc_sidebar_width";
+const GC_INLINE_DEFAULT_WIDTH = "clamp(20rem,32vw,24rem)";
+const GC_INLINE_SIDEBAR_MIN_WIDTH = 18 * 16;
+
+type SidebarWidthGuard = (input: { nextWidth: number; wrapper: HTMLElement }) => boolean;
+
+function useComposerSidebarWidthGuard(): SidebarWidthGuard {
+  return useCallback(({ nextWidth, wrapper }) => {
+    const composerForm = document.querySelector<HTMLElement>("[data-chat-composer-form='true']");
+    if (!composerForm) return true;
+    const composerViewport = composerForm.parentElement;
+    if (!composerViewport) return true;
+    const previousSidebarWidth = wrapper.style.getPropertyValue("--sidebar-width");
+    wrapper.style.setProperty("--sidebar-width", `${nextWidth}px`);
+
+    const viewportStyle = window.getComputedStyle(composerViewport);
+    const viewportPaddingLeft = Number.parseFloat(viewportStyle.paddingLeft) || 0;
+    const viewportPaddingRight = Number.parseFloat(viewportStyle.paddingRight) || 0;
+    const viewportContentWidth = Math.max(
+      0,
+      composerViewport.clientWidth - viewportPaddingLeft - viewportPaddingRight,
+    );
+    const formRect = composerForm.getBoundingClientRect();
+    const composerFooter = composerForm.querySelector<HTMLElement>(
+      "[data-chat-composer-footer='true']",
+    );
+    const composerRightActions = composerForm.querySelector<HTMLElement>(
+      "[data-chat-composer-actions='right']",
+    );
+    const composerRightActionsWidth = composerRightActions?.getBoundingClientRect().width ?? 0;
+    const composerFooterGap = composerFooter
+      ? Number.parseFloat(window.getComputedStyle(composerFooter).columnGap) ||
+        Number.parseFloat(window.getComputedStyle(composerFooter).gap) ||
+        0
+      : 0;
+    const minimumComposerWidth =
+      COMPOSER_COMPACT_MIN_LEFT_CONTROLS_WIDTH_PX + composerRightActionsWidth + composerFooterGap;
+    const hasComposerOverflow = composerForm.scrollWidth > composerForm.clientWidth + 0.5;
+    const overflowsViewport = formRect.width > viewportContentWidth + 0.5;
+    const violatesMinimumComposerWidth = composerForm.clientWidth + 0.5 < minimumComposerWidth;
+
+    if (previousSidebarWidth.length > 0) {
+      wrapper.style.setProperty("--sidebar-width", previousSidebarWidth);
+    } else {
+      wrapper.style.removeProperty("--sidebar-width");
+    }
+
+    return !hasComposerOverflow && !overflowsViewport && !violatesMinimumComposerWidth;
+  }, []);
+}
 
 const DiffPanelSheet = (props: {
   children: ReactNode;
@@ -80,6 +130,7 @@ const DiffPanelInlineSidebar = (props: {
   renderDiffContent: boolean;
 }) => {
   const { diffOpen, onCloseDiff, onOpenDiff, renderDiffContent } = props;
+  const shouldAcceptInlineSidebarWidth = useComposerSidebarWidthGuard();
   const onOpenChange = useCallback(
     (open: boolean) => {
       if (open) {
@@ -89,51 +140,6 @@ const DiffPanelInlineSidebar = (props: {
       onCloseDiff();
     },
     [onCloseDiff, onOpenDiff],
-  );
-  const shouldAcceptInlineSidebarWidth = useCallback(
-    ({ nextWidth, wrapper }: { nextWidth: number; wrapper: HTMLElement }) => {
-      const composerForm = document.querySelector<HTMLElement>("[data-chat-composer-form='true']");
-      if (!composerForm) return true;
-      const composerViewport = composerForm.parentElement;
-      if (!composerViewport) return true;
-      const previousSidebarWidth = wrapper.style.getPropertyValue("--sidebar-width");
-      wrapper.style.setProperty("--sidebar-width", `${nextWidth}px`);
-
-      const viewportStyle = window.getComputedStyle(composerViewport);
-      const viewportPaddingLeft = Number.parseFloat(viewportStyle.paddingLeft) || 0;
-      const viewportPaddingRight = Number.parseFloat(viewportStyle.paddingRight) || 0;
-      const viewportContentWidth = Math.max(
-        0,
-        composerViewport.clientWidth - viewportPaddingLeft - viewportPaddingRight,
-      );
-      const formRect = composerForm.getBoundingClientRect();
-      const composerFooter = composerForm.querySelector<HTMLElement>(
-        "[data-chat-composer-footer='true']",
-      );
-      const composerRightActions = composerForm.querySelector<HTMLElement>(
-        "[data-chat-composer-actions='right']",
-      );
-      const composerRightActionsWidth = composerRightActions?.getBoundingClientRect().width ?? 0;
-      const composerFooterGap = composerFooter
-        ? Number.parseFloat(window.getComputedStyle(composerFooter).columnGap) ||
-          Number.parseFloat(window.getComputedStyle(composerFooter).gap) ||
-          0
-        : 0;
-      const minimumComposerWidth =
-        COMPOSER_COMPACT_MIN_LEFT_CONTROLS_WIDTH_PX + composerRightActionsWidth + composerFooterGap;
-      const hasComposerOverflow = composerForm.scrollWidth > composerForm.clientWidth + 0.5;
-      const overflowsViewport = formRect.width > viewportContentWidth + 0.5;
-      const violatesMinimumComposerWidth = composerForm.clientWidth + 0.5 < minimumComposerWidth;
-
-      if (previousSidebarWidth.length > 0) {
-        wrapper.style.setProperty("--sidebar-width", previousSidebarWidth);
-      } else {
-        wrapper.style.removeProperty("--sidebar-width");
-      }
-
-      return !hasComposerOverflow && !overflowsViewport && !violatesMinimumComposerWidth;
-    },
-    [],
   );
 
   return (
@@ -155,6 +161,39 @@ const DiffPanelInlineSidebar = (props: {
         }}
       >
         {renderDiffContent ? <LazyDiffPanel mode="sidebar" /> : null}
+        <SidebarRail />
+      </Sidebar>
+    </SidebarProvider>
+  );
+};
+
+const GcPanelPlaceholder = () => (
+  <div className="px-4 py-3 text-[11px] text-muted-foreground/70">Loading GC context...</div>
+);
+
+const GcContextSidebarLayout = (props: { threadId: ThreadId; children: ReactNode }) => {
+  const shouldAcceptInlineSidebarWidth = useComposerSidebarWidthGuard();
+
+  return (
+    <SidebarProvider
+      defaultOpen
+      className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground"
+      style={{ "--sidebar-width": GC_INLINE_DEFAULT_WIDTH } as React.CSSProperties}
+    >
+      {props.children}
+      <Sidebar
+        side="right"
+        collapsible="icon"
+        className="border-l border-border bg-card text-foreground"
+        resizable={{
+          minWidth: GC_INLINE_SIDEBAR_MIN_WIDTH,
+          shouldAcceptWidth: shouldAcceptInlineSidebarWidth,
+          storageKey: GC_INLINE_SIDEBAR_WIDTH_STORAGE_KEY,
+        }}
+      >
+        <Suspense fallback={<GcPanelPlaceholder />}>
+          <GcPanel threadId={props.threadId} />
+        </Suspense>
         <SidebarRail />
       </Sidebar>
     </SidebarProvider>
@@ -225,24 +264,21 @@ function ChatThreadRouteView() {
   }
 
   const shouldRenderDiffContent = diffOpen || hasOpenedDiff;
+  const chatView = (
+    <SidebarInset className="h-dvh  min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
+      <ChatView threadId={threadId} />
+    </SidebarInset>
+  );
+  const chatLayout = isGcManaged ? (
+    <GcContextSidebarLayout threadId={threadId}>{chatView}</GcContextSidebarLayout>
+  ) : (
+    chatView
+  );
 
   if (!shouldUseDiffSheet) {
     return (
       <>
-        <SidebarInset className="h-dvh  min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-          <div className="flex h-full min-h-0">
-            <div className="min-w-0 flex-1">
-              <ChatView threadId={threadId} />
-            </div>
-            {isGcManaged && (
-              <div className="w-64 shrink-0 border-l border-border overflow-y-auto">
-                <Suspense fallback={null}>
-                  <GcPanel threadId={threadId} />
-                </Suspense>
-              </div>
-            )}
-          </div>
-        </SidebarInset>
+        {chatLayout}
         <DiffPanelInlineSidebar
           diffOpen={diffOpen}
           onCloseDiff={closeDiff}
@@ -255,20 +291,7 @@ function ChatThreadRouteView() {
 
   return (
     <>
-      <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-        <div className="flex h-full min-h-0">
-          <div className="min-w-0 flex-1">
-            <ChatView threadId={threadId} />
-          </div>
-          {isGcManaged && (
-            <div className="w-64 shrink-0 border-l border-border overflow-y-auto">
-              <Suspense fallback={null}>
-                <GcPanel threadId={threadId} />
-              </Suspense>
-            </div>
-          )}
-        </div>
-      </SidebarInset>
+      {chatLayout}
       <DiffPanelSheet diffOpen={diffOpen} onCloseDiff={closeDiff}>
         {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
       </DiffPanelSheet>

@@ -926,19 +926,30 @@ const make = Effect.fn("make")(function* () {
         case "turn.started":
           return !conflictsWithActiveTurn;
         case "turn.completed":
-          if (conflictsWithActiveTurn || missingTurnForActiveTurn) {
-            return false;
-          }
-          // Only the active turn may close the lifecycle state.
-          if (activeTurnId !== null && eventTurnId !== undefined) {
-            return sameId(activeTurnId, eventTurnId);
-          }
-          // If no active turn is tracked, accept completion scoped to this thread.
+          // Always apply turn.completed to prevent sessions stuck at "running".
+          // A completed turn must clear the running state even when the runtime
+          // reports a mismatched turn id.
           return true;
         default:
           return true;
       }
     })();
+    if (
+      event.type === "turn.completed" &&
+      STRICT_PROVIDER_LIFECYCLE_GUARD &&
+      (conflictsWithActiveTurn || missingTurnForActiveTurn)
+    ) {
+      yield* Effect.logWarning(
+        "turn.completed accepted despite turnId mismatch — clearing running state to prevent stuck session",
+        {
+          threadId: thread.id,
+          eventTurnId: eventTurnId ?? "<missing>",
+          activeTurnId: activeTurnId ?? "<none>",
+          conflictsWithActiveTurn,
+          missingTurnForActiveTurn,
+        },
+      );
+    }
     const acceptedTurnStartedSourcePlan =
       event.type === "turn.started" && shouldApplyThreadLifecycle
         ? yield* getSourceProposedPlanReferenceForAcceptedTurnStart(thread.id, eventTurnId)

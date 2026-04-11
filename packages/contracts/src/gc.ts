@@ -114,6 +114,221 @@ export function isGcActivityKind(kind: string): kind is GcActivityKind {
 }
 
 // ---------------------------------------------------------------------------
+// GC config inventory (for sidebar / config-aware UI)
+// ---------------------------------------------------------------------------
+
+export const GcConfigWorkspace = Schema.Struct({
+  name: Schema.String,
+  provider: Schema.optional(Schema.String),
+  suspended: Schema.Boolean,
+  session_template: Schema.optional(Schema.String),
+});
+export type GcConfigWorkspace = typeof GcConfigWorkspace.Type;
+
+export const GcConfigAgent = Schema.Struct({
+  name: Schema.String,
+  dir: Schema.optional(Schema.String),
+  provider: Schema.optional(Schema.String),
+  is_pool: Schema.optional(Schema.Boolean),
+  scope: Schema.optional(Schema.String),
+  suspended: Schema.Boolean,
+});
+export type GcConfigAgent = typeof GcConfigAgent.Type;
+
+export const GcConfigRig = Schema.Struct({
+  name: Schema.String,
+  path: Schema.String,
+  prefix: Schema.optional(Schema.String),
+  suspended: Schema.Boolean,
+});
+export type GcConfigRig = typeof GcConfigRig.Type;
+
+export const GcConfigProvider = Schema.Struct({
+  display_name: Schema.optional(Schema.String),
+  command: Schema.optional(Schema.String),
+  args: Schema.optional(Schema.Array(Schema.String)),
+  prompt_mode: Schema.optional(Schema.String),
+  prompt_flag: Schema.optional(Schema.String),
+  ready_delay_ms: Schema.optional(Schema.Number),
+  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+});
+export type GcConfigProvider = typeof GcConfigProvider.Type;
+
+export const GcConfigPatches = Schema.Struct({
+  agent_count: Schema.Number,
+  rig_count: Schema.Number,
+  provider_count: Schema.Number,
+});
+export type GcConfigPatches = typeof GcConfigPatches.Type;
+
+export const GcConfigResult = Schema.Struct({
+  workspace: GcConfigWorkspace,
+  agents: Schema.Array(GcConfigAgent),
+  rigs: Schema.Array(GcConfigRig),
+  providers: Schema.optional(Schema.Record(Schema.String, GcConfigProvider)),
+  patches: Schema.optional(GcConfigPatches),
+});
+export type GcConfigResult = typeof GcConfigResult.Type;
+
+// ---------------------------------------------------------------------------
+// Sidebar virtual folder grouping
+// ---------------------------------------------------------------------------
+
+/** A virtual agent group nested under a rig folder in the sidebar. */
+export interface VirtualAgentGroup<TThread> {
+  id: string;
+  label: string;
+  qualifiedName: string;
+  isConfigured: boolean;
+  isPool: boolean;
+  isSuspended: boolean;
+  scope?: string;
+  threads: TThread[];
+}
+
+/** A virtual rig group for sidebar thread grouping. */
+export interface VirtualRigGroup<TThread> {
+  id: string;
+  label: string;
+  isConfigured: boolean;
+  isSuspended: boolean;
+  agentGroups: VirtualAgentGroup<TThread>[];
+}
+
+function normalizeMetadataValue(value?: string): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function agentFolderLabel(agent: string): string {
+  const segments = agent.split("/").filter(Boolean);
+  return segments.at(-1) ?? agent;
+}
+
+function configuredAgentQualifiedName(agent: Pick<GcConfigAgent, "dir" | "name">): string {
+  const dir = normalizeMetadataValue(agent.dir);
+  return dir ? `${dir}/${agent.name}` : agent.name;
+}
+
+/** Partition threads into rig folders, agent folders, and standalone threads. */
+export function groupThreadsByRigAndAgent<
+  TThread extends { customMetadata?: Record<string, string> },
+>(
+  threads: TThread[],
+  options?: {
+    config?: GcConfigResult | null;
+    projectCwd?: string | null;
+  },
+): {
+  standaloneThreads: TThread[];
+  rigGroups: VirtualRigGroup<TThread>[];
+} {
+  const standaloneThreads: TThread[] = [];
+  const rigGroupsById = new Map<
+    string,
+    {
+      id: string;
+      label: string;
+      isConfigured: boolean;
+      isSuspended: boolean;
+      agentGroupsById: Map<string, VirtualAgentGroup<TThread>>;
+    }
+  >();
+
+  const projectCwd = normalizeMetadataValue(options?.projectCwd ?? undefined);
+  const relevantRigs = options?.config?.rigs.filter(
+    (rig) => !projectCwd || normalizeMetadataValue(rig.path) === projectCwd,
+  );
+  if (relevantRigs && relevantRigs.length > 0) {
+    const relevantRigNames = new Set(relevantRigs.map((rig) => rig.name));
+    for (const rig of relevantRigs) {
+      rigGroupsById.set(rig.name, {
+        id: rig.name,
+        label: rig.name,
+        isConfigured: true,
+        isSuspended: rig.suspended,
+        agentGroupsById: new Map(),
+      });
+    }
+
+    for (const agent of options?.config?.agents ?? []) {
+      const rigName = normalizeMetadataValue(agent.dir);
+      if (!rigName || !relevantRigNames.has(rigName)) {
+        continue;
+      }
+      const rigGroup = rigGroupsById.get(rigName);
+      if (!rigGroup) {
+        continue;
+      }
+      const qualifiedName = configuredAgentQualifiedName(agent);
+      rigGroup.agentGroupsById.set(qualifiedName, {
+        id: `${rigName}/${qualifiedName}`,
+        label: agentFolderLabel(qualifiedName),
+        qualifiedName,
+        isConfigured: true,
+        isPool: agent.is_pool ?? false,
+        isSuspended: agent.suspended,
+        ...(agent.scope ? { scope: agent.scope } : {}),
+        threads: [],
+      });
+    }
+  }
+
+  for (const thread of threads) {
+    const meta = parseGcMeta(thread.customMetadata);
+    const rig = normalizeMetadataValue(meta.rig);
+    const agent = normalizeMetadataValue(meta.agent);
+    if (!meta.isGcManaged || !rig || !agent) {
+      standaloneThreads.push(thread);
+      continue;
+    }
+
+    let rigGroup = rigGroupsById.get(rig);
+    if (!rigGroup) {
+      rigGroup = {
+        id: rig,
+        label: rig,
+        isConfigured: false,
+        isSuspended: false,
+        agentGroupsById: new Map(),
+      };
+      rigGroupsById.set(rig, rigGroup);
+    }
+
+    const existingAgentGroup = rigGroup.agentGroupsById.get(agent);
+    if (existingAgentGroup) {
+      existingAgentGroup.threads.push(thread);
+      continue;
+    }
+
+    rigGroup.agentGroupsById.set(agent, {
+      id: `${rig}/${agent}`,
+      label: agentFolderLabel(agent),
+      qualifiedName: agent,
+      isConfigured: false,
+      isPool: false,
+      isSuspended: false,
+      threads: [thread],
+    });
+  }
+
+  return {
+    standaloneThreads,
+    rigGroups: Array.from(rigGroupsById.values())
+      .toSorted((a, b) => a.label.localeCompare(b.label))
+      .map((rigGroup) => ({
+        id: rigGroup.id,
+        label: rigGroup.label,
+        isConfigured: rigGroup.isConfigured,
+        isSuspended: rigGroup.isSuspended,
+        agentGroups: Array.from(rigGroup.agentGroupsById.values()).toSorted((a, b) =>
+          a.label.localeCompare(b.label),
+        ),
+      })),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Convoy grouping (for sidebar virtual folders)
 // ---------------------------------------------------------------------------
 
@@ -163,7 +378,7 @@ export function groupThreadsByConvoy<TThread extends { customMetadata?: Record<s
 
   return {
     standaloneThreads,
-    convoyGroups: Array.from(convoyGroupsById.values()).sort((a, b) =>
+    convoyGroups: Array.from(convoyGroupsById.values()).toSorted((a, b) =>
       a.label.localeCompare(b.label),
     ),
   };
@@ -177,6 +392,9 @@ export const GcGetThreadContextInput = Schema.Struct({
   threadId: Schema.String,
 });
 export type GcGetThreadContextInput = typeof GcGetThreadContextInput.Type;
+
+export const GcGetConfigInput = Schema.Struct({});
+export type GcGetConfigInput = typeof GcGetConfigInput.Type;
 
 const GcBeadSchema = Schema.Struct({
   id: Schema.String,
@@ -229,5 +447,10 @@ export type GcThreadContextResult = typeof GcThreadContextResult.Type;
 
 export class GcGetThreadContextError extends Schema.TaggedErrorClass<GcGetThreadContextError>()(
   "GcGetThreadContextError",
+  { message: Schema.String },
+) {}
+
+export class GcGetConfigError extends Schema.TaggedErrorClass<GcGetConfigError>()(
+  "GcGetConfigError",
   { message: Schema.String },
 ) {}

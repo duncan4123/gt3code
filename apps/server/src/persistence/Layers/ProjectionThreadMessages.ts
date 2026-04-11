@@ -1,7 +1,7 @@
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { Effect, Layer, Option, Schema, Struct } from "effect";
-import { ChatAttachment } from "@t3tools/contracts";
+import { ChatAttachment, type MessageId } from "@t3tools/contracts";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
@@ -91,6 +91,21 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
     },
   });
 
+  const getProjectionThreadMessageIndexRow = SqlSchema.findOne({
+    Request: GetProjectionThreadMessageInput,
+    Result: Schema.Struct({
+      rowId: Schema.Number,
+      text: Schema.String,
+    }),
+    execute: ({ messageId }) =>
+      sql`
+        SELECT row_id AS "rowId", text
+        FROM projection_thread_messages
+        WHERE message_id = ${messageId}
+        LIMIT 1
+      `,
+  });
+
   const getProjectionThreadMessageRow = SqlSchema.findOneOption({
     Request: GetProjectionThreadMessageInput,
     Result: ProjectionThreadMessageDbRowSchema,
@@ -142,9 +157,65 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
       `,
   });
 
+  const syncProjectionThreadMessageFts = (messageId: MessageId) =>
+    Effect.gen(function* () {
+      const indexedRow = yield* getProjectionThreadMessageIndexRow({ messageId }).pipe(
+        Effect.mapError(
+          toPersistenceSqlError("ProjectionThreadMessageRepository.syncProjectionThreadMessageFts"),
+        ),
+      );
+      yield* sql
+        .unsafe(`INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', ?, ?)`, [
+          indexedRow.rowId,
+          indexedRow.text,
+        ])
+        .pipe(
+          Effect.catchTag("SqlError", () => Effect.void),
+          Effect.mapError(
+            toPersistenceSqlError(
+              "ProjectionThreadMessageRepository.syncProjectionThreadMessageFts",
+            ),
+          ),
+        );
+      yield* sql
+        .unsafe(`INSERT INTO messages_fts(rowid, text) VALUES (?, ?)`, [
+          indexedRow.rowId,
+          indexedRow.text,
+        ])
+        .pipe(
+          Effect.mapError(
+            toPersistenceSqlError(
+              "ProjectionThreadMessageRepository.syncProjectionThreadMessageFts",
+            ),
+          ),
+        );
+    });
+
+  const deleteProjectionThreadMessageFtsByThreadId = (threadId: string) =>
+    Effect.gen(function* () {
+      yield* sql
+        .unsafe(
+          `
+            INSERT INTO messages_fts(messages_fts, rowid, text)
+            SELECT 'delete', row_id, text
+            FROM projection_thread_messages
+            WHERE thread_id = ?
+          `,
+          [threadId],
+        )
+        .pipe(Effect.catchTag("SqlError", () => Effect.void));
+    }).pipe(
+      Effect.mapError(
+        toPersistenceSqlError(
+          "ProjectionThreadMessageRepository.deleteProjectionThreadMessageFtsByThreadId",
+        ),
+      ),
+    );
+
   const upsert: ProjectionThreadMessageRepositoryShape["upsert"] = (row) =>
     upsertProjectionThreadMessageRow(row).pipe(
       Effect.mapError(toPersistenceSqlError("ProjectionThreadMessageRepository.upsert:query")),
+      Effect.flatMap(() => syncProjectionThreadMessageFts(row.messageId)),
     );
 
   const getByMessageId: ProjectionThreadMessageRepositoryShape["getByMessageId"] = (input) =>
@@ -164,7 +235,8 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
     );
 
   const deleteByThreadId: ProjectionThreadMessageRepositoryShape["deleteByThreadId"] = (input) =>
-    deleteProjectionThreadMessageRows(input).pipe(
+    deleteProjectionThreadMessageFtsByThreadId(input.threadId).pipe(
+      Effect.flatMap(() => deleteProjectionThreadMessageRows(input)),
       Effect.mapError(
         toPersistenceSqlError("ProjectionThreadMessageRepository.deleteByThreadId:query"),
       ),

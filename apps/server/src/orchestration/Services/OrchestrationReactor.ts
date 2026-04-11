@@ -20,6 +20,11 @@ export interface OrchestrationReactorShape {
    * finalized on shutdown.
    */
   readonly start: () => Effect.Effect<void, never, Scope.Scope>;
+
+  /**
+   * Drain queued reactor work before shutdown.
+   */
+  readonly drain: Effect.Effect<void>;
 }
 
 /**

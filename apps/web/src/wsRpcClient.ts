@@ -97,6 +97,9 @@ export interface WsRpcClient {
     readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
     readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
     readonly replayEvents: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.replayEvents>;
+    readonly searchThreadMessages: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.searchThreadMessages
+    >;
     readonly onDomainEvent: RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>;
   };
   readonly gc: {
@@ -222,6 +225,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport
           .request((client) => client[ORCHESTRATION_WS_METHODS.replayEvents](input))
           .then((events) => [...events]),
+      searchThreadMessages: (input) =>
+        transport.request((client) => client[ORCHESTRATION_WS_METHODS.searchThreadMessages](input)),
       onDomainEvent: (listener, options) =>
         transport.subscribe(
           (client) => client[WS_METHODS.subscribeOrchestrationDomainEvents]({}),

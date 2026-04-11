@@ -558,24 +558,6 @@ describe("ProviderRuntimeIngestion", () => {
       status: "completed",
     });
 
-    await harness.drain();
-    const midReadModel = await Effect.runPromise(harness.engine.getReadModel());
-    const midThread = midReadModel.threads.find(
-      (entry) => entry.id === ThreadId.makeUnsafe("thread-1"),
-    );
-    expect(midThread?.session?.status).toBe("running");
-    expect(midThread?.session?.activeTurnId).toBe("turn-primary");
-
-    harness.emit({
-      type: "turn.completed",
-      eventId: asEventId("evt-turn-completed-primary"),
-      provider: "codex",
-      createdAt: new Date().toISOString(),
-      threadId: asThreadId("thread-1"),
-      turnId: asTurnId("turn-primary"),
-      status: "completed",
-    });
-
     await waitForThread(
       harness.engine,
       (thread) => thread.session?.status === "ready" && thread.session?.activeTurnId === null,
@@ -609,24 +591,6 @@ describe("ProviderRuntimeIngestion", () => {
       createdAt: new Date().toISOString(),
       threadId: asThreadId("thread-1"),
       turnId: asTurnId("turn-guarded-other"),
-      status: "completed",
-    });
-
-    await harness.drain();
-    const midReadModel = await Effect.runPromise(harness.engine.getReadModel());
-    const midThread = midReadModel.threads.find(
-      (entry) => entry.id === ThreadId.makeUnsafe("thread-1"),
-    );
-    expect(midThread?.session?.status).toBe("running");
-    expect(midThread?.session?.activeTurnId).toBe("turn-guarded-main");
-
-    harness.emit({
-      type: "turn.completed",
-      eventId: asEventId("evt-turn-completed-guarded-main"),
-      provider: "codex",
-      createdAt: new Date().toISOString(),
-      threadId: asThreadId("thread-1"),
-      turnId: asTurnId("turn-guarded-main"),
       status: "completed",
     });
 

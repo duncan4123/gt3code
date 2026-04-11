@@ -20,8 +20,8 @@ import {
   findSidebarProposedPlan,
   hasActionableProposedPlan,
   hasToolActivityForTurn,
+  isSessionActivelyRunning,
   isLatestTurnSettled,
-  stripTrailingExitCode,
 } from "./session-logic";
 
 function makeActivity(overrides: {
@@ -1109,6 +1109,42 @@ describe("hasToolActivityForTurn", () => {
 
     expect(hasToolActivityForTurn(activities, TurnId.makeUnsafe("turn-1"))).toBe(true);
     expect(hasToolActivityForTurn(activities, TurnId.makeUnsafe("turn-2"))).toBe(false);
+  });
+});
+
+describe("isSessionActivelyRunning", () => {
+  const latestTurn = {
+    turnId: TurnId.makeUnsafe("turn-1"),
+    startedAt: "2026-02-27T21:10:00.000Z",
+    completedAt: "2026-02-27T21:10:06.000Z",
+  } as const;
+
+  it("returns false when a completed turn is newer than the stale running session update", () => {
+    expect(
+      isSessionActivelyRunning(
+        {
+          status: "running",
+          orchestrationStatus: "running",
+          activeTurnId: undefined,
+          updatedAt: "2026-02-27T21:10:05.000Z",
+        },
+        latestTurn,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns true while the running session update is newer than the last completed turn", () => {
+    expect(
+      isSessionActivelyRunning(
+        {
+          status: "running",
+          orchestrationStatus: "running",
+          activeTurnId: undefined,
+          updatedAt: "2026-02-27T21:10:07.000Z",
+        },
+        latestTurn,
+      ),
+    ).toBe(true);
   });
 });
 

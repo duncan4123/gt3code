@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createThreadJumpHintVisibilityController,
   getVisibleSidebarThreadIds,
+  normalizeThreadSearchQuery,
   resolveAdjacentThreadId,
   getFallbackThreadIdAfterDelete,
   getVisibleThreadsForProject,
@@ -12,6 +13,7 @@ import {
   orderItemsByPreferredIds,
   resolveProjectStatusIndicator,
   resolveSidebarNewThreadSeedContext,
+  resolveSidebarThreadSearch,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
@@ -164,6 +166,43 @@ describe("resolveSidebarNewThreadEnvMode", () => {
         defaultEnvMode: "worktree",
       }),
     ).toBe("local");
+  });
+});
+
+describe("thread search helpers", () => {
+  it("normalizes search terms for FTS matching", () => {
+    expect(normalizeThreadSearchQuery('  hello   world "quoted" ')).toBe(
+      '"hello" "world" "quoted"',
+    );
+  });
+
+  it("combines title matches and FTS hits", () => {
+    const result = resolveSidebarThreadSearch({
+      query: "release",
+      threads: [
+        {
+          id: ThreadId.makeUnsafe("thread-title"),
+          projectId: ProjectId.makeUnsafe("project-a"),
+          title: "Release checklist",
+        },
+        {
+          id: ThreadId.makeUnsafe("thread-fts"),
+          projectId: ProjectId.makeUnsafe("project-b"),
+          title: "Notes",
+        },
+      ],
+      ftsHits: [
+        {
+          threadId: ThreadId.makeUnsafe("thread-fts"),
+          snippet: "ship the release build tonight",
+        },
+      ],
+    });
+
+    expect(result.isFiltering).toBe(true);
+    expect(result.matchingThreadIds).toEqual(new Set(["thread-title", "thread-fts"]));
+    expect(result.matchingProjectIds).toEqual(new Set(["project-a", "project-b"]));
+    expect(result.snippetByThreadId.get("thread-fts")).toBe("ship the release build tonight");
   });
 });
 

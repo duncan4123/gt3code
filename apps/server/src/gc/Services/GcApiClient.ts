@@ -10,6 +10,7 @@
  */
 import { ServiceMap } from "effect";
 import type { Effect, Stream } from "effect";
+import type { GcConfigResult } from "@t3tools/contracts";
 
 export interface GcBead {
   readonly id: string;
@@ -70,6 +71,7 @@ export interface GcApiClientShape {
   readonly getBead: (id: string) => Effect.Effect<GcBead | null>;
   readonly getConvoy: (id: string) => Effect.Effect<GcConvoy | null>;
   readonly getFormula: (name: string) => Effect.Effect<GcFormula | null>;
+  readonly getConfig: () => Effect.Effect<GcConfigResult | null>;
   readonly streamEvents: Stream.Stream<GcEvent>;
   readonly isAvailable: Effect.Effect<boolean>;
 }
