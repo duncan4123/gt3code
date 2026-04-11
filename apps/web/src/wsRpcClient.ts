@@ -103,6 +103,7 @@ export interface WsRpcClient {
     readonly onDomainEvent: RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>;
   };
   readonly gc: {
+    readonly getConfig: RpcUnaryMethod<typeof WS_METHODS.gcGetConfig>;
     readonly getThreadContext: RpcUnaryMethod<typeof WS_METHODS.gcGetThreadContext>;
   };
 }
@@ -235,6 +236,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         ),
     },
     gc: {
+      getConfig: (input) => transport.request((client) => client[WS_METHODS.gcGetConfig](input)),
       getThreadContext: (input) =>
         transport.request((client) => client[WS_METHODS.gcGetThreadContext](input)),
     },

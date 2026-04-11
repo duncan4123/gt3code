@@ -1,6 +1,8 @@
 import { type ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import readline from "node:readline";
 
 import {
@@ -154,6 +156,109 @@ const RECOVERABLE_THREAD_RESUME_ERROR_SNIPPETS = [
   "unknown thread",
   "does not exist",
 ];
+
+const GC_DOLT_ENV_KEYS = [
+  "GC_DOLT_HOST",
+  "GC_DOLT_PORT",
+  "BEADS_DOLT_HOST",
+  "BEADS_DOLT_PORT",
+  "BEADS_DOLT_SHARED_SERVER",
+] as const;
+
+function stripGcDoltEnv(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(baseEnv)) {
+    if (value === undefined) continue;
+    if ((GC_DOLT_ENV_KEYS as ReadonlyArray<string>).includes(key)) continue;
+    env[key] = value;
+  }
+  return env;
+}
+
+function findGcCityRoot(startCwd: string): string | null {
+  let current = path.resolve(startCwd);
+  while (true) {
+    if (existsSync(path.join(current, "city.toml")) && existsSync(path.join(current, ".gc"))) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+function readGcCityTomlValue(cityPath: string, key: "host" | "port"): string | null {
+  const cityTomlPath = path.join(cityPath, "city.toml");
+  if (!existsSync(cityTomlPath)) return null;
+
+  const content = readFileSync(cityTomlPath, "utf8");
+  let inDoltSection = false;
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed === "[dolt]") {
+      inDoltSection = true;
+      continue;
+    }
+    if (inDoltSection && trimmed.startsWith("[")) break;
+    if (!inDoltSection || !trimmed.startsWith(`${key} =`)) continue;
+    const [, rawValue = ""] = trimmed.split("=", 2);
+    const normalized = rawValue.trim().replace(/^"(.*)"$/, "$1");
+    return normalized.length > 0 ? normalized : null;
+  }
+  return null;
+}
+
+function readGcDoltPort(cityPath: string): string | null {
+  const configuredPort = readGcCityTomlValue(cityPath, "port");
+  if (configuredPort) return configuredPort;
+
+  const portFile = path.join(cityPath, ".beads", "dolt-server.port");
+  if (existsSync(portFile)) {
+    const filePort = readFileSync(portFile, "utf8").trim();
+    if (filePort.length > 0) return filePort;
+  }
+
+  const stateFile = path.join(cityPath, ".gc", "runtime", "packs", "dolt", "dolt-state.json");
+  if (existsSync(stateFile)) {
+    try {
+      const parsed = JSON.parse(readFileSync(stateFile, "utf8")) as { port?: unknown };
+      if (typeof parsed.port === "number" && Number.isFinite(parsed.port)) {
+        return String(parsed.port);
+      }
+      if (typeof parsed.port === "string" && parsed.port.trim().length > 0) {
+        return parsed.port.trim();
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function resolveGcDoltEnv(cwd: string): NodeJS.ProcessEnv | null {
+  const cityPath = findGcCityRoot(cwd);
+  if (!cityPath) return null;
+
+  const port = readGcDoltPort(cityPath);
+  if (!port) return null;
+
+  const host = readGcCityTomlValue(cityPath, "host") ?? "127.0.0.1";
+  return {
+    GC_DOLT_HOST: host,
+    GC_DOLT_PORT: port,
+    BEADS_DOLT_HOST: host,
+    BEADS_DOLT_PORT: port,
+    BEADS_DOLT_SHARED_SERVER: "1",
+  };
+}
+
+export function resolveCodexProcessEnv(baseEnv: NodeJS.ProcessEnv, cwd: string): NodeJS.ProcessEnv {
+  return {
+    ...stripGcDoltEnv(baseEnv),
+    ...(resolveGcDoltEnv(cwd) ?? {}),
+  };
+}
 export const CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS = `<collaboration_mode># Plan Mode (Conversational)
 
 You work in 3 phases, and you should *chat your way* to a great plan before finalizing it. A great plan is very detailed-intent- and implementation-wise-so that it can be handed to another engineer or agent to be implemented right away. It must be **decision complete**, where the implementer does not need to make any decisions.
@@ -464,10 +569,11 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         cwd: resolvedCwd,
         ...(codexHomePath ? { homePath: codexHomePath } : {}),
       });
+      const codexProcessEnv = resolveCodexProcessEnv(process.env, resolvedCwd);
       const child = spawn(codexBinaryPath, ["app-server"], {
         cwd: resolvedCwd,
         env: {
-          ...process.env,
+          ...codexProcessEnv,
           ...(codexHomePath ? { CODEX_HOME: codexHomePath } : {}),
         },
         stdio: ["pipe", "pipe", "pipe"],

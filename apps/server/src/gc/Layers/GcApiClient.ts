@@ -234,10 +234,11 @@ const makeGcApiClient = Effect.gen(function* () {
     }).pipe(Effect.orElseSucceed(() => null));
   };
 
-  const getConfig: GcApiClientShape["getConfig"] = Effect.tryPromise({
-    try: () => fetchJson<GcConfigResult>("/v0/config"),
-    catch: () => null,
-  }).pipe(Effect.orElseSucceed(() => null));
+  const getConfig: GcApiClientShape["getConfig"] = () =>
+    Effect.tryPromise({
+      try: () => fetchJson<GcConfigResult>("/v0/config"),
+      catch: () => null,
+    }).pipe(Effect.orElseSucceed(() => null));
 
   const isAvailable: GcApiClientShape["isAvailable"] = Effect.tryPromise({
     try: async () => {

@@ -107,6 +107,7 @@ export function createWsNativeApi(): NativeApi {
         rpcClient.orchestration.onDomainEvent(callback, options),
     },
     gc: {
+      getConfig: (input) => rpcClient.gc.getConfig(input),
       getThreadContext: (input) => rpcClient.gc.getThreadContext(input),
     },
   };
