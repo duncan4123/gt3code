@@ -159,8 +159,8 @@ SELECT dolt_checkout('experiment');
 SELECT dolt_merge('main');
 ```
 
-These are exposed through the `ctx_commit`, `ctx_log`, `ctx_diff`, and
-`ctx_status` MCP tools.
+These are exposed through the `ctx_commit`, `ctx_branch`, `ctx_log`,
+`ctx_diff`, and `ctx_status` MCP tools.
 
 ## Updating doltlite
 

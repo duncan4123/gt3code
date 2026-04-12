@@ -51,7 +51,7 @@ Restart Claude Code (or run `/reload-plugins`).
 
 All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, plugin registration, and doltlite patch status.
 
-**Routing:** Automatic. The SessionStart hook injects routing instructions at runtime — no file is written to your project. The plugin registers all hooks (PreToolUse, PostToolUse, PreCompact, SessionStart) and 19 tools: 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`), 3 utility tools, 2 database management tools, 4 doltlite version control tools, and 4 convoy/work-tracking tools. See [Tools](#tools) for the full list.
+**Routing:** Automatic. The SessionStart hook injects routing instructions at runtime — no file is written to your project. The plugin registers all hooks (PreToolUse, PostToolUse, PreCompact, SessionStart) and 20 tools: 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`), 3 utility tools, 2 database management tools, 5 doltlite version control tools, and 4 convoy/work-tracking tools. See [Tools](#tools) for the full list.
 
 | Slash Command | What it does |
 |---|---|
@@ -613,6 +613,7 @@ npm install -g context-mode
 | `delete_database` | Permanently delete a named persistent database. | — |
 | **Version Control** *(doltlite)* | | |
 | `ctx_commit` | Save a versioned snapshot of the knowledge base. | — |
+| `ctx_branch` | Create, list, switch, merge, or delete knowledge base branches. | — |
 | `ctx_log` | View commit history for the current knowledge base. | — |
 | `ctx_diff` | Show changes since the last commit. | — |
 | `ctx_status` | Show current knowledge base state (uncommitted changes). | — |
@@ -636,7 +637,7 @@ When output exceeds 5 KB and an `intent` is provided, Context Mode switches to i
 
 The `ctx_index` tool chunks markdown content by headings while keeping code blocks intact, then stores them in a **SQLite FTS5** (Full-Text Search 5) virtual table. Search uses **BM25 ranking** — a probabilistic relevance algorithm that scores documents based on term frequency, inverse document frequency, and document length normalization. **Porter stemming** is applied at index time so "running", "runs", and "ran" match the same stem. Titles and headings are weighted **5x** in BM25 scoring for precise navigational queries.
 
-When [doltlite](docs/BUILD-DOLTLITE.md) is active, the knowledge base uses a **prolly tree** storage engine instead of SQLite's B-tree. This adds git-like version control — `ctx_commit`, `ctx_log`, `ctx_diff`, and `ctx_status` expose commit/branch/merge/diff operations on the indexed content. FTS5 search works identically under both engines.
+When [doltlite](docs/BUILD-DOLTLITE.md) is active, the knowledge base uses a **prolly tree** storage engine instead of SQLite's B-tree. This adds git-like version control — `ctx_commit`, `ctx_branch`, `ctx_log`, `ctx_diff`, and `ctx_status` expose commit/branch/merge/diff operations on the indexed content. FTS5 search works identically under both engines.
 
 When you call `ctx_search`, it returns relevant content snippets focused around matching query terms — not full documents, not approximations, the actual indexed content with smart extraction around what you're looking for. `ctx_fetch_and_index` extends this to URLs: fetch, convert HTML to markdown, chunk, index. The raw page never enters context. Use the `contentType` parameter to filter results by type (e.g. `code` or `prose`).
 
