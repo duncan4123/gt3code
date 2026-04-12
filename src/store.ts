@@ -261,20 +261,11 @@ export class ContentStore {
   #persistent: boolean;
 
   // ── Cached Prepared Statements ──
-  // Prepared once at construction, reused on every call to avoid
-  // re-compiling SQL on each invocation.
+  // Keep read-heavy statements cached. Write statements on the reindex path
+  // are prepared fresh to avoid a better-sqlite3 + doltlite FTS reuse bug.
 
-  // Write path
-  #stmtInsertSourceEmpty!: PreparedStatement;
-  #stmtInsertSource!: PreparedStatement;
-  #stmtInsertChunk!: PreparedStatement;
-  #stmtInsertChunkTrigram!: PreparedStatement;
+  // Vocabulary path
   #stmtInsertVocab!: PreparedStatement;
-
-  // Dedup path (delete previous source with same label before re-indexing)
-  #stmtDeleteChunksByLabel!: PreparedStatement;
-  #stmtDeleteChunksTrigramByLabel!: PreparedStatement;
-  #stmtDeleteSourcesByLabel!: PreparedStatement;
 
   // Search path (hot)
   #stmtSearchPorter!: PreparedStatement;
@@ -533,33 +524,9 @@ export class ContentStore {
   }
 
   #prepareStatements(): void {
-    // Write path
-    this.#stmtInsertSourceEmpty = this.#db.prepare(
-      "INSERT INTO sources (label, chunk_count, code_chunk_count, indexed_at) VALUES (?, 0, 0, datetime('now'))",
-    );
-    this.#stmtInsertSource = this.#db.prepare(
-      "INSERT INTO sources (label, chunk_count, code_chunk_count, indexed_at) VALUES (?, ?, ?, datetime('now'))",
-    );
-    this.#stmtInsertChunk = this.#db.prepare(
-      "INSERT INTO chunks (rowid, title, content, source_id, content_type) VALUES (?, ?, ?, ?, ?)",
-    );
-    this.#stmtInsertChunkTrigram = this.#db.prepare(
-      "INSERT INTO chunks_trigram (rowid, title, content, source_id, content_type) VALUES (?, ?, ?, ?, ?)",
-    );
+    // Vocabulary path
     this.#stmtInsertVocab = this.#db.prepare(
       "INSERT OR IGNORE INTO vocabulary (word) VALUES (?)",
-    );
-
-    // Dedup path: delete previous source with same label before re-indexing
-    // Prevents stale outputs from accumulating in iterative workflows (build-fix-build)
-    this.#stmtDeleteChunksByLabel = this.#db.prepare(
-      "DELETE FROM chunks WHERE source_id IN (SELECT id FROM sources WHERE label = ?)",
-    );
-    this.#stmtDeleteChunksTrigramByLabel = this.#db.prepare(
-      "DELETE FROM chunks_trigram WHERE source_id IN (SELECT id FROM sources WHERE label = ?)",
-    );
-    this.#stmtDeleteSourcesByLabel = this.#db.prepare(
-      "DELETE FROM sources WHERE label = ?",
     );
 
     // Search path (hot)
@@ -851,29 +818,36 @@ export class ContentStore {
 
   /**
    * Shared DB insertion logic for all index methods. Inserts chunks
-   * into both FTS5 tables within a transaction and extracts vocabulary.
-   * Uses cached prepared statements from #prepareStatements().
+   * into both FTS5 tables within transactions and extracts vocabulary.
+   * Reindex writes use fresh prepared statements because reusing cached
+   * mutation statements can corrupt porter FTS state on doltlite.
    */
   #insertChunks(chunks: Chunk[], label: string, text: string): IndexResult {
     const codeChunks = chunks.filter((c) => c.hasCode).length;
 
-    // Under doltlite, deleting and reinserting the same FTS label in a single
-    // transaction can leave stale row references in FTS shadow tables. Split
-    // dedup and insert into separate commits so the delete fully lands before
-    // new rows for the same logical source are added.
     const deleteTransaction = this.#db.transaction(() => {
-      this.#stmtDeleteChunksByLabel.run(label);
-      this.#stmtDeleteChunksTrigramByLabel.run(label);
-      this.#stmtDeleteSourcesByLabel.run(label);
+      this.#db.prepare(
+        "DELETE FROM chunks WHERE source_id IN (SELECT id FROM sources WHERE label = ?)",
+      ).run(label);
+      this.#db.prepare(
+        "DELETE FROM chunks_trigram WHERE source_id IN (SELECT id FROM sources WHERE label = ?)",
+      ).run(label);
+      this.#db.prepare(
+        "DELETE FROM sources WHERE label = ?",
+      ).run(label);
     });
 
     const insertTransaction = this.#db.transaction(() => {
       if (chunks.length === 0) {
-        const info = this.#stmtInsertSourceEmpty.run(label);
+        const info = this.#db.prepare(
+          "INSERT INTO sources (label, chunk_count, code_chunk_count, indexed_at) VALUES (?, 0, 0, datetime('now'))",
+        ).run(label);
         return Number(info.lastInsertRowid);
       }
 
-      const info = this.#stmtInsertSource.run(label, chunks.length, codeChunks);
+      const info = this.#db.prepare(
+        "INSERT INTO sources (label, chunk_count, code_chunk_count, indexed_at) VALUES (?, ?, ?, datetime('now'))",
+      ).run(label, chunks.length, codeChunks);
       const sourceId = Number(info.lastInsertRowid);
 
       for (const [index, chunk] of chunks.entries()) {
@@ -881,8 +855,12 @@ export class ContentStore {
         // Use explicit rowids so FTS row references never get reused across
         // delete-and-reindex cycles for the same source label.
         const rowid = sourceId * 1_000_000 + index + 1;
-        this.#stmtInsertChunk.run(rowid, chunk.title, chunk.content, sourceId, ct);
-        this.#stmtInsertChunkTrigram.run(rowid, chunk.title, chunk.content, sourceId, ct);
+        this.#db.prepare(
+          "INSERT INTO chunks (rowid, title, content, source_id, content_type) VALUES (?, ?, ?, ?, ?)",
+        ).run(rowid, chunk.title, chunk.content, sourceId, ct);
+        this.#db.prepare(
+          "INSERT INTO chunks_trigram (rowid, title, content, source_id, content_type) VALUES (?, ?, ?, ?, ?)",
+        ).run(rowid, chunk.title, chunk.content, sourceId, ct);
       }
 
       return sourceId;
