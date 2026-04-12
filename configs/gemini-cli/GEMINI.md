@@ -2,6 +2,10 @@
 
 You have context-mode MCP tools available. These rules are NOT optional — they protect your context window from flooding. A single unrouted command can dump 56 KB into context and waste the entire session.
 
+## Think in Code — MANDATORY
+
+When you need to analyze, count, filter, compare, search, parse, transform, or process data: **write code** that does the work via `mcp__context-mode__ctx_execute(language, code)` and `console.log()` only the answer. Do NOT read raw data into context to process mentally. Your role is to PROGRAM the analysis, not to COMPUTE it. Write robust, pure JavaScript — no npm dependencies, only Node.js built-ins (`fs`, `path`, `child_process`). Always use `try/catch`, handle `null`/`undefined`, and ensure compatibility with both Node.js and Bun. One script replaces ten tool calls and saves 100x context.
+
 ## BLOCKED commands — do NOT attempt these
 
 ### curl / wget — BLOCKED
@@ -56,3 +60,6 @@ Search results can flood context. Use `mcp__context-mode__ctx_execute(language: 
 | `ctx stats` | Call the `stats` MCP tool and display the full output verbatim |
 | `ctx doctor` | Call the `doctor` MCP tool, run the returned shell command, display as checklist |
 | `ctx upgrade` | Call the `upgrade` MCP tool, run the returned shell command, display as checklist |
+| `ctx purge` | Call the `purge` MCP tool with confirm: true. Warns before wiping the knowledge base. |
+
+After /clear or /compact: knowledge base and session stats are preserved. Use `ctx purge` if you want to start fresh.

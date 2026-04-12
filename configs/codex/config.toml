@@ -2,4 +2,4 @@
 # Add this to ~/.codex/config.toml
 
 [mcp_servers.context-mode]
-command = "context-mode"
+command = "context-mode-doltlite"

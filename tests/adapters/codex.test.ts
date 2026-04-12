@@ -1,5 +1,6 @@
 import "../setup-home";
 import { describe, it, expect, beforeEach } from "vitest";
+import { execSync } from "node:child_process";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { CodexAdapter } from "../../src/adapters/codex/index.js";
@@ -98,20 +99,15 @@ describe("CodexAdapter", () => {
   // ── formatPreToolUseResponse ──────────────────────────
 
   describe("formatPreToolUseResponse", () => {
-    it("deny returns hookSpecificOutput with permissionDecision deny", () => {
+    it("deny returns hookSpecificOutput with hookEventName and permissionDecision deny", () => {
       const resp = adapter.formatPreToolUseResponse({
         decision: "deny",
         reason: "blocked",
       });
-      expect(resp).toHaveProperty("hookSpecificOutput");
-      expect(
-        (resp as { hookSpecificOutput: Record<string, unknown> })
-          .hookSpecificOutput.permissionDecision,
-      ).toBe("deny");
-      expect(
-        (resp as { hookSpecificOutput: Record<string, unknown> })
-          .hookSpecificOutput.permissionDecisionReason,
-      ).toBe("blocked");
+      const hso = (resp as { hookSpecificOutput: Record<string, unknown> }).hookSpecificOutput;
+      expect(hso.hookEventName).toBe("PreToolUse");
+      expect(hso.permissionDecision).toBe("deny");
+      expect(hso.permissionDecisionReason).toBe("blocked");
     });
 
     it("allow returns empty object (passthrough)", () => {
@@ -144,14 +140,13 @@ describe("CodexAdapter", () => {
   // ── formatPostToolUseResponse ─────────────────────────
 
   describe("formatPostToolUseResponse", () => {
-    it("context injection returns additionalContext in hookSpecificOutput", () => {
+    it("context injection returns hookEventName and additionalContext in hookSpecificOutput", () => {
       const resp = adapter.formatPostToolUseResponse({
         additionalContext: "extra info",
       });
-      expect(
-        (resp as { hookSpecificOutput: Record<string, unknown> })
-          .hookSpecificOutput.additionalContext,
-      ).toBe("extra info");
+      const hso = (resp as { hookSpecificOutput: Record<string, unknown> }).hookSpecificOutput;
+      expect(hso.hookEventName).toBe("PostToolUse");
+      expect(hso.additionalContext).toBe("extra info");
     });
   });
 
@@ -185,6 +180,24 @@ describe("CodexAdapter", () => {
     });
   });
 
+  // ── formatSessionStartResponse ──────────────────────
+
+  describe("formatSessionStartResponse", () => {
+    it("context returns hookEventName and additionalContext in hookSpecificOutput", () => {
+      const resp = adapter.formatSessionStartResponse({
+        context: "routing block",
+      });
+      const hso = (resp as { hookSpecificOutput: Record<string, unknown> }).hookSpecificOutput;
+      expect(hso.hookEventName).toBe("SessionStart");
+      expect(hso.additionalContext).toBe("routing block");
+    });
+
+    it("empty context returns empty object", () => {
+      const resp = adapter.formatSessionStartResponse({});
+      expect(resp).toEqual({});
+    });
+  });
+
   // ── Config paths ──────────────────────────────────────
 
   describe("config paths", () => {
@@ -207,5 +220,36 @@ describe("CodexAdapter", () => {
       expect(config).toHaveProperty("PostToolUse");
       expect(config).toHaveProperty("SessionStart");
     });
+  });
+});
+
+// ── Hook script integration tests ──────────────────────
+describe("Codex pretooluse hook script", () => {
+  it("outputs valid JSON with hookEventName even for passthrough (no routing match)", () => {
+    const hookScript = resolve(__dirname, "../../hooks/codex/pretooluse.mjs");
+    const input = JSON.stringify({
+      tool_name: "Bash",
+      tool_input: { command: "ls" },
+      session_id: "test-1",
+      cwd: "/tmp",
+      hook_event_name: "PreToolUse",
+      model: "o3",
+      permission_mode: "default",
+      tool_use_id: "tu1",
+      transcript_path: null,
+      turn_id: "t1",
+    });
+
+    const stdout = execSync(
+      `printf '%s' '${input.replace(/'/g, "'\\''")}' | node ${hookScript}`,
+      {
+        encoding: "utf-8",
+        timeout: 10000,
+      },
+    );
+
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.hookSpecificOutput).toBeDefined();
+    expect(parsed.hookSpecificOutput.hookEventName).toBe("PreToolUse");
   });
 });

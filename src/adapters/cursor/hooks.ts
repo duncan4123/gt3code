@@ -17,13 +17,12 @@ export const HOOK_TYPES = {
 
 export type HookType = (typeof HOOK_TYPES)[keyof typeof HOOK_TYPES];
 
-/** Map of hook types to their script file names. */
-export const HOOK_SCRIPTS: Record<HookType, string> = {
+/** Map of hook types that have actual script files. */
+export const HOOK_SCRIPTS: Partial<Record<HookType, string>> = {
   [HOOK_TYPES.PRE_TOOL_USE]: "pretooluse.mjs",
   [HOOK_TYPES.POST_TOOL_USE]: "posttooluse.mjs",
   [HOOK_TYPES.SESSION_START]: "sessionstart.mjs",
   [HOOK_TYPES.STOP]: "stop.mjs",
-  [HOOK_TYPES.AFTER_AGENT_RESPONSE]: "afteragentresponse.mjs",
 };
 
 /** Canonical Cursor-native matchers for tools context-mode routes proactively. */
@@ -69,14 +68,16 @@ export function isContextModeHook(
   const cliCommand = buildHookCommand(hookType);
 
   if ("command" in entry) {
-    return entry.command?.includes(scriptName) || entry.command?.includes(cliCommand) || false;
+    const cmd = entry.command ?? "";
+    return (scriptName != null && cmd.includes(scriptName)) || cmd.includes(cliCommand);
   }
 
   const wrappedEntry = entry as { hooks?: Array<{ command?: string }> };
   return (
-    wrappedEntry.hooks?.some((hook: { command?: string }) =>
-      hook.command?.includes(scriptName) || hook.command?.includes(cliCommand),
-    ) ?? false
+    wrappedEntry.hooks?.some((hook: { command?: string }) => {
+      const cmd = hook.command ?? "";
+      return (scriptName != null && cmd.includes(scriptName)) || cmd.includes(cliCommand);
+    }) ?? false
   );
 }
 

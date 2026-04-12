@@ -1,20 +1,19 @@
 /**
- * adapters/codex — Codex CLI (codex-rs) platform adapter.
+ * adapters/codex — Codex CLI platform adapter.
  *
- * Implements HookAdapter for Codex CLI's JSON stdin/stdout hook paradigm.
+ * Implements HookAdapter for Codex CLI's JSON stdin/stdout paradigm.
  *
  * Codex CLI hook specifics:
- *   - I/O: JSON on stdin, JSON on stdout (same wire protocol as Claude Code)
- *   - 5 hook events: PreToolUse, PostToolUse, SessionStart, PreCompact, Stop
- *   - Arg modification: NOT supported (no updatedInput field)
- *   - Output modification: NOT supported (no updatedMCPToolOutput field)
- *   - Blocking: `hookSpecificOutput.permissionDecision: "deny"` in response
- *   - Context injection: `hookSpecificOutput.additionalContext` in response
- *   - Session ID: session_id field from hook input
- *   - Project dir: cwd field from hook input
- *   - Config: ~/.codex/config.toml (TOML format)
- *   - MCP: full support via [mcp_servers] in config.toml
+ *   - 5 hook events: PreToolUse, PostToolUse, SessionStart, UserPromptSubmit, Stop
+ *   - Same wire protocol as Claude Code (JSON stdin → stdout)
+ *   - Config: ~/.codex/hooks.json + ~/.codex/config.toml (TOML for MCP/features)
  *   - Session dir: ~/.codex/context-mode/sessions/
+ *
+ * IMPORTANT: Hook dispatch is NOT yet active in Codex CLI (v0.118.0).
+ * codex_hooks feature flag is Stage::UnderDevelopment — hooks are implemented
+ * in codex-rs/hooks/ but not wired into the tool execution pipeline.
+ * Our adapter is ready; it will work once Codex enables dispatch.
+ * Track: https://github.com/openai/codex/issues/16685
  */
 
 import { createHash } from "node:crypto";
@@ -151,6 +150,7 @@ export class CodexAdapter implements HookAdapter {
     if (response.decision === "deny") {
       return {
         hookSpecificOutput: {
+          hookEventName: "PreToolUse",
           permissionDecision: "deny",
           permissionDecisionReason:
             response.reason ?? "Blocked by context-mode hook",
@@ -158,11 +158,9 @@ export class CodexAdapter implements HookAdapter {
       };
     }
     if (response.decision === "context" && response.additionalContext) {
-      return {
-        hookSpecificOutput: {
-          additionalContext: response.additionalContext,
-        },
-      };
+      // Codex does not support additionalContext in PreToolUse (fails open).
+      // Context injection works via PostToolUse and SessionStart instead.
+      return {};
     }
     // "allow" — return empty object for passthrough
     return {};
@@ -172,6 +170,7 @@ export class CodexAdapter implements HookAdapter {
     if (response.additionalContext) {
       return {
         hookSpecificOutput: {
+          hookEventName: "PostToolUse",
           additionalContext: response.additionalContext,
         },
       };
@@ -194,6 +193,7 @@ export class CodexAdapter implements HookAdapter {
     if (response.context) {
       return {
         hookSpecificOutput: {
+          hookEventName: "SessionStart",
           additionalContext: response.context,
         },
       };
@@ -292,9 +292,9 @@ export class CodexAdapter implements HookAdapter {
     return [
       {
         check: "Hook support",
-        status: "pass",
+        status: "warn",
         message:
-          "Codex CLI supports hooks (PreToolUse, PostToolUse, SessionStart) via JSON stdin/stdout.",
+          "Codex CLI hooks are implemented but dispatch is not yet active (Stage::UnderDevelopment, v0.118.0). Enable flag: [features] codex_hooks = true in ~/.codex/config.toml. Track: openai/codex#16685",
       },
     ];
   }

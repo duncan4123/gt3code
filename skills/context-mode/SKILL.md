@@ -107,6 +107,7 @@ About to run a command / read a file / call an API?
 | Check what's been indexed | `ctx_log` | See commit history of knowledge base. Accepts `database` param for named DBs. |
 | Review pending changes | `ctx_diff` | What's changed since last commit. Accepts `database` param for named DBs. |
 | Knowledge base health check | `ctx_status` | Engine, sources, chunks, commits, uncommitted. Accepts `database` param for named DBs. |
+| Manage KB branches | `ctx_branch` | Create/list/checkout/merge/delete KB branches after first commit |
 | Create draft convoy | `ctx_convoy_create` | Start staging a new convoy of work |
 | Create draft bead | `ctx_bead_create` | Add a task/gate to a draft convoy |
 | Add bead dependency | `ctx_dep_add` | Wire sequential blocking between beads |
@@ -120,6 +121,7 @@ About to run a command / read a file / call an API?
 | Status named DB | `ctx_status(database: "name")` | Health check a persistent knowledge base |
 | List persistent DBs | `list_databases` | See all named knowledge bases |
 | Delete persistent DB | `delete_database` | Remove a named knowledge base |
+| Wipe indexed KB content | `ctx_purge(confirm: true)` | Permanently deletes all indexed content |
 
 ## Automatic Triggers
 
@@ -312,6 +314,7 @@ Subagents automatically receive context-mode tool routing via a PreToolUse hook.
 - Ignoring `browser_navigate` auto-snapshot → navigation response includes a full page snapshot. Don't rely on it for inspection — call `browser_snapshot(filename)` separately.
 - Indexing many sources without committing → **corruption risk**. Uncommitted data lives in WAL/memory. A crash, MCP restart, or session timeout loses everything. Commit after every `fetch_and_index` and every 3-5 `ctx_index` calls.
 - Ending a session without committing → dirty database state carries into next session. Always `ctx_commit` as final KB operation.
+- Expecting `ctx_stats` to reset or wipe anything → `ctx_stats` is read-only (shows stats only). Use `ctx_purge(confirm: true)` to permanently delete all indexed content.
 
 ## Knowledge Base Versioning (Doltlite)
 
@@ -352,6 +355,18 @@ ctx_commit("pre-reindex checkpoint — about to refresh stale Zod docs")
 - Assume the MCP server will stay up — treat every commit as your last chance to save
 
 **Rule of thumb:** If you'd be upset losing the work you just did, commit it.
+
+### Branching
+
+Use `ctx_branch` after first KB commit when you need isolated experimental indexing. Typical flow:
+
+```
+ctx_commit("seed kb")
+ctx_branch(action: "create", name: "experiment")
+ctx_branch(action: "checkout", name: "experiment")
+```
+
+Fresh KBs with no commits cannot branch yet.
 
 ### Use Cases
 

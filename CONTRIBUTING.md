@@ -4,7 +4,7 @@ This project is licensed under the Elastic License 2.0 (ELv2) and moves forward 
 
 Don't overthink it. Don't ask yourself "is my PR good enough?" or "is this issue too small?" -- just send it. A rough draft beats a perfect plan that never ships. If you found a bug, report it. If you have an idea, open an issue. If you wrote a fix, submit the PR.
 
-That said, I'm a solo maintainer with limited time. The best way to help me help you: follow the templates, include your `/context-mode-doltlite:doctor` output, and write tests for your changes. The more context you give me, the faster I can review.
+That said, I'm a solo maintainer with limited time. The best way to help me help you: follow the templates, run the debug script (`bash scripts/ctx-debug.sh`), include your `/context-mode-doltlite:doctor` output when relevant, and write tests for your changes. The more context you give me, the faster I can review.
 
 I genuinely love open source and I'm grateful to have you here. Don't hesitate to reach out -- whether it's a question, a suggestion, or just to say hi. Let's build this together.
 
@@ -338,12 +338,14 @@ See [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md) for hook registrati
 
 ## Submitting a Bug Report
 
-When filing a bug, **always include your prompt**. The exact message you sent to Claude Code is critical for reproduction. Without it, we can't debug the issue.
+When filing a bug, **always include your prompt**. The exact message you sent to the agent is critical for reproduction. Without it, we can't debug the issue.
 
 Required information:
 - `/context-mode-doltlite:doctor` output (must be latest version)
+- Debug script output: `bash scripts/ctx-debug.sh` (collects OS, runtimes, configs, hooks, SQLite diagnostics)
 - The prompt that triggered the bug
-- Debug logs from `Ctrl+O` (background tool calls and MCP communication)
+- Full error output (expand with `Ctrl+O` in Claude Code)
+- Steps to reproduce
 
 ## Submitting a Pull Request
 
@@ -363,6 +365,8 @@ Required information:
 | Check version | `/context-mode-doltlite:doctor` |
 | Upgrade plugin | `/context-mode-doltlite:upgrade` |
 | View session stats | `/context-mode-doltlite:stats` |
+| Purge knowledge base | `/context-mode-doltlite:ctx-purge` |
+| Run diagnostics | `bash scripts/ctx-debug.sh` |
 | See background steps | `Ctrl+O` |
 | Kill cached server | `pkill -f "context-mode-doltlite.*start.mjs"` |
 | Rebuild after changes | `npm run build` |

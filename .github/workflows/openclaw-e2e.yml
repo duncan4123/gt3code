@@ -68,10 +68,9 @@ jobs:
       - name: Setup OpenClaw state directory
         run: |
           export OPENCLAW_STATE_DIR="$RUNNER_TEMP/openclaw-state"
-          mkdir -p "$OPENCLAW_STATE_DIR/runtime"
           mkdir -p "$OPENCLAW_STATE_DIR/extensions"
           mkdir -p "$OPENCLAW_STATE_DIR/logs"
-          echo '{"plugins":{"allow":[],"entries":{}}}' > "$OPENCLAW_STATE_DIR/runtime/openclaw.runtime.json"
+          echo '{"plugins":{"allow":[],"entries":{}}}' > "$OPENCLAW_STATE_DIR/openclaw.json"
           echo "OPENCLAW_STATE_DIR=$OPENCLAW_STATE_DIR" >> $GITHUB_ENV
 
       - name: Install plugin into OpenClaw
@@ -82,7 +81,7 @@ jobs:
           python3 -c "
           import json, os
           state_dir = os.environ['OPENCLAW_STATE_DIR']
-          with open(f'{state_dir}/runtime/openclaw.runtime.json') as f:
+          with open(f'{state_dir}/openclaw.json') as f:
               cfg = json.load(f)
           plugins = cfg.get('plugins', {})
           allow = plugins.get('allow', [])
@@ -90,7 +89,7 @@ jobs:
           assert 'context-mode' in allow, f'context-mode not in plugins.allow: {allow}'
           assert 'context-mode' in entries, f'context-mode not in plugins.entries: {entries}'
           assert entries['context-mode'].get('enabled') is True, 'plugin not enabled'
-          print('PASS: runtime.json contains context-mode plugin entry')
+          print('PASS: openclaw.json contains context-mode plugin entry')
           "
           test -f "$OPENCLAW_STATE_DIR/extensions/context-mode/openclaw.plugin.json" \
             && echo "PASS: openclaw.plugin.json exists" \

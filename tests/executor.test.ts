@@ -1473,3 +1473,4 @@ describe("Windows Shell Support", () => {
     assert.equal(cmd[1], "/tmp/script.sh");
   });
 });
+

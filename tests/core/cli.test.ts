@@ -906,3 +906,151 @@ describe("Plugin root detection (#PR refactor/opencode-improvements)", () => {
     expect(getPluginRootBody).toContain("cachePluginRoot");
   });
 });
+
+// ── Issue #225: Codex CLI hook dispatch ──────────────────────────────────
+
+describe("Codex CLI hook dispatch (#225)", () => {
+  const CLI_SOURCE = readFileSync(resolve(ROOT, "src", "cli.ts"), "utf-8");
+
+  test("HOOK_MAP includes codex platform", () => {
+    // Extract HOOK_MAP definition
+    const mapStart = CLI_SOURCE.indexOf("const HOOK_MAP");
+    const mapEnd = CLI_SOURCE.indexOf("};", mapStart) + 2;
+    const hookMap = CLI_SOURCE.slice(mapStart, mapEnd);
+    expect(hookMap).toContain('"codex"');
+  });
+
+  test("codex HOOK_MAP has pretooluse, posttooluse, sessionstart", () => {
+    const mapStart = CLI_SOURCE.indexOf("const HOOK_MAP");
+    const mapEnd = CLI_SOURCE.indexOf("};", mapStart) + 2;
+    const hookMap = CLI_SOURCE.slice(mapStart, mapEnd);
+    // Extract codex block
+    const codexStart = hookMap.indexOf('"codex"');
+    const codexEnd = hookMap.indexOf("}", codexStart + 10) + 1;
+    const codexBlock = hookMap.slice(codexStart, codexEnd);
+    expect(codexBlock).toContain("pretooluse");
+    expect(codexBlock).toContain("posttooluse");
+    expect(codexBlock).toContain("sessionstart");
+  });
+
+  test("codex hooks point to dedicated hooks/codex/ directory", () => {
+    const mapStart = CLI_SOURCE.indexOf("const HOOK_MAP");
+    const mapEnd = CLI_SOURCE.indexOf("};", mapStart) + 2;
+    const hookMap = CLI_SOURCE.slice(mapStart, mapEnd);
+    const codexStart = hookMap.indexOf('"codex"');
+    const codexEnd = hookMap.indexOf("}", codexStart + 10) + 1;
+    const codexBlock = hookMap.slice(codexStart, codexEnd);
+    expect(codexBlock).toContain("hooks/codex/pretooluse.mjs");
+    expect(codexBlock).toContain("hooks/codex/posttooluse.mjs");
+    expect(codexBlock).toContain("hooks/codex/sessionstart.mjs");
+  });
+
+  test("hooks/codex/pretooluse.mjs exists", () => {
+    expect(existsSync(resolve(ROOT, "hooks/codex/pretooluse.mjs"))).toBe(true);
+  });
+
+  test("hooks/codex/posttooluse.mjs exists", () => {
+    expect(existsSync(resolve(ROOT, "hooks/codex/posttooluse.mjs"))).toBe(true);
+  });
+
+  test("hooks/codex/sessionstart.mjs exists", () => {
+    expect(existsSync(resolve(ROOT, "hooks/codex/sessionstart.mjs"))).toBe(true);
+  });
+
+  test("session-helpers.mjs exports CODEX_OPTS", () => {
+    const helpers = readFileSync(resolve(ROOT, "hooks/session-helpers.mjs"), "utf-8");
+    expect(helpers).toContain("export const CODEX_OPTS");
+  });
+
+  test("CODEX_OPTS uses .codex config dir", () => {
+    const helpers = readFileSync(resolve(ROOT, "hooks/session-helpers.mjs"), "utf-8");
+    const optsStart = helpers.indexOf("CODEX_OPTS");
+    const optsEnd = helpers.indexOf("};", optsStart) + 2;
+    const optsBlock = helpers.slice(optsStart, optsEnd);
+    expect(optsBlock).toContain('".codex"');
+  });
+
+  test("configs/codex/hooks.json commands match HOOK_MAP platform name", () => {
+    const hooksJson = JSON.parse(readFileSync(resolve(ROOT, "configs/codex/hooks.json"), "utf-8"));
+    for (const [eventType, entries] of Object.entries(hooksJson.hooks)) {
+      for (const entry of entries as any[]) {
+        for (const hook of entry.hooks) {
+          // Command must use "context-mode hook codex <event>"
+          expect(hook.command).toMatch(/context-mode hook codex \w+/);
+        }
+      }
+    }
+  });
+
+  test("CODEX_OPTS.projectDirEnv is undefined (Codex passes cwd in stdin, not env)", () => {
+    const helpers = readFileSync(resolve(ROOT, "hooks/session-helpers.mjs"), "utf-8");
+    const optsStart = helpers.indexOf("CODEX_OPTS");
+    const optsEnd = helpers.indexOf("};", optsStart) + 2;
+    const optsBlock = helpers.slice(optsStart, optsEnd);
+    expect(optsBlock).toMatch(/projectDirEnv:\s*undefined/);
+  });
+
+  test("codex hooks include hookEventName in output (required by codex-rs)", () => {
+    const posttooluse = readFileSync(resolve(ROOT, "hooks/codex/posttooluse.mjs"), "utf-8");
+    expect(posttooluse).toContain('hookEventName: "PostToolUse"');
+
+    const sessionstart = readFileSync(resolve(ROOT, "hooks/codex/sessionstart.mjs"), "utf-8");
+    expect(sessionstart).toContain('hookEventName: "SessionStart"');
+  });
+
+  test("codex pretooluse formatter includes hookEventName in deny response", () => {
+    const formatters = readFileSync(resolve(ROOT, "hooks/core/formatters.mjs"), "utf-8");
+    const codexStart = formatters.indexOf('"codex"');
+    const codexEnd = formatters.indexOf("},", codexStart + 50);
+    const codexBlock = formatters.slice(codexStart, codexEnd);
+    expect(codexBlock).toContain('hookEventName: "PreToolUse"');
+  });
+});
+
+// ── Cursor stop hook (#HOOK_MAP cursor stop) ─────────────────────────────
+
+describe("Cursor CLI hook dispatch — stop event", () => {
+  const CLI_SOURCE = readFileSync(resolve(ROOT, "src", "cli.ts"), "utf-8");
+
+  test("HOOK_MAP cursor entry includes stop event", () => {
+    const cursorEntry = CLI_SOURCE.match(/"cursor"\s*:\s*\{[\s\S]*?\}/);
+    expect(cursorEntry).not.toBeNull();
+    expect(cursorEntry![0]).toContain("stop");
+    expect(cursorEntry![0]).toContain("hooks/cursor/stop.mjs");
+  });
+});
+
+// ── Upgrade skill sync to marketplace/cache directories ───────────────────
+
+describe("Upgrade syncs skills to active install path (#228)", () => {
+  const CLI_SOURCE = readFileSync(resolve(ROOT, "src/cli.ts"), "utf-8");
+  const upgradeStart = CLI_SOURCE.indexOf("async function upgrade");
+  const upgradeBody = CLI_SOURCE.slice(upgradeStart);
+
+  test("upgrade reads installed_plugins.json to find active install path", () => {
+    expect(upgradeBody).toContain("installed_plugins.json");
+    expect(upgradeBody).toContain("context-mode@context-mode");
+    expect(upgradeBody).toContain("installPath");
+  });
+
+  test("upgrade only syncs when installPath differs from pluginRoot", () => {
+    // Must check installPath !== pluginRoot before copying
+    expect(upgradeBody).toMatch(/installPath.*!==.*pluginRoot|installPath\s*&&\s*installPath\s*!==\s*pluginRoot/);
+  });
+
+  test("upgrade does NOT blindly copy to marketplace or cache directories", () => {
+    // No hardcoded marketplace/cache paths — only installPath from registry
+    const syncSection = upgradeBody.slice(upgradeBody.indexOf("installed_plugins.json"));
+    expect(syncSection).not.toContain('"marketplaces"');
+    expect(syncSection).not.toContain("readdirSync");
+  });
+
+  test("upgrade warns user to restart for new MCP tools", () => {
+    expect(upgradeBody).toMatch(/[Rr]estart.*MCP|new MCP tools/i);
+  });
+
+  test("restart hint is adapter-aware (Claude Code gets /reload-plugins)", () => {
+    expect(upgradeBody).toContain("reload-plugins");
+    expect(upgradeBody).toContain('adapter.name === "Claude Code"');
+  });
+});

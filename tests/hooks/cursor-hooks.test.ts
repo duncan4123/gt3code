@@ -121,7 +121,7 @@ describe("Cursor hooks", () => {
       expect(result.exitCode).toBe(0);
       const payload = JSON.parse(result.stdout) as Record<string, unknown>;
       expect(payload.permission).toBe("deny");
-      expect(String(payload.user_message)).toContain("mcp_web_fetch");
+      expect(String(payload.user_message)).toContain("WebFetch blocked");
       expect(String(payload.user_message)).toContain("ctx_fetch_and_index");
       expect(String(payload.user_message)).toContain("ctx_search");
     });
@@ -137,7 +137,7 @@ describe("Cursor hooks", () => {
       expect(result.exitCode).toBe(0);
       const payload = JSON.parse(result.stdout) as Record<string, unknown>;
       expect(payload.permission).toBe("deny");
-      expect(String(payload.user_message)).toContain("mcp_fetch_tool");
+      expect(String(payload.user_message)).toContain("WebFetch blocked");
       expect(String(payload.user_message)).toContain("ctx_fetch_and_index");
       expect(String(payload.user_message)).toContain("ctx_search");
     });
@@ -214,6 +214,52 @@ describe("Cursor hooks", () => {
       expect(result.exitCode).toBe(0);
       const payload = JSON.parse(result.stdout) as Record<string, unknown>;
       expect(String(payload.additional_context)).toContain("context-mode");
+    });
+  });
+
+  describe("stop.mjs", () => {
+    test("exists on disk", () => {
+      expect(existsSync(join(HOOKS_DIR, "stop.mjs"))).toBe(true);
+    });
+
+    test("exits 0 and returns followup_message when given valid JSON stdin", () => {
+      const result = runHook("stop.mjs", {
+        conversation_id: "cursor-hook-stop-1",
+        status: "completed",
+        loop_count: 3,
+        transcript_path: `${tempDir}/transcripts/cursor-hook-stop-1.jsonl`,
+        workspace_roots: [tempDir],
+      }, cursorEnv());
+
+      expect(result.exitCode).toBe(0);
+      const payload = JSON.parse(result.stdout) as Record<string, unknown>;
+      expect(payload.followup_message).toBe("");
+    });
+
+    test("handles error status gracefully", () => {
+      const result = runHook("stop.mjs", {
+        conversation_id: "cursor-hook-stop-2",
+        status: "error",
+        loop_count: 1,
+        workspace_roots: [tempDir],
+      }, cursorEnv());
+
+      expect(result.exitCode).toBe(0);
+      const payload = JSON.parse(result.stdout) as Record<string, unknown>;
+      expect(payload.followup_message).toBe("");
+    });
+
+    test("parses BOM-prefixed stdin without error", () => {
+      const result = runHook("stop.mjs", {
+        conversation_id: "cursor-bom-stop-1",
+        status: "completed",
+        loop_count: 0,
+        workspace_roots: [tempDir],
+      }, cursorEnv(), { bom: true });
+
+      expect(result.exitCode).toBe(0);
+      const payload = JSON.parse(result.stdout) as Record<string, unknown>;
+      expect(payload.followup_message).toBe("");
     });
   });
 

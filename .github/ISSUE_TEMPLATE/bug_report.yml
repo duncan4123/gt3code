@@ -6,11 +6,11 @@ body:
   - type: markdown
     attributes:
       value: |
-        ## 🛑 Read this before filing.
+        ## Read this before filing.
 
-        **This is a developer tool that runs on 11 platforms (Claude Code, Gemini CLI, VS Code Copilot, OpenCode, Kiro, Cursor, Codex CLI, Zed, Antigravity, OpenClaw, Pi) across 3 operating systems (macOS, Linux, Windows). It is maintained by one person. I cannot reproduce every platform-specific edge case.**
+        **This is a developer tool that runs on 12 platforms (Claude Code, Cursor, VS Code Copilot, Gemini CLI, OpenCode, KiloCode, Codex CLI, OpenClaw, Kiro, Antigravity, Zed, and more) across 3 operating systems (macOS, Linux, Windows). It is maintained by one person. I cannot reproduce every platform-specific edge case.**
 
-        ### 🔧 PRs > Issues. Always.
+        ### PRs > Issues. Always.
 
         You're using an AI coding agent. You have the most powerful debugging tool in history sitting right there. Use it:
 
@@ -25,7 +25,7 @@ body:
 
         - You genuinely tried to fix it and couldn't (show what you tried)
         - The bug is in core architecture, not a platform-specific edge case
-        - You provide: exact prompt, full error log, doctor output, repro steps
+        - You provide: exact prompt, full error log, debug script output, repro steps
 
         **Issues without reproduction steps will be closed.**
 
@@ -43,16 +43,17 @@ body:
       description: Which AI agent platform are you using?
       options:
         - Claude Code
-        - Gemini CLI
-        - VS Code Copilot
-        - OpenCode / Kilo Code
         - Cursor
-        - Kiro
+        - VS Code Copilot (GitHub Copilot)
+        - Gemini CLI
+        - OpenCode
+        - KiloCode
         - Codex CLI
+        - OpenClaw (Pi Agent)
+        - Kiro
+        - Antigravity
         - Zed
-        - Google Antigravity
-        - OpenClaw / Pi Agent
-        - Other
+        - Other (please specify)
     validations:
       required: true
 
@@ -61,21 +62,26 @@ body:
     attributes:
       label: context-mode version
       description: |
-        Run `/context-mode:ctx-doctor` (Claude Code) or ask the model to call the `stats` tool.
-        Must be the latest. If not, upgrade first.
+        Shown in the debug script output. Must be the latest. If not, upgrade first.
       placeholder: "e.g. 0.9.23"
     validations:
       required: true
 
   - type: textarea
-    id: doctor-output
+    id: debug-output
     attributes:
-      label: Full doctor output (REQUIRED)
+      label: Debug script output (REQUIRED)
       description: |
-        Run `/context-mode:ctx-doctor` and paste the COMPLETE output here.
-        Must be on the LATEST version. If not latest, upgrade first.
-        **Issues without doctor output will be closed immediately.**
-      render: text
+        Run the diagnostic script and paste the JSON output:
+        ```
+        bash scripts/ctx-debug.sh
+        cat /tmp/ctx-debug-*.json   # paste this
+        ```
+        If installed via npm: `bash "$(npm root -g)/context-mode/scripts/ctx-debug.sh"`
+        The script writes a JSON file to /tmp — copy its contents here.
+        **Issues without debug output will be closed immediately.**
+      placeholder: "Paste the contents of /tmp/ctx-debug-<timestamp>.json"
+      render: json
     validations:
       required: true
 
@@ -138,13 +144,13 @@ body:
     attributes:
       label: Pre-submission checklist
       options:
-        - label: I am on the LATEST version (ran ctx-upgrade)
+        - label: I have run the debug script and pasted the output above
           required: true
-        - label: I searched existing issues and this is not a duplicate
+        - label: I am using the latest version of context-mode
           required: true
-        - label: I tried to debug this myself (read source, ran hooks manually, etc.)
+        - label: I have searched existing issues for duplicates
           required: true
-        - label: I understand that PRs are preferred and issues don't guarantee a fix
+        - label: I have included steps to reproduce the issue
           required: true
 
   - type: dropdown
@@ -152,11 +158,15 @@ body:
     attributes:
       label: Operating System
       options:
-        - macOS
+        - macOS (Apple Silicon)
+        - macOS (Intel)
         - Linux (Ubuntu/Debian)
+        - Linux (Fedora/RHEL)
+        - Linux (Arch)
         - Linux (Other)
-        - Windows (Native)
+        - Windows (Git Bash)
         - Windows (WSL)
+        - Windows (PowerShell)
     validations:
       required: true
 
@@ -164,7 +174,7 @@ body:
     id: runtime
     attributes:
       label: JS Runtime
-      description: "Bun or Node version (shown in doctor output)"
+      description: "Bun or Node version (shown in debug script output)"
       placeholder: "e.g. bun 1.3.4"
     validations:
       required: false

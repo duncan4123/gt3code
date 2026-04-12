@@ -10,11 +10,12 @@ import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest"
 import { spawnSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdtempSync, rmSync, existsSync, unlinkSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, unlinkSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir, homedir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(__dirname, "..", "..");
 const HOOKS_DIR = join(__dirname, "..", "..", "hooks", "vscode-copilot");
 
 interface HookResult {
@@ -265,6 +266,17 @@ describe("VS Code Copilot hooks", () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("SessionStart");
+    });
+
+    test("sessionstart outputs valid JSON with hookSpecificOutput", () => {
+      // Read the hook source and verify it outputs JSON format
+      const hookSrc = readFileSync(resolve(ROOT, "hooks/vscode-copilot/sessionstart.mjs"), "utf-8");
+      expect(hookSrc).toContain("JSON.stringify");
+      expect(hookSrc).toContain("hookSpecificOutput");
+      expect(hookSrc).toContain("hookEventName");
+      expect(hookSrc).toContain('"SessionStart"');
+      // Must NOT have plain text output
+      expect(hookSrc).not.toContain("SessionStart:compact hook success");
     });
   });
 
