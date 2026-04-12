@@ -149,6 +149,37 @@ function resolveStore(database?: string): ContentStore {
   return store;
 }
 
+type DoltBranchRow = {
+  name: string;
+  hash?: string;
+  is_current?: number | string | boolean;
+  current?: number | string | boolean;
+  active?: number | string | boolean;
+};
+
+function formatDoltBranches(store: ContentStore): string {
+  const branchColumns = store.queryAll("PRAGMA table_info(dolt_branches)") as Array<{ name?: string }>;
+  const columnNames = new Set(branchColumns.map((col) => col.name).filter(Boolean));
+  const currentColumn = ["is_current", "current", "active"].find((name) => columnNames.has(name));
+  const selectCols = ["name", "hash"];
+  if (currentColumn) selectCols.push(currentColumn);
+
+  const branches = store.queryAll(
+    `SELECT ${selectCols.join(", ")} FROM dolt_branches ORDER BY name`
+  ) as Array<DoltBranchRow>;
+
+  const lines = ["## Branches\n"];
+  for (const branch of branches) {
+    const currentValue = currentColumn ? branch[currentColumn as keyof DoltBranchRow] : undefined;
+    const isCurrent = currentValue === 1 || currentValue === "1" || currentValue === true;
+    const marker = isCurrent ? " **(active)**" : "";
+    const hash = branch.hash ? ` — ${branch.hash.slice(0, 12)}` : "";
+    lines.push(`- \`${branch.name}\`${marker}${hash}`);
+  }
+
+  return lines.join("\n");
+}
+
 // ─────────────────────────────────────────────────────────
 // Session stats — track context consumption per tool
 // ─────────────────────────────────────────────────────────
@@ -2114,6 +2145,86 @@ server.registerTool(
       }
       return trackResponse("ctx_commit", {
         content: [{ type: "text" as const, text: `Commit failed: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_branch",
+  {
+    title: "Manage Knowledge Base Branches",
+    description:
+      "Create, list, switch, merge, or delete dolt branches for the indexed knowledge base. " +
+      "Use branches to isolate experimental indexing before merging. Only available on doltlite.",
+    inputSchema: z.object({
+      action: z.enum(["list", "create", "checkout", "merge", "delete"]).describe("Branch action"),
+      name: z.string().optional().describe("Branch name (required for create/checkout/merge/delete)"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the ephemeral session store."),
+    }),
+  },
+  async ({ action, name, database }) => {
+    const store = resolveStore(database);
+    try {
+      switch (action) {
+        case "list":
+          return trackResponse("ctx_branch", {
+            content: [{ type: "text" as const, text: formatDoltBranches(store) }],
+          });
+        case "create":
+          if (!name) {
+            return trackResponse("ctx_branch", {
+              content: [{ type: "text" as const, text: "Error: name required for create" }],
+              isError: true,
+            });
+          }
+          store.queryOne(`SELECT dolt_branch('${name.replace(/'/g, "''")}')`);
+          return trackResponse("ctx_branch", {
+            content: [{ type: "text" as const, text: `Created branch: ${name}` }],
+          });
+        case "checkout":
+          if (!name) {
+            return trackResponse("ctx_branch", {
+              content: [{ type: "text" as const, text: "Error: name required for checkout" }],
+              isError: true,
+            });
+          }
+          store.queryOne(`SELECT dolt_checkout('${name.replace(/'/g, "''")}')`);
+          return trackResponse("ctx_branch", {
+            content: [{ type: "text" as const, text: `Switched to branch: ${name}` }],
+          });
+        case "merge":
+          if (!name) {
+            return trackResponse("ctx_branch", {
+              content: [{ type: "text" as const, text: "Error: name required for merge" }],
+              isError: true,
+            });
+          }
+          store.queryOne(`SELECT dolt_merge('${name.replace(/'/g, "''")}')`);
+          return trackResponse("ctx_branch", {
+            content: [{ type: "text" as const, text: `Merged branch: ${name}` }],
+          });
+        case "delete":
+          if (!name) {
+            return trackResponse("ctx_branch", {
+              content: [{ type: "text" as const, text: "Error: name required for delete" }],
+              isError: true,
+            });
+          }
+          store.queryOne(`SELECT dolt_branch('-d', '${name.replace(/'/g, "''")}')`);
+          return trackResponse("ctx_branch", {
+            content: [{ type: "text" as const, text: `Deleted branch: ${name}` }],
+          });
+      }
+    } catch (e: any) {
+      if (e.message?.includes("dolt_") || e.message?.includes("dolt_branches")) {
+        return trackResponse("ctx_branch", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_branch", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
         isError: true,
       });
     }
