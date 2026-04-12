@@ -261,13 +261,6 @@ describe("OpenClawPlugin", () => {
       expect(doctorCmd!.description).toContain("diagnostics");
     });
 
-    it("registers ctx-upgrade command", async () => {
-      const mock = await createTestPlugin(join(tempDir, "cmd-upgrade"));
-      const upgradeCmd = mock.commands.find((c) => c.name === "ctx-upgrade");
-      expect(upgradeCmd).toBeDefined();
-      expect(upgradeCmd!.description).toContain("Upgrade");
-    });
-
     it("ctx-stats handler returns session stats text", async () => {
       const mock = await createTestPlugin(join(tempDir, "cmd-stats-run"));
       const statsCmd = mock.commands.find((c) => c.name === "ctx-stats");
@@ -284,14 +277,6 @@ describe("OpenClawPlugin", () => {
       expect(result.text).toContain("doctor");
     });
 
-    it("ctx-upgrade handler returns upgrade command", async () => {
-      const mock = await createTestPlugin(join(tempDir, "cmd-upgrade-run"));
-      const upgradeCmd = mock.commands.find((c) => c.name === "ctx-upgrade");
-      const result = await upgradeCmd!.handler({});
-      expect(result.text).toContain("ctx-upgrade");
-      expect(result.text).toContain("upgrade");
-      expect(result.text).toContain("Restart");
-    });
   });
 
   // ── before_tool_call ──────────────────────────────────

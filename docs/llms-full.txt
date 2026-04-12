@@ -658,14 +658,6 @@ Reports session statistics:
 - Call counts per tool
 - Estimated token usage
 
-### ctx-upgrade
-
-Self-update from GitHub:
-- Fetches latest version from npm registry or GitHub releases
-- Downloads and installs to the plugin cache directory
-- Rebuilds TypeScript if needed
-- Updates hooks and settings paths
-
 ## Plugin Registration
 
 ### `.claude-plugin/plugin.json`

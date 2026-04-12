@@ -1998,41 +1998,6 @@ server.registerTool(
   },
 );
 
-// ── ctx-upgrade: upgrade meta-tool ─────────────────────────────────────────
-server.registerTool(
-  "ctx_upgrade",
-  {
-    title: "Upgrade Plugin",
-    description:
-      "Upgrade context-mode to the latest version. Returns a shell command to execute. " +
-      "You MUST run the returned command using your shell tool (Bash, shell_execute, " +
-      "run_in_terminal, etc.) and display the output as a checklist. " +
-      "Tell the user to restart their session after upgrade.",
-    inputSchema: z.object({}),
-  },
-  async () => {
-    const text = [
-      "## ctx-upgrade",
-      "",
-      "Disabled in this fork.",
-      "",
-      "Reason:",
-      "- `ctx_upgrade` would replace the live install at `/data/projects/claude-context-mode` with a fresh upstream GitHub checkout.",
-      "- This fork is managed from local `main`, not from upstream auto-upgrade.",
-      "",
-      "Use the local rollout flow instead:",
-      "1. update `/data/projects/claude-context-mode` on `main`",
-      "2. run `npm run build`",
-      "3. restart the provider/app session",
-    ].join("\n");
-
-    return trackResponse("ctx_upgrade", {
-      content: [{ type: "text" as const, text }],
-      isError: true,
-    });
-  },
-);
-
 // ─────────────────────────────────────────────────────────
 // Named persistent databases
 // ─────────────────────────────────────────────────────────

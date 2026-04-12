@@ -122,14 +122,6 @@ describe("cli.bundle.mjs — marketplace install support", () => {
 
   // ── Skill files ────────────────────────────────────────────
 
-  it("ctx-upgrade skill uses cli.bundle.mjs with fallback", () => {
-    const skill = readFileSync(resolve(ROOT, "skills", "ctx-upgrade", "SKILL.md"), "utf-8");
-    expect(skill).toContain("cli.bundle.mjs");
-    expect(skill).toContain("build/cli.js");
-    // Fallback pattern: try bundle first, then build
-    expect(skill).toMatch(/CLI=.*cli\.bundle\.mjs.*\[ ! -f.*\].*build\/cli\.js/);
-  });
-
   it("ctx-doctor skill uses cli.bundle.mjs with fallback", () => {
     const skill = readFileSync(resolve(ROOT, "skills", "ctx-doctor", "SKILL.md"), "utf-8");
     expect(skill).toContain("cli.bundle.mjs");
@@ -585,19 +577,12 @@ describe("Bin entry uses cli.bundle.mjs", () => {
 
   it("server.ts ctx_doctor runs diagnostics in-process (no CLI dependency)", () => {
     const src = readFileSync(resolve(ROOT, "src", "server.ts"), "utf-8");
-    const doctorSection = src.slice(src.indexOf("ctx_doctor"), src.indexOf("ctx_upgrade"));
+    const doctorSection = src.slice(src.indexOf("ctx_doctor"), src.indexOf("list_databases"));
     // Must NOT delegate to CLI — runs server-side
     expect(doctorSection).not.toContain('node "');
     // Must run actual checks
     expect(doctorSection).toContain("PolyglotExecutor");
     expect(doctorSection).toContain("FTS5");
-  });
-
-  it("server.ts ctx_upgrade uses cli.bundle.mjs with fallback", () => {
-    const src = readFileSync(resolve(ROOT, "src", "server.ts"), "utf-8");
-    // ctx_upgrade handler must prefer cli.bundle.mjs
-    const upgradeSection = src.slice(src.indexOf("ctx_upgrade"), src.indexOf("ctx_upgrade") + 800);
-    expect(upgradeSection).toContain("cli.bundle.mjs");
   });
 
   it("server.ts registers empty prompts/resources handlers to avoid -32601 (#168)", () => {
@@ -611,18 +596,14 @@ describe("Bin entry uses cli.bundle.mjs", () => {
     expect(src).toContain("resources: []");
   });
 
-  it("openclaw-plugin.ts doctor/upgrade use cli.bundle.mjs with fallback", () => {
+  it("openclaw-plugin.ts doctor command uses cli.bundle.mjs with fallback", () => {
     const src = readFileSync(resolve(ROOT, "src", "openclaw-plugin.ts"), "utf-8");
     expect(src).toContain("cli.bundle.mjs");
     // Find the registerCommand blocks, not comments
     const doctorIdx = src.indexOf('name: "ctx-doctor"');
-    const upgradeIdx = src.indexOf('name: "ctx-upgrade"');
     expect(doctorIdx).toBeGreaterThan(-1);
-    expect(upgradeIdx).toBeGreaterThan(-1);
     const doctorSection = src.slice(doctorIdx, doctorIdx + 500);
-    const upgradeSection = src.slice(upgradeIdx, upgradeIdx + 500);
     expect(doctorSection).toContain("cli.bundle.mjs");
-    expect(upgradeSection).toContain("cli.bundle.mjs");
   });
 });
 
@@ -705,18 +686,6 @@ describe("SKILL.md prefers MCP tool over Bash", () => {
     expect(mcpIdx).toBeLessThan(fallbackIdx);
   });
 
-  it("ctx-upgrade SKILL.md prefers MCP tool over Bash", () => {
-    const skill = readFileSync(resolve(ROOT, "skills", "ctx-upgrade", "SKILL.md"), "utf-8");
-    // Must mention the MCP tool
-    expect(skill).toContain("ctx_upgrade");
-    expect(skill).toContain("MCP tool");
-    // MCP tool instruction must appear BEFORE the Bash fallback
-    const mcpIdx = skill.indexOf("ctx_upgrade");
-    const fallbackIdx = skill.indexOf("Fallback");
-    expect(mcpIdx).toBeGreaterThan(-1);
-    expect(fallbackIdx).toBeGreaterThan(-1);
-    expect(mcpIdx).toBeLessThan(fallbackIdx);
-  });
 });
 
 // ── Package exports ───────────────────────────────────────────────────
@@ -1017,40 +986,5 @@ describe("Cursor CLI hook dispatch — stop event", () => {
     expect(cursorEntry).not.toBeNull();
     expect(cursorEntry![0]).toContain("stop");
     expect(cursorEntry![0]).toContain("hooks/cursor/stop.mjs");
-  });
-});
-
-// ── Upgrade skill sync to marketplace/cache directories ───────────────────
-
-describe("Upgrade syncs skills to active install path (#228)", () => {
-  const CLI_SOURCE = readFileSync(resolve(ROOT, "src/cli.ts"), "utf-8");
-  const upgradeStart = CLI_SOURCE.indexOf("async function upgrade");
-  const upgradeBody = CLI_SOURCE.slice(upgradeStart);
-
-  test("upgrade reads installed_plugins.json to find active install path", () => {
-    expect(upgradeBody).toContain("installed_plugins.json");
-    expect(upgradeBody).toContain("context-mode@context-mode");
-    expect(upgradeBody).toContain("installPath");
-  });
-
-  test("upgrade only syncs when installPath differs from pluginRoot", () => {
-    // Must check installPath !== pluginRoot before copying
-    expect(upgradeBody).toMatch(/installPath.*!==.*pluginRoot|installPath\s*&&\s*installPath\s*!==\s*pluginRoot/);
-  });
-
-  test("upgrade does NOT blindly copy to marketplace or cache directories", () => {
-    // No hardcoded marketplace/cache paths — only installPath from registry
-    const syncSection = upgradeBody.slice(upgradeBody.indexOf("installed_plugins.json"));
-    expect(syncSection).not.toContain('"marketplaces"');
-    expect(syncSection).not.toContain("readdirSync");
-  });
-
-  test("upgrade warns user to restart for new MCP tools", () => {
-    expect(upgradeBody).toMatch(/[Rr]estart.*MCP|new MCP tools/i);
-  });
-
-  test("restart hint is adapter-aware (Claude Code gets /reload-plugins)", () => {
-    expect(upgradeBody).toContain("reload-plugins");
-    expect(upgradeBody).toContain('adapter.name === "Claude Code"');
   });
 });

@@ -25,7 +25,6 @@
 - [context-mode](https://raw.githubusercontent.com/sfncore/claude-context-mode/main/skills/context-mode/SKILL.md): Primary skill — tool selection decision tree, routing rules, usage patterns
 - [ctx-doctor](https://raw.githubusercontent.com/sfncore/claude-context-mode/main/skills/ctx-doctor/SKILL.md): Diagnose plugin health — runtimes, FTS5, hooks, plugin registration, versions
 - [ctx-stats](https://raw.githubusercontent.com/sfncore/claude-context-mode/main/skills/ctx-stats/SKILL.md): Report context savings statistics and knowledge base utilization for the current session
-- [ctx-upgrade](https://raw.githubusercontent.com/sfncore/claude-context-mode/main/skills/ctx-upgrade/SKILL.md): Upgrade the plugin to the latest version and migrate configuration if needed
 
 ## Configuration
 

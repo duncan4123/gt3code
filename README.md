@@ -54,16 +54,15 @@ Restart Claude Code (or run `/reload-plugins`).
 
 All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, plugin registration, and doltlite patch status.
 
-**Routing:** Automatic. The SessionStart hook injects routing instructions at runtime — no file is written to your project. The plugin registers all hooks (PreToolUse, PostToolUse, PreCompact, SessionStart) and 20 tools: 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`), 3 utility tools, 2 database management tools, 5 doltlite version control tools, and 4 convoy/work-tracking tools. See [Tools](#tools) for the full list.
+**Routing:** Automatic. The SessionStart hook injects routing instructions at runtime — no file is written to your project. The plugin registers all hooks (PreToolUse, PostToolUse, PreCompact, SessionStart) and 19 tools: 6 sandbox tools (`ctx_batch_execute`, `ctx_execute`, `ctx_execute_file`, `ctx_index`, `ctx_search`, `ctx_fetch_and_index`), 2 utility tools, 2 database management tools, 5 doltlite version control tools, and 4 convoy/work-tracking tools. See [Tools](#tools) for the full list.
 
 | Slash Command | What it does |
 |---|---|
 | `/context-mode-doltlite:ctx-stats` | Context savings — per-tool breakdown, tokens consumed, savings ratio. |
 | `/context-mode-doltlite:ctx-doctor` | Diagnostics — runtimes, hooks, FTS5, plugin registration, versions. |
-| `/context-mode-doltlite:ctx-upgrade` | Pull latest, rebuild, migrate cache, fix hooks. |
 | `/context-mode-doltlite:ctx-purge` | Permanently delete all indexed content from the knowledge base. |
 
-> **Note:** Slash commands are a Claude Code plugin feature. On other platforms, type `ctx stats`, `ctx doctor`, or `ctx upgrade` in the chat — the model calls the MCP tool automatically. See [Utility Commands](#utility-commands).
+> **Note:** Slash commands are a Claude Code plugin feature. On other platforms, type `ctx stats`, `ctx doctor`, or `ctx purge` in the chat — the model calls the MCP tool automatically. See [Utility Commands](#utility-commands).
 
 <details>
 <summary>Alternative — MCP-only install (no hooks or slash commands)</summary>
@@ -640,7 +639,6 @@ npm install -g context-mode-doltlite
 | **Utility** | | |
 | `ctx_stats` | Show context savings, call counts, and session statistics. | — |
 | `ctx_doctor` | Diagnose installation: runtimes, hooks, FTS5, versions. | — |
-| `ctx_upgrade` | Upgrade to latest version from GitHub, rebuild, reconfigure hooks. | — |
 | `ctx_purge` | Permanently deletes all indexed content from the knowledge base. | — |
 | **Database Management** | | |
 | `list_databases` | List all named persistent FTS5 databases. | — |
@@ -884,7 +882,7 @@ bash scripts/ctx-debug.sh    # full diagnostic report for bug reports
 
 The debug script collects OS info, runtime versions, better-sqlite3 status, adapter detection, config files (redacted), hook validation, FTS5/SQLite test, executor test, process check, session databases, and environment variables into a single pasteable markdown report.
 
-Works on **all platforms**. On Claude Code, slash commands (`/ctx-stats`, `/ctx-doctor`, `/ctx-upgrade`, `/ctx-purge`) are also available.
+Works on **all platforms**. On Claude Code, slash commands (`/ctx-stats`, `/ctx-doctor`, `/ctx-purge`) are also available.
 
 ## Benchmarks
 

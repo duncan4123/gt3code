@@ -372,11 +372,10 @@ async function doctor(): Promise<number> {
         ` — v${localVersion}`,
     );
   } else {
-    p.log.warn(
-      color.yellow("npm (MCP): WARN") +
-        ` — local v${localVersion}, latest v${latestVersion}` +
-        color.dim("\n  Run: /context-mode:ctx-upgrade"),
-    );
+      p.log.warn(
+        color.yellow("npm (MCP): WARN") +
+        ` — local v${localVersion}, latest v${latestVersion}`,
+      );
   }
 
   if (installedVersion === "not installed") {
@@ -390,11 +389,10 @@ async function doctor(): Promise<number> {
         ` — v${installedVersion}`,
     );
   } else if (latestVersion !== "unknown") {
-    p.log.warn(
-      color.yellow(`${adapter.name}: WARN`) +
-        ` — v${installedVersion}, latest v${latestVersion}` +
-        color.dim("\n  Run: /context-mode:ctx-upgrade"),
-    );
+      p.log.warn(
+        color.yellow(`${adapter.name}: WARN`) +
+        ` — v${installedVersion}, latest v${latestVersion}`,
+      );
   } else {
     p.log.info(
       `${adapter.name}: v${installedVersion}` +

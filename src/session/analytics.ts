@@ -432,7 +432,7 @@ export function formatReport(report: FullReport, version?: string, latestVersion
     lines.push("");
     lines.push(version ? `v${version}` : "context-mode");
     if (version && latestVersion && latestVersion !== "unknown" && latestVersion !== version) {
-      lines.push(`Update available: v${version} -> v${latestVersion}  |  Run: ctx_upgrade`);
+      lines.push(`Update available: v${version} -> v${latestVersion}`);
     }
     return lines.join("\n");
   }
@@ -511,7 +511,7 @@ export function formatReport(report: FullReport, version?: string, latestVersion
 
   // Outdated warning in footer
   if (version && latestVersion && latestVersion !== "unknown" && latestVersion !== version) {
-    lines.push(`Update available: v${version} -> v${latestVersion}  |  Run: ctx_upgrade`);
+    lines.push(`Update available: v${version} -> v${latestVersion}`);
   }
 
   return lines.join("\n");

@@ -25,8 +25,7 @@ npm install -g context-mode-doltlite
 This puts the `context-mode` binary in PATH, which is required for:
 - **MCP server:** `"command": "context-mode"` (replaces ephemeral `npx -y context-mode`)
 - **Hook dispatcher:** `context-mode hook <platform> <event>` (replaces `node ./node_modules/...` paths)
-- **Utility commands:** `context-mode doctor`, `context-mode upgrade`
-- **Persistent upgrades:** `ctx-upgrade` updates the global binary in-place
+- **Utility commands:** `context-mode doctor`
 
 ---
 

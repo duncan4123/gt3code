@@ -16,7 +16,6 @@
  *   - context-mode engine      — Context engine with compaction management
  *   - /ctx-stats command       — Auto-reply command for session statistics
  *   - /ctx-doctor command      — Auto-reply command for diagnostics
- *   - /ctx-upgrade command     — Auto-reply command for upgrade
  *
  * Loaded by OpenClaw via: openclaw.extensions entry in package.json
  *
@@ -651,29 +650,6 @@ export default {
         },
       });
 
-      api.registerCommand({
-        name: "ctx-upgrade",
-        description: "Upgrade context-mode to the latest version",
-        handler: () => {
-          const bundlePath = resolve(_latestPluginRoot, "cli.bundle.mjs");
-          const fallbackPath = resolve(_latestPluginRoot, "build", "cli.js");
-          const cliPath = existsSync(bundlePath) ? bundlePath : fallbackPath;
-          const cmd = `node "${cliPath}" upgrade`;
-          return {
-            text: [
-              "## ctx-upgrade",
-              "",
-              "Run this command to upgrade context-mode:",
-              "",
-              "```",
-              cmd,
-              "```",
-              "",
-              "Restart your session after upgrade.",
-            ].join("\n"),
-          };
-        },
-      });
     }
   },
 };

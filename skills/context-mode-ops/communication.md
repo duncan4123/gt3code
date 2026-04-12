@@ -21,8 +21,6 @@ This lands on the `next` branch and will ship in the next release. Once it's out
 
 ```
 npm update -g context-mode
-# or for plugin users:
-/context-mode:ctx-upgrade
 ```
 
 Thanks for reporting this — it helped improve context-mode for everyone!
@@ -188,8 +186,6 @@ Let me know how you'd like to proceed!
 Please update and test:
 ```
 npm update -g context-mode
-# or for plugin users:
-/context-mode:ctx-upgrade
 ```
 
 Let us know if this resolves your issue!

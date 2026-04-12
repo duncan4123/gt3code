@@ -22,6 +22,8 @@ Try each step in order. Move to the next only if the current step fails.
 
 ### Step 2: CLI fallback (MCP down, binary works)
 
+Fallback:
+
 If the MCP tool call fails, derive the **plugin root** from this skill file's
 path (go up 2 levels — remove `/skills/ctx-doctor`), then:
 
@@ -71,5 +73,5 @@ Format results as:
 - [ ] FAIL: <describe any failure>
 ```
 
-If the native addon fails to load, suggest running `/ctx-upgrade` (Step 3)
-to rebuild it.
+If the native addon fails to load, suggest rebuilding it locally with
+`npm rebuild better-sqlite3`.

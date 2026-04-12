@@ -1092,46 +1092,6 @@ if (LIVE) {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ctx_upgrade: inline fallback for missing CLI files
-// ═══════════════════════════════════════════════════════════════════════════
-
-describe("ctx_upgrade tool: inline fallback for missing CLI", () => {
-  const serverSrc = readFileSync(
-    resolve(__dirname, "../../src/server.ts"),
-    "utf-8",
-  );
-
-  test("tries cli.bundle.mjs first", () => {
-    expect(serverSrc).toContain("cli.bundle.mjs");
-    // The bundle path should be checked before fallback
-    expect(serverSrc).toMatch(/existsSync\(bundlePath\)/);
-  });
-
-  test("tries build/cli.js second", () => {
-    expect(serverSrc).toContain('resolve(pluginRoot, "build", "cli.js")');
-  });
-
-  test("contains inline fallback with git clone when neither CLI file exists", () => {
-    // The fallback must generate an inline script with git clone via execFileSync
-    expect(serverSrc).toMatch(/git.*clone.*--depth.*1/);
-    // The inline script is written to a temp .mjs file
-    expect(serverSrc).toMatch(/\.ctx-upgrade-inline\.mjs/);
-  });
-
-  test("inline fallback copies key files to plugin root", () => {
-    // The inline script must copy build artifacts back
-    expect(serverSrc).toMatch(/server\.bundle\.mjs/);
-    expect(serverSrc).toMatch(/cli\.bundle\.mjs/);
-    expect(serverSrc).toMatch(/npm.*install/);
-  });
-
-  test("fallback only triggers when neither CLI file exists", () => {
-    // There should be an else/fallback branch after checking both paths
-    expect(serverSrc).toMatch(/existsSync\(fallbackPath\)/);
-  });
-});
-
 // ─── ctx_purge is the ONLY reset mechanism ──────────────────────────────────
 
 describe("ctx_purge is the sole reset/wipe mechanism", () => {
