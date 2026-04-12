@@ -617,6 +617,7 @@ npm install -g context-mode
 | `ctx_log` | View commit history for the current knowledge base. | — |
 | `ctx_diff` | Show changes since the last commit. | — |
 | `ctx_status` | Show current knowledge base state (uncommitted changes). | — |
+| `ctx_gc` | Compact a doltlite knowledge base and reclaim unreachable storage. | — |
 | **Convoy / Work Tracking** | | |
 | `ctx_convoy_create` | Create a parent convoy grouping related tasks. | — |
 | `ctx_bead_create` | Create a work bead (issue) in the knowledge base. | — |
@@ -637,7 +638,9 @@ When output exceeds 5 KB and an `intent` is provided, Context Mode switches to i
 
 The `ctx_index` tool chunks markdown content by headings while keeping code blocks intact, then stores them in a **SQLite FTS5** (Full-Text Search 5) virtual table. Search uses **BM25 ranking** — a probabilistic relevance algorithm that scores documents based on term frequency, inverse document frequency, and document length normalization. **Porter stemming** is applied at index time so "running", "runs", and "ran" match the same stem. Titles and headings are weighted **5x** in BM25 scoring for precise navigational queries.
 
-When [doltlite](docs/BUILD-DOLTLITE.md) is active, the knowledge base uses a **prolly tree** storage engine instead of SQLite's B-tree. This adds git-like version control — `ctx_commit`, `ctx_branch`, `ctx_log`, `ctx_diff`, and `ctx_status` expose commit/branch/merge/diff operations on the indexed content. FTS5 search works identically under both engines.
+When [doltlite](docs/BUILD-DOLTLITE.md) is active, the knowledge base uses a **prolly tree** storage engine instead of SQLite's B-tree. This adds git-like version control — `ctx_commit`, `ctx_branch`, `ctx_log`, `ctx_diff`, and `ctx_status` expose commit/branch/merge/diff operations on the indexed content. `ctx_gc` adds an explicit maintenance operation to compact the file and reclaim unreachable storage after heavy commit, branch, or delete churn. FTS5 search works identically under both engines.
+
+Use `ctx_gc` sparingly. It makes sense on long-lived named databases after a lot of history churn or cleanup, especially once you've already committed the current state. It is not a repair tool for logical indexing bugs or write-path inconsistencies.
 
 When you call `ctx_search`, it returns relevant content snippets focused around matching query terms — not full documents, not approximations, the actual indexed content with smart extraction around what you're looking for. `ctx_fetch_and_index` extends this to URLs: fetch, convert HTML to markdown, chunk, index. The raw page never enters context. Use the `contentType` parameter to filter results by type (e.g. `code` or `prose`).
 

@@ -160,7 +160,13 @@ SELECT dolt_merge('main');
 ```
 
 These are exposed through the `ctx_commit`, `ctx_branch`, `ctx_log`,
-`ctx_diff`, and `ctx_status` MCP tools.
+`ctx_diff`, `ctx_status`, and `ctx_gc` MCP tools.
+
+Use `ctx_gc` when a knowledge base has accumulated a lot of unreachable history
+from commits, branch churn, or large deletes and you want to compact the file.
+Prefer to commit first, then run GC as an explicit maintenance step. Do not
+treat GC as a fix for logical FTS or indexing bugs — it is for space
+reclamation and file rewrite, not semantic repair.
 
 ## Updating doltlite
 

@@ -15,7 +15,7 @@ description: |
   "outdated packages", "dependency tree", "cloud resources", "CI/CD output".
   Also triggers on ANY MCP tool output that may exceed 20 lines.
   Subagent routing is handled automatically via PreToolUse hook.
-  Powered by doltlite — versioned knowledge bases with ctx_commit, ctx_log, ctx_diff, ctx_status.
+  Powered by doltlite — versioned knowledge bases with ctx_commit, ctx_log, ctx_diff, ctx_status, ctx_gc.
   Named persistent databases with database parameter on index/search/batch_execute/commit/log/diff/status, list_databases, delete_database.
   Draft convoy creation with ctx_convoy_create, ctx_bead_create, ctx_dep_add, ctx_convoy_list.
 ---
@@ -107,6 +107,7 @@ About to run a command / read a file / call an API?
 | Check what's been indexed | `ctx_log` | See commit history of knowledge base. Accepts `database` param for named DBs. |
 | Review pending changes | `ctx_diff` | What's changed since last commit. Accepts `database` param for named DBs. |
 | Knowledge base health check | `ctx_status` | Engine, sources, chunks, commits, uncommitted. Accepts `database` param for named DBs. |
+| Compact a long-lived DB | `ctx_gc` | Reclaim space after commit/branch/delete churn on a named DB. Prefer after `ctx_commit`; not a repair tool for indexing bugs. |
 | Create draft convoy | `ctx_convoy_create` | Start staging a new convoy of work |
 | Create draft bead | `ctx_bead_create` | Add a task/gate to a draft convoy |
 | Add bead dependency | `ctx_dep_add` | Wire sequential blocking between beads |
@@ -118,6 +119,7 @@ About to run a command / read a file / call an API?
 | Log named DB | `ctx_log(..., database: "name")` | View commit history of a persistent KB |
 | Diff named DB | `ctx_diff(database: "name")` | Uncommitted changes in a persistent KB |
 | Status named DB | `ctx_status(database: "name")` | Health check a persistent knowledge base |
+| GC named DB | `ctx_gc(database: "name")` | Compact a persistent knowledge base after history churn |
 | List persistent DBs | `list_databases` | See all named knowledge bases |
 | Delete persistent DB | `delete_database` | Remove a named knowledge base |
 

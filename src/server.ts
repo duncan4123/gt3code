@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
-import { existsSync, unlinkSync, readdirSync, readFileSync, rmSync, mkdirSync } from "node:fs";
+import { existsSync, unlinkSync, readdirSync, readFileSync, rmSync, mkdirSync, statSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir, tmpdir } from "node:os";
@@ -147,6 +147,23 @@ function resolveStore(database?: string): ContentStore {
     _namedStores.set(key, store);
   }
   return store;
+}
+
+function resetStore(database?: string): void {
+  if (!database) {
+    if (_store) {
+      _store.close();
+      _store = null;
+    }
+    return;
+  }
+
+  const key = database.toLowerCase();
+  const store = _namedStores.get(key);
+  if (store) {
+    store.close();
+    _namedStores.delete(key);
+  }
 }
 
 type DoltBranchRow = {
@@ -2452,6 +2469,74 @@ server.registerTool(
     lines.push(`- **DB path**: ${store.dbPath}`);
 
     return trackResponse("ctx_status", {
+      content: [{ type: "text" as const, text: lines.join("\n") }],
+    });
+  },
+);
+
+server.registerTool(
+  "ctx_gc",
+  {
+    title: "Run Knowledge Base Garbage Collection",
+    description:
+      "Run doltlite garbage collection on a knowledge base. This rewrites the " +
+      "database with only reachable data to reclaim space after heavy commit, " +
+      "branch, or delete churn. Use it as explicit maintenance, not as a repair tool.",
+    inputSchema: z.object({
+      database: z.string().optional().describe("Named persistent database to compact. Omit to use the ephemeral session store."),
+    }),
+  },
+  async ({ database }) => {
+    let store = resolveStore(database);
+    const dbPath = database ? ContentStore.namedDbPath(database.toLowerCase()) : getStorePath();
+    const sizeBefore = existsSync(dbPath) ? statSync(dbPath).size : 0;
+
+    let pendingChanges = 0;
+    try {
+      const row = store.queryOne("SELECT COUNT(*) as n FROM dolt_status") as { n?: number } | undefined;
+      pendingChanges = row?.n ?? 0;
+    } catch {
+      pendingChanges = 0;
+    }
+
+    resetStore(database);
+
+    let gcResult = "ok";
+    try {
+      store = database ? ContentStore.openNamed(database.toLowerCase()) : new ContentStore(dbPath);
+      const row = store.queryOne("SELECT dolt_gc() as result") as Record<string, unknown> | undefined;
+      gcResult = row ? String(Object.values(row)[0]) : "ok";
+      store.close();
+    } catch (e: any) {
+      return trackResponse("ctx_gc", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    } finally {
+      resetStore(database);
+    }
+
+    const sizeAfter = existsSync(dbPath) ? statSync(dbPath).size : 0;
+    const reclaimed = Math.max(0, sizeBefore - sizeAfter);
+    const lines = [
+      "## Knowledge Base Garbage Collection",
+      "",
+      `- **Database**: ${database ? "`" + database + "`" : "ephemeral session store"}`,
+      `- **DB path**: ${dbPath}`,
+      `- **Pending changes before GC**: ${pendingChanges}`,
+      `- **Size before**: ${sizeBefore.toLocaleString()} bytes`,
+      `- **Size after**: ${sizeAfter.toLocaleString()} bytes`,
+      `- **Reclaimed**: ${reclaimed.toLocaleString()} bytes`,
+      `- **GC result**: ${gcResult}`,
+    ];
+
+    if (pendingChanges > 0) {
+      lines.push("", "- **Note**: GC ran with uncommitted changes present. Prefer `ctx_commit` before maintenance GC on long-lived databases.");
+    } else {
+      lines.push("", "- **Note**: `ctx_gc` is for space reclamation and compaction after commit/branch/delete churn, not for repairing logical indexing bugs.");
+    }
+
+    return trackResponse("ctx_gc", {
       content: [{ type: "text" as const, text: lines.join("\n") }],
     });
   },
