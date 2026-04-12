@@ -857,14 +857,17 @@ export class ContentStore {
   #insertChunks(chunks: Chunk[], label: string, text: string): IndexResult {
     const codeChunks = chunks.filter((c) => c.hasCode).length;
 
-    // Atomic dedup + insert: delete previous source with same label,
-    // then insert new content — all within a single transaction.
-    // Prevents stale results in iterative workflows. (See: GitHub issue #67)
-    const transaction = this.#db.transaction(() => {
+    // Under doltlite, deleting and reinserting the same FTS label in a single
+    // transaction can leave stale row references in FTS shadow tables. Split
+    // dedup and insert into separate commits so the delete fully lands before
+    // new rows for the same logical source are added.
+    const deleteTransaction = this.#db.transaction(() => {
       this.#stmtDeleteChunksByLabel.run(label);
       this.#stmtDeleteChunksTrigramByLabel.run(label);
       this.#stmtDeleteSourcesByLabel.run(label);
+    });
 
+    const insertTransaction = this.#db.transaction(() => {
       if (chunks.length === 0) {
         const info = this.#stmtInsertSourceEmpty.run(label);
         return Number(info.lastInsertRowid);
@@ -885,7 +888,8 @@ export class ContentStore {
       return sourceId;
     });
 
-    const sourceId = transaction();
+    deleteTransaction();
+    const sourceId = insertTransaction();
     if (text) this.#extractAndStoreVocabulary(text);
 
     return {
