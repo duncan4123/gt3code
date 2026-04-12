@@ -40,6 +40,8 @@ const ensureBtreeFile = (path: string): void => {
   db.close();
 };
 
+const escapeSqliteStringLiteral = (value: string): string => value.replaceAll("'", "''");
+
 const makeSetup = (projPath: string | null) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
@@ -48,7 +50,7 @@ const makeSetup = (projPath: string | null) =>
 
       if (projPath) {
         ensureBtreeFile(projPath);
-        yield* sql.unsafe(`ATTACH DATABASE '${projPath}' AS proj`);
+        yield* sql.unsafe(`ATTACH DATABASE '${escapeSqliteStringLiteral(projPath)}' AS proj`);
         yield* Effect.logInfo(`attached projection sidecar: ${projPath}`);
       }
 
@@ -89,7 +91,7 @@ const memorySetup = Layer.effectDiscard(
       scope,
       Effect.sync(() => rmSync(tempDir, { recursive: true, force: true })),
     );
-    yield* sql.unsafe(`ATTACH DATABASE '${projPath}' AS proj`);
+    yield* sql.unsafe(`ATTACH DATABASE '${escapeSqliteStringLiteral(projPath)}' AS proj`);
     yield* runMigrations();
   }),
 );

@@ -7,8 +7,8 @@
     ".": "./index.ts"
   },
   "scripts": {
-    "patch": "node ../apps/server/scripts/patch-doltlite.mjs",
-    "postinstall": "node ../apps/server/scripts/patch-doltlite.mjs || true"
+    "patch": "node ../../apps/server/scripts/patch-doltlite.mjs",
+    "postinstall": "node ../../apps/server/scripts/patch-doltlite.mjs || true"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0"

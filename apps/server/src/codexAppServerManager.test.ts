@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ApprovalRequestId, ThreadId } from "@t3tools/contracts";
@@ -14,6 +14,7 @@ import {
   isRecoverableThreadResumeError,
   normalizeCodexModelSlug,
   readCodexAccountSnapshot,
+  resolveCodexProcessEnv,
   resolveCodexModelForAccount,
 } from "./codexAppServerManager";
 
@@ -365,6 +366,71 @@ describe("resolveCodexModelForAccount", () => {
         sparkEnabled: false,
       }),
     ).toBe("gpt-5.3-codex");
+  });
+});
+
+describe("resolveCodexProcessEnv", () => {
+  it("replaces stale GC Dolt env with the authoritative city port", () => {
+    const tempRoot = mkdtempSync(path.join(os.tmpdir(), "codex-gc-env-"));
+    const cityPath = path.join(tempRoot, "gc");
+    const cwd = path.join(cityPath, ".gc", "agents", "deacon");
+
+    try {
+      mkdirSync(cwd, { recursive: true });
+      mkdirSync(path.join(cityPath, ".beads"), { recursive: true });
+      writeFileSync(
+        path.join(cityPath, "city.toml"),
+        ["[workspace]", 'name = "gc"', "", "[dolt]", 'host = "127.0.0.1"', "port = 35819", ""].join(
+          "\n",
+        ),
+      );
+      writeFileSync(path.join(cityPath, ".beads", "dolt-server.port"), "9999\n");
+      const env = resolveCodexProcessEnv(
+        {
+          GC_DOLT_PORT: "3308",
+          BEADS_DOLT_PORT: "3308",
+          BEADS_DOLT_SHARED_SERVER: "1",
+          PATH: "/usr/bin",
+        },
+        cwd,
+      );
+
+      expect(env.PATH).toBe("/usr/bin");
+      expect(env.GC_DOLT_HOST).toBe("127.0.0.1");
+      expect(env.BEADS_DOLT_HOST).toBe("127.0.0.1");
+      expect(env.GC_DOLT_PORT).toBe("35819");
+      expect(env.BEADS_DOLT_PORT).toBe("35819");
+      expect(env.BEADS_DOLT_SHARED_SERVER).toBe("1");
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strips inherited GC Dolt env outside a GC workspace", () => {
+    const tempRoot = mkdtempSync(path.join(os.tmpdir(), "codex-non-gc-env-"));
+
+    try {
+      const env = resolveCodexProcessEnv(
+        {
+          GC_DOLT_PORT: "3308",
+          BEADS_DOLT_PORT: "3308",
+          GC_DOLT_HOST: "127.0.0.1",
+          BEADS_DOLT_HOST: "127.0.0.1",
+          BEADS_DOLT_SHARED_SERVER: "1",
+          PATH: "/usr/bin",
+        },
+        tempRoot,
+      );
+
+      expect(env.PATH).toBe("/usr/bin");
+      expect(env.GC_DOLT_PORT).toBeUndefined();
+      expect(env.BEADS_DOLT_PORT).toBeUndefined();
+      expect(env.GC_DOLT_HOST).toBeUndefined();
+      expect(env.BEADS_DOLT_HOST).toBeUndefined();
+      expect(env.BEADS_DOLT_SHARED_SERVER).toBeUndefined();
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 });
 

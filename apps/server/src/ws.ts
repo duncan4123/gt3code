@@ -9,6 +9,7 @@ import {
   type OrchestrationEvent,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetSnapshotError,
+  OrchestrationSearchThreadMessagesError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_WS_METHODS,
   ProjectSearchEntriesError,
@@ -46,8 +47,8 @@ import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries";
 import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem";
 import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePaths";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner";
-import { GcContextProvider, GcApiClientLive, GcContextProviderLive } from "./gc";
-import { GcGetThreadContextError } from "@t3tools/contracts";
+import { GcApiClient, GcContextProvider, GcApiClientLive, GcContextProviderLive } from "./gc";
+import { GcGetConfigError, GcGetThreadContextError } from "@t3tools/contracts";
 
 const WsRpcLayer = WsRpcGroup.toLayer(
   Effect.gen(function* () {
@@ -441,6 +442,20 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           ),
           { "rpc.aggregate": "orchestration" },
         ),
+      [ORCHESTRATION_WS_METHODS.searchThreadMessages]: (input) =>
+        observeRpcEffect(
+          ORCHESTRATION_WS_METHODS.searchThreadMessages,
+          projectionSnapshotQuery.searchThreadMessages(input.query, input.limit).pipe(
+            Effect.mapError(
+              (cause) =>
+                new OrchestrationSearchThreadMessagesError({
+                  message: "Failed to search thread messages",
+                  cause,
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "orchestration" },
+        ),
       [WS_METHODS.subscribeOrchestrationDomainEvents]: (_input) =>
         observeRpcStreamEffect(
           WS_METHODS.subscribeOrchestrationDomainEvents,
@@ -712,6 +727,26 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         ),
 
       // Gas City
+      [WS_METHODS.gcGetConfig]: (_input) =>
+        observeRpcEffect(
+          WS_METHODS.gcGetConfig,
+          Effect.gen(function* () {
+            const gcApi = yield* GcApiClient;
+            const config = yield* gcApi.getConfig();
+            if (!config) {
+              throw new Error("GC config unavailable");
+            }
+            return config;
+          }).pipe(
+            Effect.mapError(
+              (error) =>
+                new GcGetConfigError({
+                  message: error instanceof Error ? error.message : "Failed to get GC config",
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "gc" },
+        ),
       [WS_METHODS.gcGetThreadContext]: ({ threadId }) =>
         observeRpcEffect(
           WS_METHODS.gcGetThreadContext,

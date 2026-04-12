@@ -7,6 +7,7 @@
  * Source of truth: gascity/internal/api/ handlers
  */
 import { Effect, Layer, Stream, PubSub, Config, Option } from "effect";
+import type { GcConfigResult } from "@t3tools/contracts";
 import {
   GcApiClient,
   type GcApiClientShape,
@@ -233,6 +234,12 @@ const makeGcApiClient = Effect.gen(function* () {
     }).pipe(Effect.orElseSucceed(() => null));
   };
 
+  const getConfig: GcApiClientShape["getConfig"] = () =>
+    Effect.tryPromise({
+      try: () => fetchJson<GcConfigResult>("/v0/config"),
+      catch: () => null,
+    }).pipe(Effect.orElseSucceed(() => null));
+
   const isAvailable: GcApiClientShape["isAvailable"] = Effect.tryPromise({
     try: async () => {
       const response = await fetch(`${baseUrl}/health`);
@@ -245,6 +252,7 @@ const makeGcApiClient = Effect.gen(function* () {
     getBead,
     getConvoy,
     getFormula,
+    getConfig,
     streamEvents: Stream.fromPubSub(eventPubSub),
     isAvailable,
   } satisfies GcApiClientShape;

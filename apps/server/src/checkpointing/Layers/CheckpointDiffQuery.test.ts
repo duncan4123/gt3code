@@ -86,6 +86,7 @@ describe("CheckpointDiffQueryLive", () => {
           getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
           getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
           getThreadCheckpointContext: () => Effect.succeed(Option.some(threadCheckpointContext)),
+          searchThreadMessages: () => Effect.succeed({ results: [] }),
         }),
       ),
     );
@@ -140,6 +141,7 @@ describe("CheckpointDiffQueryLive", () => {
           getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
           getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
           getThreadCheckpointContext: () => Effect.succeed(Option.none()),
+          searchThreadMessages: () => Effect.succeed({ results: [] }),
         }),
       ),
     );

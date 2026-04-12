@@ -46,10 +46,17 @@ import type {
   OrchestrationGetTurnDiffResult,
   OrchestrationEvent,
   OrchestrationReadModel,
+  OrchestrationSearchThreadMessagesInput,
+  OrchestrationSearchThreadMessagesResult,
 } from "./orchestration";
 import { EditorId } from "./editor";
 import { ServerSettings, ServerSettingsPatch } from "./settings";
-import type { GcGetThreadContextInput, GcThreadContextResult } from "./gc";
+import type {
+  GcConfigResult,
+  GcGetConfigInput,
+  GcGetThreadContextInput,
+  GcThreadContextResult,
+} from "./gc";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -181,6 +188,9 @@ export interface NativeApi {
       input: OrchestrationGetFullThreadDiffInput,
     ) => Promise<OrchestrationGetFullThreadDiffResult>;
     replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationEvent[]>;
+    searchThreadMessages: (
+      input: OrchestrationSearchThreadMessagesInput,
+    ) => Promise<OrchestrationSearchThreadMessagesResult>;
     onDomainEvent: (
       callback: (event: OrchestrationEvent) => void,
       options?: {
@@ -189,6 +199,7 @@ export interface NativeApi {
     ) => () => void;
   };
   gc?: {
+    getConfig: (input: GcGetConfigInput) => Promise<GcConfigResult>;
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
   };
 }

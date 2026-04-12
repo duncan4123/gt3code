@@ -40,6 +40,7 @@ import {
   OrchestrationReplayEventsError,
   OrchestrationReplayEventsInput,
   OrchestrationRpcSchemas,
+  OrchestrationSearchThreadMessagesError,
 } from "./orchestration";
 import {
   ProjectSearchEntriesError,
@@ -69,7 +70,14 @@ import {
   ServerUpsertKeybindingResult,
 } from "./server";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings";
-import { GcGetThreadContextInput, GcThreadContextResult, GcGetThreadContextError } from "./gc";
+import {
+  GcGetConfigError,
+  GcGetConfigInput,
+  GcGetThreadContextInput,
+  GcThreadContextResult,
+  GcGetThreadContextError,
+  GcConfigResult,
+} from "./gc";
 
 export const WS_METHODS = {
   // Project registry methods
@@ -111,6 +119,7 @@ export const WS_METHODS = {
   serverUpdateSettings: "server.updateSettings",
 
   // Gas City
+  gcGetConfig: "gc.getConfig",
   gcGetThreadContext: "gc.getThreadContext",
 
   // Streaming subscriptions
@@ -297,6 +306,15 @@ export const WsOrchestrationReplayEventsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.
   error: OrchestrationReplayEventsError,
 });
 
+export const WsOrchestrationSearchThreadMessagesRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.searchThreadMessages,
+  {
+    payload: OrchestrationRpcSchemas.searchThreadMessages.input,
+    success: OrchestrationRpcSchemas.searchThreadMessages.output,
+    error: OrchestrationSearchThreadMessagesError,
+  },
+);
+
 export const WsSubscribeOrchestrationDomainEventsRpc = Rpc.make(
   WS_METHODS.subscribeOrchestrationDomainEvents,
   {
@@ -329,6 +347,12 @@ export const WsGcGetThreadContextRpc = Rpc.make(WS_METHODS.gcGetThreadContext, {
   payload: GcGetThreadContextInput,
   success: GcThreadContextResult,
   error: GcGetThreadContextError,
+});
+
+export const WsGcGetConfigRpc = Rpc.make(WS_METHODS.gcGetConfig, {
+  payload: GcGetConfigInput,
+  success: GcConfigResult,
+  error: GcGetConfigError,
 });
 
 export const WsRpcGroup = RpcGroup.make(
@@ -366,5 +390,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
+  WsOrchestrationSearchThreadMessagesRpc,
+  WsGcGetConfigRpc,
   WsGcGetThreadContextRpc,
 );

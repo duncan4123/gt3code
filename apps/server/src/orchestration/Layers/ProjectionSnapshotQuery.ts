@@ -13,6 +13,7 @@ import {
   type OrchestrationMessage,
   type OrchestrationProposedPlan,
   type OrchestrationProject,
+  type OrchestrationSearchThreadMessagesResult,
   type OrchestrationSession,
   type OrchestrationThread,
   type OrchestrationThreadActivity,
@@ -67,7 +68,7 @@ const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
 );
 const ProjectionThreadActivityDbRowSchema = ProjectionThreadActivity.mapFields(
   Struct.assign({
-    payload: Schema.fromJsonString(Schema.Unknown),
+    payload: Schema.String,
     sequence: Schema.NullOr(NonNegativeInt),
   }),
 );
@@ -102,6 +103,10 @@ const ProjectIdLookupInput = Schema.Struct({
 const ThreadIdLookupInput = Schema.Struct({
   threadId: ThreadId,
 });
+const ProjectionThreadMessageSearchInput = Schema.Struct({
+  query: Schema.String,
+  limit: Schema.Number,
+});
 const ProjectionProjectLookupRowSchema = ProjectionProjectDbRowSchema;
 const ProjectionThreadIdLookupRowSchema = Schema.Struct({
   threadId: ThreadId,
@@ -111,6 +116,10 @@ const ProjectionThreadCheckpointContextThreadRowSchema = Schema.Struct({
   projectId: ProjectId,
   workspaceRoot: Schema.String,
   worktreePath: Schema.NullOr(Schema.String),
+});
+const ProjectionThreadMessageSearchRowSchema = Schema.Struct({
+  threadId: ThreadId,
+  snippet: Schema.String,
 });
 
 const REQUIRED_SNAPSHOT_PROJECTORS = [
@@ -159,6 +168,18 @@ function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: st
     Schema.isSchemaError(cause)
       ? toPersistenceDecodeError(decodeOperation)(cause)
       : toPersistenceSqlError(sqlOperation)(cause);
+}
+
+function parseThreadActivityPayload(payloadJson: string, activityId: string): unknown {
+  try {
+    return JSON.parse(payloadJson);
+  } catch (error) {
+    return {
+      _tag: "InvalidThreadActivityPayloadJson",
+      activityId,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 const makeProjectionSnapshotQuery = Effect.gen(function* () {
@@ -434,6 +455,29 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       `,
   });
 
+  const searchProjectionThreadMessageRows = SqlSchema.findAll({
+    Request: ProjectionThreadMessageSearchInput,
+    Result: ProjectionThreadMessageSearchRowSchema,
+    execute: ({ query, limit }) =>
+      sql.unsafe(
+        `
+          SELECT
+            messages.thread_id AS "threadId",
+            COALESCE(
+              snippet(messages_fts, 0, '', '', ' … ', 12),
+              substr(messages.text, 1, 160)
+            ) AS "snippet"
+          FROM messages_fts
+          INNER JOIN projection_thread_messages AS messages
+            ON messages.row_id = messages_fts.rowid
+          WHERE messages_fts MATCH ?
+          ORDER BY rank
+          LIMIT ?
+        `,
+        [query, limit],
+      ),
+  });
+
   const getSnapshot: ProjectionSnapshotQueryShape["getSnapshot"] = () =>
     sql
       .withTransaction(
@@ -581,7 +625,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
               tone: row.tone,
               kind: row.kind,
               summary: row.summary,
-              payload: row.payload,
+              payload: parseThreadActivityPayload(row.payload, row.activityId),
               turnId: row.turnId,
               ...(row.sequence !== null ? { sequence: row.sequence } : {}),
               createdAt: row.createdAt,
@@ -808,12 +852,34 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       });
     });
 
+  const searchThreadMessages: ProjectionSnapshotQueryShape["searchThreadMessages"] = (
+    query,
+    limit,
+  ) =>
+    searchProjectionThreadMessageRows({ query, limit }).pipe(
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "ProjectionSnapshotQuery.searchThreadMessages:query",
+          "ProjectionSnapshotQuery.searchThreadMessages:decodeRows",
+        ),
+      ),
+      Effect.map(
+        (rows): OrchestrationSearchThreadMessagesResult => ({
+          results: rows.map((row) => ({
+            threadId: row.threadId,
+            snippet: row.snippet,
+          })),
+        }),
+      ),
+    );
+
   return {
     getSnapshot,
     getCounts,
     getActiveProjectByWorkspaceRoot,
     getFirstActiveThreadIdByProjectId,
     getThreadCheckpointContext,
+    searchThreadMessages,
   } satisfies ProjectionSnapshotQueryShape;
 });
 

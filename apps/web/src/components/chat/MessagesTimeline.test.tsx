@@ -89,7 +89,6 @@ describe("MessagesTimeline", () => {
         resolvedTheme="light"
         timestampFormat="locale"
         workspaceRoot={undefined}
-        activityPayloadById={new Map()}
       />,
     );
 
@@ -135,7 +134,6 @@ describe("MessagesTimeline", () => {
         resolvedTheme="light"
         timestampFormat="locale"
         workspaceRoot={undefined}
-        activityPayloadById={new Map()}
       />,
     );
 

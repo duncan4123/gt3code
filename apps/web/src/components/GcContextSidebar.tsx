@@ -2,7 +2,14 @@ import { memo, useMemo } from "react";
 import type { GcThreadContextResult } from "@t3tools/contracts";
 import { parseGcMeta } from "@t3tools/contracts";
 import { Badge } from "./ui/badge";
-import { ScrollArea } from "./ui/scroll-area";
+import {
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarSeparator,
+} from "./ui/sidebar";
 
 interface GcContextSidebarProps {
   metadata: Record<string, string>;
@@ -25,9 +32,9 @@ function ContextRow({ label, value }: { label: string; value: string | undefined
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
+    <SidebarGroupLabel className="h-auto px-0 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
       {children}
-    </div>
+    </SidebarGroupLabel>
   );
 }
 
@@ -67,105 +74,132 @@ const GcContextSidebar = memo(function GcContextSidebar({
 
   if (!gcMeta.isGcManaged) {
     return (
-      <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
-        No GC context available for this thread.
-      </div>
+      <>
+        <SidebarHeader className="gap-1 px-4 py-3">
+          <div className="text-xs font-semibold tracking-wide text-foreground/90 uppercase">
+            GC Context
+          </div>
+        </SidebarHeader>
+        <SidebarSeparator />
+        <SidebarContent className="gap-0">
+          <SidebarGroup className="px-4 py-4">
+            <SidebarGroupContent>
+              <div className="text-sm leading-relaxed text-muted-foreground">
+                No GC context available for this thread.
+              </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+      </>
     );
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="flex flex-col gap-5 p-4">
-        {/* Identity */}
-        <div className="flex flex-col gap-3">
-          <SectionHeader>Agent</SectionHeader>
-          <ContextRow label="Agent" value={gcMeta.agent} />
-          <ContextRow label="Rig" value={gcMeta.rig} />
-          <ContextRow label="Provider" value={gcMeta.runtimeProvider ?? gcMeta.provider} />
-          {gcMeta.state && (
-            <div>
-              <Badge variant={gcMeta.state === "active" ? "default" : "secondary"}>
-                {gcMeta.state}
-              </Badge>
-            </div>
-          )}
+    <>
+      <SidebarHeader className="gap-1 px-4 py-3">
+        <div className="text-xs font-semibold tracking-wide text-foreground/90 uppercase">
+          GC Context
         </div>
-
-        {/* Current Bead */}
-        {(gcMeta.bead || threadContext?.bead) && (
-          <div className="flex flex-col gap-3">
-            <SectionHeader>Current Work</SectionHeader>
-            <ContextRow
-              label="Bead"
-              value={threadContext?.bead?.title ?? gcMeta.beadTitle ?? gcMeta.bead}
-            />
-            {threadContext?.bead?.description && (
-              <ContextRow label="Description" value={threadContext.bead.description} />
-            )}
-            {threadContext?.bead && (
+        <div className="text-[11px] text-muted-foreground/70">
+          {gcMeta.agent ?? "Managed thread"}
+        </div>
+      </SidebarHeader>
+      <SidebarSeparator />
+      <SidebarContent className="gap-0">
+        <SidebarGroup className="px-4 py-3">
+          <SectionHeader>Agent</SectionHeader>
+          <SidebarGroupContent className="space-y-3 pt-1">
+            <ContextRow label="Agent" value={gcMeta.agent} />
+            <ContextRow label="Rig" value={gcMeta.rig} />
+            <ContextRow label="Provider" value={gcMeta.runtimeProvider ?? gcMeta.provider} />
+            {gcMeta.state && (
               <div>
-                <Badge
-                  variant={
-                    threadContext.bead.status === "closed"
-                      ? "secondary"
-                      : threadContext.bead.status === "in_progress"
-                        ? "default"
-                        : "outline"
-                  }
-                >
-                  {threadContext.bead.status}
+                <Badge variant={gcMeta.state === "active" ? "default" : "secondary"}>
+                  {gcMeta.state}
                 </Badge>
               </div>
             )}
-          </div>
-        )}
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-        {/* Convoy */}
-        {(gcMeta.convoy || convoy) && (
-          <div className="flex flex-col gap-3">
-            <SectionHeader>Convoy</SectionHeader>
-            <ContextRow
-              label="Convoy"
-              value={convoy?.title ?? gcMeta.convoyTitle ?? gcMeta.convoy}
-            />
-            <ContextRow label="Status" value={convoy?.status ?? gcMeta.convoyStatus} />
-            {convoyProgress && (
-              <ProgressBar closed={convoyProgress.closed} total={convoyProgress.total} />
-            )}
-            {convoy?.children && convoy.children.length > 0 && (
-              <div className="flex flex-col gap-1">
-                <SectionHeader>Children</SectionHeader>
-                {convoy.children.map((child) => (
-                  <button
-                    key={child.id}
-                    type="button"
-                    className="flex items-center justify-between rounded px-2 py-1 text-[12px] hover:bg-muted"
-                    onClick={() => onSelectWorkedBead?.(child.id)}
+        {(gcMeta.bead || threadContext?.bead) && (
+          <SidebarGroup className="px-4 py-3">
+            <SectionHeader>Current Work</SectionHeader>
+            <SidebarGroupContent className="space-y-3 pt-1">
+              <ContextRow
+                label="Bead"
+                value={threadContext?.bead?.title ?? gcMeta.beadTitle ?? gcMeta.bead}
+              />
+              {threadContext?.bead?.description && (
+                <ContextRow label="Description" value={threadContext.bead.description} />
+              )}
+              {threadContext?.bead && (
+                <div>
+                  <Badge
+                    variant={
+                      threadContext.bead.status === "closed"
+                        ? "secondary"
+                        : threadContext.bead.status === "in_progress"
+                          ? "default"
+                          : "outline"
+                    }
                   >
-                    <span className="truncate">{child.title}</span>
-                    <Badge
-                      variant={child.status === "closed" ? "secondary" : "outline"}
-                      className="ml-2 shrink-0"
-                    >
-                      {child.status}
-                    </Badge>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+                    {threadContext.bead.status}
+                  </Badge>
+                </div>
+              )}
+            </SidebarGroupContent>
+          </SidebarGroup>
         )}
 
-        {/* Formula */}
-        {(gcMeta.formula || threadContext?.formula) && (
-          <div className="flex flex-col gap-3">
-            <SectionHeader>Formula</SectionHeader>
-            <ContextRow label="Formula" value={threadContext?.formula?.name ?? gcMeta.formula} />
-            {gcMeta.molecule && <ContextRow label="Molecule" value={gcMeta.molecule} />}
-          </div>
+        {(gcMeta.convoy || convoy) && (
+          <SidebarGroup className="px-4 py-3">
+            <SectionHeader>Convoy</SectionHeader>
+            <SidebarGroupContent className="space-y-3 pt-1">
+              <ContextRow
+                label="Convoy"
+                value={convoy?.title ?? gcMeta.convoyTitle ?? gcMeta.convoy}
+              />
+              <ContextRow label="Status" value={convoy?.status ?? gcMeta.convoyStatus} />
+              {convoyProgress && (
+                <ProgressBar closed={convoyProgress.closed} total={convoyProgress.total} />
+              )}
+              {convoy?.children && convoy.children.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <SectionHeader>Children</SectionHeader>
+                  {convoy.children.map((child) => (
+                    <button
+                      key={child.id}
+                      type="button"
+                      className="flex items-center justify-between rounded-md px-2 py-1.5 text-[12px] hover:bg-muted"
+                      onClick={() => onSelectWorkedBead?.(child.id)}
+                    >
+                      <span className="truncate">{child.title}</span>
+                      <Badge
+                        variant={child.status === "closed" ? "secondary" : "outline"}
+                        className="ml-2 shrink-0"
+                      >
+                        {child.status}
+                      </Badge>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </SidebarGroupContent>
+          </SidebarGroup>
         )}
-      </div>
-    </ScrollArea>
+
+        {(gcMeta.formula || threadContext?.formula) && (
+          <SidebarGroup className="px-4 py-3">
+            <SectionHeader>Formula</SectionHeader>
+            <SidebarGroupContent className="space-y-3 pt-1">
+              <ContextRow label="Formula" value={threadContext?.formula?.name ?? gcMeta.formula} />
+              {gcMeta.molecule && <ContextRow label="Molecule" value={gcMeta.molecule} />}
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+      </SidebarContent>
+    </>
   );
 });
 

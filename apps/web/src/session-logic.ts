@@ -43,8 +43,6 @@ export interface WorkLogEntry {
   toolTitle?: string;
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
-  /** Raw activity kind for downstream rendering (e.g. "gc.bead.claimed"). */
-  activityKind?: string;
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
@@ -128,7 +126,31 @@ export function formatElapsed(startIso: string, endIso: string | undefined): str
 }
 
 type LatestTurnTiming = Pick<OrchestrationLatestTurn, "turnId" | "startedAt" | "completedAt">;
-type SessionActivityState = Pick<ThreadSession, "orchestrationStatus" | "activeTurnId">;
+type SessionActivityState = Pick<ThreadSession, "orchestrationStatus" | "activeTurnId"> &
+  Partial<Pick<ThreadSession, "status" | "updatedAt">>;
+
+export function isSessionActivelyRunning(
+  session: SessionActivityState | null,
+  latestTurn: LatestTurnTiming | null,
+): boolean {
+  if (!session) return false;
+  if (session.status !== "running" && session.orchestrationStatus !== "running") {
+    return false;
+  }
+  if (session.activeTurnId) {
+    return true;
+  }
+  if (!latestTurn?.completedAt) {
+    return true;
+  }
+  const sessionUpdatedAt =
+    typeof session.updatedAt === "string" ? Date.parse(session.updatedAt) : Number.NaN;
+  const latestTurnCompletedAt = Date.parse(latestTurn.completedAt);
+  if (Number.isNaN(sessionUpdatedAt) || Number.isNaN(latestTurnCompletedAt)) {
+    return true;
+  }
+  return latestTurnCompletedAt < sessionUpdatedAt;
+}
 
 export function isLatestTurnSettled(
   latestTurn: LatestTurnTiming | null,
@@ -137,7 +159,7 @@ export function isLatestTurnSettled(
   if (!latestTurn?.startedAt) return false;
   if (!latestTurn.completedAt) return false;
   if (!session) return true;
-  if (session.orchestrationStatus === "running") return false;
+  if (isSessionActivelyRunning(session, latestTurn)) return false;
   return true;
 }
 
@@ -470,7 +492,7 @@ export function deriveWorkLogEntries(
     .filter((activity) => !isPlanBoundaryToolActivity(activity))
     .map(toDerivedWorkLogEntry);
   return collapseDerivedWorkLogEntries(entries).map(
-    ({ collapseKey: _collapseKey, ...entry }) => entry,
+    ({ activityKind: _activityKind, collapseKey: _collapseKey, ...entry }) => entry,
   );
 }
 
@@ -924,9 +946,12 @@ export function inferCheckpointTurnCountByTurnId(
   return result;
 }
 
-export function derivePhase(session: ThreadSession | null): SessionPhase {
+export function derivePhase(
+  session: ThreadSession | null,
+  latestTurn: LatestTurnTiming | null = null,
+): SessionPhase {
   if (!session || session.status === "closed") return "disconnected";
   if (session.status === "connecting") return "connecting";
-  if (session.status === "running") return "running";
+  if (isSessionActivelyRunning(session, latestTurn)) return "running";
   return "ready";
 }

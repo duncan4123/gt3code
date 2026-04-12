@@ -34,6 +34,10 @@ import Migration0018 from "./Migrations/018_ProjectionThreadsArchivedAtIndex.ts"
 import Migration0019 from "./Migrations/019_ProjectionSnapshotLookupIndexes.ts";
 import Migration0020 from "./Migrations/020_ProjectionThreadsCustomMetadata.ts";
 import Migration0021 from "./Migrations/021_MoveProjectionsToBtreeSidecar.ts";
+import Migration0022 from "./Migrations/022_HybridAttachGcBeads.ts";
+import Migration0023 from "./Migrations/023_ProjectionThreadMessagesFts.ts";
+import Migration0024 from "./Migrations/024_FinalizedThreadMessages.ts";
+import Migration0025 from "./Migrations/025_MoveEventStoreToBtreeSidecar.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -67,6 +71,10 @@ export const migrationEntries = [
   [19, "ProjectionSnapshotLookupIndexes", Migration0019],
   [20, "ProjectionThreadsCustomMetadata", Migration0020],
   [21, "MoveProjectionsToBtreeSidecar", Migration0021],
+  [22, "HybridAttachGcBeads", Migration0022],
+  [23, "ProjectionThreadMessagesFts", Migration0023],
+  [24, "FinalizedThreadMessages", Migration0024],
+  [25, "MoveEventStoreToBtreeSidecar", Migration0025],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

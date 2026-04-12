@@ -340,6 +340,112 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
     }),
   );
 
+  it.effect("does not fail the full snapshot when a thread activity payload is malformed", () =>
+    Effect.gen(function* () {
+      const snapshotQuery = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+
+      yield* sql`DELETE FROM projection_projects`;
+      yield* sql`DELETE FROM projection_threads`;
+      yield* sql`DELETE FROM projection_thread_activities`;
+
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id,
+          title,
+          workspace_root,
+          default_model_selection_json,
+          scripts_json,
+          created_at,
+          updated_at,
+          deleted_at
+        )
+        VALUES (
+          'project-invalid-activity-payload',
+          'Project Invalid Activity Payload',
+          '/tmp/project-invalid-activity-payload',
+          NULL,
+          '[]',
+          '2026-02-25T00:00:00.000Z',
+          '2026-02-25T00:00:01.000Z',
+          NULL
+        )
+      `;
+
+      yield* sql`
+        INSERT INTO projection_threads (
+          thread_id,
+          project_id,
+          title,
+          model_selection_json,
+          runtime_mode,
+          interaction_mode,
+          branch,
+          worktree_path,
+          latest_turn_id,
+          created_at,
+          updated_at,
+          archived_at,
+          deleted_at
+        )
+        VALUES (
+          'thread-invalid-activity-payload',
+          'project-invalid-activity-payload',
+          'Thread Invalid Activity Payload',
+          '{"provider":"codex","model":"gpt-5-codex"}',
+          'full-access',
+          'default',
+          NULL,
+          NULL,
+          NULL,
+          '2026-02-25T00:00:02.000Z',
+          '2026-02-25T00:00:03.000Z',
+          NULL,
+          NULL
+        )
+      `;
+
+      yield* sql`
+        INSERT INTO projection_thread_activities (
+          activity_id,
+          thread_id,
+          turn_id,
+          tone,
+          kind,
+          summary,
+          payload_json,
+          created_at
+        )
+        VALUES (
+          'activity-invalid-payload',
+          'thread-invalid-activity-payload',
+          NULL,
+          'error',
+          'runtime.note',
+          'malformed payload',
+          '"bad \\u{escape}"',
+          '2026-02-25T00:00:04.000Z'
+        )
+      `;
+
+      const snapshot = yield* snapshotQuery.getSnapshot();
+
+      const thread = snapshot.threads.find(
+        (candidate) => candidate.id === ThreadId.makeUnsafe("thread-invalid-activity-payload"),
+      );
+      const payload = thread?.activities[0]?.payload;
+      assert.equal(
+        payload !== undefined &&
+          typeof payload === "object" &&
+          payload !== null &&
+          "_tag" in payload
+          ? payload._tag
+          : undefined,
+        "InvalidThreadActivityPayloadJson",
+      );
+    }),
+  );
+
   it.effect(
     "reads targeted project, thread, and count queries without hydrating the full snapshot",
     () =>

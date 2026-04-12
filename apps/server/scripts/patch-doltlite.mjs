@@ -9,13 +9,13 @@
  * Skips silently if libdoltlite.a is not found (CI / plain SQLite installs).
  */
 
-import { execSync } from "node:child_process";
-import { existsSync, writeFileSync, statSync } from "node:fs";
+import { execFileSync, execSync } from "node:child_process";
+import { existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const serverDir = resolve(fileURLToPath(import.meta.url), "../..");
-const nodeModulesDir = join(serverDir, "node_modules");
+const workspaceRoot = resolve(serverDir, "..", "..");
 
 // ── 1. Locate libdoltlite.a ──────────────────────────────────────────────────
 
@@ -52,7 +52,9 @@ function findBetterSqlite3(base) {
   return null;
 }
 
-const pkgDir = findBetterSqlite3(nodeModulesDir);
+const pkgDir =
+  findBetterSqlite3(join(workspaceRoot, "node_modules")) ??
+  findBetterSqlite3(join(serverDir, "node_modules"));
 if (!pkgDir) {
   console.error("[patch-doltlite] Could not find better-sqlite3 in node_modules — aborting.");
   process.exit(1);
@@ -83,7 +85,7 @@ const patchedGyp = `\
       'dependencies': ['locate_sqlite3'],
       'sources': ['doltlite_stubs.c'],
       'direct_dependent_settings': {
-        'include_dirs': ['${headerDir}'],
+        'include_dirs': ['${headerDir}', 'sqlite3'],
         'libraries': [
           '${libPath}',
           '-lz',
@@ -97,25 +99,62 @@ const patchedGyp = `\
 
 writeFileSync(gypPath, patchedGyp);
 
-// Write stub implementations for symbols that libdoltlite.a doesn't provide
-// but better-sqlite3's C++ code references (SQLITE_ENABLE_COLUMN_METADATA).
+// Write stub implementations for symbols that older libdoltlite builds
+// do not provide. Newer builds may export these directly.
 const stubsPath = join(pkgDir, "deps", "doltlite_stubs.c");
+let needsColumnMetadataStubs = true;
+try {
+  const exportedSymbols = execSync(`nm ${JSON.stringify(libPath)}`, {
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "ignore"],
+  });
+  needsColumnMetadataStubs = !exportedSymbols.includes("sqlite3_column_origin_name");
+} catch {
+  // Fall back to conservative behavior if symbol inspection fails.
+}
 writeFileSync(
   stubsPath,
-  `\
+  needsColumnMetadataStubs
+    ? `\
 /* Stubs for SQLITE_ENABLE_COLUMN_METADATA symbols missing from libdoltlite.a.
-   better-sqlite3 references these in src/util/data.cpp but doltlite doesn't
-   compile with SQLITE_ENABLE_COLUMN_METADATA. Return NULL = "no metadata". */
+   Return NULL = "no metadata". */
 const char *sqlite3_column_origin_name(void *stmt, int col) { return 0; }
 const void *sqlite3_column_origin_name16(void *stmt, int col) { return 0; }
 const char *sqlite3_column_table_name(void *stmt, int col) { return 0; }
 const void *sqlite3_column_table_name16(void *stmt, int col) { return 0; }
 const char *sqlite3_column_database_name(void *stmt, int col) { return 0; }
 const void *sqlite3_column_database_name16(void *stmt, int col) { return 0; }
-`,
+`
+    : "/* Column metadata symbols provided by libdoltlite.a; no stubs needed. */\n",
 );
-console.log("[patch-doltlite] Wrote doltlite_stubs.c (COLUMN_METADATA stubs)");
+console.log(
+  needsColumnMetadataStubs
+    ? "[patch-doltlite] Wrote doltlite_stubs.c (COLUMN_METADATA stubs)"
+    : "[patch-doltlite] Wrote doltlite_stubs.c (no stubs needed)",
+);
 console.log("[patch-doltlite] Wrote patched deps/sqlite3.gyp");
+
+function verifyAddon(pkgDirToCheck) {
+  const verifyScript = `
+    import { createRequire } from 'node:module';
+    const r = createRequire(${JSON.stringify(join(pkgDirToCheck, "package.json"))});
+    const db = new (r('./'))(':memory:');
+    try {
+      const engine = db.prepare("SELECT doltlite_engine() AS e").get()?.e;
+      db.exec("CREATE VIRTUAL TABLE __fts5_smoke USING fts5(content)");
+      db.exec("DROP TABLE __fts5_smoke");
+      console.log(engine === 'prolly' ? 'ok' : 'missing-engine');
+    } catch (error) {
+      console.log(String(error?.message ?? error));
+    } finally {
+      db.close();
+    }
+  `;
+  return execFileSync(process.execPath, ["--input-type=module", "-e", verifyScript], {
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "pipe"],
+  }).trim();
+}
 
 // ── 4. Check if rebuild is needed (avoid redundant rebuilds) ─────────────────
 
@@ -125,13 +164,10 @@ if (existsSync(addonPath)) {
   try {
     const symbols = execSync(`nm "${addonPath}" 2>/dev/null | head -1`, { encoding: "utf8" });
     if (symbols.trim()) {
-      // Verify doltlite_engine is present by doing a quick runtime check
+      // Verify both doltlite and FTS5 support before skipping rebuild.
       try {
-        const result = execSync(
-          `node --input-type=module <<'EOF'\nimport { createRequire } from 'node:module';\nconst r = createRequire('${pkgDir}/package.json');\nconst db = new (r('./'))(':memory:');\ntry { const v = db.prepare("SELECT doltlite_engine() as e").get(); console.log(v.e); } catch(e) { console.log('missing'); }\ndb.close();\nEOF`,
-          { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
-        ).trim();
-        if (result === "prolly") {
+        const result = verifyAddon(pkgDir);
+        if (result === "ok") {
           // Check if libdoltlite.a is newer than the addon — force rebuild if so
           const addonMtime = statSync(addonPath).mtimeMs;
           const libMtime = statSync(libPath).mtimeMs;
@@ -176,12 +212,29 @@ if (existsSync(addonPath)) {
 
 console.log("[patch-doltlite] Rebuilding better-sqlite3 against libdoltlite.a ...");
 try {
-  execSync("node-gyp rebuild", {
+  const targetVersion = process.version;
+  const nodeGypPaths = [
+    join(pkgDir, "node_modules", ".bin", "node-gyp"),
+    join(workspaceRoot, "node_modules", ".bin", "node-gyp"),
+    join(serverDir, "node_modules", ".bin", "node-gyp"),
+  ];
+  const nodeGypBin = nodeGypPaths.find((p) => existsSync(p));
+  const rebuildCmd = nodeGypBin
+    ? `${JSON.stringify(process.execPath)} ${JSON.stringify(nodeGypBin)} rebuild --target=${targetVersion}`
+    : `npx node-gyp rebuild --target=${targetVersion}`;
+  execSync(rebuildCmd, {
     cwd: pkgDir,
     stdio: "inherit",
     env: { ...process.env, npm_config_nodedir: undefined },
+    shell: true,
   });
   console.log("[patch-doltlite] Rebuild complete.");
+
+  const verifyResult = verifyAddon(pkgDir);
+  if (verifyResult !== "ok") {
+    throw new Error(`addon verification failed: ${verifyResult}`);
+  }
+  console.log("[patch-doltlite] Verified: doltlite_engine() = prolly; FTS5 available.");
 
   // Record doltlite version for runtime verification
   try {

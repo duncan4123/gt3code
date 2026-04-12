@@ -102,10 +102,12 @@ export function createWsNativeApi(): NativeApi {
         rpcClient.orchestration
           .replayEvents({ fromSequenceExclusive })
           .then((events) => [...events]),
+      searchThreadMessages: rpcClient.orchestration.searchThreadMessages,
       onDomainEvent: (callback, options) =>
         rpcClient.orchestration.onDomainEvent(callback, options),
     },
     gc: {
+      getConfig: (input) => rpcClient.gc.getConfig(input),
       getThreadContext: (input) => rpcClient.gc.getThreadContext(input),
     },
   };
