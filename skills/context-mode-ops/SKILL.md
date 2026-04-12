@@ -7,6 +7,26 @@ description: Manage context-mode GitHub issues, PRs, releases, and marketing wit
 
 Parallel subagent army for issue triage, PR review, and releases.
 
+## Claim Verification: BLOCKING GATE
+
+<claim_verification_enforcement>
+STOP. Before implementing ANY fix or feature, you MUST verify that the reported problem actually exists.
+We shipped inheritEnvKeys because an LLM said Claude Code strips env vars from child processes — it does not.
+We got burned shipping a fix for an unverified claim. Never again.
+
+RULE: No code without proof. Every bug must be reproduced. Every behavioral claim must be
+verified against official docs or source code. LLM knowledge about platform behavior is NOT evidence.
+If you cannot verify the claim, ask the reporter for evidence BEFORE writing a single line of code.
+</claim_verification_enforcement>
+
+**Read [validation.md](validation.md) Problem Verification section FIRST.** Summary:
+
+1. **Bug reports**: Reproduce locally or request reproduction steps. No repro = no fix.
+2. **Feature requests**: Verify the underlying claim with official docs/source. Never trust LLM assertions about how platforms behave.
+3. **Performance claims**: Benchmark it. "Should be faster" is not evidence.
+4. **Cannot verify?** Comment on the issue asking for `ctx-debug.sh` output and repro steps. Do NOT implement speculatively.
+5. Every triage produces a `CLAIM_VERDICT`: CONFIRMED, UNCONFIRMED, or DEBUNKED.
+
 ## TDD-First: BLOCKING GATE
 
 <tdd_enforcement>
@@ -23,6 +43,24 @@ One untested change breaks everything. TDD is not optional, it is the gate.
 3. **Staff Engineers**: Your PR will be REJECTED without RED→GREEN evidence per behavior.
 4. **Architects**: REJECT any change without tests. No exceptions, no "trivial change" excuse.
 5. **QA Engineer**: Run full suite after EVERY change. Report failures immediately.
+
+## Grill-Me Review: BLOCKING GATE
+
+<grill_me_enforcement>
+STOP. Before shipping ANY release, you MUST run a grill-me interview on all changes.
+No exceptions. No "this is a small patch." No "we already tested it."
+Every release gets grilled. If the grill reveals an unresolved question, the release is BLOCKED.
+</grill_me_enforcement>
+
+**The grill-me interview is MANDATORY before every release.** Summary:
+
+1. Interview the user relentlessly about every aspect of the changes until reaching shared understanding.
+2. Walk down each branch of the design tree, resolving dependencies between decisions one-by-one.
+3. For each question, provide your recommended answer.
+4. Ask questions one at a time.
+5. If a question can be answered by exploring the codebase, explore the codebase instead of asking.
+6. The release CANNOT proceed until the grill interview produces zero unresolved questions.
+7. The user must explicitly approve the grill results before the release continues.
 
 ## You Are the Engineering Manager
 
@@ -74,6 +112,7 @@ Never use curl/wget to GitHub API. `gh` handles auth, pagination, and rate limit
 ## Validation (Every Workflow)
 
 Before shipping ANY change, validate per [validation.md](validation.md):
+- [ ] **Problem verified** — claim reproduced or confirmed with hard evidence (CLAIM_VERDICT logged)
 - [ ] ENV vars verified against real platform source (not LLM hallucinations)
 - [ ] All 12 adapter tests pass: `npx vitest run tests/adapters/`
 - [ ] TypeScript compiles: `npm run typecheck`

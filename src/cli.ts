@@ -59,6 +59,12 @@ const HOOK_MAP: Record<string, Record<string, string>> = {
     pretooluse: "hooks/cursor/pretooluse.mjs",
     posttooluse: "hooks/cursor/posttooluse.mjs",
     sessionstart: "hooks/cursor/sessionstart.mjs",
+    stop: "hooks/cursor/stop.mjs",
+  },
+  "codex": {
+    pretooluse: "hooks/codex/pretooluse.mjs",
+    posttooluse: "hooks/codex/posttooluse.mjs",
+    sessionstart: "hooks/codex/sessionstart.mjs",
   },
   "kiro": {
     pretooluse: "hooks/kiro/pretooluse.mjs",
@@ -584,6 +590,28 @@ async function upgrade() {
     // Cleanup
     rmSync(tmpDir, { recursive: true, force: true });
 
+    // Sync skills to the active install path from installed_plugins.json (#228).
+    // Only targets the ACTUAL directory Claude Code reads from — not spraying everywhere.
+    try {
+      const registryPath = resolve(homedir(), ".claude", "plugins", "installed_plugins.json");
+      if (existsSync(registryPath)) {
+        const registry = JSON.parse(readFileSync(registryPath, "utf-8"));
+        const entries = registry?.plugins?.["context-mode@context-mode"];
+        if (Array.isArray(entries)) {
+          for (const entry of entries) {
+            const installPath = entry.installPath;
+            if (installPath && installPath !== pluginRoot && existsSync(installPath)) {
+              const srcSkills = resolve(srcDir, "skills");
+              if (existsSync(srcSkills)) {
+                cpSync(srcSkills, resolve(installPath, "skills"), { recursive: true });
+                changes.push(`Synced skills to active install path`);
+              }
+            }
+          }
+        }
+      }
+    } catch { /* best effort — registry may not exist or be malformed */ }
+
     changes.push(
       newVersion !== localVersion
         ? `Updated v${localVersion} → v${newVersion}`
@@ -659,6 +687,15 @@ async function upgrade() {
   } else {
     p.log.info(color.dim("No changes were needed."));
   }
+
+  // Restart notice — new MCP tools require MCP server restart
+  const restartHint = adapter.name === "Claude Code"
+    ? "/reload-plugins, new terminal, or restart session"
+    : "new terminal or restart session";
+  p.log.warn(
+    color.yellow("Restart for new MCP tools to take effect.") +
+      color.dim(` (${restartHint})`),
+  );
 
   // Step 7: Run doctor
   p.log.step("Running doctor to verify...");

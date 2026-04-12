@@ -211,7 +211,7 @@ export function writeSessionEventsFile(events, eventsPath) {
 }
 
 // ── Build session guide — actionable narrative for LLM to continue from ──
-export function buildSessionDirective(source, eventMeta) {
+export function buildSessionDirective(source, eventMeta, toolNamer) {
   const { grouped, lastPrompt, fileNames } = eventMeta;
   const isCompact = source === "compact";
 
@@ -416,8 +416,9 @@ export function buildSessionDirective(source, eventMeta) {
 
   // Search on demand — detailed data lives in FTS5
   block += `\n<session_search>`;
+  const searchTool = toolNamer ? toolNamer("ctx_search") : "ctx_search";
+  block += `\nUse ${searchTool}(queries: [...], source: "session-events") when you need specifics.`;
   block += `\nDetailed session data is indexed in context-mode-doltlite FTS5 (source: "session-events").`;
-  block += `\nUse mcp__plugin_context-mode-doltlite_context-mode-doltlite__ctx_search(queries: [...], source: "session-events") when you need specifics.`;
   block += `\nDo NOT call ctx_index() — data is already indexed.`;
   block += `\n</session_search>`;
 

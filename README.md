@@ -16,12 +16,15 @@ This is a deliberate architectural choice, not a missing feature. Context optimi
 
 Every MCP tool call dumps raw data into your context window. A Playwright snapshot costs 56 KB. Twenty GitHub issues cost 59 KB. One access log — 45 KB. After 30 minutes, 40% of your context is gone. And when the agent compacts the conversation to free space, it forgets which files it was editing, what tasks are in progress, and what you last asked for.
 
-Context Mode is an MCP server that solves both halves of this problem:
+Context Mode is an MCP server that solves all three sides of this problem:
 
 1. **Context Saving** — Sandbox tools keep raw data out of the context window. 315 KB becomes 5.4 KB. 98% reduction.
 2. **Session Continuity** — Every file edit, git operation, task, error, and user decision is tracked in SQLite. When the conversation compacts, context-mode doesn't dump this data back into context — it indexes events into FTS5 and retrieves only what's relevant via BM25 search. The model picks up exactly where you left off. If you don't `--continue`, previous session data is deleted immediately — a fresh session means a clean slate.
+3. **Think in Code** — The LLM should program the analysis, not compute it. Instead of reading 50 files into context to count functions, the agent writes a script that does the counting and `console.log()`s only the result. One script replaces ten tool calls and saves 100x context. This is a mandatory paradigm across all 12 platforms: stop treating the LLM as a data processor, treat it as a code generator.
 
-https://github.com/user-attachments/assets/07013dbf-07c0-4ef1-974a-33ea1207637b
+<a href="https://www.youtube.com/watch?v=QUHrntlfPo4">
+  <img src="https://img.youtube.com/vi/QUHrntlfPo4/maxresdefault.jpg" alt="context-mode demo" width="100%">
+</a>
 
 ## Install
 
@@ -58,6 +61,7 @@ All checks should show `[x]`. The doctor validates runtimes, hooks, FTS5, plugin
 | `/context-mode-doltlite:ctx-stats` | Context savings — per-tool breakdown, tokens consumed, savings ratio. |
 | `/context-mode-doltlite:ctx-doctor` | Diagnostics — runtimes, hooks, FTS5, plugin registration, versions. |
 | `/context-mode-doltlite:ctx-upgrade` | Pull latest, rebuild, migrate cache, fix hooks. |
+| `/context-mode-doltlite:ctx-purge` | Permanently delete all indexed content from the knowledge base. |
 
 > **Note:** Slash commands are a Claude Code plugin feature. On other platforms, type `ctx stats`, `ctx doctor`, or `ctx upgrade` in the chat — the model calls the MCP tool automatically. See [Utility Commands](#utility-commands).
 
@@ -84,7 +88,7 @@ This gives you the 6 sandbox tools without automatic routing. The model can stil
 1. Install context-mode globally:
 
    ```bash
-   npm install -g context-mode
+   npm install -g context-mode-doltlite
    ```
 
 2. Add the following to `~/.gemini/settings.json`. This single file registers the MCP server and all four hooks:
@@ -153,7 +157,7 @@ Full config reference: [`configs/gemini-cli/settings.json`](configs/gemini-cli/s
 1. Install context-mode globally:
 
    ```bash
-   npm install -g context-mode
+   npm install -g context-mode-doltlite
    ```
 
 2. Create `.vscode/mcp.json` in your project root:
@@ -206,7 +210,7 @@ Full hook config including PreCompact: [`configs/vscode-copilot/hooks.json`](con
 1. Install context-mode globally:
 
    ```bash
-   npm install -g context-mode
+   npm install -g context-mode-doltlite
    ```
 
 2. Create `.cursor/mcp.json` in your project root (or `~/.cursor/mcp.json` for global):
@@ -248,7 +252,7 @@ Full hook config including PreCompact: [`configs/vscode-copilot/hooks.json`](con
 
    ```bash
    mkdir -p .cursor/rules
-   cp node_modules/context-mode/configs/cursor/context-mode.mdc .cursor/rules/context-mode.mdc
+   cp node_modules/context-mode-doltlite/configs/cursor/context-mode.mdc .cursor/rules/context-mode.mdc
    ```
 
 5. Restart Cursor or open a new agent session.
@@ -256,6 +260,8 @@ Full hook config including PreCompact: [`configs/vscode-copilot/hooks.json`](con
 **Verify:** Open Cursor Settings > MCP and confirm "context-mode" shows as connected. In agent chat, type `ctx stats`.
 
 **Routing:** Hooks enforce routing programmatically via `preToolUse`/`postToolUse`. The `.cursor/rules/context-mode.mdc` file provides routing instructions at session start since Cursor's `sessionStart` hook is currently rejected by their validator ([forum report](https://forum.cursor.com/t/unknown-hook-type-sessionstart/149566)). Project `.cursor/hooks.json` overrides `~/.cursor/hooks.json`.
+
+**Known limitation:** Cursor accepts `additional_context` in hook responses but does not surface it to the model ([forum #155689](https://forum.cursor.com/t/native-posttooluse-hooks-accept-and-log-additional-context-successfully-but-the-injected-context-is-not-surfaced-to-the-model/155689)). Routing relies on the `.mdc` rules file instead of hook context injection.
 
 Full configs: [`configs/cursor/hooks.json`](configs/cursor/hooks.json) | [`configs/cursor/mcp.json`](configs/cursor/mcp.json) | [`configs/cursor/context-mode.mdc`](configs/cursor/context-mode.mdc)
 
@@ -271,7 +277,7 @@ Full configs: [`configs/cursor/hooks.json`](configs/cursor/hooks.json) | [`confi
 1. Install context-mode globally:
 
    ```bash
-   npm install -g context-mode
+   npm install -g context-mode-doltlite
    ```
 
 2. Add to `opencode.json` in your project root (or `~/.config/opencode/opencode.json` for global):
@@ -343,7 +349,7 @@ Full documentation: [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md)
 </details>
 
 <details>
-<summary><strong>Codex CLI</strong> — MCP-only, no hooks</summary>
+<summary><strong>Codex CLI</strong> — MCP + hooks (waiting for upstream dispatch)</summary>
 
 **Prerequisites:** Node.js 18+, Codex CLI installed.
 
@@ -352,29 +358,56 @@ Full documentation: [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md)
 1. Install context-mode globally:
 
    ```bash
-   npm install -g context-mode
+   npm install -g context-mode-doltlite
    ```
 
 2. Add to `~/.codex/config.toml`:
 
    ```toml
    [mcp_servers.context-mode]
-   command = "context-mode"
+   command = "context-mode-doltlite"
    ```
 
-3. Copy routing instructions (Codex CLI has no hook support):
+3. *(Waiting for upstream)* Enable the hooks feature flag. Add to `~/.codex/config.toml`:
+
+   ```toml
+   [features]
+   codex_hooks = true
+   ```
+
+   > **Status:** Codex CLI's hook system is implemented in source (`codex-rs/hooks/`) but hook dispatch is not yet wired into the tool execution pipeline (`Stage::UnderDevelopment`). The feature flag is accepted but hooks don't fire during sessions as of v0.118.0. Our hook scripts are ready — they'll work immediately once Codex enables dispatch. Track progress: [openai/codex#16685](https://github.com/openai/codex/issues/16685).
+
+4. *(Prepare for when dispatch is enabled)* Add hooks for routing enforcement and session tracking. Create `~/.codex/hooks.json`:
+
+   ```json
+   {
+     "hooks": {
+       "PreToolUse": [{ "hooks": [{ "type": "command", "command": "context-mode-doltlite hook codex pretooluse" }] }],
+       "PostToolUse": [{ "hooks": [{ "type": "command", "command": "context-mode-doltlite hook codex posttooluse" }] }],
+       "SessionStart": [{ "hooks": [{ "type": "command", "command": "context-mode-doltlite hook codex sessionstart" }] }]
+     }
+   }
+   ```
+
+   `PreToolUse` enforces sandbox routing (blocks dangerous commands, redirects to MCP tools). `PostToolUse` captures session events. `SessionStart` restores state after compaction.
+
+   > **Note:** PreToolUse routing supports deny rules only (blocks dangerous commands). Context injection (`additionalContext`) is not supported in Codex PreToolUse — it works via PostToolUse and SessionStart instead. This is handled automatically.
+
+5. Copy routing instructions (recommended even with hooks for full routing awareness):
 
    ```bash
-   cp node_modules/context-mode/configs/codex/AGENTS.md ./AGENTS.md
+   cp node_modules/context-mode-doltlite/configs/codex/AGENTS.md ./AGENTS.md
    ```
 
-   For global use: `cp node_modules/context-mode/configs/codex/AGENTS.md ~/.codex/AGENTS.md`. Global applies to all projects. If both exist, Codex CLI merges them.
+   For global use: `cp node_modules/context-mode-doltlite/configs/codex/AGENTS.md ~/.codex/AGENTS.md`. Global applies to all projects. If both exist, Codex CLI merges them.
 
-4. Restart Codex CLI.
+6. Restart Codex CLI.
 
 **Verify:** Start a session and type `ctx stats`. Context-mode tools should appear and respond.
 
-**Routing:** Manual. The `AGENTS.md` file is the only enforcement method (~60% compliance). There is no programmatic interception — the model can run raw `curl`, read large files, or bypass sandbox tools at any time. Hook support PRs [#2904](https://github.com/openai/codex/pull/2904) and [#9796](https://github.com/openai/codex/pull/9796) were closed without merge.
+**Routing:** MCP tools work. Hook-based routing is ready but waiting for Codex to enable hook dispatch. The `AGENTS.md` file provides routing instructions for model awareness in the meantime.
+
+> **Exec mode regression (v0.118.0):** `codex exec` cancels all MCP tool calls with "user cancelled MCP tool call". The `tool_call_mcp_elicitation` flag went stable in 0.118.0, adding an approval prompt that exec-mode can't handle. **Pin to Codex ≤0.116.0 for exec-mode MCP.** Confirmed by upstream: [openai/codex#16685](https://github.com/openai/codex/issues/16685). Interactive mode (`codex` / `codex --full-auto`) is not affected.
 
 </details>
 
@@ -388,7 +421,7 @@ Full documentation: [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md)
 1. Install context-mode globally:
 
    ```bash
-   npm install -g context-mode
+   npm install -g context-mode-doltlite
    ```
 
 2. Add to `~/.gemini/antigravity/mcp_config.json`:
@@ -406,7 +439,7 @@ Full documentation: [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md)
 3. Copy routing instructions (Antigravity has no hook support):
 
    ```bash
-   cp node_modules/context-mode/configs/antigravity/GEMINI.md ./GEMINI.md
+   cp node_modules/context-mode-doltlite/configs/antigravity/GEMINI.md ./GEMINI.md
    ```
 
 4. Restart Antigravity.
@@ -429,7 +462,7 @@ Full configs: [`configs/antigravity/mcp_config.json`](configs/antigravity/mcp_co
 1. Install context-mode globally:
 
    ```bash
-   npm install -g context-mode
+   npm install -g context-mode-doltlite
    ```
 
 2. Add to `.kiro/settings/mcp.json` in your project (or `~/.kiro/settings/mcp.json` for global):
@@ -464,7 +497,7 @@ Full configs: [`configs/antigravity/mcp_config.json`](configs/antigravity/mcp_co
 4. Copy routing instructions. Kiro's `agentSpawn` (SessionStart) is not yet implemented, so the model needs a routing file at session start:
 
    ```bash
-   cp node_modules/context-mode/configs/kiro/KIRO.md ./KIRO.md
+   cp node_modules/context-mode-doltlite/configs/kiro/KIRO.md ./KIRO.md
    ```
 
 5. Restart Kiro.
@@ -487,7 +520,7 @@ Full configs: [`configs/kiro/mcp.json`](configs/kiro/mcp.json) | [`configs/kiro/
 1. Install context-mode globally:
 
    ```bash
-   npm install -g context-mode
+   npm install -g context-mode-doltlite
    ```
 
 2. Add to `~/.config/zed/settings.json` (Windows: `%APPDATA%\Zed\settings.json`):
@@ -509,7 +542,7 @@ Full configs: [`configs/kiro/mcp.json`](configs/kiro/mcp.json) | [`configs/kiro/
 3. Copy routing instructions (Zed has no hook support):
 
    ```bash
-   cp node_modules/context-mode/configs/zed/AGENTS.md ./AGENTS.md
+   cp node_modules/context-mode-doltlite/configs/zed/AGENTS.md ./AGENTS.md
    ```
 
 4. Restart Zed (or save `settings.json` — Zed auto-restarts context servers on config change).
@@ -543,7 +576,7 @@ Full configs: [`configs/kiro/mcp.json`](configs/kiro/mcp.json) | [`configs/kiro/
      "mcpServers": {
        "context-mode": {
          "command": "node",
-         "args": ["~/.pi/extensions/context-mode/node_modules/context-mode/start.mjs"]
+         "args": ["~/.pi/extensions/context-mode/node_modules/context-mode-doltlite/start.mjs"]
        }
      }
    }
@@ -588,7 +621,7 @@ Alpine prebuilt binaries (musl) are available in better-sqlite3 v12.8.0+. With t
 
 ```bash
 apk add build-base python3 py3-setuptools
-npm install -g context-mode
+npm install -g context-mode-doltlite
 ```
 
 </details>
@@ -608,6 +641,7 @@ npm install -g context-mode
 | `ctx_stats` | Show context savings, call counts, and session statistics. | — |
 | `ctx_doctor` | Diagnose installation: runtimes, hooks, FTS5, versions. | — |
 | `ctx_upgrade` | Upgrade to latest version from GitHub, rebuild, reconfigure hooks. | — |
+| `ctx_purge` | Permanently deletes all indexed content from the knowledge base. | — |
 | **Database Management** | | |
 | `list_databases` | List all named persistent FTS5 databases. | — |
 | `delete_database` | Permanently delete a named persistent database. | — |
@@ -687,7 +721,7 @@ Session continuity requires 4 hooks working together:
 | **SessionStart** | Restores state after compaction or resume | Yes | Yes | Yes | -- | -- | Plugin | -- | -- | -- | -- | ✓ (via session_start event) |
 | | **Session completeness** | **Full** | **High** | **High** | **Partial** | **High** | **High** | **--** | **--** | **Partial** | **--** | **High** |
 
-> **Note:** Full session continuity (capture + snapshot + restore) works on **Claude Code**, **Gemini CLI**, **VS Code Copilot**, and **OpenCode**. **Cursor** captures tool events via `preToolUse`/`postToolUse`, but `sessionStart` is currently rejected by Cursor's validator ([forum report](https://forum.cursor.com/t/unknown-hook-type-sessionstart/149566)), so session restore after compaction is not available yet. **OpenCode** uses the `experimental.session.compacting` plugin hook for compaction recovery, but SessionStart is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)), so startup/resume is not supported. **OpenClaw** uses native gateway plugin hooks (`api.on()`) for full session continuity. **Pi Coding Agent** provides high session continuity via extension hooks (`tool_call`, `tool_result`, `session_start`, `session_before_compact`). **Codex CLI**, **Antigravity**, **Kiro**, and **Zed** have no hook support in the current release, so session tracking is not available.
+> **Note:** Full session continuity (capture + snapshot + restore) works on **Claude Code**, **Gemini CLI**, and **VS Code Copilot**. **OpenCode** provides **high** session continuity: it captures tool events and injects compaction snapshots via the plugin, but SessionStart is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)), so startup/resume restore is not supported. **KiloCode** shares the same plugin architecture as OpenCode via the OpenCodeAdapter, so its continuity level depends on KiloCode's SessionStart support. **Cursor** captures tool events via `preToolUse`/`postToolUse`, but `sessionStart` is currently rejected by Cursor's validator ([forum report](https://forum.cursor.com/t/unknown-hook-type-sessionstart/149566)), so session restore after compaction is not available yet. **OpenClaw** uses native gateway plugin hooks (`api.on()`) for full session continuity. **Pi Coding Agent** provides high session continuity via extension hooks (`tool_call`, `tool_result`, `session_start`, `session_before_compact`). **Codex CLI** hook-based session tracking is ready but waiting for upstream hook dispatch (codex_hooks Stage::UnderDevelopment, [openai/codex#16685](https://github.com/openai/codex/issues/16685)). MCP tools work. Once dispatch is enabled, session tracking will activate automatically. **Antigravity**, **Kiro**, and **Zed** have no hook support in the current release, so session tracking is not available.
 
 <details>
 <summary><strong>What gets captured</strong></summary>
@@ -768,11 +802,11 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 
 **OpenClaw / Pi Agent** — High coverage. All tool lifecycle hooks (`after_tool_call`, `before_compaction`, `session_start`) fire via the native gateway plugin. User decisions aren't captured but file edits, git ops, errors, and tasks are fully tracked. Falls back to DB snapshot reconstruction if compaction hooks fail on older gateway versions. See [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md).
 
-**Codex CLI** — No session support. No hooks means no event capture. Each compaction or new session starts fresh. Requires manually copying `AGENTS.md` to your project root.
+**Codex CLI** — MCP active, hooks ready. Hook scripts (PreToolUse, PostToolUse, SessionStart) are implemented and tested but Codex CLI doesn't dispatch them yet (Stage::UnderDevelopment). MCP tools work. Track: [openai/codex#16685](https://github.com/openai/codex/issues/16685).
 
-**Antigravity** — No session support. Same as Codex CLI — no hooks, no event capture. Requires manually copying `GEMINI.md` to your project root. Auto-detected via MCP protocol handshake (`clientInfo.name`).
+**Antigravity** — No session support. No hooks, no event capture. Requires manually copying `GEMINI.md` to your project root. Auto-detected via MCP protocol handshake (`clientInfo.name`).
 
-**Zed** — No session support. Same as Codex CLI — no hooks, no event capture. Requires manually copying `AGENTS.md` to your project root. Auto-detected via MCP protocol handshake (`clientInfo.name`).
+**Zed** — No session support. No hooks, no event capture. Requires manually copying `AGENTS.md` to your project root. Auto-detected via MCP protocol handshake (`clientInfo.name`).
 
 **Kiro** — Partial coverage. Native `preToolUse` and `postToolUse` hooks capture tool events and enforce sandbox routing. `agentSpawn` (the Kiro equivalent of SessionStart) is not yet implemented, so session restore after compaction is not available. Requires manually copying `KIRO.md` to your project root. Auto-detected via MCP protocol handshake (`clientInfo.name`).
 
@@ -782,24 +816,24 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 
 ## Platform Compatibility
 
-| Feature | Claude Code | Gemini CLI | VS Code Copilot | Cursor | OpenCode | OpenClaw | Codex CLI | Antigravity | Kiro | Zed | Pi |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| MCP Server | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| PreToolUse Hook | Yes | Yes | Yes | Yes | Plugin | Plugin | -- | -- | Yes | -- | Yes (extension) |
-| PostToolUse Hook | Yes | Yes | Yes | Yes | Plugin | Plugin | -- | -- | Yes | -- | Yes (extension) |
-| SessionStart Hook | Yes | Yes | Yes | -- | -- | Plugin | -- | -- | -- | -- | Yes (extension) |
-| PreCompact Hook | Yes | Yes | Yes | -- | Plugin | Plugin | -- | -- | -- | -- | Yes (extension) |
-| Can Modify Args | Yes | Yes | Yes | Yes | Plugin | Plugin | -- | -- | -- | -- | Yes (extension) |
-| Can Block Tools | Yes | Yes | Yes | Yes | Plugin | Plugin | -- | -- | Yes | -- | Yes (extension) |
-| Utility Commands (ctx) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes (/ctx-stats, /ctx-doctor) |
-| Slash Commands | Yes | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
-| Plugin Marketplace | Yes | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| Feature | Claude Code | Gemini CLI | VS Code Copilot | Cursor | OpenCode | KiloCode | OpenClaw | Codex CLI | Antigravity | Kiro | Zed | Pi |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| MCP Server | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| PreToolUse Hook | Yes | Yes | Yes | Yes | Plugin | Plugin | Plugin | Yes | -- | Yes | -- | Yes (extension) |
+| PostToolUse Hook | Yes | Yes | Yes | Yes | Plugin | Plugin | Plugin | Yes | -- | Yes | -- | Yes (extension) |
+| SessionStart Hook | Yes | Yes | Yes | -- | -- | -- | Plugin | Yes | -- | -- | -- | Yes (extension) |
+| PreCompact Hook | Yes | Yes | Yes | -- | Plugin | Plugin | Plugin | -- | -- | -- | -- | Yes (extension) |
+| Can Modify Args | Yes | Yes | Yes | Yes | Plugin | Plugin | Plugin | Yes | -- | -- | -- | Yes (extension) |
+| Can Block Tools | Yes | Yes | Yes | Yes | Plugin | Plugin | Plugin | Yes | -- | Yes | -- | Yes (extension) |
+| Utility Commands (ctx) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes (/ctx-stats, /ctx-doctor) |
+| Slash Commands | Yes | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| Plugin Marketplace | Yes | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
 
 > **OpenCode** uses a TypeScript plugin paradigm — hooks run as in-process functions via `tool.execute.before`, `tool.execute.after`, and `experimental.session.compacting`, providing the same routing enforcement and session continuity as shell-based hooks. SessionStart is not yet available ([#14808](https://github.com/sst/opencode/issues/14808)), but compaction recovery works via the plugin's compacting hook.
 >
 > **OpenClaw** runs context-mode as a native gateway plugin targeting Pi Agent sessions. Hooks register via `api.on()` (tool/lifecycle) and `api.registerHook()` (commands). All tool interception and compaction hooks are supported. See [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md).
 >
-> **Codex CLI**, **Antigravity**, and **Zed** do not support hooks. They rely solely on manually-copied routing instruction files (`AGENTS.md` / `GEMINI.md`) for enforcement (~60% compliance). See each platform's install section for copy instructions. Antigravity and Zed are auto-detected via MCP protocol handshake — no manual platform configuration needed.
+> **Codex CLI** hooks are implemented but dispatch is not yet active (`codex_hooks` is `Stage::UnderDevelopment`). MCP tools work. Hook scripts are ready and will activate once Codex enables dispatch ([openai/codex#16685](https://github.com/openai/codex/issues/16685)). PreToolUse supports `permissionDecision: "deny"` only — `additionalContext` is not supported in PreToolUse (context injection works via PostToolUse and SessionStart instead; the codex formatter handles this automatically). See the Codex install section for setup. **Antigravity** and **Zed** do not support hooks. They rely solely on manually-copied routing instruction files (`AGENTS.md` / `GEMINI.md`) for enforcement (~60% compliance). See each platform's install section for copy instructions. Antigravity and Zed are auto-detected via MCP protocol handshake — no manual platform configuration needed.
 >
 > **Kiro** supports native `preToolUse` and `postToolUse` hooks for routing enforcement and tool event capture. `agentSpawn` (SessionStart equivalent) and `stop` are not yet wired. Requires manually copying `KIRO.md` to your project root. Kiro is auto-detected via MCP protocol handshake (`clientInfo.name`).
 >
@@ -809,7 +843,7 @@ Detailed event data is also indexed into FTS5 for on-demand retrieval via `searc
 
 Hooks intercept tool calls programmatically — they can block dangerous commands and redirect them to the sandbox before execution. Instruction files guide the model via prompt instructions but cannot block anything. **Always enable hooks where supported.**
 
-> **Note:** Routing instruction files were previously auto-written to project directories on first session start. This was disabled to prevent git tree pollution ([#158](https://github.com/sfncore/claude-context-mode/issues/158), [#164](https://github.com/sfncore/claude-context-mode/issues/164)). Hook-capable platforms (Claude Code, Gemini CLI, VS Code Copilot, OpenCode, OpenClaw) inject routing via hooks and need no file. Non-hook platforms (Codex, Zed, Cursor, Kiro, Antigravity) require a one-time manual copy — see each platform's install section.
+> **Note:** Routing instruction files were previously auto-written to project directories on first session start. This was disabled to prevent git tree pollution ([#158](https://github.com/sfncore/claude-context-mode/issues/158), [#164](https://github.com/sfncore/claude-context-mode/issues/164)). Hook-capable platforms (Claude Code, Gemini CLI, VS Code Copilot, Cursor, OpenCode, OpenClaw, Codex CLI) inject routing via hooks and need no file. Non-hook platforms (Zed, Kiro, Antigravity) require a one-time manual copy — see each platform's install section.
 
 | Platform | Hooks | Instruction File | With Hooks | Without Hooks |
 |---|:---:|---|:---:|:---:|
@@ -819,7 +853,7 @@ Hooks intercept tool calls programmatically — they can block dangerous command
 | Cursor | Yes | [`context-mode.mdc`](configs/cursor/context-mode.mdc) | **~98% saved** | ~60% saved |
 | OpenCode | Plugin | [`AGENTS.md`](configs/opencode/AGENTS.md) | **~98% saved** | ~60% saved |
 | OpenClaw | Plugin | [`AGENTS.md`](configs/openclaw/AGENTS.md) | **~98% saved** | ~60% saved |
-| Codex CLI | -- | [`AGENTS.md`](configs/codex/AGENTS.md) | -- | ~60% saved |
+| Codex CLI | Yes | [`AGENTS.md`](configs/codex/AGENTS.md) | **~98% saved** | ~60% saved |
 | Antigravity | -- | [`GEMINI.md`](configs/antigravity/GEMINI.md) | -- | ~60% saved |
 | Kiro | Yes | [`KIRO.md`](configs/kiro/KIRO.md) | **~98% saved** | ~60% saved |
 | Zed | -- | [`AGENTS.md`](configs/zed/AGENTS.md) | -- | ~60% saved |
@@ -837,6 +871,7 @@ See [`docs/platform-support.md`](docs/platform-support.md) for the full capabili
 ctx stats       → context savings, call counts, session report
 ctx doctor      → diagnose runtimes, hooks, FTS5, versions
 ctx upgrade     → update from GitHub, rebuild, reconfigure hooks
+ctx purge       → permanently delete all indexed content from the knowledge base
 ```
 
 **From your terminal** — run directly without an AI session:
@@ -844,9 +879,12 @@ ctx upgrade     → update from GitHub, rebuild, reconfigure hooks
 ```bash
 context-mode doctor
 context-mode upgrade
+bash scripts/ctx-debug.sh    # full diagnostic report for bug reports
 ```
 
-Works on **all platforms**. On Claude Code, slash commands (`/ctx-stats`, `/ctx-doctor`, `/ctx-upgrade`) are also available.
+The debug script collects OS info, runtime versions, better-sqlite3 status, adapter detection, config files (redacted), hook validation, FTS5/SQLite test, executor test, process check, session databases, and environment variables into a single pasteable markdown report.
+
+Works on **all platforms**. On Claude Code, slash commands (`/ctx-stats`, `/ctx-doctor`, `/ctx-upgrade`, `/ctx-purge`) are also available.
 
 ## Benchmarks
 
@@ -932,7 +970,7 @@ Context Mode enforces the same permission rules you already use — but extends 
 }
 ```
 
-Add this to your project's `.claude/settings.json` (or `~/.claude/settings.json` for global rules). All platforms read security policies from Claude Code's settings format — even on Gemini CLI, VS Code Copilot, and OpenCode. Codex CLI has no hook support, so security enforcement is not available.
+Add this to your project's `.claude/settings.json` (or `~/.claude/settings.json` for global rules). All platforms read security policies from Claude Code's settings format — even on Gemini CLI, VS Code Copilot, and OpenCode. Codex CLI security enforcement requires the `codex_hooks` feature flag to be enabled.
 
 The pattern is `Tool(what to match)` where `*` means "anything".
 

@@ -215,7 +215,8 @@ describe("ContextModePlugin", () => {
 
       expect(snapshot.length).toBeGreaterThan(0);
       expect(snapshot).toContain("session_resume");
-      expect(snapshot).toContain("/src/index.ts");
+      expect(snapshot).toContain("<files");
+      expect(snapshot).toContain("index.ts");
     });
 
     it("can be called multiple times (increments compact count)", async () => {
@@ -273,7 +274,8 @@ describe("ContextModePlugin", () => {
         output,
       );
       expect(snapshot).toContain("session_resume");
-      expect(snapshot).toContain("/app/main.ts");
+      expect(snapshot).toContain("<files");
+      expect(snapshot).toContain("main.ts");
     });
 
     it("blocked tool command is replaced before execution", async () => {

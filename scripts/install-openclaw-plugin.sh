@@ -17,14 +17,17 @@ if [ ! -d "$OPENCLAW_STATE_DIR" ]; then
   echo "✗ OPENCLAW_STATE_DIR ($OPENCLAW_STATE_DIR) does not exist. Is OpenClaw installed?" >&2
   exit 1
 fi
-if [ ! -f "$OPENCLAW_STATE_DIR/runtime/openclaw.runtime.json" ]; then
-  echo "✗ $OPENCLAW_STATE_DIR/runtime/openclaw.runtime.json not found." >&2
+
+# OpenClaw uses openclaw.json as the single config file.
+# https://docs.openclaw.ai/tools/plugin — plugins.entries, plugins.allow
+OPENCLAW_JSON="$OPENCLAW_STATE_DIR/openclaw.json"
+if [ ! -f "$OPENCLAW_JSON" ]; then
+  echo "✗ $OPENCLAW_JSON not found." >&2
   echo "  Start OpenClaw once first, then re-run this script." >&2
   exit 1
 fi
 
 EXT_DIR="$OPENCLAW_STATE_DIR/extensions/context-mode"
-RUNTIME_JSON="$OPENCLAW_STATE_DIR/runtime/openclaw.runtime.json"
 
 echo "→ context-mode plugin installer"
 echo "  plugin root : $PLUGIN_ROOT"
@@ -67,7 +70,7 @@ else
 fi
 
 # 5. Register in runtime config (idempotent)
-echo "→ registering in $RUNTIME_JSON..."
+echo "→ registering in $OPENCLAW_JSON..."
 node -e "
 const fs = require('fs');
 const [runtimePath, pluginRoot] = process.argv.slice(1);
@@ -101,7 +104,7 @@ if (!entries['context-mode']) entries['context-mode'] = { enabled: true };
 
 fs.writeFileSync(runtimePath, JSON.stringify(cfg, null, 2) + '\n');
 console.log('  plugins.allow:', JSON.stringify(allow));
-" "$RUNTIME_JSON" "$PLUGIN_ROOT"
+" "$OPENCLAW_JSON" "$PLUGIN_ROOT"
 
 # 6. Restart gateway
 echo "→ restarting openclaw gateway..."
