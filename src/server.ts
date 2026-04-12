@@ -1765,10 +1765,16 @@ server.registerTool(
 
       // Index into knowledge base — markdown heading chunking splits by # labels
       const store = resolveStore(database);
-      const source = `batch:${commands
+      const logicalSource = `batch:${commands
         .map((c) => c.label)
         .join(",")
         .slice(0, 80)}`;
+      // Keep batch sources unique so repeated batch_execute calls do not
+      // reindex the same logical label through the FTS dedup delete path.
+      const source = `${logicalSource}#${createHash("sha256")
+        .update(`${Date.now()}\n${stdout}\n${logicalSource}`)
+        .digest("hex")
+        .slice(0, 8)}`;
       const indexed = store.index({ content: stdout, source });
 
       // Build section inventory — direct query by source_id (no FTS5 MATCH needed)
