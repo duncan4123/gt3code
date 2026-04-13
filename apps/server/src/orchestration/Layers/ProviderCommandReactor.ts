@@ -5,6 +5,7 @@ import {
   type ModelSelection,
   type OrchestrationEvent,
   ProviderKind,
+  parseGcMeta,
   type OrchestrationSession,
   ThreadId,
   type ProviderSession,
@@ -43,6 +44,19 @@ type ProviderIntentEvent = Extract<
 function toNonEmptyProviderInput(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized && normalized.length > 0 ? normalized : undefined;
+}
+
+function gcRuntimeProviderToProviderKind(value: string | undefined): ProviderKind | undefined {
+  switch (value?.trim()) {
+    case "codex":
+      return "codex";
+    case "claudeAgent":
+    case "claude":
+    case "claude-code":
+      return "claudeAgent";
+    default:
+      return undefined;
+  }
 }
 
 function mapProviderSessionStatusToOrchestrationStatus(
@@ -237,8 +251,12 @@ const make = Effect.gen(function* () {
     )
       ? thread.session.providerName
       : undefined;
+    const gcRuntimeProvider = gcRuntimeProviderToProviderKind(
+      parseGcMeta(thread.customMetadata).runtimeProvider,
+    );
     const requestedModelSelection = options?.modelSelection;
-    const threadProvider: ProviderKind = currentProvider ?? thread.modelSelection.provider;
+    const threadProvider: ProviderKind =
+      currentProvider ?? gcRuntimeProvider ?? thread.modelSelection.provider;
     if (
       requestedModelSelection !== undefined &&
       requestedModelSelection.provider !== threadProvider

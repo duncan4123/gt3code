@@ -734,7 +734,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
             const gcApi = yield* GcApiClient;
             const config = yield* gcApi.getConfig();
             if (!config) {
-              throw new Error("GC config unavailable");
+              return yield* Effect.fail(new Error("GC config unavailable"));
             }
             return config;
           }).pipe(
@@ -783,6 +783,7 @@ export const websocketRpcRouteLayer = Layer.unwrap(
     }).pipe(
       Effect.provide(
         Layer.mergeAll(WsRpcLayer, RpcSerialization.layerJson).pipe(
+          Layer.provideMerge(GcApiClientLive),
           Layer.provideMerge(GcContextProviderLive.pipe(Layer.provide(GcApiClientLive))),
         ),
       ),

@@ -148,6 +148,9 @@ export function createDevRunnerEnv({
     const webPort = BASE_WEB_PORT + webOffset;
     const resolvedBaseDir = yield* resolveBaseDir(t3Home);
     const isDesktopMode = mode === "dev:desktop";
+    const shouldDefaultAutoBootstrap = mode === "dev" || mode === "dev:server";
+    const resolvedAutoBootstrapProjectFromCwd =
+      autoBootstrapProjectFromCwd ?? (shouldDefaultAutoBootstrap ? true : undefined);
 
     const output: NodeJS.ProcessEnv = {
       ...baseEnv,
@@ -185,8 +188,10 @@ export function createDevRunnerEnv({
       delete output.T3CODE_NO_BROWSER;
     }
 
-    if (autoBootstrapProjectFromCwd !== undefined) {
-      output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = autoBootstrapProjectFromCwd ? "1" : "0";
+    if (resolvedAutoBootstrapProjectFromCwd !== undefined) {
+      output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = resolvedAutoBootstrapProjectFromCwd
+        ? "1"
+        : "0";
     } else {
       delete output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD;
     }

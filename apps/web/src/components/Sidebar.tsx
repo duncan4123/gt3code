@@ -131,7 +131,7 @@ import {
   sortThreadsForSidebar,
   useThreadJumpHintVisibility,
 } from "./Sidebar.logic";
-import { groupThreadsByRigAndAgent } from "@t3tools/contracts";
+import { groupThreadsByRigAndAgent, type GcConfigResult } from "@t3tools/contracts";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
@@ -686,6 +686,18 @@ export default function Sidebar() {
   const projects = useStore((store) => store.projects);
   const sidebarThreadsById = useStore((store) => store.sidebarThreadsById);
   const threadIdsByProjectId = useStore((store) => store.threadIdsByProjectId);
+  const [gcConfig, setGcConfig] = useState<GcConfigResult | null>(null);
+  const gcRigLookup = useMemo(() => {
+    if (!gcConfig) return null;
+    const normalizeCwd = (value: string) => value.trim().replace(/\/+$/, "");
+    const rigPathByNormalizedPath = new Map<string, string>();
+    const rigPathByName = new Map<string, string>();
+    for (const rig of gcConfig.rigs) {
+      rigPathByNormalizedPath.set(normalizeCwd(rig.path), rig.path);
+      rigPathByName.set(rig.name, rig.path);
+    }
+    return { rigPathByNormalizedPath, rigPathByName, normalizeCwd };
+  }, [gcConfig]);
   const { projectExpandedById, projectOrder, threadLastVisitedAtById } = useUiStateStore(
     useShallow((store) => ({
       projectExpandedById: store.projectExpandedById,
@@ -697,6 +709,37 @@ export default function Sidebar() {
   const toggleProject = useUiStateStore((store) => store.toggleProject);
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
   const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearDraftThread);
+
+  useEffect(() => {
+    let cancelled = false;
+    let retryTimeout: number | null = null;
+
+    const fetchConfig = async (): Promise<void> => {
+      const api = readNativeApi();
+      if (!api?.gc?.getConfig) return;
+      try {
+        const config = await api.gc.getConfig({});
+        if (!cancelled) {
+          setGcConfig(config);
+        }
+      } catch {
+        if (!cancelled && retryTimeout == null) {
+          retryTimeout = window.setTimeout(() => {
+            retryTimeout = null;
+            void fetchConfig();
+          }, 5_000);
+        }
+      }
+    };
+
+    void fetchConfig();
+    return () => {
+      cancelled = true;
+      if (retryTimeout != null) {
+        window.clearTimeout(retryTimeout);
+      }
+    };
+  }, []);
   const getDraftThreadByProjectId = useComposerDraftStore(
     (store) => store.getDraftThreadByProjectId,
   );
@@ -1484,7 +1527,28 @@ export default function Sidebar() {
           const renderedThreads = pinnedCollapsedThread
             ? [pinnedCollapsedThread]
             : visibleProjectThreads;
-          const { rigGroups, standaloneThreads } = groupThreadsByRigAndAgent(renderedThreads);
+          const gcProjectCwd = (() => {
+            if (!gcRigLookup) return project.cwd;
+
+            const rigFromThreads = renderedThreads
+              .map((thread) => thread.customMetadata?.["gc.rig"])
+              .find((rig) => typeof rig === "string" && rig.trim().length > 0);
+
+            const rigPathFromThreads = rigFromThreads
+              ? gcRigLookup.rigPathByName.get(rigFromThreads.trim())
+              : undefined;
+
+            return (
+              rigPathFromThreads ??
+              gcRigLookup.rigPathByNormalizedPath.get(gcRigLookup.normalizeCwd(project.cwd)) ??
+              gcRigLookup.rigPathByName.get(project.name) ??
+              project.cwd
+            );
+          })();
+          const { rigGroups, standaloneThreads } = groupThreadsByRigAndAgent(renderedThreads, {
+            config: gcConfig,
+            projectCwd: gcProjectCwd,
+          });
           const renderedThreadIds = [
             ...rigGroups.flatMap((rigGroup) =>
               rigGroup.agentGroups.flatMap((agentGroup) =>
@@ -1520,6 +1584,8 @@ export default function Sidebar() {
     [
       appSettings.sidebarThreadSortOrder,
       expandedThreadListsByProject,
+      gcConfig,
+      gcRigLookup,
       isThreadSearchActive,
       routeThreadId,
       sortedProjects,
