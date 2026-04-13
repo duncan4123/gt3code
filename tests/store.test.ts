@@ -283,10 +283,10 @@ describe.runIf(DOLTLITE_ENABLED)("Doltlite version control", () => {
       ) as { r: number } | undefined;
       assert.equal(checkoutExperiment?.r, 0);
 
-      const currentExperiment = store.queryAll(
-        "SELECT name, is_current FROM dolt_branches WHERE is_current = 1",
-      ) as Array<{ name: string; is_current: number }>;
-      assert.equal(currentExperiment[0]?.name, "experiment");
+      const currentExperiment = store.queryOne(
+        "SELECT active_branch() as name",
+      ) as { name: string } | undefined;
+      assert.equal(currentExperiment?.name, "experiment");
 
       store.index({
         content: "# Experiment\n\nBranch-only content.",
@@ -311,21 +311,21 @@ describe.runIf(DOLTLITE_ENABLED)("Doltlite version control", () => {
       assert.equal(tagResult?.r, 0);
 
       const tags = store.queryAll(
-        "SELECT name, hash, commit_message FROM dolt_tags ORDER BY name",
-      ) as Array<{ name: string; hash: string; commit_message: string }>;
-      const experimentTag = tags.find((tag) => tag.name === "experiment-v1");
-      assert.equal(experimentTag?.commit_message, "experiment snapshot");
-      assert.equal(experimentTag?.hash, experimentCommit?.hash);
+        "SELECT tag_name, tag_hash, message FROM dolt_tags ORDER BY tag_name",
+      ) as Array<{ tag_name: string; tag_hash: string; message: string }>;
+      const experimentTag = tags.find((tag) => tag.tag_name === "experiment-v1");
+      assert.ok(experimentTag);
+      assert.equal(experimentTag?.tag_hash, experimentCommit?.hash);
 
       const checkoutMain = store.queryOne(
         "SELECT dolt_checkout('main') as r",
       ) as { r: number } | undefined;
       assert.equal(checkoutMain?.r, 0);
 
-      const currentMain = store.queryAll(
-        "SELECT name, is_current FROM dolt_branches WHERE is_current = 1",
-      ) as Array<{ name: string; is_current: number }>;
-      assert.equal(currentMain[0]?.name, "main");
+      const currentMain = store.queryOne(
+        "SELECT active_branch() as name",
+      ) as { name: string } | undefined;
+      assert.equal(currentMain?.name, "main");
 
       const mainCount = store.queryOne(
         "SELECT COUNT(*) as n FROM sources WHERE label = ?",
@@ -1480,6 +1480,46 @@ describe("Persistent content store lifecycle", () => {
     store.close();
   });
 
+  test("cleanupStaleSources deletes aged sources without breaking later search or reindex", () => {
+    const store = createStore();
+    store.index({ content: "# Old\nlegacy token", source: "old-source" });
+    store.index({ content: "# Fresh\nfresh token", source: "fresh-source" });
+    store.exec("UPDATE sources SET indexed_at = datetime('now', '-90 days') WHERE label = 'old-source'");
+
+    const deleted = store.cleanupStaleSources(30);
+    expect(deleted).toBe(1);
+    expect(store.getSourceMeta("old-source")).toBeNull();
+    expect(store.getSourceMeta("fresh-source")).not.toBeNull();
+
+    const freshResults = store.search("fresh token", 3, "fresh-source");
+    expect(freshResults.length).toBeGreaterThan(0);
+
+    store.index({ content: "# Reborn\nold source restored", source: "old-source" });
+    const rebornResults = store.search("restored", 3, "old-source");
+    expect(rebornResults.length).toBeGreaterThan(0);
+    store.close();
+  });
+
+  test("repeated multi-chunk reindex keeps search healthy", () => {
+    const store = createStore();
+    const makeDoc = (version: number) =>
+      Array.from({ length: 24 }, (_, i) =>
+        `## Section ${version}-${i}\n\nRepeated reindex token ${version}-${i}\n\nLine A\nLine B`,
+      ).join("\n\n");
+
+    for (let version = 1; version <= 8; version++) {
+      store.index({
+        content: `# Large Doc ${version}\n\n${makeDoc(version)}`,
+        source: "reindex-stress",
+      });
+    }
+
+    const results = store.search("Repeated reindex token 8-12", 5, "reindex-stress");
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0]!.source).toBe("reindex-stress");
+    store.close();
+  });
+
   test("getDBSizeBytes returns positive number after indexing", () => {
     const store = createStore();
     store.index({ content: "# Test\nSome content for size", source: "size-test" });
@@ -1524,12 +1564,12 @@ describe("Persistent content store lifecycle", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("SQLITE_BUSY retry logic", () => {
-  test("ContentStore uses 30s timeout", () => {
-    const storeSrc = readFileSync(
-      join(__dirname, "../src/store.ts"),
+  test("SQLiteBase uses 30s timeout", () => {
+    const dbBaseSrc = readFileSync(
+      join(__dirname, "../src/db-base.ts"),
       "utf-8",
     );
-    expect(storeSrc).toContain("timeout: 30000");
+    expect(dbBaseSrc).toContain("timeout: 30000");
   });
 
   test("withRetry retries on SQLITE_BUSY and succeeds", () => {

@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import Database from "better-sqlite3";
+import Database from "../../vendor/better-sqlite3";
 import { AnalyticsEngine } from "../../src/session/analytics.js";
 
 // ─────────────────────────────────────────────────────────
