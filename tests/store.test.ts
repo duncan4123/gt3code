@@ -344,6 +344,125 @@ describe.runIf(DOLTLITE_ENABLED)("Doltlite version control", () => {
       store.close();
     }
   });
+
+  test("supports reset for clearing working changes", () => {
+    const store = createStore();
+    try {
+      store.index({
+        content: "# Baseline\n\nCommitted baseline.",
+        source: "baseline-doc",
+      });
+      store.exec(`SELECT dolt_add('-A')`);
+      const baselineCommit = store.queryOne(
+        "SELECT dolt_commit('-m', ?) as hash",
+        "baseline snapshot",
+      ) as { hash: string } | undefined;
+      assert.match(baselineCommit?.hash ?? "", /^[0-9a-f]{40}$/);
+
+      store.index({
+        content: "# Alpha\n\nReset target content.",
+        source: "reset-doc",
+      });
+
+      store.exec(`SELECT dolt_add('-A')`);
+      const stagedBeforeSoft = store.queryAll(
+        "SELECT table_name, staged, status FROM dolt_status",
+      ) as Array<{ table_name: string; staged: number | boolean; status: string }>;
+      assert.ok(stagedBeforeSoft.some((row) => row.staged === 1 || row.staged === true));
+
+      store.queryOne("SELECT dolt_reset('--soft') as r");
+      const afterSoft = store.queryAll(
+        "SELECT table_name, staged, status FROM dolt_status",
+      ) as Array<{ table_name: string; staged: number | boolean; status: string }>;
+      assert.ok(afterSoft.length > 0);
+
+      store.queryOne("SELECT dolt_reset('--hard') as r");
+      const afterHard = store.queryAll(
+        "SELECT table_name, staged, status FROM dolt_status",
+      ) as Array<{ table_name: string; staged: number | boolean; status: string }>;
+      assert.equal(afterHard.length, 0);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("supports history, as-of queries, diff stat/summary, and merge base", () => {
+    const store = createStore();
+    try {
+      store.index({
+        content: "# Alpha\n\nInitial content.",
+        source: "history-doc",
+      });
+      store.exec(`SELECT dolt_add('-A')`);
+      const baseCommit = store.queryOne(
+        "SELECT dolt_commit('-m', ?) as hash",
+        "base history snapshot",
+      ) as { hash: string } | undefined;
+      assert.match(baseCommit?.hash ?? "", /^[0-9a-f]{40}$/);
+
+      store.index({
+        content: "# Beta\n\nUpdated content.",
+        source: "history-doc",
+      });
+      store.exec(`SELECT dolt_add('-A')`);
+      const secondCommit = store.queryOne(
+        "SELECT dolt_commit('-m', ?) as hash",
+        "second history snapshot",
+      ) as { hash: string } | undefined;
+      assert.match(secondCommit?.hash ?? "", /^[0-9a-f]{40}$/);
+
+      const historyRows = store.queryAll(
+        "SELECT * FROM dolt_history_sources WHERE commit_hash = ? LIMIT 5",
+        secondCommit?.hash,
+      ) as Array<Record<string, unknown>>;
+      assert.ok(historyRows.length > 0);
+
+      const asOfRows = store.queryAll(
+        "SELECT * FROM dolt_at_sources(?) WHERE label = ? LIMIT 5",
+        baseCommit?.hash,
+        "history-doc",
+      ) as Array<Record<string, unknown>>;
+      assert.equal(asOfRows.length, 1);
+
+      const diffStat = store.queryAll(
+        "SELECT * FROM dolt_diff_stat(?, ?, ?)",
+        baseCommit?.hash,
+        secondCommit?.hash,
+        "sources",
+      ) as Array<Record<string, unknown>>;
+      assert.equal(diffStat.length, 1);
+
+      const diffSummary = store.queryAll(
+        "SELECT * FROM dolt_diff_summary(?, ?, ?)",
+        baseCommit?.hash,
+        secondCommit?.hash,
+        "sources",
+      ) as Array<Record<string, unknown>>;
+      assert.equal(diffSummary.length, 1);
+
+      store.queryOne("SELECT dolt_branch('history-feature') as r");
+      store.queryOne("SELECT dolt_checkout('history-feature') as r");
+      store.index({
+        content: "# Gamma\n\nFeature branch content.",
+        source: "feature-doc",
+      });
+      store.exec(`SELECT dolt_add('-A')`);
+      const featureCommit = store.queryOne(
+        "SELECT dolt_commit('-m', ?) as hash",
+        "feature history snapshot",
+      ) as { hash: string } | undefined;
+      assert.match(featureCommit?.hash ?? "", /^[0-9a-f]{40}$/);
+
+      const mergeBase = store.queryOne(
+        "SELECT dolt_merge_base(?, ?) as hash",
+        secondCommit?.hash,
+        featureCommit?.hash,
+      ) as { hash: string } | undefined;
+      assert.equal(mergeBase?.hash, secondCommit?.hash);
+    } finally {
+      store.close();
+    }
+  });
 });
 
 describe("Basic Indexing", () => {

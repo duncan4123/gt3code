@@ -135,8 +135,8 @@ const _namedStores = new Map<string, ContentStore>();
 
 /**
  * Resolve a store by optional database name.
- * - Omit or empty → ephemeral session store (getStore())
- * - Provide a name → named persistent store (survives restarts)
+ * - Omit or empty → default per-project store (getStore())
+ * - Provide a name → named persistent store (survives restarts, supports explicit versioning workflows)
  */
 function resolveStore(database?: string): ContentStore {
   if (!database) return getStore();
@@ -156,6 +156,48 @@ type DoltBranchRow = {
   current?: number | string | boolean;
   active?: number | string | boolean;
 };
+
+function isDoltUnavailableError(message?: string): boolean {
+  if (!message) return false;
+  return [
+    "dolt_",
+    "dolt_log",
+    "dolt_status",
+    "dolt_branches",
+    "dolt_tags",
+    "active_branch",
+    "dolt_history_",
+    "dolt_at_",
+    "dolt_diff",
+    "dolt_conflicts",
+    "dolt_remotes",
+    "doltlite_engine",
+    "no such function",
+    "no such table",
+    "no such module",
+  ].some((needle) => message.includes(needle));
+}
+
+function safeSqlIdentifier(name: string): string | null {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? name : null;
+}
+
+function formatMarkdownCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const text = String(value);
+  return text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+}
+
+function formatRowTable(title: string, rows: Array<Record<string, unknown>>, emptyMessage: string): string {
+  if (!rows.length) return emptyMessage;
+  const columns = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
+  const header = `| ${columns.join(" | ")} |`;
+  const divider = `| ${columns.map(() => "---").join(" | ")} |`;
+  const body = rows.map((row) =>
+    `| ${columns.map((column) => formatMarkdownCell(row[column])).join(" | ")} |`
+  );
+  return `## ${title}\n\n${header}\n${divider}\n${body.join("\n")}`;
+}
 
 function formatDoltBranches(store: ContentStore): string {
   const branchColumns = store.queryAll("PRAGMA table_info(dolt_branches)") as Array<{ name?: string }>;
@@ -965,7 +1007,7 @@ server.registerTool(
     title: "Index Content",
     description:
       "Index documentation or knowledge content into a searchable BM25 knowledge base. " +
-      "Chunks markdown by headings (keeping code blocks intact) and stores in ephemeral FTS5 database. " +
+      "Chunks markdown by headings (keeping code blocks intact) and stores in the default per-project knowledge base unless you provide a named database. " +
       "The full content does NOT stay in context — only a brief summary is returned.\n\n" +
       "WHEN TO USE:\n" +
       "- Documentation from Context7, Skills, or MCP tools (API docs, framework guides, code examples)\n" +
@@ -998,7 +1040,7 @@ server.registerTool(
       database: z
         .string()
         .optional()
-        .describe("Named persistent database to index into. Omit to use the ephemeral session store."),
+        .describe("Named persistent database to index into. Omit to use the default per-project store."),
     }),
   },
   async ({ content, path, source, database }) => {
@@ -1026,11 +1068,14 @@ server.registerTool(
       const store = resolveStore(database);
       const result = store.index({ content, path, source });
 
+      const versioningHint = database
+        ? `\nVersioning: use ctx_diff(database: "${database}") to review changes, ctx_commit(message, database: "${database}") to snapshot, or ctx_branch(action, database: "${database}") to isolate experiments.`
+        : "";
       return trackResponse("ctx_index", {
         content: [
           {
             type: "text" as const,
-            text: `Indexed ${result.totalChunks} sections (${result.codeChunks} with code) from: ${result.label}\nUse search(queries: ["..."]) to query this content. Use source: "${result.label}" to scope results.`,
+            text: `Indexed ${result.totalChunks} sections (${result.codeChunks} with code) from: ${result.label}\nUse search(queries: ["..."]) to query this content. Use source: "${result.label}" to scope results.${versioningHint}`,
           },
         ],
       });
@@ -1116,7 +1161,7 @@ server.registerTool(
       database: z
         .string()
         .optional()
-        .describe("Named persistent database to search. Omit to search the ephemeral session store."),
+        .describe("Named persistent database to search. Omit to search the default per-project store."),
     }),
   },
   async (params) => {
@@ -1354,7 +1399,7 @@ server.registerTool(
       database: z
         .string()
         .optional()
-        .describe("Named persistent database to index into. Omit to use the ephemeral session store."),
+        .describe("Named persistent database to index into. Omit to use the default per-project store."),
     }),
   },
   async ({ url, source, force, database }) => {
@@ -1537,7 +1582,7 @@ server.registerTool(
       database: z
         .string()
         .optional()
-        .describe("Named persistent database to index into and search. Omit to use the ephemeral session store."),
+        .describe("Named persistent database to index into and search. Omit to use the default per-project store."),
     }),
   },
   async ({ commands, queries, timeout, database }) => {
@@ -1634,6 +1679,9 @@ server.registerTool(
         ? store.getDistinctiveTerms(indexed.sourceId)
         : [];
 
+      const versioningHint = database
+        ? `\nVersioning: use ctx_diff(database: "${database}") before saving, ctx_commit(message, database: "${database}") after important batches, and ctx_branch(action, database: "${database}") for experimental indexing.`
+        : "";
       const output = [
         `Executed ${commands.length} commands (${totalLines} lines, ${(totalBytes / 1024).toFixed(1)}KB). ` +
           `Indexed ${indexed.totalChunks} sections. Searched ${queries.length} queries.`,
@@ -1644,6 +1692,7 @@ server.registerTool(
         distinctiveTerms.length > 0
           ? `\nSearchable terms for follow-up: ${distinctiveTerms.join(", ")}`
           : "",
+        versioningHint,
       ].join("\n");
 
       return trackResponse("ctx_batch_execute", {
@@ -2089,7 +2138,7 @@ server.registerTool(
       "or before making experimental changes to the knowledge base.",
     inputSchema: z.object({
       message: z.string().describe("Commit message describing what was indexed or changed"),
-      database: z.string().optional().describe("Named persistent database to commit. Omit to use the ephemeral session store."),
+      database: z.string().optional().describe("Named persistent database to commit. Omit to use the default per-project store."),
     }),
   },
   async ({ message, database }) => {
@@ -2126,7 +2175,7 @@ server.registerTool(
     inputSchema: z.object({
       action: z.enum(["list", "create", "checkout", "merge", "delete"]).describe("Branch action"),
       name: z.string().optional().describe("Branch name (required for create/checkout/merge/delete)"),
-      database: z.string().optional().describe("Named persistent database. Omit to use the ephemeral session store."),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default per-project store."),
     }),
   },
   async ({ action, name, database }) => {
@@ -2206,7 +2255,7 @@ server.registerTool(
       "Use to understand what an agent has indexed and when.",
     inputSchema: z.object({
       limit: z.number().optional().default(10).describe("Max commits to show (default 10)"),
-      database: z.string().optional().describe("Named persistent database to query. Omit to use the ephemeral session store."),
+      database: z.string().optional().describe("Named persistent database to query. Omit to use the default per-project store."),
     }),
   },
   async ({ limit, database }) => {
@@ -2248,40 +2297,650 @@ server.registerTool(
 );
 
 server.registerTool(
-  "ctx_diff",
+  "ctx_tag",
   {
-    title: "Knowledge Base Diff",
+    title: "Manage Knowledge Base Tags",
     description:
-      "Show what changed in the knowledge base since the last commit. " +
-      "Reports added, modified, and deleted chunks. Use before committing " +
-      "to review what will be saved, or to understand recent indexing activity.",
+      "Create, list, or delete dolt tags for the knowledge base. " +
+      "Use tags for known-good baselines, releases, and important milestones.",
     inputSchema: z.object({
-      database: z.string().optional().describe("Named persistent database to diff. Omit to use the ephemeral session store."),
+      action: z.enum(["list", "create", "delete"]).describe("Tag action"),
+      name: z.string().optional().describe("Tag name (required for create/delete)"),
+      ref: z.string().optional().describe("Optional commit, branch, or tag ref to tag instead of current HEAD"),
+      message: z.string().optional().describe("Optional tag message"),
+      author: z.string().optional().describe("Optional author string: Name <email>"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default per-project store."),
+    }),
+  },
+  async ({ action, name, ref, message, author, database }) => {
+    const store = resolveStore(database);
+    try {
+      switch (action) {
+        case "list": {
+          const rows = store.queryAll("SELECT * FROM dolt_tags ORDER BY tag_name") as Array<Record<string, unknown>>;
+          return trackResponse("ctx_tag", {
+            content: [{ type: "text" as const, text: formatRowTable("Knowledge Base Tags", rows, "No tags yet.") }],
+          });
+        }
+        case "create": {
+          if (!name) {
+            return trackResponse("ctx_tag", {
+              content: [{ type: "text" as const, text: "Error: name required for create" }],
+              isError: true,
+            });
+          }
+          const params: unknown[] = [name];
+          let sql = "SELECT dolt_tag(?";
+          if (ref) {
+            sql += ", ?";
+            params.push(ref);
+          }
+          if (message) {
+            sql += ", '-m', ?";
+            params.push(message);
+          }
+          if (author) {
+            sql += ", '--author', ?";
+            params.push(author);
+          }
+          sql += ") as result";
+          store.queryOne(sql, ...params);
+          return trackResponse("ctx_tag", {
+            content: [{ type: "text" as const, text: `Created tag: ${name}${ref ? ` -> ${ref}` : ""}` }],
+          });
+        }
+        case "delete": {
+          if (!name) {
+            return trackResponse("ctx_tag", {
+              content: [{ type: "text" as const, text: "Error: name required for delete" }],
+              isError: true,
+            });
+          }
+          store.queryOne("SELECT dolt_tag('-d', ?) as result", name);
+          return trackResponse("ctx_tag", {
+            content: [{ type: "text" as const, text: `Deleted tag: ${name}` }],
+          });
+        }
+      }
+    } catch (e: any) {
+      if (isDoltUnavailableError(e.message)) {
+        return trackResponse("ctx_tag", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_tag", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_reset",
+  {
+    title: "Reset Knowledge Base Working State",
+    description:
+      "Reset staged or working changes in the knowledge base. " +
+      "Soft reset unstages changes; hard reset discards uncommitted changes.",
+    inputSchema: z.object({
+      mode: z.enum(["soft", "hard"]).describe("Reset mode"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default per-project store."),
+    }),
+  },
+  async ({ mode, database }) => {
+    const store = resolveStore(database);
+    try {
+      store.queryOne("SELECT dolt_reset(?) as result", mode === "soft" ? "--soft" : "--hard");
+      return trackResponse("ctx_reset", {
+        content: [{ type: "text" as const, text: `Reset complete: ${mode}` }],
+      });
+    } catch (e: any) {
+      if (isDoltUnavailableError(e.message)) {
+        return trackResponse("ctx_reset", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_reset", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_history",
+  {
+    title: "Knowledge Base Table History",
+    description:
+      "Inspect row history for a specific knowledge-base table across commits. " +
+      "Wraps dolt_history_<table> for time-travel debugging.",
+    inputSchema: z.object({
+      table: z.string().describe("Table name to inspect"),
+      ref: z.string().optional().describe("Optional commit hash filter"),
+      rowid: z.number().optional().describe("Optional rowid_val filter"),
+      limit: z.number().optional().default(20).describe("Max rows to return (default 20)"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default per-project store."),
+    }),
+  },
+  async ({ table, ref, rowid, limit, database }) => {
+    const store = resolveStore(database);
+    const safeTable = safeSqlIdentifier(table);
+    if (!safeTable) {
+      return trackResponse("ctx_history", {
+        content: [{ type: "text" as const, text: "Error: invalid table name" }],
+        isError: true,
+      });
+    }
+    try {
+      const clauses: string[] = [];
+      const params: unknown[] = [];
+      if (ref) {
+        clauses.push("commit_hash = ?");
+        params.push(ref);
+      }
+      if (rowid !== undefined) {
+        clauses.push("rowid_val = ?");
+        params.push(rowid);
+      }
+      const where = clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
+      const rows = store.queryAll(
+        `SELECT * FROM dolt_history_${safeTable}${where} LIMIT ?`,
+        ...params,
+        limit,
+      ) as Array<Record<string, unknown>>;
+      return trackResponse("ctx_history", {
+        content: [{
+          type: "text" as const,
+          text: formatRowTable(`Knowledge Base History (${table})`, rows, `No history rows for table: ${table}`),
+        }],
+      });
+    } catch (e: any) {
+      if (isDoltUnavailableError(e.message)) {
+        return trackResponse("ctx_history", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_history", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_at",
+  {
+    title: "Knowledge Base Point-in-Time Query",
+    description:
+      "Read a knowledge-base table as it existed at a commit, branch, or tag. " +
+      "Wraps dolt_at_<table>(ref) for point-in-time inspection.",
+    inputSchema: z.object({
+      table: z.string().describe("Table name to inspect"),
+      ref: z.string().describe("Commit, branch, or tag ref"),
+      limit: z.number().optional().default(20).describe("Max rows to return (default 20)"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default per-project store."),
+    }),
+  },
+  async ({ table, ref, limit, database }) => {
+    const store = resolveStore(database);
+    const safeTable = safeSqlIdentifier(table);
+    if (!safeTable) {
+      return trackResponse("ctx_at", {
+        content: [{ type: "text" as const, text: "Error: invalid table name" }],
+        isError: true,
+      });
+    }
+    try {
+      const rows = store.queryAll(
+        `SELECT * FROM dolt_at_${safeTable}(?) LIMIT ?`,
+        ref,
+        limit,
+      ) as Array<Record<string, unknown>>;
+      return trackResponse("ctx_at", {
+        content: [{
+          type: "text" as const,
+          text: formatRowTable(`Knowledge Base As Of (${table} @ ${ref})`, rows, `No rows for ${table} at ${ref}.`),
+        }],
+      });
+    } catch (e: any) {
+      if (isDoltUnavailableError(e.message)) {
+        return trackResponse("ctx_at", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_at", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_merge_base",
+  {
+    title: "Knowledge Base Merge Base",
+    description:
+      "Find the common ancestor of two knowledge-base refs. " +
+      "Useful before merge analysis, cherry-picks, or comparing branches.",
+    inputSchema: z.object({
+      left_ref: z.string().describe("Left commit, branch, or tag ref"),
+      right_ref: z.string().describe("Right commit, branch, or tag ref"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default per-project store."),
+    }),
+  },
+  async ({ left_ref, right_ref, database }) => {
+    const store = resolveStore(database);
+    try {
+      const result = store.queryOne("SELECT dolt_merge_base(?, ?) as hash", left_ref, right_ref) as Record<string, unknown> | undefined;
+      const hash = result ? String(Object.values(result)[0] ?? "") : "";
+      return trackResponse("ctx_merge_base", {
+        content: [{ type: "text" as const, text: hash ? `Merge base: ${hash}` : "No merge base found." }],
+      });
+    } catch (e: any) {
+      if (isDoltUnavailableError(e.message)) {
+        return trackResponse("ctx_merge_base", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_merge_base", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_cherry_pick",
+  {
+    title: "Cherry-Pick Knowledge Base Commit",
+    description:
+      "Apply the changes from a specific commit onto the current branch. " +
+      "Conflicts, if any, can be inspected with ctx_conflicts.",
+    inputSchema: z.object({
+      ref: z.string().describe("Commit ref to cherry-pick"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default per-project store."),
+    }),
+  },
+  async ({ ref, database }) => {
+    const store = resolveStore(database);
+    try {
+      const result = store.queryOne("SELECT dolt_cherry_pick(?) as result", ref) as Record<string, unknown> | undefined;
+      const text = result ? String(Object.values(result)[0] ?? "") : "Cherry-pick completed.";
+      return trackResponse("ctx_cherry_pick", {
+        content: [{ type: "text" as const, text }],
+      });
+    } catch (e: any) {
+      if (isDoltUnavailableError(e.message)) {
+        return trackResponse("ctx_cherry_pick", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_cherry_pick", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_revert",
+  {
+    title: "Revert Knowledge Base Commit",
+    description:
+      "Create a new commit that undoes the changes from a specific commit. " +
+      "Conflicts, if any, can be inspected with ctx_conflicts.",
+    inputSchema: z.object({
+      ref: z.string().describe("Commit ref to revert"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default per-project store."),
+    }),
+  },
+  async ({ ref, database }) => {
+    const store = resolveStore(database);
+    try {
+      const result = store.queryOne("SELECT dolt_revert(?) as result", ref) as Record<string, unknown> | undefined;
+      const text = result ? String(Object.values(result)[0] ?? "") : "Revert completed.";
+      return trackResponse("ctx_revert", {
+        content: [{ type: "text" as const, text }],
+      });
+    } catch (e: any) {
+      if (isDoltUnavailableError(e.message)) {
+        return trackResponse("ctx_revert", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_revert", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_remote",
+  {
+    title: "Knowledge Base Remote Sync",
+    description:
+      "Manage remotes or sync a knowledge base branch to and from a remote. " +
+      "Wraps dolt_remote, dolt_push, dolt_fetch, dolt_pull, and dolt_clone.",
+    inputSchema: z.object({
+      action: z.enum(["list", "add", "push", "fetch", "pull", "clone"]).describe("Remote action"),
+      name: z.string().optional().describe("Remote name (required for add/push/fetch/pull)"),
+      url: z.string().optional().describe("Remote URL (required for add/clone)"),
+      branch: z.string().optional().describe("Branch name (required for push/fetch/pull)"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default per-project store."),
+    }),
+  },
+  async ({ action, name, url, branch, database }) => {
+    const store = resolveStore(database);
+    try {
+      switch (action) {
+        case "list": {
+          const rows = store.queryAll("SELECT * FROM dolt_remotes") as Array<Record<string, unknown>>;
+          return trackResponse("ctx_remote", {
+            content: [{ type: "text" as const, text: formatRowTable("Knowledge Base Remotes", rows, "No remotes configured.") }],
+          });
+        }
+        case "add": {
+          if (!name || !url) {
+            return trackResponse("ctx_remote", {
+              content: [{ type: "text" as const, text: "Error: name and url are required for add" }],
+              isError: true,
+            });
+          }
+          store.queryOne("SELECT dolt_remote('add', ?, ?) as result", name, url);
+          return trackResponse("ctx_remote", {
+            content: [{ type: "text" as const, text: `Added remote: ${name}` }],
+          });
+        }
+        case "push":
+        case "fetch":
+        case "pull": {
+          if (!name || !branch) {
+            return trackResponse("ctx_remote", {
+              content: [{ type: "text" as const, text: `Error: name and branch are required for ${action}` }],
+              isError: true,
+            });
+          }
+          const fn = action === "push" ? "dolt_push" : action === "fetch" ? "dolt_fetch" : "dolt_pull";
+          const result = store.queryOne(`SELECT ${fn}(?, ?) as result`, name, branch) as Record<string, unknown> | undefined;
+          const text = result ? String(Object.values(result)[0] ?? "") : `${action} completed.`;
+          return trackResponse("ctx_remote", {
+            content: [{ type: "text" as const, text }],
+          });
+        }
+        case "clone": {
+          if (!url) {
+            return trackResponse("ctx_remote", {
+              content: [{ type: "text" as const, text: "Error: url is required for clone" }],
+              isError: true,
+            });
+          }
+          const result = store.queryOne("SELECT dolt_clone(?) as result", url) as Record<string, unknown> | undefined;
+          const text = result ? String(Object.values(result)[0] ?? "") : "Clone completed.";
+          return trackResponse("ctx_remote", {
+            content: [{ type: "text" as const, text }],
+          });
+        }
+      }
+    } catch (e: any) {
+      if (isDoltUnavailableError(e.message)) {
+        return trackResponse("ctx_remote", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_remote", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_conflicts",
+  {
+    title: "Knowledge Base Merge Conflicts",
+    description:
+      "Inspect or resolve merge/cherry-pick/revert conflicts in the knowledge base. " +
+      "Wraps dolt_conflicts and dolt_conflicts_resolve.",
+    inputSchema: z.object({
+      action: z.enum(["summary", "show", "resolve"]).describe("Conflict action"),
+      table: z.string().optional().describe("Table name (required for show/resolve)"),
+      strategy: z.enum(["ours", "theirs"]).optional().describe("Resolution strategy for resolve"),
+      limit: z.number().optional().default(20).describe("Max rows to return for show (default 20)"),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default per-project store."),
+    }),
+  },
+  async ({ action, table, strategy, limit, database }) => {
+    const store = resolveStore(database);
+    try {
+      switch (action) {
+        case "summary": {
+          const rows = store.queryAll("SELECT * FROM dolt_conflicts") as Array<Record<string, unknown>>;
+          return trackResponse("ctx_conflicts", {
+            content: [{ type: "text" as const, text: formatRowTable("Knowledge Base Conflicts", rows, "No merge conflicts.") }],
+          });
+        }
+        case "show": {
+          if (!table) {
+            return trackResponse("ctx_conflicts", {
+              content: [{ type: "text" as const, text: "Error: table is required for show" }],
+              isError: true,
+            });
+          }
+          const safeTable = safeSqlIdentifier(table);
+          if (!safeTable) {
+            return trackResponse("ctx_conflicts", {
+              content: [{ type: "text" as const, text: "Error: invalid table name" }],
+              isError: true,
+            });
+          }
+          const rows = store.queryAll(`SELECT * FROM dolt_conflicts_${safeTable} LIMIT ?`, limit) as Array<Record<string, unknown>>;
+          return trackResponse("ctx_conflicts", {
+            content: [{
+              type: "text" as const,
+              text: formatRowTable(`Knowledge Base Conflicts (${table})`, rows, `No conflict rows for table: ${table}`),
+            }],
+          });
+        }
+        case "resolve": {
+          if (!table || !strategy) {
+            return trackResponse("ctx_conflicts", {
+              content: [{ type: "text" as const, text: "Error: table and strategy are required for resolve" }],
+              isError: true,
+            });
+          }
+          const flag = strategy === "ours" ? "--ours" : "--theirs";
+          const result = store.queryOne("SELECT dolt_conflicts_resolve(?, ?) as result", flag, table) as Record<string, unknown> | undefined;
+          const text = result ? String(Object.values(result)[0] ?? "") : `Resolved conflicts for ${table}.`;
+          return trackResponse("ctx_conflicts", {
+            content: [{ type: "text" as const, text }],
+          });
+        }
+      }
+    } catch (e: any) {
+      if (isDoltUnavailableError(e.message)) {
+        return trackResponse("ctx_conflicts", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_conflicts", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_gc",
+  {
+    title: "Garbage Collect Knowledge Base",
+    description:
+      "Run dolt garbage collection to remove unreachable chunks from the knowledge base store. " +
+      "Use after major cleanup or branch/tag deletion to reclaim space.",
+    inputSchema: z.object({
+      database: z.string().optional().describe("Named persistent database. Omit to use the default per-project store."),
     }),
   },
   async ({ database }) => {
     const store = resolveStore(database);
     try {
-      const status = store.queryAll(
-        `SELECT table_name, staged, status FROM dolt_status`
-      ) as Array<Record<string, string>>;
-
-      if (!status.length) {
-        return trackResponse("ctx_diff", {
-          content: [{ type: "text" as const, text: "No changes — knowledge base matches last commit." }],
-        });
-      }
-
-      const lines = status.map((r) =>
-        `- **${r.table_name}**: ${r.status}${r.staged === "1" || r.staged === "true" ? " (staged)" : ""}`
-      );
-      const text = `## Knowledge Base Changes\n\n${lines.join("\n")}`;
-
-      return trackResponse("ctx_diff", {
+      const result = store.queryOne("SELECT dolt_gc() as result") as Record<string, unknown> | undefined;
+      const text = result ? String(Object.values(result)[0] ?? "") : "Garbage collection completed.";
+      return trackResponse("ctx_gc", {
         content: [{ type: "text" as const, text }],
       });
     } catch (e: any) {
-      if (e.message?.includes("dolt_status")) {
+      if (isDoltUnavailableError(e.message)) {
+        return trackResponse("ctx_gc", {
+          content: [{ type: "text" as const, text: "Not available: running on plain SQLite (no dolt versioning)." }],
+        });
+      }
+      return trackResponse("ctx_gc", {
+        content: [{ type: "text" as const, text: `Error: ${e.message}` }],
+        isError: true,
+      });
+    }
+  },
+);
+
+server.registerTool(
+  "ctx_diff",
+  {
+    title: "Knowledge Base Diff",
+    description:
+      "Show working-set changes or commit-to-commit diffs for the knowledge base. " +
+      "Supports working-set status, commit-history diff, diff stats, diff summary, " +
+      "and per-table audit history on doltlite.",
+    inputSchema: z.object({
+      view: z
+        .enum(["working", "history", "stat", "summary", "table"])
+        .optional()
+        .default("working")
+        .describe("Diff view: working (default), history, stat, summary, or table"),
+      from_ref: z.string().optional().describe("Start ref for stat/summary views (commit, branch, or tag)"),
+      to_ref: z.string().optional().describe("End ref for stat/summary views (commit, branch, or tag)"),
+      table: z.string().optional().describe("Table name for history/stat/summary filtering or required for table view"),
+      limit: z.number().optional().default(20).describe("Max rows to return for history/table views (default 20)"),
+      database: z.string().optional().describe("Named persistent database to diff. Omit to use the default per-project store."),
+    }),
+  },
+  async ({ view, from_ref, to_ref, table, limit, database }) => {
+    const store = resolveStore(database);
+    try {
+      switch (view) {
+        case "working": {
+          const status = store.queryAll(
+            `SELECT table_name, staged, status FROM dolt_status`
+          ) as Array<Record<string, string>>;
+
+          if (!status.length) {
+            return trackResponse("ctx_diff", {
+              content: [{ type: "text" as const, text: "No changes — knowledge base matches last commit." }],
+            });
+          }
+
+          const lines = status.map((r) =>
+            `- **${r.table_name}**: ${r.status}${r.staged === "1" || r.staged === "true" ? " (staged)" : ""}`
+          );
+          return trackResponse("ctx_diff", {
+            content: [{ type: "text" as const, text: `## Knowledge Base Changes\n\n${lines.join("\n")}` }],
+          });
+        }
+
+        case "history": {
+          const rows = table
+            ? store.queryAll(`SELECT * FROM dolt_diff WHERE table_name = ? LIMIT ?`, table, limit)
+            : store.queryAll(`SELECT * FROM dolt_diff LIMIT ?`, limit);
+          return trackResponse("ctx_diff", {
+            content: [{
+              type: "text" as const,
+              text: formatRowTable("Knowledge Base Diff History", rows as Array<Record<string, unknown>>, "No diff history rows."),
+            }],
+          });
+        }
+
+        case "stat": {
+          if (!from_ref || !to_ref) {
+            return trackResponse("ctx_diff", {
+              content: [{ type: "text" as const, text: "Error: from_ref and to_ref are required for stat view" }],
+              isError: true,
+            });
+          }
+          const rows = table
+            ? store.queryAll(`SELECT * FROM dolt_diff_stat(?, ?, ?)`, from_ref, to_ref, table)
+            : store.queryAll(`SELECT * FROM dolt_diff_stat(?, ?)`, from_ref, to_ref);
+          return trackResponse("ctx_diff", {
+            content: [{
+              type: "text" as const,
+              text: formatRowTable(
+                `Knowledge Base Diff Stat (${from_ref} → ${to_ref})`,
+                rows as Array<Record<string, unknown>>,
+                "No diff-stat rows.",
+              ),
+            }],
+          });
+        }
+
+        case "summary": {
+          if (!from_ref || !to_ref) {
+            return trackResponse("ctx_diff", {
+              content: [{ type: "text" as const, text: "Error: from_ref and to_ref are required for summary view" }],
+              isError: true,
+            });
+          }
+          const rows = table
+            ? store.queryAll(`SELECT * FROM dolt_diff_summary(?, ?, ?)`, from_ref, to_ref, table)
+            : store.queryAll(`SELECT * FROM dolt_diff_summary(?, ?)`, from_ref, to_ref);
+          return trackResponse("ctx_diff", {
+            content: [{
+              type: "text" as const,
+              text: formatRowTable(
+                `Knowledge Base Diff Summary (${from_ref} → ${to_ref})`,
+                rows as Array<Record<string, unknown>>,
+                "No diff-summary rows.",
+              ),
+            }],
+          });
+        }
+
+        case "table": {
+          if (!table) {
+            return trackResponse("ctx_diff", {
+              content: [{ type: "text" as const, text: "Error: table is required for table view" }],
+              isError: true,
+            });
+          }
+          const safeTable = safeSqlIdentifier(table);
+          if (!safeTable) {
+            return trackResponse("ctx_diff", {
+              content: [{ type: "text" as const, text: "Error: invalid table name" }],
+              isError: true,
+            });
+          }
+          const rows = store.queryAll(`SELECT * FROM dolt_diff_${safeTable} LIMIT ?`, limit);
+          return trackResponse("ctx_diff", {
+            content: [{
+              type: "text" as const,
+              text: formatRowTable(
+                `Knowledge Base Table Audit (${table})`,
+                rows as Array<Record<string, unknown>>,
+                `No audit rows for table: ${table}`,
+              ),
+            }],
+          });
+        }
+      }
+    } catch (e: any) {
+      if (isDoltUnavailableError(e.message)) {
         return trackResponse("ctx_diff", {
           content: [{ type: "text" as const, text: "No version history — doltlite not initialized or no commits yet." }],
         });
@@ -2303,7 +2962,7 @@ server.registerTool(
       "source count, and any uncommitted changes. Quick health check for the " +
       "versioned knowledge base.",
     inputSchema: z.object({
-      database: z.string().optional().describe("Named persistent database to inspect. Omit to use the ephemeral session store."),
+      database: z.string().optional().describe("Named persistent database to inspect. Omit to use the default per-project store."),
     }),
   },
   async ({ database }) => {
@@ -2372,7 +3031,7 @@ server.registerTool(
       description: z.string().optional().default("").describe("What this convoy accomplishes"),
       rig: z.string().optional().default("").describe("Target rig name (e.g. gascity, t3code)"),
       metadata: z.record(z.unknown()).optional().describe("Additional metadata as JSON object"),
-      database: z.string().optional().describe("Named persistent database to store convoy in. Omit to use the ephemeral session store."),
+      database: z.string().optional().describe("Named persistent database to store convoy in. Omit to use the default per-project store."),
     }),
   },
   async ({ title, description, rig, metadata, database }) => {
@@ -2417,7 +3076,7 @@ server.registerTool(
       issue_type: z.string().optional().default("task").describe("task | gate | formula | session"),
       priority: z.number().optional().default(2).describe("Priority 1-4 (1=highest)"),
       assignee: z.string().optional().describe("Agent assignee"),
-      database: z.string().optional().describe("Named persistent database to store bead in. Omit to use the ephemeral session store."),
+      database: z.string().optional().describe("Named persistent database to store bead in. Omit to use the default per-project store."),
     }),
   },
   async ({ title, description, rig, convoy_id, issue_type, priority, assignee, database }) => {
@@ -2464,7 +3123,7 @@ server.registerTool(
       issue_id: z.string().describe("ID of the dependent bead (the one that is blocked)"),
       depends_on_id: z.string().describe("ID of the bead it depends on (the blocker)"),
       type: z.string().optional().default("blocks").describe("Relationship type: blocks | child-of | relates-to"),
-      database: z.string().optional().describe("Named persistent database. Omit to use the ephemeral session store."),
+      database: z.string().optional().describe("Named persistent database. Omit to use the default per-project store."),
     }),
   },
   async ({ issue_id, depends_on_id, type, database }) => {
@@ -2498,7 +3157,7 @@ server.registerTool(
       "Use to review staged work before deploying to production GC.",
     inputSchema: z.object({
       include_beads: z.boolean().optional().default(true).describe("Include child beads under each convoy"),
-      database: z.string().optional().describe("Named persistent database to list convoys from. Omit to use the ephemeral session store."),
+      database: z.string().optional().describe("Named persistent database to list convoys from. Omit to use the default per-project store."),
     }),
   },
   async ({ include_beads, database }) => {
