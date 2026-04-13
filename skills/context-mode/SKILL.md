@@ -16,7 +16,8 @@ description: |
   Also triggers on ANY MCP tool output that may exceed 20 lines.
   Subagent routing is handled automatically via PreToolUse hook.
   Powered by doltlite — versioned knowledge bases with ctx_commit, ctx_log, ctx_diff, ctx_status, ctx_gc.
-  Named persistent databases with database parameter on index/search/batch_execute/commit/log/diff/status, list_databases, delete_database.
+  Prefer named databases for repeatable investigations, branching, and cross-session work:
+  index/search/batch_execute/commit/log/diff/status/branch all accept database.
   Draft convoy creation with ctx_convoy_create, ctx_bead_create, ctx_dep_add, ctx_convoy_list.
 ---
 
@@ -41,6 +42,19 @@ Bash whitelist (safe to run directly):
 **Everything else → `ctx_execute` or `ctx_execute_file`.** Any command that reads, queries, fetches, lists, logs, tests, builds, diffs, inspects, or calls an external service. This includes ALL CLIs (gh, aws, kubectl, docker, terraform, wrangler, fly, heroku, gcloud, etc.) — there are thousands and we cannot list them all.
 
 **When uncertain, use context-mode.** Every KB of unnecessary context reduces the quality and speed of the entire session.
+
+## Database Default
+
+- Omitting `database` does **not** create an ephemeral scratch store. It uses the default per-project knowledge base for the current repo.
+- Use a **named database** for any investigation you want to replay, branch, diff, or share across restarts: `database: "issue-123-20260413"`.
+- Treat the default per-project store as shared project state. Treat named DBs as isolated workspaces for durable research.
+
+## MCP Launcher Source Of Truth
+
+- If an agent is running the wrong `context-mode`, check project/global MCP config files first: `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, or tool-specific global MCP config.
+- Those files decide which server binary gets launched. A stale absolute path to another checkout wins over whatever repo you are editing.
+- For this repo, the safe launcher is `/usr/bin/node /data/projects/claude-context-mode/start.mjs`.
+- After changing MCP config, restart the client/agent and run `ctx_doctor` to confirm the expected build is live.
 
 ## Decision Tree
 
@@ -314,7 +328,8 @@ Subagents automatically receive context-mode tool routing via a PreToolUse hook.
 - Passing ANY large data to `ctx_index(content: ...)` → data enters context as a parameter. **Always** use `ctx_index(path: ...)` to read server-side. The `content` parameter should only be used for small inline text you're composing yourself.
 - Calling an MCP tool (Context7 `query-docs`, GitHub API, etc.) then passing the response to `ctx_index(content: response)` → **doubles** context usage. The response is already in context — use it directly or save to file first.
 - Ignoring `browser_navigate` auto-snapshot → navigation response includes a full page snapshot. Don't rely on it for inspection — call `browser_snapshot(filename)` separately.
-- Indexing many sources without committing → **corruption risk**. Uncommitted data lives in WAL/memory. A crash, MCP restart, or session timeout loses everything. Commit after every `fetch_and_index` and every 3-5 `ctx_index` calls.
+- Treating omitted `database` as disposable scratch space → it is the default per-project store, so state can carry across sessions. Use a named DB when isolation matters.
+- Indexing many sources without committing → **corruption risk**. Uncommitted doltlite state is easier to lose or damage on crashes, restarts, or transport failures. Commit after every `fetch_and_index` and every 3-5 `ctx_index` calls.
 - Ending a session without committing → dirty database state carries into next session. Always `ctx_commit` as final KB operation.
 - Expecting `ctx_stats` to reset or wipe anything → `ctx_stats` is read-only (shows stats only). Use `ctx_purge(confirm: true)` to permanently delete all indexed content.
 
@@ -333,7 +348,7 @@ context-mode uses doltlite — a SQLite fork with git-like version control. Ever
 
 ### Commit Discipline (MANDATORY)
 
-**Uncommitted data is vulnerable to corruption.** Doltlite journals uncommitted changes in memory and WAL state. If the session crashes, the MCP server restarts, or the process is killed, uncommitted indexed content is lost or corrupted. Commits checkpoint the database to a known-good state.
+**Uncommitted data is vulnerable to corruption.** If the session crashes, the MCP server restarts, or the process is killed, uncommitted indexed content is easier to lose or damage. Commits checkpoint the database to a known-good state.
 
 **Commit cadence rules:**
 
@@ -360,15 +375,25 @@ ctx_commit("pre-reindex checkpoint — about to refresh stale Zod docs")
 
 ### Branching
 
-Use `ctx_branch` after first KB commit when you need isolated experimental indexing. Typical flow:
+Use `ctx_branch` after first KB commit when you need isolated experimental indexing. Prefer doing this on a named DB so the branch history is tied to a stable workspace. Typical flow:
 
 ```
-ctx_commit("seed kb")
-ctx_branch(action: "create", name: "experiment")
-ctx_branch(action: "checkout", name: "experiment")
+ctx_commit("seed kb", database: "issue-123")
+ctx_branch(action: "create", name: "experiment", database: "issue-123")
+ctx_branch(action: "checkout", name: "experiment", database: "issue-123")
+ctx_index(path: "/tmp/api-notes.md", source: "API notes", database: "issue-123")
+ctx_diff(database: "issue-123")
+ctx_commit("experiment: api notes indexed", database: "issue-123")
+ctx_branch(action: "checkout", name: "main", database: "issue-123")
+ctx_branch(action: "merge", name: "experiment", database: "issue-123")
 ```
 
 Fresh KBs with no commits cannot branch yet.
+
+**Use named DB + branch when:**
+- you are investigating a bug across multiple sessions
+- you want to compare alternate indexing approaches without polluting the main KB
+- multiple agents need a shared, reviewable audit trail
 
 ### Use Cases
 

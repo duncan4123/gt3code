@@ -75,6 +75,21 @@ This gives you the 6 sandbox tools without automatic routing. The model can stil
 
 </details>
 
+**MCP config precedence:** project-level MCP config files such as `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, or tool-specific global configs are what actually tell an agent which `context-mode` server binary to launch. If an agent is using the wrong build, check those files first for stale absolute paths like another checkout's `build/server.js`. For this repo, the safe launcher is:
+
+```json
+{
+  "mcpServers": {
+    "context-mode": {
+      "command": "/usr/bin/node",
+      "args": ["/data/projects/claude-context-mode/start.mjs"]
+    }
+  }
+}
+```
+
+Use `/context-mode-doltlite:ctx-doctor` after changing MCP config to verify the runtime is connected to the expected build.
+
 </details>
 
 <details>
