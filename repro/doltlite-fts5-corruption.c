@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
   int rc;
 
   const char *db_path = argc > 1 ? argv[1] : "/tmp/doltlite-c-repro.db";
-  const char *sql_path = argc > 2 ? argv[2] : "/data/projects/claude-context-mode/repro/doltlite-fts5-corruption.sql";
+  const char *sql_path = argc > 2 ? argv[2] : "doltlite-fts5-corruption-noshell.sql";
 
   sql = read_file(sql_path, &n_sql);
   if (!sql) {
