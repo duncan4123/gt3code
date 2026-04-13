@@ -87,7 +87,69 @@ For every task:
 | "triage issue #N", "fix issue", "analyze issue" | Triage | [triage-issue.md](triage-issue.md) |
 | "review PR #N", "merge PR", "check PR" | Review | [review-pr.md](review-pr.md) |
 | "release", "version bump", "publish" | Release | [release.md](release.md) |
+| "upgrade doltlite", "rebuild prebuilds", "agents using wrong build", "rollout" | Release | [release.md](release.md) |
 | "linkedin", "marketing", "announce", "write post" | Marketing | [marketing.md](marketing.md) |
+
+## Build And Update Process
+
+When the task is operational rather than feature work, the release workflow also covers build/update/rollout.
+
+### 1. Know what is actually shipped
+
+Agents do **not** magically run the checkout you are editing. They run whatever their MCP config launches.
+
+- MCP launcher source of truth: `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, and any tool-specific global MCP config
+- Safe launcher for this repo: `/usr/bin/node /data/projects/claude-context-mode/start.mjs`
+- Stale absolute paths to another checkout's `build/server.js` or similar must be swept and fixed before calling rollout complete
+
+### 2. Know which artifacts must be rebuilt
+
+If TypeScript/runtime code changed, shipped artifacts must be regenerated and committed:
+
+- `build/`
+- `server.bundle.mjs`
+- `cli.bundle.mjs`
+- `hooks/session-*.bundle.mjs`
+
+If DoltLite changed, prebuild artifacts must also be refreshed and committed:
+
+- `prebuilds/VERSION`
+- `prebuilds/<platform>-<arch>/node.abi*.node`
+
+### 3. DoltLite upgrade process
+
+When upstream DoltLite fixes a bug or is intentionally upgraded:
+
+1. Rebuild latest DoltLite locally
+2. Rebuild the vendored `better-sqlite3` addon against it
+3. Verify with a real engine check:
+   - `SELECT doltlite_engine()` should report `prolly`
+4. Run targeted DB-heavy tests first, then broader validation
+5. Rebuild tracked prebuilds for supported ABIs
+6. Bump `prebuilds/VERSION`
+7. Commit the prebuild refresh separately so rollout is auditable
+
+### 4. Rollout verification
+
+A rollout is not complete until all of these are true:
+
+- `origin/main` has the intended commits
+- shipped bundles/prebuilds are committed and pushed
+- MCP config sweep shows no stale launcher paths
+- affected agents/clients restarted
+- live smoke passes on the real MCP runtime:
+  - `ctx_doctor`
+  - `ctx_index`
+  - `ctx_batch_execute`
+  - `ctx_search`
+
+### 5. Default release rule
+
+Do not assume CI or npm publish will regenerate everything you need.
+
+- If tracked generated artifacts changed, rebuild them locally and commit them
+- If only source/docs/tests changed and tracked artifacts do not change, do not churn generated files unnecessarily
+- Treat runtime rollout and package publishing as separate checkpoints
 
 ## GitHub CLI (`gh`) Is Mandatory
 

@@ -76,9 +76,43 @@ This single command does ALL of the following automatically:
 
 **Do NOT create your own commit or tag. `npm version patch` handles it.**
 
-### 3. Validate (NO Build Needed)
+### 3. Build And Validate
 
-**Do NOT run `npm run build` or `npm run bundle`.** CI generates bundle files automatically on GitHub. You only validate:
+Build requirements depend on what changed.
+
+#### If source changes affect shipped runtime artifacts
+
+Run:
+
+```bash
+npm run build
+```
+
+This refreshes tracked runtime artifacts such as:
+- `build/`
+- `server.bundle.mjs`
+- `cli.bundle.mjs`
+- `hooks/session-*.bundle.mjs`
+
+Commit those generated files if they changed.
+
+#### If DoltLite changed
+
+You must also refresh tracked prebuilds:
+
+```bash
+# rebuild the local addon/prebuild workflow as required for the current upgrade
+# then verify the engine:
+/usr/bin/node -e "const DB=require('./vendor/better-sqlite3'); const db=new DB(':memory:'); console.log(db.prepare('SELECT doltlite_engine() AS e').get().e); db.close()"
+```
+
+Then update and commit:
+- `prebuilds/VERSION`
+- `prebuilds/<platform>-<arch>/node.abi*.node`
+
+#### Always validate
+
+After any required build/prebuild work:
 
 ```bash
 # Tests
@@ -169,6 +203,19 @@ Only delete after explicit approval:
 git push origin --delete {branch-name}
 ```
 
+## MCP Rollout Verification
+
+Do not call the rollout complete until agents are actually running the intended build.
+
+- [ ] Sweep project/global MCP config files for stale absolute paths
+- [ ] Confirm launcher points at `/usr/bin/node /data/projects/claude-context-mode/start.mjs` where appropriate
+- [ ] Restart affected agents/clients
+- [ ] Run live smoke on the real MCP runtime:
+  - `ctx_doctor`
+  - `ctx_index`
+  - `ctx_batch_execute`
+  - `ctx_search`
+
 ## Release Checklist (EM Verification)
 
 Before declaring release complete:
@@ -176,9 +223,12 @@ Before declaring release complete:
 - [ ] `npm test` — all pass
 - [ ] `npm run typecheck` — no errors
 - [ ] `npm version patch` — version bumped in all manifests
-- [ ] `git push origin main --tags` — pushed with tag (CI builds bundles automatically)
+- [ ] Tracked generated artifacts rebuilt and committed if changed
+- [ ] Prebuilds refreshed and committed if DoltLite changed
+- [ ] `git push origin main --tags` — pushed with tag
 - [ ] `gh release create` — GitHub release published
 - [ ] `npm publish` — package on npm registry
+- [ ] MCP rollout verification completed
 - [ ] `next` branch synced with `main`
 - [ ] Stale remote branches cleaned (user approved)
 - [ ] Verify: `npm view context-mode version` shows new version
