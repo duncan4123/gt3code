@@ -813,6 +813,67 @@ routing.layer("ProviderServiceLive routing", (it) => {
     }),
   );
 
+  it.effect(
+    "rehydrates persisted runtime rows from live adapter sessions during listSessions",
+    () =>
+      Effect.gen(function* () {
+        const provider = yield* ProviderService;
+        const runtimeRepository = yield* ProviderSessionRuntimeRepository;
+
+        const session = yield* provider.startSession(asThreadId("thread-pid-refresh"), {
+          provider: "codex",
+          threadId: asThreadId("thread-pid-refresh"),
+          cwd: "/tmp/project-pid-refresh",
+          runtimeMode: "full-access",
+        });
+
+        const staleRuntime = yield* runtimeRepository.getByThreadId({
+          threadId: session.threadId,
+        });
+        assert.equal(Option.isSome(staleRuntime), true);
+        if (Option.isSome(staleRuntime)) {
+          const originalPayload = staleRuntime.value.runtimePayload as Record<
+            string,
+            unknown
+          > | null;
+          assert.equal(originalPayload?.cwd, "/tmp/project-pid-refresh");
+        }
+
+        routing.codex.updateSession(session.threadId, (existing) => ({
+          ...existing,
+          status: "running",
+          pid: 43210,
+          updatedAt: new Date().toISOString(),
+        }));
+
+        const listed = yield* provider.listSessions();
+        assert.equal(
+          listed.some((entry) => entry.threadId === session.threadId && entry.pid === 43210),
+          true,
+        );
+
+        const refreshedRuntime = yield* runtimeRepository.getByThreadId({
+          threadId: session.threadId,
+        });
+        assert.equal(Option.isSome(refreshedRuntime), true);
+        if (Option.isSome(refreshedRuntime)) {
+          assert.equal(refreshedRuntime.value.status, "running");
+          const payload = refreshedRuntime.value.runtimePayload;
+          assert.equal(payload !== null && typeof payload === "object", true);
+          if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
+            const runtimePayload = payload as {
+              cwd: string | null;
+              pid: number | null;
+              lastRuntimeEvent: string | null;
+            };
+            assert.equal(runtimePayload.cwd, "/tmp/project-pid-refresh");
+            assert.equal(runtimePayload.pid, 43210);
+            assert.equal(runtimePayload.lastRuntimeEvent, "provider.listSessions");
+          }
+        }
+      }),
+  );
+
   it.effect("reuses persisted resume cursor when startSession is called after a restart", () =>
     Effect.gen(function* () {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3-provider-service-start-"));

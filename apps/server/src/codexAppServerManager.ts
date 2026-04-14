@@ -121,6 +121,7 @@ export interface CodexAppServerStartSessionInput {
   readonly threadId: ThreadId;
   readonly provider?: "codex";
   readonly cwd?: string;
+  readonly env?: Record<string, string>;
   readonly model?: string;
   readonly serviceTier?: string;
   readonly resumeCursor?: unknown;
@@ -551,7 +552,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     try {
       const resolvedCwd = input.cwd ?? process.cwd();
 
-      const session: ProviderSession = {
+      const baseSession: ProviderSession = {
         provider: "codex",
         status: "connecting",
         runtimeMode: input.runtimeMode,
@@ -574,11 +575,14 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         cwd: resolvedCwd,
         env: {
           ...codexProcessEnv,
+          ...(input.env ?? {}),
           ...(codexHomePath ? { CODEX_HOME: codexHomePath } : {}),
         },
         stdio: ["pipe", "pipe", "pipe"],
         shell: process.platform === "win32",
       });
+      const session: ProviderSession =
+        child.pid !== undefined ? { ...baseSession, pid: child.pid } : baseSession;
       const output = readline.createInterface({ input: child.stdout });
 
       context = {
@@ -1026,8 +1030,11 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   }
 
   listSessions(): ProviderSession[] {
-    return Array.from(this.sessions.values(), ({ session }) => ({
+    return Array.from(this.sessions.values(), ({ session, child }) => ({
       ...session,
+      ...(session.pid === undefined && session.status !== "closed" && child.pid !== undefined
+        ? { pid: child.pid }
+        : {}),
     }));
   }
 
@@ -1408,6 +1415,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     context.session = {
       ...context.session,
       ...updates,
+      ...(context.child.pid !== undefined ? { pid: context.child.pid } : {}),
       updatedAt: new Date().toISOString(),
     };
   }

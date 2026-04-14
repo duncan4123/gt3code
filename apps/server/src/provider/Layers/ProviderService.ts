@@ -129,6 +129,7 @@ function toRuntimePayloadFromSession(
   return {
     cwd: session.cwd ?? null,
     model: session.model ?? null,
+    pid: session.pid ?? null,
     activeTurnId: session.activeTurnId ?? null,
     lastError: session.lastError ?? null,
     ...(extra?.modelSelection !== undefined ? { modelSelection: extra.modelSelection } : {}),
@@ -206,6 +207,30 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       runtimePayload: toRuntimePayloadFromSession(session, extra),
     });
 
+  const refreshPersistedRuntimeRows = (
+    sessions: ReadonlyArray<ProviderSession>,
+    reason: string,
+  ): Effect.Effect<void> =>
+    Effect.forEach(
+      sessions,
+      (session) =>
+        upsertSessionBinding(session, session.threadId, {
+          lastRuntimeEvent: reason,
+          lastRuntimeEventAt: new Date().toISOString(),
+        }).pipe(
+          Effect.tapError((cause) =>
+            Effect.logWarning("failed to refresh persisted provider session", {
+              cause,
+              threadId: session.threadId,
+              provider: session.provider,
+              reason,
+            }),
+          ),
+          Effect.ignore,
+        ),
+      { concurrency: "unbounded" },
+    ).pipe(Effect.asVoid);
+
   const providers = yield* registry.listProviders();
   const adapters = yield* Effect.forEach(providers, (provider) => registry.getByProvider(provider));
   const processRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
@@ -239,6 +264,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       Queue.offer(runtimeEventQueue, event).pipe(Effect.asVoid),
     ).pipe(Effect.forkScoped),
   ).pipe(Effect.asVoid);
+  yield* Effect.forEach(adapters, (adapter) => adapter.listSessions()).pipe(
+    Effect.map((sessionsByAdapter) => sessionsByAdapter.flatMap((sessions) => sessions)),
+    Effect.flatMap((sessions) => refreshPersistedRuntimeRows(sessions, "provider.bootstrap")),
+  );
 
   const recoverSessionForThread = Effect.fn("recoverSessionForThread")(function* (input: {
     readonly binding: ProviderRuntimeBinding;
@@ -670,7 +699,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         }
       }
 
-      return activeSessions.map((session) => {
+      const hydratedSessions = activeSessions.map((session) => {
         const binding = bindingsByThreadId.get(session.threadId);
         if (!binding) {
           return session;
@@ -688,6 +717,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         }
         return Object.assign({}, session, overrides);
       });
+
+      yield* refreshPersistedRuntimeRows(hydratedSessions, "provider.listSessions");
+
+      return hydratedSessions;
     },
   );
 
