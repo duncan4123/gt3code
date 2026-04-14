@@ -15,7 +15,7 @@ const targets = [
   ".openclaw-plugin/openclaw.plugin.json",
   ".openclaw-plugin/package.json",
   "openclaw.plugin.json",
-  ".pi/extensions/context-mode-doltlite/package.json",
+  ".pi/extensions/context-mode/package.json",
 ];
 
 for (const file of targets) {

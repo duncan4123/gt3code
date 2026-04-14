@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { homedir, tmpdir } from "node:os";
 import { z } from "zod";
 import { PolyglotExecutor } from "./executor.js";
+import { removeMcpProcessRecordIfPid, writeMcpProcessRecord } from "./mcp-registry.js";
 import { ContentStore, cleanupStaleDBs, cleanupStaleContentDBs, type SearchResult, type IndexResult } from "./store.js";
 import {
   readBashPolicies,
@@ -94,14 +95,26 @@ function maybeIndexSessionEvents(store: ContentStore): void {
 }
 
 /**
+ * Resolve the current project directory from host-provided env vars.
+ * start.mjs sets CONTEXT_MODE_PROJECT_DIR for platforms that do not provide
+ * their own project-root env var before spawning the MCP server.
+ */
+function getProjectDir(): string {
+  return process.env.CONTEXT_MODE_PROJECT_DIR
+    || process.env.CLAUDE_PROJECT_DIR
+    || process.env.GEMINI_PROJECT_DIR
+    || process.env.VSCODE_CWD
+    || process.env.OPENCODE_PROJECT_DIR
+    || process.env.PI_PROJECT_DIR
+    || process.cwd();
+}
+
+/**
  * Compute a per-project persistent path for the ContentStore.
  * Uses SHA256 of the project dir (normalized for Windows) to avoid collisions.
  */
 function getStorePath(): string {
-  const projectDir = process.env.CLAUDE_PROJECT_DIR
-    || process.env.GEMINI_PROJECT_DIR
-    || process.env.OPENCLAW_HOME
-    || process.cwd();
+  const projectDir = getProjectDir();
   const normalized = projectDir.replace(/\\/g, "/");
   const hash = createHash("sha256").update(normalized).digest("hex").slice(0, 16);
   const dir = join(homedir(), ".context-mode", "content");
@@ -3619,11 +3632,20 @@ server.registerTool(
 // ─────────────────────────────────────────────────────────
 
 async function main() {
+  const projectDir = getProjectDir();
+
   // Clean up stale DB files from previous sessions
   const cleaned = cleanupStaleDBs();
   if (cleaned > 0) {
     console.error(`Cleaned up ${cleaned} stale DB file(s) from previous sessions`);
   }
+
+  writeMcpProcessRecord({
+    pid: process.pid,
+    projectDir,
+    startedAt: new Date().toISOString(),
+    version: VERSION,
+  });
 
   // Clean up own DB + backgrounded processes on shutdown
   const shutdown = () => {
@@ -3634,6 +3656,7 @@ async function main() {
       try { ns.close(); } catch { /* ignore */ }
     }
     _namedStores.clear();
+    removeMcpProcessRecordIfPid(projectDir, process.pid);
   };
   const gracefulShutdown = async () => {
     shutdown();

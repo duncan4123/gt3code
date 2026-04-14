@@ -5,7 +5,9 @@
  * Usage:
  *   context-mode                              → Start MCP server (stdio)
  *   context-mode doctor                       → Diagnose runtime issues, hooks, FTS5, version
+ *   context-mode restart                      → Terminate the current project's MCP server so the client respawns it
  *   context-mode upgrade                      → Fix hooks, permissions, and settings
+ *   context-mode mcp restart                  → Alias for `context-mode restart`
  *   context-mode hook <platform> <event>      → Dispatch a hook script (used by platform hook configs)
  *
  * Platform auto-detection: CLI detects which platform is running
@@ -26,6 +28,11 @@ import {
   hasBunRuntime,
   getAvailableLanguages,
 } from "./runtime.js";
+import {
+  readMcpProcessRecord,
+  removeMcpProcessRecord,
+  restartRecordedMcpProcess,
+} from "./mcp-registry.js";
 
 // ── Adapter imports ──────────────────────────────────────
 import { detectPlatform, getAdapter } from "./adapters/detect.js";
@@ -94,6 +101,8 @@ const args = process.argv.slice(2);
 
 if (args[0] === "doctor") {
   doctor().then((code) => process.exit(code));
+} else if (args[0] === "restart" || (args[0] === "mcp" && args[1] === "restart")) {
+  restartMcp().then((code) => process.exit(code));
 } else if (args[0] === "upgrade") {
   upgrade();
 } else if (args[0] === "hook") {
@@ -147,6 +156,96 @@ function getLocalVersion(): string {
     return pkg.version ?? "unknown";
   } catch {
     return "unknown";
+  }
+}
+
+function getCurrentProjectDir(): string {
+  return process.env.CONTEXT_MODE_PROJECT_DIR
+    || process.env.CLAUDE_PROJECT_DIR
+    || process.env.GEMINI_PROJECT_DIR
+    || process.env.VSCODE_CWD
+    || process.env.OPENCODE_PROJECT_DIR
+    || process.env.PI_PROJECT_DIR
+    || process.cwd();
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: any) {
+    return error?.code === "EPERM";
+  }
+}
+
+function describeProcess(pid: number): string | null {
+  try {
+    if (process.platform === "win32") {
+      return execFileSync(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-Command",
+          `(Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}").CommandLine`,
+        ],
+        { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] },
+      ).trim() || null;
+    }
+    return execFileSync(
+      "ps",
+      ["-p", String(pid), "-o", "command="],
+      { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] },
+    ).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function terminateProcess(pid: number, force = false): void {
+  try {
+    if (process.platform === "win32") {
+      const args = ["/PID", String(pid), "/T"];
+      if (force) args.unshift("/F");
+      execFileSync("taskkill", args, { stdio: "pipe" });
+      return;
+    }
+    process.kill(pid, force ? "SIGKILL" : "SIGTERM");
+  } catch {
+    // Best effort — caller checks liveness afterwards.
+  }
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function restartMcp(): Promise<number> {
+  const projectDir = getCurrentProjectDir();
+  const record = readMcpProcessRecord(projectDir);
+  const result = await restartRecordedMcpProcess(record, {
+    describeProcess,
+    isProcessAlive,
+    removeRecord: () => removeMcpProcessRecord(projectDir),
+    terminateProcess,
+    wait,
+  });
+
+  switch (result.kind) {
+    case "not-found":
+      console.log("No recorded context-mode MCP process for this project. Retry the MCP tool call and the client should start a fresh server.");
+      return 0;
+    case "stale":
+      console.log(`Cleared stale context-mode MCP record for PID ${result.pid}. Retry the MCP tool call and the client should start a fresh server.`);
+      return 0;
+    case "terminated":
+      console.log(`Stopped context-mode MCP PID ${result.pid}${result.forced ? " (forced)" : ""}. Retry the MCP tool call and the client should start a fresh server.`);
+      return 0;
+    case "foreign":
+      console.error(`Refusing to kill PID ${result.pid} because it does not look like context-mode: ${result.command}`);
+      return 1;
+    case "failed":
+      console.error(`Tried to stop context-mode MCP PID ${result.pid}, but it is still running.`);
+      return 1;
   }
 }
 

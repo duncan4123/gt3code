@@ -120,6 +120,13 @@ describe("cli.bundle.mjs — marketplace install support", () => {
     expect(src).toMatch(/for\s*\(.*\["build\/cli\.js",\s*"cli\.bundle\.mjs"\]/);
   });
 
+  it("cli.ts exposes an MCP restart command", () => {
+    const src = readFileSync(resolve(ROOT, "src", "cli.ts"), "utf-8");
+    expect(src).toContain('args[0] === "restart"');
+    expect(src).toContain('args[0] === "mcp" && args[1] === "restart"');
+    expect(src).toContain("restartRecordedMcpProcess");
+  });
+
   // ── Skill files ────────────────────────────────────────────
 
   it("ctx-doctor skill uses cli.bundle.mjs with fallback", () => {
@@ -949,6 +956,11 @@ describe("Codex CLI hook dispatch (#225)", () => {
         }
       }
     }
+  });
+
+  test("configs/codex/AGENTS.md documents MCP restart recovery", () => {
+    const agents = readFileSync(resolve(ROOT, "configs/codex/AGENTS.md"), "utf-8");
+    expect(agents).toContain("context-mode-doltlite restart");
   });
 
   test("CODEX_OPTS.projectDirEnv is undefined (Codex passes cwd in stdin, not env)", () => {

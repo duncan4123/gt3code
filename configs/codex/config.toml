@@ -1,5 +1,7 @@
 # Codex CLI — context-mode MCP server configuration
 # Add this to ~/.codex/config.toml
+# Recovery: if the MCP server wedges during a session, run
+# `context-mode-doltlite restart` from the project root and retry the tool call.
 
 [mcp_servers.context-mode]
 command = "context-mode-doltlite"
