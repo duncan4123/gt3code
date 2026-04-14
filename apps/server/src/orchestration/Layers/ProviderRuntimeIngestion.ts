@@ -992,9 +992,14 @@ const make = Effect.fn("make")(function* () {
           : event.type === "turn.completed" &&
               normalizeRuntimeTurnState(event.payload.state) === "failed"
             ? (event.payload.errorMessage ?? thread.session?.lastError ?? "Turn failed")
-            : status === "ready"
+            : event.type === "session.state.changed" &&
+                (event.payload.state === "ready" ||
+                  event.payload.state === "running" ||
+                  event.payload.state === "stopped")
               ? null
-              : (thread.session?.lastError ?? null);
+              : status === "ready" || status === "stopped"
+                ? null
+                : (thread.session?.lastError ?? null);
 
       if (shouldApplyThreadLifecycle) {
         if (event.type === "turn.started" && acceptedTurnStartedSourcePlan !== null) {

@@ -10,6 +10,7 @@
  * @module ProviderServiceLive
  */
 import {
+  EventId,
   ModelSelection,
   NonNegativeInt,
   ThreadId,
@@ -22,6 +23,7 @@ import {
   type ProviderRuntimeEvent,
   type ProviderSession,
 } from "@t3tools/contracts";
+import { randomUUID } from "node:crypto";
 import { Effect, Layer, Option, PubSub, Queue, Schema, SchemaIssue, Stream } from "effect";
 
 import {
@@ -95,6 +97,24 @@ function toRuntimeStatus(session: ProviderSession): "starting" | "running" | "st
     case "running":
     default:
       return "running";
+  }
+}
+
+function toRecoveredRuntimeState(
+  session: ProviderSession,
+): "starting" | "ready" | "running" | "stopped" | "error" {
+  switch (session.status) {
+    case "connecting":
+      return "starting";
+    case "error":
+      return "error";
+    case "closed":
+      return "stopped";
+    case "running":
+      return "running";
+    case "ready":
+    default:
+      return "ready";
   }
 }
 
@@ -194,6 +214,21 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       eventType: event.type,
     }).pipe(Effect.andThen(publishRuntimeEvent(event)));
 
+  const emitRecoveredSessionState = (
+    session: ProviderSession,
+    threadId: ThreadId,
+  ): Effect.Effect<void> =>
+    processRuntimeEvent({
+      eventId: EventId.makeUnsafe(randomUUID()),
+      provider: session.provider,
+      threadId,
+      createdAt: new Date().toISOString(),
+      type: "session.state.changed",
+      payload: {
+        state: toRecoveredRuntimeState(session),
+      },
+    });
+
   const worker = Effect.forever(
     Queue.take(runtimeEventQueue).pipe(Effect.flatMap(processRuntimeEvent)),
   );
@@ -226,6 +261,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         );
         if (existing) {
           yield* upsertSessionBinding(existing, input.binding.threadId);
+          yield* emitRecoveredSessionState(existing, input.binding.threadId);
           yield* analytics.record("provider.session.recovered", {
             provider: existing.provider,
             strategy: "adopt-existing",
@@ -261,6 +297,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       }
 
       yield* upsertSessionBinding(resumed, input.binding.threadId);
+      yield* emitRecoveredSessionState(resumed, input.binding.threadId);
       yield* analytics.record("provider.session.recovered", {
         provider: resumed.provider,
         strategy: "resume-thread",

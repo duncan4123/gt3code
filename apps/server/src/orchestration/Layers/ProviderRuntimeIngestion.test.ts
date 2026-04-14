@@ -389,10 +389,10 @@ describe("ProviderRuntimeIngestion", () => {
       (entry) =>
         entry.session?.status === "stopped" &&
         entry.session?.activeTurnId === null &&
-        entry.session?.lastError === "provider crashed",
+        entry.session?.lastError === null,
     );
     expect(thread.session?.status).toBe("stopped");
-    expect(thread.session?.lastError).toBe("provider crashed");
+    expect(thread.session?.lastError).toBeNull();
 
     harness.emit({
       type: "session.state.changed",
