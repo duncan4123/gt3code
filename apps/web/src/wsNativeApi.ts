@@ -109,6 +109,8 @@ export function createWsNativeApi(): NativeApi {
     gc: {
       getConfig: (input) => rpcClient.gc.getConfig(input),
       getThreadContext: (input) => rpcClient.gc.getThreadContext(input),
+      setAgentSuspended: (input) => rpcClient.gc.setAgentSuspended(input),
+      setRigSuspended: (input) => rpcClient.gc.setRigSuspended(input),
     },
   };
 

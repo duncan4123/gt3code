@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createThreadJumpHintVisibilityController,
+  dedupeProjectsByWorkspacePath,
+  groupProjectsByWorkspacePath,
   getVisibleSidebarThreadIds,
   normalizeThreadSearchQuery,
   resolveAdjacentThreadId,
+  resolveMissingGcRigProjects,
   getFallbackThreadIdAfterDelete,
   getVisibleThreadsForProject,
   getProjectSortTimestamp,
@@ -203,6 +206,115 @@ describe("thread search helpers", () => {
     expect(result.matchingThreadIds).toEqual(new Set(["thread-title", "thread-fts"]));
     expect(result.matchingProjectIds).toEqual(new Set(["project-a", "project-b"]));
     expect(result.snippetByThreadId.get("thread-fts")).toBe("ship the release build tonight");
+  });
+});
+
+describe("resolveMissingGcRigProjects", () => {
+  it("returns rigs whose paths do not yet exist as projects", () => {
+    const missing = resolveMissingGcRigProjects({
+      projects: [
+        {
+          id: ProjectId.makeUnsafe("project-t3code"),
+          name: "t3code",
+          cwd: "/data/projects/t3code",
+        },
+      ],
+      gcConfig: {
+        workspace: { name: "gc", suspended: false },
+        rigs: [
+          { name: "t3code", path: "/data/projects/t3code", suspended: false },
+          { name: "beads", path: "/data/projects/beads", suspended: false },
+        ],
+        agents: [],
+      },
+    });
+
+    expect(missing.map((rig) => rig.name)).toEqual(["beads"]);
+  });
+
+  it("skips rigs already pending creation", () => {
+    const missing = resolveMissingGcRigProjects({
+      projects: [],
+      gcConfig: {
+        workspace: { name: "gc", suspended: false },
+        rigs: [{ name: "beads", path: "/data/projects/beads", suspended: false }],
+        agents: [],
+      },
+      pendingCwds: new Set(["/data/projects/beads"]),
+    });
+
+    expect(missing).toEqual([]);
+  });
+});
+
+describe("dedupeProjectsByWorkspacePath", () => {
+  it("keeps only the first rendered project for each normalized cwd", () => {
+    const deduped = dedupeProjectsByWorkspacePath([
+      {
+        id: ProjectId.makeUnsafe("project-t3code-a"),
+        name: "t3code",
+        cwd: "/data/projects/t3code/",
+      },
+      {
+        id: ProjectId.makeUnsafe("project-t3code-b"),
+        name: "t3code duplicate",
+        cwd: "/data/projects/t3code",
+      },
+      {
+        id: ProjectId.makeUnsafe("project-gc"),
+        name: "gc",
+        cwd: "/data/projects/gc",
+      },
+    ]);
+
+    expect(deduped.map((project) => project.id)).toEqual([
+      ProjectId.makeUnsafe("project-t3code-a"),
+      ProjectId.makeUnsafe("project-gc"),
+    ]);
+  });
+});
+
+describe("groupProjectsByWorkspacePath", () => {
+  it("collapses duplicate cwd rows while preserving every project id in the group", () => {
+    const grouped = groupProjectsByWorkspacePath([
+      {
+        id: ProjectId.makeUnsafe("project-t3code-a"),
+        name: "t3code",
+        cwd: "/data/projects/t3code/",
+      },
+      {
+        id: ProjectId.makeUnsafe("project-t3code-b"),
+        name: "t3code duplicate",
+        cwd: "/data/projects/t3code",
+      },
+      {
+        id: ProjectId.makeUnsafe("project-gc"),
+        name: "gc",
+        cwd: "/data/projects/gc",
+      },
+    ]);
+
+    expect(grouped).toEqual([
+      {
+        project: {
+          id: ProjectId.makeUnsafe("project-t3code-a"),
+          name: "t3code",
+          cwd: "/data/projects/t3code/",
+        },
+        projectIds: [
+          ProjectId.makeUnsafe("project-t3code-a"),
+          ProjectId.makeUnsafe("project-t3code-b"),
+        ],
+      },
+      {
+        project: {
+          id: ProjectId.makeUnsafe("project-gc"),
+          name: "gc",
+          cwd: "/data/projects/gc",
+        },
+        projectIds: [ProjectId.makeUnsafe("project-gc")],
+      },
+    ]);
   });
 });
 

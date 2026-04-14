@@ -72,6 +72,8 @@ export interface GcApiClientShape {
   readonly getConvoy: (id: string) => Effect.Effect<GcConvoy | null>;
   readonly getFormula: (name: string) => Effect.Effect<GcFormula | null>;
   readonly getConfig: () => Effect.Effect<GcConfigResult | null>;
+  readonly setAgentSuspended: (name: string, suspended: boolean) => Effect.Effect<void, Error>;
+  readonly setRigSuspended: (name: string, suspended: boolean) => Effect.Effect<void, Error>;
   readonly streamEvents: Stream.Stream<GcEvent>;
   readonly isAvailable: Effect.Effect<boolean>;
 }

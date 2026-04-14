@@ -13,7 +13,6 @@ import {
 import { ProjectFavicon } from "./ProjectFavicon";
 import { autoAnimate } from "@formkit/auto-animate";
 import {
-  Fragment,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -114,6 +113,7 @@ import {
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { isNonEmpty as isNonEmptyString } from "effect/String";
 import {
+  groupProjectsByWorkspacePath,
   getVisibleSidebarThreadIds,
   getVisibleThreadsForProject,
   normalizeThreadSearchQuery,
@@ -121,6 +121,7 @@ import {
   resolveSidebarThreadSearch,
   isContextMenuPointerDown,
   resolveProjectStatusIndicator,
+  resolveMissingGcRigProjects,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
@@ -132,6 +133,7 @@ import {
   useThreadJumpHintVisibility,
 } from "./Sidebar.logic";
 import { groupThreadsByRigAndAgent, type GcConfigResult } from "@t3tools/contracts";
+import { SidebarGcFolders } from "./SidebarGcFolders";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
@@ -687,17 +689,10 @@ export default function Sidebar() {
   const sidebarThreadsById = useStore((store) => store.sidebarThreadsById);
   const threadIdsByProjectId = useStore((store) => store.threadIdsByProjectId);
   const [gcConfig, setGcConfig] = useState<GcConfigResult | null>(null);
-  const gcRigLookup = useMemo(() => {
-    if (!gcConfig) return null;
-    const normalizeCwd = (value: string) => value.trim().replace(/\/+$/, "");
-    const rigPathByNormalizedPath = new Map<string, string>();
-    const rigPathByName = new Map<string, string>();
-    for (const rig of gcConfig.rigs) {
-      rigPathByNormalizedPath.set(normalizeCwd(rig.path), rig.path);
-      rigPathByName.set(rig.name, rig.path);
-    }
-    return { rigPathByNormalizedPath, rigPathByName, normalizeCwd };
-  }, [gcConfig]);
+  const [gcAgentMutationsInFlight, setGcAgentMutationsInFlight] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const pendingGcRigProjectCwdsRef = useRef(new Set<string>());
   const { projectExpandedById, projectOrder, threadLastVisitedAtById } = useUiStateStore(
     useShallow((store) => ({
       projectExpandedById: store.projectExpandedById,
@@ -710,17 +705,24 @@ export default function Sidebar() {
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
   const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearDraftThread);
 
+  const refreshGcConfig = useCallback(async (): Promise<GcConfigResult | null> => {
+    const api = readNativeApi();
+    if (!api?.gc?.getConfig) {
+      return null;
+    }
+    const config = await api.gc.getConfig({});
+    setGcConfig(config);
+    return config;
+  }, []);
   useEffect(() => {
     let cancelled = false;
     let retryTimeout: number | null = null;
 
     const fetchConfig = async (): Promise<void> => {
-      const api = readNativeApi();
-      if (!api?.gc?.getConfig) return;
       try {
-        const config = await api.gc.getConfig({});
-        if (!cancelled) {
-          setGcConfig(config);
+        const config = await refreshGcConfig();
+        if (cancelled || !config) {
+          return;
         }
       } catch {
         if (!cancelled && retryTimeout == null) {
@@ -739,7 +741,62 @@ export default function Sidebar() {
         window.clearTimeout(retryTimeout);
       }
     };
-  }, []);
+  }, [refreshGcConfig]);
+  useEffect(() => {
+    const existingProjectCwds = new Set(
+      projects
+        .map((project) => project.cwd.trim().replace(/\/+$/, ""))
+        .filter((cwd) => cwd.length > 0),
+    );
+    for (const pendingCwd of pendingGcRigProjectCwdsRef.current) {
+      if (existingProjectCwds.has(pendingCwd)) {
+        pendingGcRigProjectCwdsRef.current.delete(pendingCwd);
+      }
+    }
+  }, [projects]);
+  useEffect(() => {
+    const api = readNativeApi();
+    if (!api || !gcConfig) {
+      return;
+    }
+
+    const missingRigs = resolveMissingGcRigProjects({
+      projects,
+      gcConfig,
+      pendingCwds: pendingGcRigProjectCwdsRef.current,
+    });
+    for (const rig of missingRigs) {
+      const normalizedRigPath = rig.path.trim().replace(/\/+$/, "");
+      if (!normalizedRigPath) {
+        continue;
+      }
+      pendingGcRigProjectCwdsRef.current.add(normalizedRigPath);
+      void api.orchestration
+        .dispatchCommand({
+          type: "project.create",
+          commandId: newCommandId(),
+          projectId: newProjectId(),
+          title: rig.name,
+          workspaceRoot: rig.path,
+          defaultModelSelection: {
+            provider: "codex",
+            model: DEFAULT_MODEL_BY_PROVIDER.codex,
+          },
+          createdAt: new Date().toISOString(),
+        })
+        .catch((error) => {
+          pendingGcRigProjectCwdsRef.current.delete(normalizedRigPath);
+          toastManager.add({
+            type: "error",
+            title: `Failed to add GC rig "${rig.name}"`,
+            description:
+              error instanceof Error
+                ? error.message
+                : `An error occurred while creating the ${rig.name} project.`,
+          });
+        });
+    }
+  }, [gcConfig, projects]);
   const getDraftThreadByProjectId = useComposerDraftStore(
     (store) => store.getDraftThreadByProjectId,
   );
@@ -1460,6 +1517,10 @@ export default function Sidebar() {
       sortProjectsForSidebar(sidebarProjects, visibleThreads, appSettings.sidebarProjectSortOrder),
     [appSettings.sidebarProjectSortOrder, sidebarProjects, visibleThreads],
   );
+  const groupedProjects = useMemo(
+    () => groupProjectsByWorkspacePath(sortedProjects),
+    [sortedProjects],
+  );
   const threadSearchState = useMemo(
     () =>
       resolveSidebarThreadSearch({
@@ -1474,12 +1535,16 @@ export default function Sidebar() {
   const isManualProjectSorting = appSettings.sidebarProjectSortOrder === "manual";
   const renderedProjects = useMemo(
     () =>
-      sortedProjects
+      groupedProjects
         .filter(
-          (project) =>
-            !isThreadSearchActive || threadSearchState.matchingProjectIds.has(project.id),
+          (projectGroup) =>
+            !isThreadSearchActive ||
+            projectGroup.projectIds.some((projectId) =>
+              threadSearchState.matchingProjectIds.has(projectId),
+            ),
         )
-        .map((project) => {
+        .map((projectGroup) => {
+          const project = projectGroup.project;
           const resolveProjectThreadStatus = (thread: (typeof visibleThreads)[number]) =>
             resolveThreadStatusPill({
               thread: {
@@ -1488,7 +1553,8 @@ export default function Sidebar() {
               },
             });
           const projectThreads = sortThreadsForSidebar(
-            (threadIdsByProjectId[project.id] ?? [])
+            projectGroup.projectIds
+              .flatMap((projectId) => threadIdsByProjectId[projectId] ?? [])
               .map((threadId) => sidebarThreadsById[threadId])
               .filter((thread): thread is NonNullable<typeof thread> => thread !== undefined)
               .filter(
@@ -1523,32 +1589,22 @@ export default function Sidebar() {
             hiddenThreads.map((thread) => resolveProjectThreadStatus(thread)),
           );
           const orderedProjectThreadIds = projectThreads.map((thread) => thread.id);
-          const showEmptyThreadState = project.expanded && projectThreads.length === 0;
           const renderedThreads = pinnedCollapsedThread
             ? [pinnedCollapsedThread]
             : visibleProjectThreads;
-          const gcProjectCwd = (() => {
-            if (!gcRigLookup) return project.cwd;
-
-            const rigFromThreads = renderedThreads
-              .map((thread) => thread.customMetadata?.["gc.rig"])
-              .find((rig) => typeof rig === "string" && rig.trim().length > 0);
-
-            const rigPathFromThreads = rigFromThreads
-              ? gcRigLookup.rigPathByName.get(rigFromThreads.trim())
-              : undefined;
-
-            return (
-              rigPathFromThreads ??
-              gcRigLookup.rigPathByNormalizedPath.get(gcRigLookup.normalizeCwd(project.cwd)) ??
-              gcRigLookup.rigPathByName.get(project.name) ??
-              project.cwd
-            );
-          })();
           const { rigGroups, standaloneThreads } = groupThreadsByRigAndAgent(renderedThreads, {
             config: gcConfig,
-            projectCwd: gcProjectCwd,
+            projectCwd: project.cwd,
+            projectName: project.name,
           });
+          const hasVirtualAgentFolders = rigGroups.some(
+            (rigGroup) => rigGroup.agentGroups.length > 0,
+          );
+          const showEmptyThreadState =
+            project.expanded &&
+            projectThreads.length === 0 &&
+            standaloneThreads.length === 0 &&
+            !hasVirtualAgentFolders;
           const renderedThreadIds = [
             ...rigGroups.flatMap((rigGroup) =>
               rigGroup.agentGroups.flatMap((agentGroup) =>
@@ -1571,10 +1627,12 @@ export default function Sidebar() {
             rigGroups: rigGroups.map((rigGroup) => ({
               id: rigGroup.id,
               label: rigGroup.label,
+              isSuspended: rigGroup.isSuspended,
               agentGroups: rigGroup.agentGroups.map((agentGroup) => ({
                 id: agentGroup.id,
                 label: agentGroup.label,
                 qualifiedName: agentGroup.qualifiedName,
+                isSuspended: agentGroup.isSuspended,
                 threadIds: agentGroup.threads.map((thread) => thread.id),
               })),
             })),
@@ -1585,10 +1643,9 @@ export default function Sidebar() {
       appSettings.sidebarThreadSortOrder,
       expandedThreadListsByProject,
       gcConfig,
-      gcRigLookup,
+      groupedProjects,
       isThreadSearchActive,
       routeThreadId,
-      sortedProjects,
       sidebarThreadsById,
       threadSearchState.matchingProjectIds,
       threadSearchState.matchingThreadIds,
@@ -1627,6 +1684,88 @@ export default function Sidebar() {
     return mapping;
   }, [keybindings, sidebarShortcutLabelOptions, threadJumpCommandById]);
   const orderedSidebarThreadIds = visibleSidebarThreadIds;
+
+  const [gcRigMutationsInFlight, setGcRigMutationsInFlight] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const handleGcAgentSuspendedChange = useCallback(
+    async (agent: string, suspended: boolean) => {
+      const api = readNativeApi();
+      if (!api?.gc?.setAgentSuspended) {
+        toastManager.add({
+          type: "error",
+          title: "GC controls unavailable",
+          description: "This T3Code build does not support GC agent controls yet.",
+        });
+        return;
+      }
+
+      setGcAgentMutationsInFlight((current) => {
+        const next = new Set(current);
+        next.add(agent);
+        return next;
+      });
+
+      try {
+        const nextConfig = await api.gc.setAgentSuspended({ agent, suspended });
+        setGcConfig(nextConfig);
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: suspended ? `Failed to suspend ${agent}` : `Failed to resume ${agent}`,
+          description: error instanceof Error ? error.message : "Failed to update GC agent state.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        setGcAgentMutationsInFlight((current) => {
+          const next = new Set(current);
+          next.delete(agent);
+          return next;
+        });
+      }
+    },
+    [refreshGcConfig],
+  );
+
+  const handleGcRigSuspendedChange = useCallback(
+    async (rig: string, suspended: boolean) => {
+      const api = readNativeApi();
+      if (!api?.gc?.setRigSuspended) {
+        toastManager.add({
+          type: "error",
+          title: "GC controls unavailable",
+          description: "This T3Code build does not support GC rig controls yet.",
+        });
+        return;
+      }
+
+      setGcRigMutationsInFlight((current) => {
+        const next = new Set(current);
+        next.add(rig);
+        return next;
+      });
+
+      try {
+        const nextConfig = await api.gc.setRigSuspended({ rig, suspended });
+        setGcConfig(nextConfig);
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: suspended ? `Failed to suspend rig ${rig}` : `Failed to resume rig ${rig}`,
+          description: error instanceof Error ? error.message : "Failed to update GC rig state.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        setGcRigMutationsInFlight((current) => {
+          const next = new Set(current);
+          next.delete(rig);
+          return next;
+        });
+      }
+    },
+    [refreshGcConfig],
+  );
 
   useEffect(() => {
     const getShortcutContext = () => ({
@@ -1890,29 +2029,20 @@ export default function Sidebar() {
               </div>
             </SidebarMenuSubItem>
           ) : null}
-          {shouldShowThreadPanel &&
-            rigGroups.length > 0 &&
-            rigGroups.map((rigGroup) => (
-              <Fragment key={`rig-${rigGroup.id}`}>
-                <SidebarMenuSubItem className="w-full">
-                  <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold tracking-wide text-muted-foreground/60 uppercase">
-                    <FolderIcon className="size-3 shrink-0" />
-                    <span className="truncate">{rigGroup.label}</span>
-                  </div>
-                </SidebarMenuSubItem>
-                {rigGroup.agentGroups.map((agentGroup) => (
-                  <Fragment key={`agent-${rigGroup.id}-${agentGroup.id}`}>
-                    <SidebarMenuSubItem className="w-full">
-                      <div className="flex items-center gap-1.5 px-4 py-1 text-[10px] font-medium text-muted-foreground/60">
-                        <FolderIcon className="size-3 shrink-0" />
-                        <span className="truncate">{agentGroup.label}</span>
-                      </div>
-                    </SidebarMenuSubItem>
-                    {renderThreadRows(agentGroup.threadIds, "pl-6")}
-                  </Fragment>
-                ))}
-              </Fragment>
-            ))}
+          {shouldShowThreadPanel && rigGroups.length > 0 && (
+            <SidebarGcFolders
+              rigGroups={rigGroups}
+              gcAgentMutationsInFlight={gcAgentMutationsInFlight}
+              gcRigMutationsInFlight={gcRigMutationsInFlight}
+              onToggleRigSuspended={(rig, suspended) => {
+                void handleGcRigSuspendedChange(rig, suspended);
+              }}
+              onToggleAgentSuspended={(agent, suspended) => {
+                void handleGcAgentSuspendedChange(agent, suspended);
+              }}
+              renderThreadRows={renderThreadRows}
+            />
+          )}
           {shouldShowThreadPanel && renderThreadRows(standaloneThreadIds)}
 
           {project.expanded && hasHiddenThreads && !isThreadListExpanded && (

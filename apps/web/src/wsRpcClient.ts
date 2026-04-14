@@ -105,6 +105,8 @@ export interface WsRpcClient {
   readonly gc: {
     readonly getConfig: RpcUnaryMethod<typeof WS_METHODS.gcGetConfig>;
     readonly getThreadContext: RpcUnaryMethod<typeof WS_METHODS.gcGetThreadContext>;
+    readonly setAgentSuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetAgentSuspended>;
+    readonly setRigSuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetRigSuspended>;
   };
 }
 
@@ -239,6 +241,10 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       getConfig: (input) => transport.request((client) => client[WS_METHODS.gcGetConfig](input)),
       getThreadContext: (input) =>
         transport.request((client) => client[WS_METHODS.gcGetThreadContext](input)),
+      setAgentSuspended: (input) =>
+        transport.request((client) => client[WS_METHODS.gcSetAgentSuspended](input)),
+      setRigSuspended: (input) =>
+        transport.request((client) => client[WS_METHODS.gcSetRigSuspended](input)),
     },
   };
 }

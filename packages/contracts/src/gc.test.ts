@@ -121,4 +121,73 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(rigGroups[0]?.agentGroups[1]?.isPool).toBe(true);
     expect(rigGroups[0]?.agentGroups[1]?.isSuspended).toBe(true);
   });
+
+  it("includes configured agent folders when a rig has no threads at all", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "city",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "t3code",
+            path: "/data/projects/t3code",
+            suspended: false,
+          },
+        ],
+        agents: [
+          {
+            name: "refinery",
+            dir: "t3code",
+            suspended: false,
+          },
+          {
+            name: "witness",
+            dir: "t3code",
+            suspended: true,
+          },
+        ],
+      },
+      projectCwd: "/data/projects/t3code",
+    });
+
+    expect(standaloneThreads).toEqual([]);
+    expect(rigGroups).toHaveLength(1);
+    expect(rigGroups[0]?.label).toBe("t3code");
+    expect(rigGroups[0]?.agentGroups.map((group) => group.label)).toEqual(["refinery", "witness"]);
+    expect(rigGroups[0]?.agentGroups.map((group) => group.threads)).toEqual([[], []]);
+  });
+
+  it("includes configured city-scoped agents under the gc project even when suspended", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "gc",
+          suspended: false,
+        },
+        rigs: [],
+        agents: [
+          {
+            name: "mayor",
+            suspended: false,
+            scope: "city",
+          },
+          {
+            name: "deacon",
+            suspended: true,
+            scope: "city",
+          },
+        ],
+      },
+      projectName: "gc",
+      projectCwd: "/data/projects/gc",
+    });
+
+    expect(standaloneThreads).toEqual([]);
+    expect(rigGroups).toHaveLength(1);
+    expect(rigGroups[0]?.label).toBe("GC");
+    expect(rigGroups[0]?.agentGroups.map((group) => group.label)).toEqual(["deacon", "mayor"]);
+    expect(rigGroups[0]?.agentGroups.map((group) => group.isSuspended)).toEqual([true, false]);
+  });
 });

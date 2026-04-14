@@ -218,6 +218,7 @@ export function groupThreadsByRigAndAgent<
   options?: {
     config?: GcConfigResult | null;
     projectCwd?: string | null;
+    projectName?: string | null;
   },
 ): {
   standaloneThreads: TThread[];
@@ -236,6 +237,9 @@ export function groupThreadsByRigAndAgent<
   >();
 
   const projectCwd = normalizeMetadataValue(options?.projectCwd ?? undefined);
+  const projectName = normalizeMetadataValue(options?.projectName ?? undefined);
+  const workspaceName = normalizeMetadataValue(options?.config?.workspace.name);
+  const isCityProject = Boolean(projectName && workspaceName && projectName === workspaceName);
   const relevantRigs = options?.config?.rigs.filter(
     (rig) => !projectCwd || normalizeMetadataValue(rig.path) === projectCwd,
   );
@@ -271,6 +275,36 @@ export function groupThreadsByRigAndAgent<
         ...(agent.scope ? { scope: agent.scope } : {}),
         threads: [],
       });
+    }
+  }
+
+  if ((!relevantRigs || relevantRigs.length === 0) && isCityProject && workspaceName) {
+    const cityGroupId = workspaceName.toUpperCase();
+    rigGroupsById.set(cityGroupId, {
+      id: cityGroupId,
+      label: cityGroupId,
+      isConfigured: true,
+      isSuspended: options?.config?.workspace.suspended ?? false,
+      agentGroupsById: new Map(),
+    });
+
+    const cityGroup = rigGroupsById.get(cityGroupId);
+    if (cityGroup) {
+      for (const agent of options?.config?.agents ?? []) {
+        const rigName = normalizeMetadataValue(agent.dir);
+        if (rigName) continue;
+        const qualifiedName = configuredAgentQualifiedName(agent);
+        cityGroup.agentGroupsById.set(qualifiedName, {
+          id: `${cityGroupId}/${qualifiedName}`,
+          label: agentFolderLabel(qualifiedName),
+          qualifiedName,
+          isConfigured: true,
+          isPool: agent.is_pool ?? false,
+          isSuspended: agent.suspended,
+          ...(agent.scope ? { scope: agent.scope } : {}),
+          threads: [],
+        });
+      }
     }
   }
 
@@ -396,6 +430,18 @@ export type GcGetThreadContextInput = typeof GcGetThreadContextInput.Type;
 export const GcGetConfigInput = Schema.Struct({});
 export type GcGetConfigInput = typeof GcGetConfigInput.Type;
 
+export const GcSetAgentSuspendedInput = Schema.Struct({
+  agent: Schema.String,
+  suspended: Schema.Boolean,
+});
+export type GcSetAgentSuspendedInput = typeof GcSetAgentSuspendedInput.Type;
+
+export const GcSetRigSuspendedInput = Schema.Struct({
+  rig: Schema.String,
+  suspended: Schema.Boolean,
+});
+export type GcSetRigSuspendedInput = typeof GcSetRigSuspendedInput.Type;
+
 const GcBeadSchema = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
@@ -452,5 +498,15 @@ export class GcGetThreadContextError extends Schema.TaggedErrorClass<GcGetThread
 
 export class GcGetConfigError extends Schema.TaggedErrorClass<GcGetConfigError>()(
   "GcGetConfigError",
+  { message: Schema.String },
+) {}
+
+export class GcSetAgentSuspendedError extends Schema.TaggedErrorClass<GcSetAgentSuspendedError>()(
+  "GcSetAgentSuspendedError",
+  { message: Schema.String },
+) {}
+
+export class GcSetRigSuspendedError extends Schema.TaggedErrorClass<GcSetRigSuspendedError>()(
+  "GcSetRigSuspendedError",
   { message: Schema.String },
 ) {}

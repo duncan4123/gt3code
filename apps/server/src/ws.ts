@@ -48,7 +48,12 @@ import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem";
 import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePaths";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner";
 import { GcApiClient, GcContextProvider, GcApiClientLive, GcContextProviderLive } from "./gc";
-import { GcGetConfigError, GcGetThreadContextError } from "@t3tools/contracts";
+import {
+  GcGetConfigError,
+  GcGetThreadContextError,
+  GcSetAgentSuspendedError,
+  GcSetRigSuspendedError,
+} from "@t3tools/contracts";
 
 const WsRpcLayer = WsRpcGroup.toLayer(
   Effect.gen(function* () {
@@ -763,6 +768,49 @@ const WsRpcLayer = WsRpcGroup.toLayer(
               (error) =>
                 new GcGetThreadContextError({
                   message: error instanceof Error ? error.message : "Failed to get GC context",
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "gc" },
+        ),
+      [WS_METHODS.gcSetAgentSuspended]: ({ agent, suspended }) =>
+        observeRpcEffect(
+          WS_METHODS.gcSetAgentSuspended,
+          Effect.gen(function* () {
+            const gcApi = yield* GcApiClient;
+            yield* gcApi.setAgentSuspended(agent, suspended);
+            const config = yield* gcApi.getConfig();
+            if (!config) {
+              return yield* Effect.fail(new Error("GC config unavailable after agent update"));
+            }
+            return config;
+          }).pipe(
+            Effect.mapError(
+              (error) =>
+                new GcSetAgentSuspendedError({
+                  message:
+                    error instanceof Error ? error.message : "Failed to update GC agent state",
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "gc" },
+        ),
+      [WS_METHODS.gcSetRigSuspended]: ({ rig, suspended }) =>
+        observeRpcEffect(
+          WS_METHODS.gcSetRigSuspended,
+          Effect.gen(function* () {
+            const gcApi = yield* GcApiClient;
+            yield* gcApi.setRigSuspended(rig, suspended);
+            const config = yield* gcApi.getConfig();
+            if (!config) {
+              return yield* Effect.fail(new Error("GC config unavailable after rig update"));
+            }
+            return config;
+          }).pipe(
+            Effect.mapError(
+              (error) =>
+                new GcSetRigSuspendedError({
+                  message: error instanceof Error ? error.message : "Failed to update GC rig state",
                 }),
             ),
           ),

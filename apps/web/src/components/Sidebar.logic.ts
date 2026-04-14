@@ -1,5 +1,10 @@
 import * as React from "react";
-import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
+import type {
+  GcConfigResult,
+  GcConfigRig,
+  SidebarProjectSortOrder,
+  SidebarThreadSortOrder,
+} from "@t3tools/contracts";
 import type { SidebarThreadSummary, Thread } from "../types";
 import { cn } from "../lib/utils";
 import { isLatestTurnSettled, isSessionActivelyRunning } from "../session-logic";
@@ -10,6 +15,7 @@ export type SidebarNewThreadEnvMode = "local" | "worktree";
 type SidebarProject = {
   id: string;
   name: string;
+  cwd: string;
   createdAt?: string | undefined;
   updatedAt?: string | undefined;
 };
@@ -68,6 +74,96 @@ export function countGcAgents(
   projectId: string,
 ): number {
   return threads.filter((t) => t.projectId === projectId && t.customMetadata?.["gc.agent"]).length;
+}
+
+function normalizeWorkspacePath(path: string): string {
+  return path.trim().replace(/\/+$/, "");
+}
+
+export function resolveMissingGcRigProjects<TProject extends Pick<SidebarProject, "cwd">>(input: {
+  projects: readonly TProject[];
+  gcConfig: GcConfigResult | null;
+  pendingCwds?: ReadonlySet<string>;
+}): GcConfigRig[] {
+  if (!input.gcConfig) {
+    return [];
+  }
+
+  const existingCwds = new Set(
+    input.projects
+      .map((project) => normalizeWorkspacePath(project.cwd))
+      .filter((cwd) => cwd.length > 0),
+  );
+  const pendingCwds = input.pendingCwds ?? new Set<string>();
+
+  return input.gcConfig.rigs.filter((rig) => {
+    const normalizedRigPath = normalizeWorkspacePath(rig.path);
+    return (
+      normalizedRigPath.length > 0 &&
+      !existingCwds.has(normalizedRigPath) &&
+      !pendingCwds.has(normalizedRigPath)
+    );
+  });
+}
+
+export function dedupeProjectsByWorkspacePath<TProject extends Pick<SidebarProject, "cwd">>(
+  projects: readonly TProject[],
+): TProject[] {
+  const seenCwds = new Set<string>();
+  const deduped: TProject[] = [];
+
+  for (const project of projects) {
+    const normalizedCwd = normalizeWorkspacePath(project.cwd);
+    if (normalizedCwd.length === 0) {
+      deduped.push(project);
+      continue;
+    }
+    if (seenCwds.has(normalizedCwd)) {
+      continue;
+    }
+    seenCwds.add(normalizedCwd);
+    deduped.push(project);
+  }
+
+  return deduped;
+}
+
+export interface SidebarProjectWorkspaceGroup<TProject> {
+  project: TProject;
+  projectIds: readonly string[];
+}
+
+export function groupProjectsByWorkspacePath<TProject extends Pick<SidebarProject, "id" | "cwd">>(
+  projects: readonly TProject[],
+): SidebarProjectWorkspaceGroup<TProject>[] {
+  const groups: SidebarProjectWorkspaceGroup<TProject>[] = [];
+  const groupIndexByNormalizedCwd = new Map<string, number>();
+
+  for (const project of projects) {
+    const normalizedCwd = normalizeWorkspacePath(project.cwd);
+    if (normalizedCwd.length === 0) {
+      groups.push({ project, projectIds: [project.id] });
+      continue;
+    }
+
+    const existingIndex = groupIndexByNormalizedCwd.get(normalizedCwd);
+    if (existingIndex === undefined) {
+      groupIndexByNormalizedCwd.set(normalizedCwd, groups.length);
+      groups.push({ project, projectIds: [project.id] });
+      continue;
+    }
+
+    const existing = groups[existingIndex];
+    if (!existing) {
+      continue;
+    }
+    groups[existingIndex] = {
+      project: existing.project,
+      projectIds: [...existing.projectIds, project.id],
+    };
+  }
+
+  return groups;
 }
 
 type ThreadStatusInput = Pick<

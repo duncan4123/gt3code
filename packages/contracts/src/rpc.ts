@@ -74,9 +74,13 @@ import {
   GcGetConfigError,
   GcGetConfigInput,
   GcGetThreadContextInput,
+  GcSetAgentSuspendedInput,
+  GcSetRigSuspendedInput,
   GcThreadContextResult,
   GcGetThreadContextError,
   GcConfigResult,
+  GcSetAgentSuspendedError,
+  GcSetRigSuspendedError,
 } from "./gc";
 
 export const WS_METHODS = {
@@ -121,6 +125,8 @@ export const WS_METHODS = {
   // Gas City
   gcGetConfig: "gc.getConfig",
   gcGetThreadContext: "gc.getThreadContext",
+  gcSetAgentSuspended: "gc.setAgentSuspended",
+  gcSetRigSuspended: "gc.setRigSuspended",
 
   // Streaming subscriptions
   subscribeOrchestrationDomainEvents: "subscribeOrchestrationDomainEvents",
@@ -355,6 +361,18 @@ export const WsGcGetConfigRpc = Rpc.make(WS_METHODS.gcGetConfig, {
   error: GcGetConfigError,
 });
 
+export const WsGcSetAgentSuspendedRpc = Rpc.make(WS_METHODS.gcSetAgentSuspended, {
+  payload: GcSetAgentSuspendedInput,
+  success: GcConfigResult,
+  error: GcSetAgentSuspendedError,
+});
+
+export const WsGcSetRigSuspendedRpc = Rpc.make(WS_METHODS.gcSetRigSuspended, {
+  payload: GcSetRigSuspendedInput,
+  success: GcConfigResult,
+  error: GcSetRigSuspendedError,
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -393,4 +411,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationSearchThreadMessagesRpc,
   WsGcGetConfigRpc,
   WsGcGetThreadContextRpc,
+  WsGcSetAgentSuspendedRpc,
+  WsGcSetRigSuspendedRpc,
 );
