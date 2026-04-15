@@ -1,6 +1,52 @@
 import { describe, expect, it } from "vitest";
 
-import { groupThreadsByRigAndAgent } from "./gc";
+import { groupThreadsByRigAndAgent, parseGcMeta } from "./gc";
+
+describe("parseGcMeta", () => {
+  it("decodes serialized GC session env metadata", () => {
+    expect(
+      parseGcMeta({
+        "gc.agent": "t3code/polecat",
+        "gc.sessionEnv": JSON.stringify({
+          GC_AGENT: "t3code/polecat",
+          GC_SESSION_NAME: "t3code--polecat",
+          GC_CITY_ROOT: "/data/projects/gc",
+          GT_ROOT: "/data/projects/gc",
+        }),
+      }),
+    ).toMatchObject({
+      isGcManaged: true,
+      sessionName: "t3code--polecat",
+      sessionEnv: {
+        GC_AGENT: "t3code/polecat",
+        GC_SESSION_NAME: "t3code--polecat",
+        GC_CITY_ROOT: "/data/projects/gc",
+        GT_ROOT: "/data/projects/gc",
+      },
+    });
+  });
+
+  it("prefers an explicit gc.sessionName over the serialized session env", () => {
+    expect(
+      parseGcMeta({
+        "gc.agent": "t3code/polecat",
+        "gc.sessionName": "explicit-session",
+        "gc.sessionEnv": JSON.stringify({
+          GC_SESSION_NAME: "env-session",
+        }),
+      }).sessionName,
+    ).toBe("explicit-session");
+  });
+
+  it("ignores invalid serialized GC session env metadata", () => {
+    expect(
+      parseGcMeta({
+        "gc.agent": "t3code/polecat",
+        "gc.sessionEnv": "{invalid-json",
+      }).sessionEnv,
+    ).toBeUndefined();
+  });
+});
 
 describe("groupThreadsByRigAndAgent", () => {
   it("groups GC-managed threads into rig and agent folders", () => {

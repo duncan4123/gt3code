@@ -50,6 +50,7 @@ import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptR
 import { GcApiClient, GcContextProvider, GcApiClientLive, GcContextProviderLive } from "./gc";
 import {
   GcGetConfigError,
+  GcFindThreadBindingError,
   GcGetThreadContextError,
   GcSetAgentSuspendedError,
   GcSetRigSuspendedError,
@@ -747,6 +748,32 @@ const WsRpcLayer = WsRpcGroup.toLayer(
               (error) =>
                 new GcGetConfigError({
                   message: error instanceof Error ? error.message : "Failed to get GC config",
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "gc" },
+        ),
+      [WS_METHODS.gcFindThreadBinding]: ({ sessionName }) =>
+        observeRpcEffect(
+          WS_METHODS.gcFindThreadBinding,
+          Effect.gen(function* () {
+            const binding =
+              yield* projectionSnapshotQuery.getActiveThreadBindingByGcSessionName(sessionName);
+            if (Option.isNone(binding)) {
+              return null;
+            }
+
+            return {
+              sessionName,
+              threadId: binding.value.threadId,
+              projectId: binding.value.projectId,
+            };
+          }).pipe(
+            Effect.mapError(
+              (error) =>
+                new GcFindThreadBindingError({
+                  message:
+                    error instanceof Error ? error.message : "Failed to find GC thread binding",
                 }),
             ),
           ),

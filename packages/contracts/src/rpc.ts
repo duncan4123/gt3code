@@ -73,6 +73,9 @@ import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./sett
 import {
   GcGetConfigError,
   GcGetConfigInput,
+  GcFindThreadBindingError,
+  GcFindThreadBindingInput,
+  GcFindThreadBindingResult,
   GcGetThreadContextInput,
   GcSetAgentSuspendedInput,
   GcSetRigSuspendedInput,
@@ -124,6 +127,7 @@ export const WS_METHODS = {
 
   // Gas City
   gcGetConfig: "gc.getConfig",
+  gcFindThreadBinding: "gc.findThreadBinding",
   gcGetThreadContext: "gc.getThreadContext",
   gcSetAgentSuspended: "gc.setAgentSuspended",
   gcSetRigSuspended: "gc.setRigSuspended",
@@ -361,6 +365,12 @@ export const WsGcGetConfigRpc = Rpc.make(WS_METHODS.gcGetConfig, {
   error: GcGetConfigError,
 });
 
+export const WsGcFindThreadBindingRpc = Rpc.make(WS_METHODS.gcFindThreadBinding, {
+  payload: GcFindThreadBindingInput,
+  success: GcFindThreadBindingResult,
+  error: GcFindThreadBindingError,
+});
+
 export const WsGcSetAgentSuspendedRpc = Rpc.make(WS_METHODS.gcSetAgentSuspended, {
   payload: GcSetAgentSuspendedInput,
   success: GcConfigResult,
@@ -410,6 +420,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationReplayEventsRpc,
   WsOrchestrationSearchThreadMessagesRpc,
   WsGcGetConfigRpc,
+  WsGcFindThreadBindingRpc,
   WsGcGetThreadContextRpc,
   WsGcSetAgentSuspendedRpc,
   WsGcSetRigSuspendedRpc,

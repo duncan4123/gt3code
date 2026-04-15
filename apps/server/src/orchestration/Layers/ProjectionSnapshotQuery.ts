@@ -20,6 +20,7 @@ import {
   ModelSelection,
   ProjectId,
   ThreadId,
+  parseGcMeta,
 } from "@t3tools/contracts";
 import { Effect, Layer, Option, Schema, Struct } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -43,6 +44,7 @@ import { ORCHESTRATION_PROJECTOR_NAMES } from "./ProjectionPipeline.ts";
 import {
   ProjectionSnapshotQuery,
   type ProjectionSnapshotCounts,
+  type ProjectionGcThreadBinding,
   type ProjectionThreadCheckpointContext,
   type ProjectionSnapshotQueryShape,
 } from "../Services/ProjectionSnapshotQuery.ts";
@@ -120,6 +122,13 @@ const ProjectionThreadCheckpointContextThreadRowSchema = Schema.Struct({
 const ProjectionThreadMessageSearchRowSchema = Schema.Struct({
   threadId: ThreadId,
   snippet: Schema.String,
+});
+const ProjectionGcThreadBindingLookupRowSchema = Schema.Struct({
+  threadId: ThreadId,
+  projectId: ProjectId,
+  customMetadata: Schema.String,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
 });
 
 const REQUIRED_SNAPSHOT_PROJECTORS = [
@@ -431,6 +440,23 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         WHERE threads.thread_id = ${threadId}
           AND threads.deleted_at IS NULL
         LIMIT 1
+      `,
+  });
+
+  const listActiveGcThreadBindingLookupRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ProjectionGcThreadBindingLookupRowSchema,
+    execute: () =>
+      sql`
+        SELECT
+          thread_id AS "threadId",
+          project_id AS "projectId",
+          custom_metadata AS "customMetadata",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM projection_threads
+        WHERE deleted_at IS NULL
+        ORDER BY updated_at DESC, created_at DESC, thread_id DESC
       `,
   });
 
@@ -852,6 +878,46 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       });
     });
 
+  const getActiveThreadBindingByGcSessionName: ProjectionSnapshotQueryShape["getActiveThreadBindingByGcSessionName"] =
+    (sessionName) =>
+      listActiveGcThreadBindingLookupRows(undefined).pipe(
+        Effect.mapError(
+          toPersistenceSqlOrDecodeError(
+            "ProjectionSnapshotQuery.getActiveThreadBindingByGcSessionName:query",
+            "ProjectionSnapshotQuery.getActiveThreadBindingByGcSessionName:decodeRows",
+          ),
+        ),
+        Effect.map((rows) => {
+          const binding = rows.find((row) => {
+            try {
+              const customMetadata = JSON.parse(row.customMetadata || "{}") as Record<
+                string,
+                string
+              >;
+              return parseGcMeta(customMetadata).sessionName === sessionName;
+            } catch {
+              return false;
+            }
+          });
+          if (!binding) {
+            return Option.none<ProjectionGcThreadBinding>();
+          }
+
+          let customMetadata: Record<string, string> = {};
+          try {
+            customMetadata = JSON.parse(binding.customMetadata || "{}") as Record<string, string>;
+          } catch {
+            customMetadata = {};
+          }
+
+          return Option.some<ProjectionGcThreadBinding>({
+            threadId: binding.threadId,
+            projectId: binding.projectId,
+            customMetadata,
+          });
+        }),
+      );
+
   const searchThreadMessages: ProjectionSnapshotQueryShape["searchThreadMessages"] = (
     query,
     limit,
@@ -879,6 +945,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getActiveProjectByWorkspaceRoot,
     getFirstActiveThreadIdByProjectId,
     getThreadCheckpointContext,
+    getActiveThreadBindingByGcSessionName,
     searchThreadMessages,
   } satisfies ProjectionSnapshotQueryShape;
 });

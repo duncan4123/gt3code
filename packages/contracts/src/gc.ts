@@ -19,6 +19,8 @@ export const GcThreadMeta = Schema.Struct({
   isGcManaged: Schema.Boolean,
   /** Agent qualified name (e.g. "t3code/polecat"). */
   agent: Schema.optional(Schema.String),
+  /** Canonical GC session name (e.g. "t3code--polecat"). */
+  sessionName: Schema.optional(Schema.String),
   /** Rig name. */
   rig: Schema.optional(Schema.String),
   /** City name. */
@@ -43,6 +45,8 @@ export const GcThreadMeta = Schema.Struct({
   runtimeProvider: Schema.optional(Schema.String),
   /** Session state (active/archived). */
   state: Schema.optional(Schema.String),
+  /** Session startup env forwarded from Gas City into the provider process. */
+  sessionEnv: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   /** Molecule ID (formula instance). */
   molecule: Schema.optional(Schema.String),
   /** Formula name. */
@@ -50,12 +54,38 @@ export const GcThreadMeta = Schema.Struct({
 });
 export type GcThreadMeta = typeof GcThreadMeta.Type;
 
+function parseGcSessionEnv(value: string | undefined): Record<string, string> | undefined {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return undefined;
+    }
+    const env = Object.entries(parsed).flatMap(([key, entryValue]) =>
+      typeof entryValue === "string" ? [[key, entryValue] as const] : [],
+    );
+    return env.length > 0 ? Object.fromEntries(env) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseGcSessionName(
+  customMetadata: Record<string, string>,
+  sessionEnv: Record<string, string> | undefined,
+): string | undefined {
+  return customMetadata["gc.sessionName"] ?? sessionEnv?.GC_SESSION_NAME;
+}
+
 /** Extract GcThreadMeta from a raw customMetadata record. */
 export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMeta {
   if (!customMetadata || !customMetadata["gc.agent"]) {
     return {
       isGcManaged: false,
       agent: undefined,
+      sessionName: undefined,
       rig: undefined,
       city: undefined,
       bead: undefined,
@@ -68,13 +98,16 @@ export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMe
       provider: undefined,
       runtimeProvider: undefined,
       state: undefined,
+      sessionEnv: undefined,
       molecule: undefined,
       formula: undefined,
     };
   }
+  const sessionEnv = parseGcSessionEnv(customMetadata["gc.sessionEnv"]);
   return {
     isGcManaged: true,
     agent: customMetadata["gc.agent"],
+    sessionName: parseGcSessionName(customMetadata, sessionEnv),
     rig: customMetadata["gc.rig"],
     city: customMetadata["gc.city"],
     bead: customMetadata["gc.bead"],
@@ -87,6 +120,7 @@ export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMe
     provider: customMetadata["gc.provider"],
     runtimeProvider: customMetadata["gc.runtimeProvider"],
     state: customMetadata["gc.state"],
+    sessionEnv,
     molecule: customMetadata["gc.molecule"],
     formula: customMetadata["gc.formula"],
   };
@@ -442,6 +476,11 @@ export const GcSetRigSuspendedInput = Schema.Struct({
 });
 export type GcSetRigSuspendedInput = typeof GcSetRigSuspendedInput.Type;
 
+export const GcFindThreadBindingInput = Schema.Struct({
+  sessionName: Schema.String,
+});
+export type GcFindThreadBindingInput = typeof GcFindThreadBindingInput.Type;
+
 const GcBeadSchema = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
@@ -491,8 +530,23 @@ export const GcThreadContextResult = Schema.Struct({
 });
 export type GcThreadContextResult = typeof GcThreadContextResult.Type;
 
+export const GcThreadBindingResultItem = Schema.Struct({
+  sessionName: Schema.String,
+  threadId: Schema.String,
+  projectId: Schema.String,
+});
+export type GcThreadBindingResultItem = typeof GcThreadBindingResultItem.Type;
+
+export const GcFindThreadBindingResult = Schema.NullOr(GcThreadBindingResultItem);
+export type GcFindThreadBindingResult = typeof GcFindThreadBindingResult.Type;
+
 export class GcGetThreadContextError extends Schema.TaggedErrorClass<GcGetThreadContextError>()(
   "GcGetThreadContextError",
+  { message: Schema.String },
+) {}
+
+export class GcFindThreadBindingError extends Schema.TaggedErrorClass<GcFindThreadBindingError>()(
+  "GcFindThreadBindingError",
   { message: Schema.String },
 ) {}
 

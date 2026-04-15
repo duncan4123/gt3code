@@ -54,6 +54,8 @@ import { ServerSettings, ServerSettingsPatch } from "./settings";
 import type {
   GcConfigResult,
   GcGetConfigInput,
+  GcFindThreadBindingInput,
+  GcFindThreadBindingResult,
   GcSetAgentSuspendedInput,
   GcSetRigSuspendedInput,
   GcGetThreadContextInput,
@@ -202,6 +204,7 @@ export interface NativeApi {
   };
   gc?: {
     getConfig: (input: GcGetConfigInput) => Promise<GcConfigResult>;
+    findThreadBinding: (input: GcFindThreadBindingInput) => Promise<GcFindThreadBindingResult>;
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
     setAgentSuspended: (input: GcSetAgentSuspendedInput) => Promise<GcConfigResult>;
     setRigSuspended: (input: GcSetRigSuspendedInput) => Promise<GcConfigResult>;

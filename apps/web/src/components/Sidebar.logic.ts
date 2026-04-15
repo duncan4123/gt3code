@@ -76,7 +76,7 @@ export function countGcAgents(
   return threads.filter((t) => t.projectId === projectId && t.customMetadata?.["gc.agent"]).length;
 }
 
-function normalizeWorkspacePath(path: string): string {
+export function normalizeWorkspacePath(path: string): string {
   return path.trim().replace(/\/+$/, "");
 }
 

@@ -33,6 +33,12 @@ export interface ProjectionThreadCheckpointContext {
   readonly checkpoints: ReadonlyArray<OrchestrationCheckpointSummary>;
 }
 
+export interface ProjectionGcThreadBinding {
+  readonly threadId: ThreadId;
+  readonly projectId: ProjectId;
+  readonly customMetadata: Readonly<Record<string, string>>;
+}
+
 /**
  * ProjectionSnapshotQueryShape - Service API for read-model snapshots.
  */
@@ -70,6 +76,13 @@ export interface ProjectionSnapshotQueryShape {
   readonly getThreadCheckpointContext: (
     threadId: ThreadId,
   ) => Effect.Effect<Option.Option<ProjectionThreadCheckpointContext>, ProjectionRepositoryError>;
+
+  /**
+   * Read the newest active thread bound to a GC session name.
+   */
+  readonly getActiveThreadBindingByGcSessionName: (
+    sessionName: string,
+  ) => Effect.Effect<Option.Option<ProjectionGcThreadBinding>, ProjectionRepositoryError>;
 
   readonly searchThreadMessages: (
     query: string,

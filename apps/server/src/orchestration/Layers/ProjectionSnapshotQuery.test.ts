@@ -731,4 +731,113 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       }
     }),
   );
+
+  it.effect("finds the newest active thread bound to a GC session name", () =>
+    Effect.gen(function* () {
+      const snapshotQuery = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+
+      yield* sql`DELETE FROM projection_projects`;
+      yield* sql`DELETE FROM projection_threads`;
+
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id,
+          title,
+          workspace_root,
+          default_model_selection_json,
+          scripts_json,
+          created_at,
+          updated_at,
+          deleted_at
+        )
+        VALUES
+          (
+            'project-old',
+            'Project Old',
+            '/tmp/project-old',
+            NULL,
+            '[]',
+            '2026-03-03T00:00:00.000Z',
+            '2026-03-03T00:00:00.000Z',
+            NULL
+          ),
+          (
+            'project-new',
+            'Project New',
+            '/tmp/project-new',
+            NULL,
+            '[]',
+            '2026-03-03T00:00:00.000Z',
+            '2026-03-03T00:00:00.000Z',
+            NULL
+          )
+      `;
+
+      yield* sql`
+        INSERT INTO projection_threads (
+          thread_id,
+          project_id,
+          title,
+          model_selection_json,
+          runtime_mode,
+          interaction_mode,
+          branch,
+          worktree_path,
+          latest_turn_id,
+          created_at,
+          updated_at,
+          archived_at,
+          deleted_at,
+          custom_metadata
+        )
+        VALUES
+          (
+            'thread-old',
+            'project-old',
+            'Thread Old',
+            '{"provider":"codex","model":"gpt-5-codex"}',
+            'full-access',
+            'chat',
+            NULL,
+            NULL,
+            NULL,
+            '2026-03-03T00:00:01.000Z',
+            '2026-03-03T00:00:02.000Z',
+            NULL,
+            NULL,
+            '{"gc.agent":"t3code/crew","gc.sessionName":"t3code--crew"}'
+          ),
+          (
+            'thread-new',
+            'project-new',
+            'Thread New',
+            '{"provider":"codex","model":"gpt-5-codex"}',
+            'full-access',
+            'chat',
+            NULL,
+            NULL,
+            NULL,
+            '2026-03-03T00:00:03.000Z',
+            '2026-03-03T00:00:04.000Z',
+            NULL,
+            NULL,
+            '{"gc.agent":"t3code/crew","gc.sessionEnv":"{\\"GC_SESSION_NAME\\":\\"t3code--crew\\"}"}'
+          )
+      `;
+
+      const binding = yield* snapshotQuery.getActiveThreadBindingByGcSessionName("t3code--crew");
+      assert.equal(binding._tag, "Some");
+      if (binding._tag === "Some") {
+        assert.deepEqual(binding.value, {
+          threadId: ThreadId.makeUnsafe("thread-new"),
+          projectId: asProjectId("project-new"),
+          customMetadata: {
+            "gc.agent": "t3code/crew",
+            "gc.sessionEnv": '{"GC_SESSION_NAME":"t3code--crew"}',
+          },
+        });
+      }
+    }),
+  );
 });

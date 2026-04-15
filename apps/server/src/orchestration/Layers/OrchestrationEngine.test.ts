@@ -146,6 +146,7 @@ describe("OrchestrationEngine", () => {
           getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
           getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
           getThreadCheckpointContext: () => Effect.succeed(Option.none()),
+          getActiveThreadBindingByGcSessionName: () => Effect.succeed(Option.none()),
           searchThreadMessages: () => Effect.succeed({ results: [] }),
         }),
       ),
@@ -231,6 +232,98 @@ describe("OrchestrationEngine", () => {
     const readModelA = await system.run(engine.getReadModel());
     const readModelB = await system.run(engine.getReadModel());
     expect(readModelB).toEqual(readModelA);
+    await system.dispose();
+  });
+
+  it("rejects creating a second active project for the same workspace root", async () => {
+    const createdAt = now();
+    const system = await createOrchestrationSystem();
+    const { engine } = system;
+
+    await system.run(
+      engine.dispatch({
+        type: "project.create",
+        commandId: CommandId.makeUnsafe("cmd-project-root-a"),
+        projectId: asProjectId("project-root-a"),
+        title: "Project Root A",
+        workspaceRoot: "/tmp/shared-workspace",
+        defaultModelSelection: {
+          provider: "codex",
+          model: "gpt-5-codex",
+        },
+        createdAt,
+      }),
+    );
+
+    await expect(
+      system.run(
+        engine.dispatch({
+          type: "project.create",
+          commandId: CommandId.makeUnsafe("cmd-project-root-b"),
+          projectId: asProjectId("project-root-b"),
+          title: "Project Root B",
+          workspaceRoot: "/tmp/shared-workspace",
+          defaultModelSelection: {
+            provider: "codex",
+            model: "gpt-5-codex",
+          },
+          createdAt,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      _tag: "OrchestrationCommandInvariantError",
+    });
+
+    await system.dispose();
+  });
+
+  it("allows re-creating a project after deleting the previous workspace root owner", async () => {
+    const createdAt = now();
+    const system = await createOrchestrationSystem();
+    const { engine } = system;
+
+    await system.run(
+      engine.dispatch({
+        type: "project.create",
+        commandId: CommandId.makeUnsafe("cmd-project-root-a-create"),
+        projectId: asProjectId("project-root-a"),
+        title: "Project Root A",
+        workspaceRoot: "/tmp/shared-workspace",
+        defaultModelSelection: {
+          provider: "codex",
+          model: "gpt-5-codex",
+        },
+        createdAt,
+      }),
+    );
+
+    await system.run(
+      engine.dispatch({
+        type: "project.delete",
+        commandId: CommandId.makeUnsafe("cmd-project-root-a-delete"),
+        projectId: asProjectId("project-root-a"),
+      }),
+    );
+
+    await expect(
+      system.run(
+        engine.dispatch({
+          type: "project.create",
+          commandId: CommandId.makeUnsafe("cmd-project-root-b-create"),
+          projectId: asProjectId("project-root-b"),
+          title: "Project Root B",
+          workspaceRoot: "/tmp/shared-workspace",
+          defaultModelSelection: {
+            provider: "codex",
+            model: "gpt-5-codex",
+          },
+          createdAt,
+        }),
+      ),
+    ).resolves.toMatchObject({
+      sequence: expect.any(Number),
+    });
+
     await system.dispose();
   });
 

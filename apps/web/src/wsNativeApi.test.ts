@@ -84,6 +84,13 @@ const rpcClientMock = {
       registerListener(orchestrationEventListeners, listener),
     ),
   },
+  gc: {
+    getConfig: vi.fn(),
+    findThreadBinding: vi.fn(),
+    getThreadContext: vi.fn(),
+    setAgentSuspended: vi.fn(),
+    setRigSuspended: vi.fn(),
+  },
 };
 
 vi.mock("./wsRpcClient", () => {

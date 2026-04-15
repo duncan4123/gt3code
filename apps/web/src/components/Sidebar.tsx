@@ -116,6 +116,7 @@ import {
   groupProjectsByWorkspacePath,
   getVisibleSidebarThreadIds,
   getVisibleThreadsForProject,
+  normalizeWorkspacePath,
   normalizeThreadSearchQuery,
   resolveAdjacentThreadId,
   resolveSidebarThreadSearch,
@@ -1010,7 +1011,10 @@ export default function Sidebar() {
         setAddingProject(false);
       };
 
-      const existing = projects.find((project) => project.cwd === cwd);
+      const normalizedCwd = normalizeWorkspacePath(cwd);
+      const existing = projects.find(
+        (project) => normalizeWorkspacePath(project.cwd) === normalizedCwd,
+      );
       if (existing) {
         focusMostRecentThreadForProject(existing.id);
         finishAddingProject();
