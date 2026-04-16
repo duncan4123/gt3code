@@ -172,10 +172,24 @@ function getCurrentProjectDir(): string {
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
-    return true;
   } catch (error: any) {
     return error?.code === "EPERM";
   }
+
+  if (process.platform !== "win32") {
+    try {
+      const state = execFileSync(
+        "ps",
+        ["-p", String(pid), "-o", "stat="],
+        { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] },
+      ).trim();
+      if (state.startsWith("Z")) return false;
+    } catch {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function describeProcess(pid: number): string | null {
