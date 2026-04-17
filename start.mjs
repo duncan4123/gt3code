@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { execSync } from "node:child_process";
-import { existsSync, chmodSync, readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, chmodSync, readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const originalCwd = process.cwd();
@@ -18,6 +19,55 @@ if (!process.env.CLAUDE_PROJECT_DIR) {
 // is the universal fallback so server.ts getProjectDir() never relies on cwd().
 if (!process.env.CONTEXT_MODE_PROJECT_DIR) {
   process.env.CONTEXT_MODE_PROJECT_DIR = originalCwd;
+}
+
+function normalizeProjectDir(projectDir) {
+  return projectDir.replace(/\\/g, "/");
+}
+
+function getMcpRegistryPath(projectDir) {
+  const hash = createHash("sha256")
+    .update(normalizeProjectDir(projectDir))
+    .digest("hex")
+    .slice(0, 16);
+  return resolve(homedir(), ".context-mode", "mcp", `${hash}.json`);
+}
+
+// Register the stdio server process immediately so `context-mode-doltlite restart`
+// can target it even if startup fails before server.ts reaches its own write.
+{
+  const projectDir = process.env.CONTEXT_MODE_PROJECT_DIR || process.cwd();
+  const registryPath = getMcpRegistryPath(projectDir);
+  mkdirSync(dirname(registryPath), { recursive: true });
+  writeFileSync(
+    registryPath,
+    JSON.stringify({
+      pid: process.pid,
+      projectDir,
+      startedAt: new Date().toISOString(),
+      version: (() => {
+        try {
+          return JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8")).version ?? "unknown";
+        } catch {
+          return "unknown";
+        }
+      })(),
+    }, null, 2) + "\n",
+    "utf-8",
+  );
+
+  const cleanupRegistry = () => {
+    try {
+      const current = JSON.parse(readFileSync(registryPath, "utf-8"));
+      if (current?.pid === process.pid) rmSync(registryPath, { force: true });
+    } catch {
+      // Best effort — record may already be gone or unreadable.
+    }
+  };
+
+  process.on("exit", cleanupRegistry);
+  process.on("SIGINT", cleanupRegistry);
+  process.on("SIGTERM", cleanupRegistry);
 }
 
 // Routing instructions file auto-write DISABLED for all platforms (#158, #164).
