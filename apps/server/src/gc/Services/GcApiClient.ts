@@ -10,7 +10,11 @@
  */
 import { ServiceMap } from "effect";
 import type { Effect, Stream } from "effect";
-import type { GcConfigResult } from "@t3tools/contracts";
+import type {
+  GcConfigResult,
+  GcSessionActionResult,
+  GcSubmitSessionResult,
+} from "@t3tools/contracts";
 
 export interface GcBead {
   readonly id: string;
@@ -72,7 +76,25 @@ export interface GcApiClientShape {
   readonly getConvoy: (id: string) => Effect.Effect<GcConvoy | null>;
   readonly getFormula: (name: string) => Effect.Effect<GcFormula | null>;
   readonly getConfig: () => Effect.Effect<GcConfigResult | null>;
+  readonly submitSession: (
+    sessionName: string,
+    message: string,
+  ) => Effect.Effect<GcSubmitSessionResult, Error>;
+  readonly stopSession: (sessionName: string) => Effect.Effect<GcSessionActionResult, Error>;
+  readonly respondToPending: (
+    sessionName: string,
+    response: {
+      readonly action: string;
+      readonly requestId?: string;
+      readonly text?: string;
+      readonly metadata?: Record<string, string>;
+    },
+  ) => Effect.Effect<GcSessionActionResult, Error>;
   readonly setAgentSuspended: (name: string, suspended: boolean) => Effect.Effect<void, Error>;
+  readonly setAgentSessionMode: (
+    name: string,
+    mode: "always" | "on_demand",
+  ) => Effect.Effect<void, Error>;
   readonly setRigSuspended: (name: string, suspended: boolean) => Effect.Effect<void, Error>;
   readonly streamEvents: Stream.Stream<GcEvent>;
   readonly isAvailable: Effect.Effect<boolean>;

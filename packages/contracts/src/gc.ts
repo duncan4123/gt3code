@@ -8,6 +8,7 @@
  * Source of truth: gascity/internal/runtime/t3bridge/provider.go
  */
 import * as Schema from "effect/Schema";
+import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas";
 
 // ---------------------------------------------------------------------------
 // gc.* metadata keys (set on OrchestrationThread.customMetadata)
@@ -159,6 +160,12 @@ export const GcConfigWorkspace = Schema.Struct({
 });
 export type GcConfigWorkspace = typeof GcConfigWorkspace.Type;
 
+export const GcNamedSessionMode = Schema.Union([
+  Schema.Literal("always"),
+  Schema.Literal("on_demand"),
+]);
+export type GcNamedSessionMode = typeof GcNamedSessionMode.Type;
+
 export const GcConfigAgent = Schema.Struct({
   name: Schema.String,
   dir: Schema.optional(Schema.String),
@@ -166,6 +173,7 @@ export const GcConfigAgent = Schema.Struct({
   is_pool: Schema.optional(Schema.Boolean),
   scope: Schema.optional(Schema.String),
   suspended: Schema.Boolean,
+  named_session_mode: Schema.optional(GcNamedSessionMode),
 });
 export type GcConfigAgent = typeof GcConfigAgent.Type;
 
@@ -216,6 +224,7 @@ export interface VirtualAgentGroup<TThread> {
   isConfigured: boolean;
   isPool: boolean;
   isSuspended: boolean;
+  namedSessionMode?: GcNamedSessionMode;
   scope?: string;
   threads: TThread[];
 }
@@ -224,6 +233,7 @@ export interface VirtualAgentGroup<TThread> {
 export interface VirtualRigGroup<TThread> {
   id: string;
   label: string;
+  kind: "workspace" | "rig";
   isConfigured: boolean;
   isSuspended: boolean;
   agentGroups: VirtualAgentGroup<TThread>[];
@@ -239,9 +249,46 @@ function agentFolderLabel(agent: string): string {
   return segments.at(-1) ?? agent;
 }
 
+function pathBasename(value: string): string {
+  const normalized = value.replace(/\\/g, "/").replace(/\/+$/, "");
+  const segments = normalized.split("/").filter(Boolean);
+  return segments.at(-1) ?? normalized;
+}
+
 function configuredAgentQualifiedName(agent: Pick<GcConfigAgent, "dir" | "name">): string {
   const dir = normalizeMetadataValue(agent.dir);
   return dir ? `${dir}/${agent.name}` : agent.name;
+}
+
+function candidateAgentLabels(agent: string): string[] {
+  const trimmed = agent.trim();
+  if (trimmed.length === 0) {
+    return [];
+  }
+
+  const labels = new Set<string>([trimmed, agentFolderLabel(trimmed)]);
+  const lastDotSegment = trimmed.split(".").filter(Boolean).at(-1);
+  if (lastDotSegment) {
+    labels.add(lastDotSegment);
+  }
+  return [...labels];
+}
+
+function findMatchingAgentGroup<TThread>(
+  agentGroupsById: ReadonlyMap<string, VirtualAgentGroup<TThread>>,
+  agent: string,
+): VirtualAgentGroup<TThread> | undefined {
+  const exactMatch = agentGroupsById.get(agent);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const candidateLabels = new Set(candidateAgentLabels(agent));
+  if (candidateLabels.size === 0) {
+    return undefined;
+  }
+
+  return [...agentGroupsById.values()].find((group) => candidateLabels.has(group.label));
 }
 
 /** Partition threads into rig folders, agent folders, and standalone threads. */
@@ -264,6 +311,7 @@ export function groupThreadsByRigAndAgent<
     {
       id: string;
       label: string;
+      kind: "workspace" | "rig";
       isConfigured: boolean;
       isSuspended: boolean;
       agentGroupsById: Map<string, VirtualAgentGroup<TThread>>;
@@ -273,7 +321,15 @@ export function groupThreadsByRigAndAgent<
   const projectCwd = normalizeMetadataValue(options?.projectCwd ?? undefined);
   const projectName = normalizeMetadataValue(options?.projectName ?? undefined);
   const workspaceName = normalizeMetadataValue(options?.config?.workspace.name);
-  const isCityProject = Boolean(projectName && workspaceName && projectName === workspaceName);
+  const projectDirName = projectCwd ? normalizeMetadataValue(pathBasename(projectCwd)) : null;
+  const isCityProject = Boolean(
+    workspaceName &&
+    ((projectName &&
+      projectName.localeCompare(workspaceName, undefined, { sensitivity: "accent" }) === 0) ||
+      (projectDirName &&
+        projectDirName.localeCompare(workspaceName, undefined, { sensitivity: "accent" }) === 0)),
+  );
+  let cityScopedRigGroupId: string | null = null;
   const relevantRigs = options?.config?.rigs.filter(
     (rig) => !projectCwd || normalizeMetadataValue(rig.path) === projectCwd,
   );
@@ -283,10 +339,20 @@ export function groupThreadsByRigAndAgent<
       rigGroupsById.set(rig.name, {
         id: rig.name,
         label: rig.name,
+        kind: "rig",
         isConfigured: true,
         isSuspended: rig.suspended,
         agentGroupsById: new Map(),
       });
+    }
+
+    if (isCityProject && workspaceName) {
+      const workspaceRig = relevantRigs.find(
+        (rig) => rig.name.localeCompare(workspaceName, undefined, { sensitivity: "accent" }) === 0,
+      );
+      if (workspaceRig) {
+        cityScopedRigGroupId = workspaceRig.name;
+      }
     }
 
     for (const agent of options?.config?.agents ?? []) {
@@ -305,7 +371,8 @@ export function groupThreadsByRigAndAgent<
         qualifiedName,
         isConfigured: true,
         isPool: agent.is_pool ?? false,
-        isSuspended: agent.suspended,
+        isSuspended: rigGroup.isSuspended || agent.suspended,
+        ...(agent.named_session_mode ? { namedSessionMode: agent.named_session_mode } : {}),
         ...(agent.scope ? { scope: agent.scope } : {}),
         threads: [],
       });
@@ -314,27 +381,35 @@ export function groupThreadsByRigAndAgent<
 
   if ((!relevantRigs || relevantRigs.length === 0) && isCityProject && workspaceName) {
     const cityGroupId = workspaceName.toUpperCase();
+    cityScopedRigGroupId = cityGroupId;
     rigGroupsById.set(cityGroupId, {
       id: cityGroupId,
       label: cityGroupId,
+      kind: "workspace",
       isConfigured: true,
       isSuspended: options?.config?.workspace.suspended ?? false,
       agentGroupsById: new Map(),
     });
+  }
 
-    const cityGroup = rigGroupsById.get(cityGroupId);
+  if (cityScopedRigGroupId) {
+    const cityGroup = rigGroupsById.get(cityScopedRigGroupId);
     if (cityGroup) {
       for (const agent of options?.config?.agents ?? []) {
         const rigName = normalizeMetadataValue(agent.dir);
         if (rigName) continue;
         const qualifiedName = configuredAgentQualifiedName(agent);
+        if (cityGroup.agentGroupsById.has(qualifiedName)) {
+          continue;
+        }
         cityGroup.agentGroupsById.set(qualifiedName, {
-          id: `${cityGroupId}/${qualifiedName}`,
+          id: `${cityScopedRigGroupId}/${qualifiedName}`,
           label: agentFolderLabel(qualifiedName),
           qualifiedName,
           isConfigured: true,
           isPool: agent.is_pool ?? false,
-          isSuspended: agent.suspended,
+          isSuspended: cityGroup.isSuspended || agent.suspended,
+          ...(agent.named_session_mode ? { namedSessionMode: agent.named_session_mode } : {}),
           ...(agent.scope ? { scope: agent.scope } : {}),
           threads: [],
         });
@@ -346,31 +421,33 @@ export function groupThreadsByRigAndAgent<
     const meta = parseGcMeta(thread.customMetadata);
     const rig = normalizeMetadataValue(meta.rig);
     const agent = normalizeMetadataValue(meta.agent);
-    if (!meta.isGcManaged || !rig || !agent) {
+    const resolvedRig = rig ?? cityScopedRigGroupId;
+    if (!meta.isGcManaged || !resolvedRig || !agent) {
       standaloneThreads.push(thread);
       continue;
     }
 
-    let rigGroup = rigGroupsById.get(rig);
+    let rigGroup = rigGroupsById.get(resolvedRig);
     if (!rigGroup) {
       rigGroup = {
-        id: rig,
-        label: rig,
+        id: resolvedRig,
+        label: resolvedRig,
+        kind: resolvedRig === cityScopedRigGroupId ? "workspace" : "rig",
         isConfigured: false,
         isSuspended: false,
         agentGroupsById: new Map(),
       };
-      rigGroupsById.set(rig, rigGroup);
+      rigGroupsById.set(resolvedRig, rigGroup);
     }
 
-    const existingAgentGroup = rigGroup.agentGroupsById.get(agent);
+    const existingAgentGroup = findMatchingAgentGroup(rigGroup.agentGroupsById, agent);
     if (existingAgentGroup) {
       existingAgentGroup.threads.push(thread);
       continue;
     }
 
     rigGroup.agentGroupsById.set(agent, {
-      id: `${rig}/${agent}`,
+      id: `${resolvedRig}/${agent}`,
       label: agentFolderLabel(agent),
       qualifiedName: agent,
       isConfigured: false,
@@ -387,6 +464,7 @@ export function groupThreadsByRigAndAgent<
       .map((rigGroup) => ({
         id: rigGroup.id,
         label: rigGroup.label,
+        kind: rigGroup.kind,
         isConfigured: rigGroup.isConfigured,
         isSuspended: rigGroup.isSuspended,
         agentGroups: Array.from(rigGroup.agentGroupsById.values()).toSorted((a, b) =>
@@ -476,10 +554,44 @@ export const GcSetRigSuspendedInput = Schema.Struct({
 });
 export type GcSetRigSuspendedInput = typeof GcSetRigSuspendedInput.Type;
 
+export const GcSetAgentSessionModeInput = Schema.Struct({
+  agent: Schema.String,
+  mode: GcNamedSessionMode,
+});
+export type GcSetAgentSessionModeInput = typeof GcSetAgentSessionModeInput.Type;
+
 export const GcFindThreadBindingInput = Schema.Struct({
   sessionName: Schema.String,
 });
 export type GcFindThreadBindingInput = typeof GcFindThreadBindingInput.Type;
+
+export const GcSubmitSessionInput = Schema.Struct({
+  threadId: ThreadId,
+  message: TrimmedNonEmptyString,
+});
+export type GcSubmitSessionInput = typeof GcSubmitSessionInput.Type;
+
+export const GcStopSessionInput = Schema.Struct({
+  threadId: ThreadId,
+});
+export type GcStopSessionInput = typeof GcStopSessionInput.Type;
+
+export const GcRespondToPendingInput = Schema.Struct({
+  threadId: ThreadId,
+  action: TrimmedNonEmptyString,
+  requestId: Schema.optional(Schema.String),
+  text: Schema.optional(Schema.String),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+});
+export type GcRespondToPendingInput = typeof GcRespondToPendingInput.Type;
+
+export const GcPeekThreadMessagesInput = Schema.Struct({
+  query: Schema.optional(TrimmedNonEmptyString),
+  agent: Schema.optional(Schema.String),
+  sessionName: Schema.optional(Schema.String),
+  limit: NonNegativeInt.pipe(Schema.withDecodingDefault(() => 25)),
+});
+export type GcPeekThreadMessagesInput = typeof GcPeekThreadMessagesInput.Type;
 
 const GcBeadSchema = Schema.Struct({
   id: Schema.String,
@@ -540,6 +652,35 @@ export type GcThreadBindingResultItem = typeof GcThreadBindingResultItem.Type;
 export const GcFindThreadBindingResult = Schema.NullOr(GcThreadBindingResultItem);
 export type GcFindThreadBindingResult = typeof GcFindThreadBindingResult.Type;
 
+export const GcSessionActionResult = Schema.Struct({
+  id: Schema.String,
+  status: Schema.String,
+});
+export type GcSessionActionResult = typeof GcSessionActionResult.Type;
+
+export const GcSubmitSessionResult = Schema.Struct({
+  id: Schema.String,
+  status: Schema.String,
+  queued: Schema.Boolean,
+  intent: Schema.String,
+});
+export type GcSubmitSessionResult = typeof GcSubmitSessionResult.Type;
+
+export const GcPeekThreadMessagesHit = Schema.Struct({
+  threadId: ThreadId,
+  projectId: ProjectId,
+  snippet: Schema.String,
+  agent: Schema.optional(Schema.String),
+  rig: Schema.optional(Schema.String),
+  sessionName: Schema.optional(Schema.String),
+});
+export type GcPeekThreadMessagesHit = typeof GcPeekThreadMessagesHit.Type;
+
+export const GcPeekThreadMessagesResult = Schema.Struct({
+  results: Schema.Array(GcPeekThreadMessagesHit),
+});
+export type GcPeekThreadMessagesResult = typeof GcPeekThreadMessagesResult.Type;
+
 export class GcGetThreadContextError extends Schema.TaggedErrorClass<GcGetThreadContextError>()(
   "GcGetThreadContextError",
   { message: Schema.String },
@@ -547,6 +688,26 @@ export class GcGetThreadContextError extends Schema.TaggedErrorClass<GcGetThread
 
 export class GcFindThreadBindingError extends Schema.TaggedErrorClass<GcFindThreadBindingError>()(
   "GcFindThreadBindingError",
+  { message: Schema.String },
+) {}
+
+export class GcSubmitSessionError extends Schema.TaggedErrorClass<GcSubmitSessionError>()(
+  "GcSubmitSessionError",
+  { message: Schema.String },
+) {}
+
+export class GcStopSessionError extends Schema.TaggedErrorClass<GcStopSessionError>()(
+  "GcStopSessionError",
+  { message: Schema.String },
+) {}
+
+export class GcRespondToPendingError extends Schema.TaggedErrorClass<GcRespondToPendingError>()(
+  "GcRespondToPendingError",
+  { message: Schema.String },
+) {}
+
+export class GcPeekThreadMessagesError extends Schema.TaggedErrorClass<GcPeekThreadMessagesError>()(
+  "GcPeekThreadMessagesError",
   { message: Schema.String },
 ) {}
 
@@ -562,5 +723,10 @@ export class GcSetAgentSuspendedError extends Schema.TaggedErrorClass<GcSetAgent
 
 export class GcSetRigSuspendedError extends Schema.TaggedErrorClass<GcSetRigSuspendedError>()(
   "GcSetRigSuspendedError",
+  { message: Schema.String },
+) {}
+
+export class GcSetAgentSessionModeError extends Schema.TaggedErrorClass<GcSetAgentSessionModeError>()(
+  "GcSetAgentSessionModeError",
   { message: Schema.String },
 ) {}
