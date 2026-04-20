@@ -21,22 +21,22 @@ import {
   ProviderInteractionMode,
 } from "@t3tools/contracts";
 import { normalizeModelSlug } from "@t3tools/shared/model";
-import { Effect, ServiceMap } from "effect";
+import { Effect, Context } from "effect";
 
 import {
   formatCodexCliUpgradeMessage,
   isCodexCliVersionSupported,
   parseCodexCliVersion,
-} from "./provider/codexCliVersion";
+} from "./provider/codexCliVersion.ts";
 import {
   readCodexAccountSnapshot,
   resolveCodexModelForAccount,
   type CodexAccountSnapshot,
-} from "./provider/codexAccount";
-import { buildCodexInitializeParams, killCodexChildProcess } from "./provider/codexAppServer";
+} from "./provider/codexAccount.ts";
+import { buildCodexInitializeParams, killCodexChildProcess } from "./provider/codexAppServer.ts";
 
-export { buildCodexInitializeParams } from "./provider/codexAppServer";
-export { readCodexAccountSnapshot, resolveCodexModelForAccount } from "./provider/codexAccount";
+export { buildCodexInitializeParams } from "./provider/codexAppServer.ts";
+export { readCodexAccountSnapshot, resolveCodexModelForAccount } from "./provider/codexAccount.ts";
 
 type PendingRequestKey = string;
 
@@ -396,20 +396,26 @@ In Default mode, strongly prefer making reasonable assumptions and executing the
 </collaboration_mode>`;
 
 function mapCodexRuntimeMode(runtimeMode: RuntimeMode): {
-  readonly approvalPolicy: "on-request" | "never";
-  readonly sandbox: "workspace-write" | "danger-full-access";
+  readonly approvalPolicy: "untrusted" | "on-request" | "never";
+  readonly sandbox: "read-only" | "workspace-write" | "danger-full-access";
 } {
-  if (runtimeMode === "approval-required") {
-    return {
-      approvalPolicy: "on-request",
-      sandbox: "workspace-write",
-    };
+  switch (runtimeMode) {
+    case "approval-required":
+      return {
+        approvalPolicy: "untrusted",
+        sandbox: "read-only",
+      };
+    case "auto-accept-edits":
+      return {
+        approvalPolicy: "on-request",
+        sandbox: "workspace-write",
+      };
+    case "full-access":
+      return {
+        approvalPolicy: "never",
+        sandbox: "danger-full-access",
+      };
   }
-
-  return {
-    approvalPolicy: "never",
-    sandbox: "danger-full-access",
-  };
 }
 
 /**
@@ -539,7 +545,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   private readonly sessions = new Map<ThreadId, CodexSessionContext>();
 
   private runPromise: (effect: Effect.Effect<unknown, never>) => Promise<unknown>;
-  constructor(services?: ServiceMap.ServiceMap<never>) {
+  constructor(services?: Context.Context<never>) {
     super();
     this.runPromise = services ? Effect.runPromiseWith(services) : Effect.runPromise;
   }
@@ -550,6 +556,25 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     let context: CodexSessionContext | undefined;
 
     try {
+      const existingContext = this.sessions.get(threadId);
+      if (existingContext) {
+        await Effect.logWarning("codex app-server replacing existing session", {
+          threadId,
+          existingStatus: existingContext.session.status,
+        }).pipe(this.runPromise);
+        try {
+          this.disposeSession(existingContext, {
+            emitLifecycleEvent: false,
+          });
+        } catch (error) {
+          await Effect.logWarning("codex app-server failed to dispose existing session", {
+            threadId,
+            existingStatus: existingContext.session.status,
+            cause: error instanceof Error ? error.message : String(error),
+          }).pipe(this.runPromise);
+        }
+      }
+
       const resolvedCwd = input.cwd ?? process.cwd();
 
       const baseSession: ProviderSession = {
@@ -744,7 +769,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         this.stopSession(threadId);
       } else {
         this.emitEvent({
-          id: EventId.makeUnsafe(randomUUID()),
+          id: EventId.make(randomUUID()),
           kind: "error",
           provider: "codex",
           threadId,
@@ -843,7 +868,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     if (!turnIdRaw) {
       throw new Error("turn/start response did not include a turn id.");
     }
-    const turnId = TurnId.makeUnsafe(turnIdRaw);
+    const turnId = TurnId.make(turnIdRaw);
 
     this.updateSession(context, {
       status: "running",
@@ -944,7 +969,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     });
 
     this.emitEvent({
-      id: EventId.makeUnsafe(randomUUID()),
+      id: EventId.make(randomUUID()),
       kind: "notification",
       provider: "codex",
       threadId: context.session.threadId,
@@ -983,7 +1008,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     });
 
     this.emitEvent({
-      id: EventId.makeUnsafe(randomUUID()),
+      id: EventId.make(randomUUID()),
       kind: "notification",
       provider: "codex",
       threadId: context.session.threadId,
@@ -1002,6 +1027,19 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   stopSession(threadId: ThreadId): void {
     const context = this.sessions.get(threadId);
     if (!context) {
+      return;
+    }
+
+    this.disposeSession(context, {
+      emitLifecycleEvent: true,
+    });
+  }
+
+  private disposeSession(
+    context: CodexSessionContext,
+    options?: { readonly emitLifecycleEvent?: boolean },
+  ): void {
+    if (context.stopping) {
       return;
     }
 
@@ -1025,8 +1063,10 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       status: "closed",
       activeTurnId: undefined,
     });
-    this.emitLifecycleEvent(context, "session/closed", "Session stopped");
-    this.sessions.delete(threadId);
+    if (options?.emitLifecycleEvent !== false) {
+      this.emitLifecycleEvent(context, "session/closed", "Session stopped");
+    }
+    this.sessions.delete(context.session.threadId);
   }
 
   listSessions(): ProviderSession[] {
@@ -1168,7 +1208,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         : undefined;
 
     this.emitEvent({
-      id: EventId.makeUnsafe(randomUUID()),
+      id: EventId.make(randomUUID()),
       kind: "notification",
       provider: "codex",
       threadId: context.session.threadId,
@@ -1241,7 +1281,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     const requestKind = this.requestKindForMethod(request.method);
     let requestId: ApprovalRequestId | undefined;
     if (requestKind) {
-      requestId = ApprovalRequestId.makeUnsafe(randomUUID());
+      requestId = ApprovalRequestId.make(randomUUID());
       const pendingRequest: PendingApprovalRequest = {
         requestId,
         jsonRpcId: request.id,
@@ -1260,7 +1300,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     }
 
     if (request.method === "item/tool/requestUserInput") {
-      requestId = ApprovalRequestId.makeUnsafe(randomUUID());
+      requestId = ApprovalRequestId.make(randomUUID());
       context.pendingUserInputs.set(requestId, {
         requestId,
         jsonRpcId: request.id,
@@ -1271,7 +1311,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     }
 
     this.emitEvent({
-      id: EventId.makeUnsafe(randomUUID()),
+      id: EventId.make(randomUUID()),
       kind: "request",
       provider: "codex",
       threadId: context.session.threadId,
@@ -1361,7 +1401,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
 
   private emitLifecycleEvent(context: CodexSessionContext, method: string, message: string): void {
     this.emitEvent({
-      id: EventId.makeUnsafe(randomUUID()),
+      id: EventId.make(randomUUID()),
       kind: "session",
       provider: "codex",
       threadId: context.session.threadId,
@@ -1373,7 +1413,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
 
   private emitErrorEvent(context: CodexSessionContext, method: string, message: string): void {
     this.emitEvent({
-      id: EventId.makeUnsafe(randomUUID()),
+      id: EventId.make(randomUUID()),
       kind: "error",
       provider: "codex",
       threadId: context.session.threadId,
@@ -1389,7 +1429,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     message: string,
   ): void {
     this.emitEvent({
-      id: EventId.makeUnsafe(randomUUID()),
+      id: EventId.make(randomUUID()),
       kind: "notification",
       provider: "codex",
       threadId: context.session.threadId,
@@ -1449,7 +1489,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     const turns = turnsRaw.map((turnValue, index) => {
       const turn = this.readObject(turnValue);
       const turnIdRaw = this.readString(turn, "id") ?? `${threadIdRaw}:turn:${index + 1}`;
-      const turnId = TurnId.makeUnsafe(turnIdRaw);
+      const turnId = TurnId.make(turnIdRaw);
       const items = this.readArray(turn, "items") ?? [];
       return {
         id: turnId,
@@ -1698,9 +1738,9 @@ function readResumeThreadId(input: {
 }
 
 function toTurnId(value: string | undefined): TurnId | undefined {
-  return brandIfNonEmpty(value, TurnId.makeUnsafe);
+  return brandIfNonEmpty(value, TurnId.make);
 }
 
 function toProviderItemId(value: string | undefined): ProviderItemId | undefined {
-  return brandIfNonEmpty(value, ProviderItemId.makeUnsafe);
+  return brandIfNonEmpty(value, ProviderItemId.make);
 }

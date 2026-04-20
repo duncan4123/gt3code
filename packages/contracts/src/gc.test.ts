@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupThreadsByRigAndAgent, parseGcMeta } from "./gc";
+import { groupThreadsByRigAndAgent, parseGcMeta } from "./gc.js";
 
 describe("parseGcMeta", () => {
   it("decodes serialized GC session env metadata", () => {

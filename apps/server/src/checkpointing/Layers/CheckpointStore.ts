@@ -19,7 +19,7 @@ import { GitCore } from "../../git/Services/GitCore.ts";
 import { CheckpointStore, type CheckpointStoreShape } from "../Services/CheckpointStore.ts";
 import { CheckpointRef } from "@t3tools/contracts";
 
-const DIFF_CHECKPOINTS_MAX_OUTPUT_BYTES = 8_000_000;
+const CHECKPOINT_DIFF_MAX_OUTPUT_BYTES = 10_000_000;
 
 const makeCheckpointStore = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -247,8 +247,7 @@ const makeCheckpointStore = Effect.gen(function* () {
         operation,
         cwd: input.cwd,
         args: ["diff", "--patch", "--minimal", "--no-color", fromCommitOid, toCommitOid],
-        maxOutputBytes: DIFF_CHECKPOINTS_MAX_OUTPUT_BYTES,
-        truncateOutputAtMaxBytes: true,
+        maxOutputBytes: CHECKPOINT_DIFF_MAX_OUTPUT_BYTES,
       });
 
       return result.stdout;

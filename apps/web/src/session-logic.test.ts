@@ -11,7 +11,6 @@ import {
   deriveCompletionDividerBeforeEntryId,
   deriveActiveWorkStartedAt,
   deriveActivePlanState,
-  PROVIDER_OPTIONS,
   derivePendingApprovals,
   derivePendingUserInputs,
   deriveTimelineEntries,
@@ -20,7 +19,6 @@ import {
   findSidebarProposedPlan,
   hasActionableProposedPlan,
   hasToolActivityForTurn,
-  isSessionActivelyRunning,
   isLatestTurnSettled,
 } from "./session-logic";
 
@@ -36,13 +34,13 @@ function makeActivity(overrides: {
 }): OrchestrationThreadActivity {
   const payload = overrides.payload ?? {};
   return {
-    id: EventId.makeUnsafe(overrides.id ?? crypto.randomUUID()),
+    id: EventId.make(overrides.id ?? crypto.randomUUID()),
     createdAt: overrides.createdAt ?? "2026-02-23T00:00:00.000Z",
     kind: overrides.kind ?? "tool.started",
     summary: overrides.summary ?? "Tool call",
     tone: overrides.tone ?? "tool",
     payload,
-    turnId: overrides.turnId ? TurnId.makeUnsafe(overrides.turnId) : null,
+    turnId: overrides.turnId ? TurnId.make(overrides.turnId) : null,
     ...(overrides.sequence !== undefined ? { sequence: overrides.sequence } : {}),
   };
 }
@@ -198,6 +196,7 @@ describe("derivePendingUserInputs", () => {
                   description: "Allow workspace writes only",
                 },
               ],
+              multiSelect: true,
             },
           ],
         },
@@ -234,6 +233,7 @@ describe("derivePendingUserInputs", () => {
                   description: "Continue execution",
                 },
               ],
+              multiSelect: false,
             },
           ],
         },
@@ -255,6 +255,7 @@ describe("derivePendingUserInputs", () => {
                 description: "Allow workspace writes only",
               },
             ],
+            multiSelect: true,
           },
         ],
       },
@@ -282,6 +283,7 @@ describe("derivePendingUserInputs", () => {
                   description: "Allow workspace writes only",
                 },
               ],
+              multiSelect: false,
             },
           ],
         },
@@ -333,11 +335,35 @@ describe("deriveActivePlanState", () => {
       }),
     ];
 
-    expect(deriveActivePlanState(activities, TurnId.makeUnsafe("turn-1"))).toEqual({
+    expect(deriveActivePlanState(activities, TurnId.make("turn-1"))).toEqual({
       createdAt: "2026-02-23T00:00:02.000Z",
       turnId: "turn-1",
       explanation: "Refined plan",
       steps: [{ step: "Implement Codex user input", status: "inProgress" }],
+    });
+  });
+
+  it("falls back to the most recent plan from a previous turn", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "plan-from-turn-1",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "turn.plan.updated",
+        summary: "Plan updated",
+        tone: "info",
+        turnId: "turn-1",
+        payload: {
+          plan: [{ step: "Write tests", status: "completed" }],
+        },
+      }),
+    ];
+
+    // Current turn is turn-2, which has no plan activity — should fall back to turn-1's plan
+    const result = deriveActivePlanState(activities, TurnId.make("turn-2"));
+    expect(result).toEqual({
+      createdAt: "2026-02-23T00:00:01.000Z",
+      turnId: "turn-1",
+      steps: [{ step: "Write tests", status: "completed" }],
     });
   });
 });
@@ -349,7 +375,7 @@ describe("findLatestProposedPlan", () => {
         [
           {
             id: "plan:thread-1:turn:turn-1",
-            turnId: TurnId.makeUnsafe("turn-1"),
+            turnId: TurnId.make("turn-1"),
             planMarkdown: "# Older",
             implementedAt: null,
             implementationThreadId: null,
@@ -358,7 +384,7 @@ describe("findLatestProposedPlan", () => {
           },
           {
             id: "plan:thread-1:turn:turn-1",
-            turnId: TurnId.makeUnsafe("turn-1"),
+            turnId: TurnId.make("turn-1"),
             planMarkdown: "# Latest",
             implementedAt: null,
             implementationThreadId: null,
@@ -367,7 +393,7 @@ describe("findLatestProposedPlan", () => {
           },
           {
             id: "plan:thread-1:turn:turn-2",
-            turnId: TurnId.makeUnsafe("turn-2"),
+            turnId: TurnId.make("turn-2"),
             planMarkdown: "# Different turn",
             implementedAt: null,
             implementationThreadId: null,
@@ -375,7 +401,7 @@ describe("findLatestProposedPlan", () => {
             updatedAt: "2026-02-23T00:00:03.000Z",
           },
         ],
-        TurnId.makeUnsafe("turn-1"),
+        TurnId.make("turn-1"),
       ),
     ).toEqual({
       id: "plan:thread-1:turn:turn-1",
@@ -393,7 +419,7 @@ describe("findLatestProposedPlan", () => {
       [
         {
           id: "plan:thread-1:turn:turn-1",
-          turnId: TurnId.makeUnsafe("turn-1"),
+          turnId: TurnId.make("turn-1"),
           planMarkdown: "# First",
           implementedAt: null,
           implementationThreadId: null,
@@ -402,7 +428,7 @@ describe("findLatestProposedPlan", () => {
         },
         {
           id: "plan:thread-1:turn:turn-2",
-          turnId: TurnId.makeUnsafe("turn-2"),
+          turnId: TurnId.make("turn-2"),
           planMarkdown: "# Latest",
           implementedAt: null,
           implementationThreadId: null,
@@ -422,7 +448,7 @@ describe("hasActionableProposedPlan", () => {
     expect(
       hasActionableProposedPlan({
         id: "plan-1",
-        turnId: TurnId.makeUnsafe("turn-1"),
+        turnId: TurnId.make("turn-1"),
         planMarkdown: "# Plan",
         implementedAt: null,
         implementationThreadId: null,
@@ -436,10 +462,10 @@ describe("hasActionableProposedPlan", () => {
     expect(
       hasActionableProposedPlan({
         id: "plan-1",
-        turnId: TurnId.makeUnsafe("turn-1"),
+        turnId: TurnId.make("turn-1"),
         planMarkdown: "# Plan",
         implementedAt: "2026-02-23T00:00:02.000Z",
-        implementationThreadId: ThreadId.makeUnsafe("thread-implement"),
+        implementationThreadId: ThreadId.make("thread-implement"),
         createdAt: "2026-02-23T00:00:00.000Z",
         updatedAt: "2026-02-23T00:00:02.000Z",
       }),
@@ -453,25 +479,25 @@ describe("findSidebarProposedPlan", () => {
       findSidebarProposedPlan({
         threads: [
           {
-            id: ThreadId.makeUnsafe("thread-1"),
+            id: ThreadId.make("thread-1"),
             proposedPlans: [
               {
                 id: "plan-1",
-                turnId: TurnId.makeUnsafe("turn-plan"),
+                turnId: TurnId.make("turn-plan"),
                 planMarkdown: "# Source plan",
                 implementedAt: "2026-02-23T00:00:03.000Z",
-                implementationThreadId: ThreadId.makeUnsafe("thread-2"),
+                implementationThreadId: ThreadId.make("thread-2"),
                 createdAt: "2026-02-23T00:00:01.000Z",
                 updatedAt: "2026-02-23T00:00:02.000Z",
               },
             ],
           },
           {
-            id: ThreadId.makeUnsafe("thread-2"),
+            id: ThreadId.make("thread-2"),
             proposedPlans: [
               {
                 id: "plan-2",
-                turnId: TurnId.makeUnsafe("turn-other"),
+                turnId: TurnId.make("turn-other"),
                 planMarkdown: "# Latest elsewhere",
                 implementedAt: null,
                 implementationThreadId: null,
@@ -482,14 +508,14 @@ describe("findSidebarProposedPlan", () => {
           },
         ],
         latestTurn: {
-          turnId: TurnId.makeUnsafe("turn-implementation"),
+          turnId: TurnId.make("turn-implementation"),
           sourceProposedPlan: {
-            threadId: ThreadId.makeUnsafe("thread-1"),
+            threadId: ThreadId.make("thread-1"),
             planId: "plan-1",
           },
         },
         latestTurnSettled: false,
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        threadId: ThreadId.make("thread-1"),
       }),
     ).toEqual({
       id: "plan-1",
@@ -507,11 +533,11 @@ describe("findSidebarProposedPlan", () => {
       findSidebarProposedPlan({
         threads: [
           {
-            id: ThreadId.makeUnsafe("thread-1"),
+            id: ThreadId.make("thread-1"),
             proposedPlans: [
               {
                 id: "plan-1",
-                turnId: TurnId.makeUnsafe("turn-plan"),
+                turnId: TurnId.make("turn-plan"),
                 planMarkdown: "# Older",
                 implementedAt: null,
                 implementationThreadId: null,
@@ -520,7 +546,7 @@ describe("findSidebarProposedPlan", () => {
               },
               {
                 id: "plan-2",
-                turnId: TurnId.makeUnsafe("turn-latest"),
+                turnId: TurnId.make("turn-latest"),
                 planMarkdown: "# Latest",
                 implementedAt: null,
                 implementationThreadId: null,
@@ -531,14 +557,14 @@ describe("findSidebarProposedPlan", () => {
           },
         ],
         latestTurn: {
-          turnId: TurnId.makeUnsafe("turn-implementation"),
+          turnId: TurnId.make("turn-implementation"),
           sourceProposedPlan: {
-            threadId: ThreadId.makeUnsafe("thread-1"),
+            threadId: ThreadId.make("thread-1"),
             planId: "plan-1",
           },
         },
         latestTurnSettled: true,
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        threadId: ThreadId.make("thread-1"),
       })?.planMarkdown,
     ).toBe("# Latest");
   });
@@ -565,7 +591,7 @@ describe("deriveWorkLogEntries", () => {
     expect(entries.map((entry) => entry.id)).toEqual(["tool-complete"]);
   });
 
-  it("omits task start and completion lifecycle entries", () => {
+  it("omits task.started but shows task.progress and task.completed", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
         id: "task-start",
@@ -591,7 +617,40 @@ describe("deriveWorkLogEntries", () => {
     ];
 
     const entries = deriveWorkLogEntries(activities, undefined);
-    expect(entries.map((entry) => entry.id)).toEqual(["task-progress"]);
+    expect(entries.map((entry) => entry.id)).toEqual(["task-progress", "task-complete"]);
+  });
+
+  it("uses payload summary as label for task entries when available", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "task-progress-with-summary",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "task.progress",
+        summary: "Reasoning update",
+        tone: "info",
+        payload: { summary: "Searching for API endpoints" },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+    expect(entries[0]?.label).toBe("Searching for API endpoints");
+  });
+
+  it("uses payload detail as label for task.completed and preserves error tone", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "task-completed-failed",
+        createdAt: "2026-02-23T00:00:03.000Z",
+        kind: "task.completed",
+        summary: "Task failed",
+        tone: "error",
+        payload: { detail: "Failed to deploy changes" },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+    expect(entries[0]?.label).toBe("Failed to deploy changes");
+    expect(entries[0]?.tone).toBe("error");
   });
 
   it("filters by turn id when provided", () => {
@@ -606,7 +665,7 @@ describe("deriveWorkLogEntries", () => {
       makeActivity({ id: "no-turn", summary: "Checkpoint captured", tone: "info" }),
     ];
 
-    const entries = deriveWorkLogEntries(activities, TurnId.makeUnsafe("turn-2"));
+    const entries = deriveWorkLogEntries(activities, TurnId.make("turn-2"));
     expect(entries.map((entry) => entry.id)).toEqual(["turn-2"]);
   });
 
@@ -710,6 +769,97 @@ describe("deriveWorkLogEntries", () => {
     expect(entry?.command).toBe("bun run lint");
   });
 
+  it("unwraps PowerShell command wrappers for displayed command text", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "command-tool-windows-wrapper",
+        kind: "tool.completed",
+        summary: "Ran command",
+        payload: {
+          itemType: "command_execution",
+          data: {
+            item: {
+              command: "\"C:\\Program Files\\PowerShell\\7\\pwsh.exe\" -Command 'bun run lint'",
+            },
+          },
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry?.command).toBe("bun run lint");
+    expect(entry?.rawCommand).toBe(
+      "\"C:\\Program Files\\PowerShell\\7\\pwsh.exe\" -Command 'bun run lint'",
+    );
+  });
+
+  it("unwraps PowerShell command wrappers from argv-style command payloads", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "command-tool-windows-wrapper-argv",
+        kind: "tool.completed",
+        summary: "Ran command",
+        payload: {
+          itemType: "command_execution",
+          data: {
+            item: {
+              command: ["C:\\Program Files\\PowerShell\\7\\pwsh.exe", "-Command", "rg -n foo ."],
+            },
+          },
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry?.command).toBe("rg -n foo .");
+    expect(entry?.rawCommand).toBe(
+      '"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "rg -n foo ."',
+    );
+  });
+
+  it("extracts command text from command detail when structured command metadata is missing", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "command-tool-windows-detail-fallback",
+        kind: "tool.completed",
+        summary: "Ran command",
+        payload: {
+          itemType: "command_execution",
+          detail:
+            '"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -NoLogo -NoProfile -Command \'rg -n -F "new Date()" .\' <exited with exit code 0>',
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry?.command).toBe('rg -n -F "new Date()" .');
+    expect(entry?.rawCommand).toBe(
+      `"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -NoLogo -NoProfile -Command 'rg -n -F "new Date()" .'`,
+    );
+  });
+
+  it("does not unwrap shell commands when no wrapper flag is present", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "command-tool-shell-script",
+        kind: "tool.completed",
+        summary: "Ran command",
+        payload: {
+          itemType: "command_execution",
+          data: {
+            item: {
+              command: "bash script.sh",
+            },
+          },
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry?.command).toBe("bash script.sh");
+    expect(entry?.rawCommand).toBeUndefined();
+  });
+
   it("keeps compact Codex tool metadata used for icons and labels", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
@@ -768,6 +918,199 @@ describe("deriveWorkLogEntries", () => {
       "apps/web/src/components/ChatView.tsx",
       "apps/web/src/session-logic.ts",
     ]);
+  });
+
+  it("drops duplicated tool detail when it only repeats the title", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "read-file-generic",
+        kind: "tool.completed",
+        summary: "Read File",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "Read File",
+          detail: "Read File",
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry?.toolTitle).toBe("Read File");
+    expect(entry?.detail).toBeUndefined();
+  });
+
+  it("uses grep raw output summaries instead of repeating the generic tool label", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "grep-update",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "tool.updated",
+        summary: "grep",
+        payload: {
+          itemType: "web_search",
+          title: "grep",
+          detail: "grep",
+          data: {
+            toolCallId: "tool-grep-1",
+            kind: "search",
+            rawInput: {},
+          },
+        },
+      }),
+      makeActivity({
+        id: "grep-complete",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "tool.completed",
+        summary: "grep",
+        payload: {
+          itemType: "web_search",
+          title: "grep",
+          detail: "grep",
+          data: {
+            toolCallId: "tool-grep-1",
+            kind: "search",
+            rawOutput: {
+              totalFiles: 19,
+              truncated: false,
+            },
+          },
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      id: "grep-complete",
+      toolTitle: "grep",
+      detail: "19 files",
+      itemType: "web_search",
+    });
+  });
+
+  it("uses completed read-file output previews and still collapses the same tool call", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "read-update",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "tool.updated",
+        summary: "Read File",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "Read File",
+          detail: "Read File",
+          data: {
+            toolCallId: "tool-read-1",
+            kind: "read",
+            rawInput: {},
+          },
+        },
+      }),
+      makeActivity({
+        id: "read-complete",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "tool.completed",
+        summary: "Read File",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "Read File",
+          detail: "Read File",
+          data: {
+            toolCallId: "tool-read-1",
+            kind: "read",
+            rawOutput: {
+              content:
+                'import * as Effect from "effect/Effect"\nimport * as Layer from "effect/Layer"\n',
+            },
+          },
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      id: "read-complete",
+      toolTitle: "Read File",
+      detail: 'import * as Effect from "effect/Effect"',
+      itemType: "dynamic_tool_call",
+    });
+  });
+
+  it("does not use command stdout as the detail when Cursor omits the command input", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "cursor-command-complete",
+        createdAt: "2026-04-16T22:40:42.221Z",
+        kind: "tool.completed",
+        summary: "Ran command",
+        payload: {
+          itemType: "command_execution",
+          title: "Ran command",
+          data: {
+            toolCallId: "toolu_vrtx_01WypXgRM8PPygBtrVAZwzy5",
+            kind: "execute",
+            rawInput: {},
+            rawOutput: {
+              exitCode: 0,
+              stdout: "total 960\napps\npackages\n",
+              stderr: "",
+            },
+          },
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry).toMatchObject({
+      id: "cursor-command-complete",
+      label: "Ran command",
+      itemType: "command_execution",
+      toolTitle: "Ran command",
+    });
+    expect(entry?.detail).toBeUndefined();
+    expect(entry?.command).toBeUndefined();
+  });
+
+  it("collapses legacy completed tool rows that are missing tool metadata", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "legacy-read-update",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "tool.updated",
+        summary: "Read File",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "Read File",
+          detail: "Read File",
+          data: {
+            toolCallId: "tool-read-legacy",
+            kind: "read",
+            rawInput: {},
+          },
+        },
+      }),
+      makeActivity({
+        id: "legacy-read-complete",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "tool.completed",
+        summary: "Read File",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "Read File",
+          detail: "Read File",
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      id: "legacy-read-complete",
+      toolTitle: "Read File",
+      itemType: "dynamic_tool_call",
+    });
+    expect(entries[0]?.detail).toBeUndefined();
   });
 
   it("collapses repeated lifecycle updates for the same tool call into one entry", () => {
@@ -975,7 +1318,7 @@ describe("deriveTimelineEntries", () => {
     const entries = deriveTimelineEntries(
       [
         {
-          id: MessageId.makeUnsafe("message-1"),
+          id: MessageId.make("message-1"),
           role: "assistant",
           text: "hello",
           createdAt: "2026-02-23T00:00:01.000Z",
@@ -985,7 +1328,7 @@ describe("deriveTimelineEntries", () => {
       [
         {
           id: "plan:thread-1:turn:turn-1",
-          turnId: TurnId.makeUnsafe("turn-1"),
+          turnId: TurnId.make("turn-1"),
           planMarkdown: "# Ship it",
           implementedAt: null,
           implementationThreadId: null,
@@ -1018,14 +1361,14 @@ describe("deriveTimelineEntries", () => {
     const entries = deriveTimelineEntries(
       [
         {
-          id: MessageId.makeUnsafe("assistant-earlier"),
+          id: MessageId.make("assistant-earlier"),
           role: "assistant",
           text: "progress update",
           createdAt: "2026-02-23T00:00:01.000Z",
           streaming: false,
         },
         {
-          id: MessageId.makeUnsafe("assistant-final"),
+          id: MessageId.make("assistant-final"),
           role: "assistant",
           text: "final answer",
           createdAt: "2026-02-23T00:00:01.000Z",
@@ -1038,7 +1381,7 @@ describe("deriveTimelineEntries", () => {
 
     expect(
       deriveCompletionDividerBeforeEntryId(entries, {
-        assistantMessageId: MessageId.makeUnsafe("assistant-final"),
+        assistantMessageId: MessageId.make("assistant-final"),
         startedAt: "2026-02-23T00:00:00.000Z",
         completedAt: "2026-02-23T00:00:02.000Z",
       }),
@@ -1065,7 +1408,7 @@ describe("deriveWorkLogEntries context window handling", () => {
           tone: "tool",
         }),
       ],
-      TurnId.makeUnsafe("turn-1"),
+      TurnId.make("turn-1"),
     );
 
     expect(entries).toHaveLength(1);
@@ -1083,7 +1426,7 @@ describe("deriveWorkLogEntries context window handling", () => {
           tone: "info",
         }),
       ],
-      TurnId.makeUnsafe("turn-1"),
+      TurnId.make("turn-1"),
     );
 
     expect(entries).toHaveLength(1);
@@ -1107,50 +1450,14 @@ describe("hasToolActivityForTurn", () => {
       makeActivity({ id: "info-1", turnId: "turn-2", kind: "turn.completed", tone: "info" }),
     ];
 
-    expect(hasToolActivityForTurn(activities, TurnId.makeUnsafe("turn-1"))).toBe(true);
-    expect(hasToolActivityForTurn(activities, TurnId.makeUnsafe("turn-2"))).toBe(false);
-  });
-});
-
-describe("isSessionActivelyRunning", () => {
-  const latestTurn = {
-    turnId: TurnId.makeUnsafe("turn-1"),
-    startedAt: "2026-02-27T21:10:00.000Z",
-    completedAt: "2026-02-27T21:10:06.000Z",
-  } as const;
-
-  it("returns false when a completed turn is newer than the stale running session update", () => {
-    expect(
-      isSessionActivelyRunning(
-        {
-          status: "running",
-          orchestrationStatus: "running",
-          activeTurnId: undefined,
-          updatedAt: "2026-02-27T21:10:05.000Z",
-        },
-        latestTurn,
-      ),
-    ).toBe(false);
-  });
-
-  it("returns true while the running session update is newer than the last completed turn", () => {
-    expect(
-      isSessionActivelyRunning(
-        {
-          status: "running",
-          orchestrationStatus: "running",
-          activeTurnId: undefined,
-          updatedAt: "2026-02-27T21:10:07.000Z",
-        },
-        latestTurn,
-      ),
-    ).toBe(true);
+    expect(hasToolActivityForTurn(activities, TurnId.make("turn-1"))).toBe(true);
+    expect(hasToolActivityForTurn(activities, TurnId.make("turn-2"))).toBe(false);
   });
 });
 
 describe("isLatestTurnSettled", () => {
   const latestTurn = {
-    turnId: TurnId.makeUnsafe("turn-1"),
+    turnId: TurnId.make("turn-1"),
     startedAt: "2026-02-27T21:10:00.000Z",
     completedAt: "2026-02-27T21:10:06.000Z",
   } as const;
@@ -1159,7 +1466,7 @@ describe("isLatestTurnSettled", () => {
     expect(
       isLatestTurnSettled(latestTurn, {
         orchestrationStatus: "running",
-        activeTurnId: TurnId.makeUnsafe("turn-1"),
+        activeTurnId: TurnId.make("turn-1"),
       }),
     ).toBe(false);
   });
@@ -1168,7 +1475,7 @@ describe("isLatestTurnSettled", () => {
     expect(
       isLatestTurnSettled(latestTurn, {
         orchestrationStatus: "running",
-        activeTurnId: TurnId.makeUnsafe("turn-2"),
+        activeTurnId: TurnId.make("turn-2"),
       }),
     ).toBe(false);
   });
@@ -1186,7 +1493,7 @@ describe("isLatestTurnSettled", () => {
     expect(
       isLatestTurnSettled(
         {
-          turnId: TurnId.makeUnsafe("turn-1"),
+          turnId: TurnId.make("turn-1"),
           startedAt: null,
           completedAt: "2026-02-27T21:10:06.000Z",
         },
@@ -1198,7 +1505,7 @@ describe("isLatestTurnSettled", () => {
 
 describe("deriveActiveWorkStartedAt", () => {
   const latestTurn = {
-    turnId: TurnId.makeUnsafe("turn-1"),
+    turnId: TurnId.make("turn-1"),
     startedAt: "2026-02-27T21:10:00.000Z",
     completedAt: "2026-02-27T21:10:06.000Z",
   } as const;
@@ -1209,11 +1516,24 @@ describe("deriveActiveWorkStartedAt", () => {
         latestTurn,
         {
           orchestrationStatus: "running",
-          activeTurnId: TurnId.makeUnsafe("turn-1"),
+          activeTurnId: TurnId.make("turn-1"),
         },
         "2026-02-27T21:11:00.000Z",
       ),
     ).toBe("2026-02-27T21:10:00.000Z");
+  });
+
+  it("uses the new send start while the session is running a different turn", () => {
+    expect(
+      deriveActiveWorkStartedAt(
+        latestTurn,
+        {
+          orchestrationStatus: "running",
+          activeTurnId: TurnId.make("turn-2"),
+        },
+        "2026-02-27T21:11:00.000Z",
+      ),
+    ).toBe("2026-02-27T21:11:00.000Z");
   });
 
   it("falls back to sendStartedAt once the latest turn is settled", () => {
@@ -1233,7 +1553,7 @@ describe("deriveActiveWorkStartedAt", () => {
     expect(
       deriveActiveWorkStartedAt(
         {
-          turnId: TurnId.makeUnsafe("turn-1"),
+          turnId: TurnId.make("turn-1"),
           startedAt: "2026-02-27T21:10:00.000Z",
           completedAt: "2026-02-27T21:10:06.000Z",
         },
@@ -1241,27 +1561,5 @@ describe("deriveActiveWorkStartedAt", () => {
         "2026-02-27T21:11:00.000Z",
       ),
     ).toBe("2026-02-27T21:11:00.000Z");
-  });
-});
-
-describe("PROVIDER_OPTIONS", () => {
-  it("advertises Claude as available while keeping Cursor as a placeholder", () => {
-    const claude = PROVIDER_OPTIONS.find((option) => option.value === "claudeAgent");
-    const cursor = PROVIDER_OPTIONS.find((option) => option.value === "cursor");
-    expect(PROVIDER_OPTIONS).toEqual([
-      { value: "codex", label: "Codex", available: true },
-      { value: "claudeAgent", label: "Claude", available: true },
-      { value: "cursor", label: "Cursor", available: false },
-    ]);
-    expect(claude).toEqual({
-      value: "claudeAgent",
-      label: "Claude",
-      available: true,
-    });
-    expect(cursor).toEqual({
-      value: "cursor",
-      label: "Cursor",
-      available: false,
-    });
   });
 });

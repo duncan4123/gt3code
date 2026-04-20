@@ -1,7 +1,7 @@
 import type { OrchestrationSearchThreadMessagesResult } from "@t3tools/contracts";
 import { queryOptions } from "@tanstack/react-query";
 
-import { ensureNativeApi } from "../nativeApi";
+import { getPrimaryEnvironmentConnection } from "../environments/runtime";
 
 export const orchestrationQueryKeys = {
   all: ["orchestration"] as const,
@@ -25,11 +25,11 @@ export function orchestrationSearchThreadMessagesQueryOptions(input: {
   return queryOptions({
     queryKey: orchestrationQueryKeys.searchThreadMessages(input.query ?? "", limit),
     queryFn: async () => {
-      const api = ensureNativeApi();
+      const connection = getPrimaryEnvironmentConnection();
       if (!input.query) {
         throw new Error("Thread message search is unavailable.");
       }
-      return api.orchestration.searchThreadMessages({
+      return connection.client.orchestration.searchThreadMessages({
         query: input.query,
         limit,
       });

@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { type GcThreadContextResult, type ThreadId, parseGcMeta } from "@t3tools/contracts";
-import { useStore } from "../store";
-import { readNativeApi } from "../nativeApi";
+import { selectSidebarThreadsAcrossEnvironments, useStore } from "../store";
+import { readLocalApi } from "../localApi";
 import GcContextSidebar from "./GcContextSidebar";
 
 interface GcPanelProps {
@@ -9,14 +9,15 @@ interface GcPanelProps {
 }
 
 const GcPanel = memo(function GcPanel({ threadId }: GcPanelProps) {
-  const thread = useStore((store) => store.threads.find((entry) => entry.id === threadId) ?? null);
+  const threads = useStore(selectSidebarThreadsAcrossEnvironments);
+  const thread = useMemo(() => threads.find((entry) => entry.id === threadId) ?? null, [threadId, threads]);
   const gcMeta = useMemo(() => parseGcMeta(thread?.customMetadata), [thread?.customMetadata]);
 
   const [threadContext, setThreadContext] = useState<GcThreadContextResult | null>(null);
 
   useEffect(() => {
     if (!gcMeta.isGcManaged) return;
-    const api = readNativeApi();
+    const api = readLocalApi();
     if (!api) return;
     let cancelled = false;
     api.gc

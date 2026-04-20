@@ -7,8 +7,9 @@
  *
  * Source of truth: gascity/internal/runtime/t3bridge/provider.go
  */
+import { Effect } from "effect";
 import * as Schema from "effect/Schema";
-import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas";
+import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.js";
 
 // ---------------------------------------------------------------------------
 // gc.* metadata keys (set on OrchestrationThread.customMetadata)
@@ -267,7 +268,10 @@ function candidateAgentLabels(agent: string): string[] {
   }
 
   const labels = new Set<string>([trimmed, agentFolderLabel(trimmed)]);
-  const lastDotSegment = trimmed.split(".").filter(Boolean).at(-1);
+  const lastDotSegment = trimmed
+    .split(".")
+    .toReversed()
+    .find((segment) => segment.length > 0);
   if (lastDotSegment) {
     labels.add(lastDotSegment);
   }
@@ -589,7 +593,7 @@ export const GcPeekThreadMessagesInput = Schema.Struct({
   query: Schema.optional(TrimmedNonEmptyString),
   agent: Schema.optional(Schema.String),
   sessionName: Schema.optional(Schema.String),
-  limit: NonNegativeInt.pipe(Schema.withDecodingDefault(() => 25)),
+  limit: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(25))),
 });
 export type GcPeekThreadMessagesInput = typeof GcPeekThreadMessagesInput.Type;
 
