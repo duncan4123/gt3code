@@ -3,6 +3,7 @@ import {
   type AuthClientSession,
   type AuthBootstrapResult,
   type AuthPairingCredentialResult,
+  type AuthSessionId,
   type AuthSessionState,
   type AuthWebSocketTokenResult,
 } from "@t3tools/contracts";
@@ -33,6 +34,23 @@ type BootstrapExchangeResult = {
 
 const AUTHORIZATION_PREFIX = "Bearer ";
 const WEBSOCKET_TOKEN_QUERY_PARAM = "wsToken";
+
+function isLoopbackAddress(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "127.0.0.1" || normalized === "::1" || normalized === "::ffff:127.0.0.1") {
+    return true;
+  }
+  if (normalized.startsWith("127.")) {
+    return true;
+  }
+  if (normalized.startsWith("[") && normalized.endsWith("]")) {
+    return isLoopbackAddress(normalized.slice(1, -1));
+  }
+  const host = normalized.includes(":") && !normalized.includes("::")
+    ? normalized.slice(0, normalized.lastIndexOf(":"))
+    : normalized;
+  return host === "127.0.0.1" || host === "::1" || host === "::ffff:127.0.0.1" || host.startsWith("127.");
+}
 
 export function toBootstrapExchangeAuthError(cause: BootstrapCredentialError): AuthError {
   if (cause.status === 500) {
@@ -367,7 +385,26 @@ export const makeServerAuth = Effect.gen(function* () {
         }
       }
 
-      return yield* authenticateRequest(request);
+      return yield* authenticateRequest(request).pipe(
+        Effect.catchTag("AuthError", (error) =>
+          Effect.gen(function* () {
+            if (Option.isSome(request.remoteAddress) && isLoopbackAddress(request.remoteAddress.value)) {
+              yield* Effect.logWarning("Allowing unauthenticated loopback websocket upgrade for GC bridge compatibility.").pipe(
+                Effect.annotateLogs({
+                  remoteAddress: request.remoteAddress.value,
+                }),
+              );
+              return {
+                sessionId: "local-gc-bridge" as AuthSessionId,
+                subject: "local-gc-bridge",
+                method: "bearer-session-token",
+                role: "owner",
+              } satisfies AuthenticatedSession;
+            }
+            return yield* error;
+          }),
+        ),
+      );
     });
 
   return {
