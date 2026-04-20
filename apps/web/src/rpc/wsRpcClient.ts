@@ -128,7 +128,11 @@ export interface WsRpcClient {
     readonly findThreadBinding: RpcUnaryMethod<typeof WS_METHODS.gcFindThreadBinding>;
     readonly getThreadContext: RpcUnaryMethod<typeof WS_METHODS.gcGetThreadContext>;
     readonly setAgentSuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetAgentSuspended>;
+    readonly setAgentMaxActiveSessions: RpcUnaryMethod<
+      typeof WS_METHODS.gcSetAgentMaxActiveSessions
+    >;
     readonly setAgentSessionMode: RpcUnaryMethod<typeof WS_METHODS.gcSetAgentSessionMode>;
+    readonly setCitySuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetCitySuspended>;
     readonly setRigSuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetRigSuspended>;
   };
 }
@@ -278,8 +282,12 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.gcGetThreadContext](input)),
       setAgentSuspended: (input) =>
         transport.request((client) => client[WS_METHODS.gcSetAgentSuspended](input)),
+      setAgentMaxActiveSessions: (input) =>
+        transport.request((client) => client[WS_METHODS.gcSetAgentMaxActiveSessions](input)),
       setAgentSessionMode: (input) =>
         transport.request((client) => client[WS_METHODS.gcSetAgentSessionMode](input)),
+      setCitySuspended: (input) =>
+        transport.request((client) => client[WS_METHODS.gcSetCitySuspended](input)),
       setRigSuspended: (input) =>
         transport.request((client) => client[WS_METHODS.gcSetRigSuspended](input)),
     },

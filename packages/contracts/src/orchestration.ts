@@ -23,6 +23,7 @@ import {
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
+  getSnapshot: "orchestration.getSnapshot",
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
   replayEvents: "orchestration.replayEvents",
@@ -372,6 +373,9 @@ export const OrchestrationThreadShell = Schema.Struct({
   hasPendingApprovals: Schema.Boolean,
   hasPendingUserInput: Schema.Boolean,
   hasActionableProposedPlan: Schema.Boolean,
+  customMetadata: Schema.optional(CustomMetadata).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
 });
 export type OrchestrationThreadShell = typeof OrchestrationThreadShell.Type;
 
@@ -468,6 +472,7 @@ const ThreadCreateCommand = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  customMetadata: Schema.optional(CustomMetadata),
   createdAt: IsoDateTime,
 });
 
@@ -812,6 +817,7 @@ export const ThreadCreatedPayload = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  customMetadata: Schema.optional(CustomMetadata),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -1203,6 +1209,10 @@ export const OrchestrationRpcSchemas = {
   dispatchCommand: {
     input: ClientOrchestrationCommand,
     output: DispatchResult,
+  },
+  getSnapshot: {
+    input: Schema.Struct({}),
+    output: OrchestrationReadModel,
   },
   getTurnDiff: {
     input: OrchestrationGetTurnDiffInput,

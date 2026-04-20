@@ -247,6 +247,7 @@ function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): T
     worktreePath: thread.worktreePath,
     turnDiffSummaries: thread.checkpoints.map(mapTurnDiffSummary),
     activities: thread.activities.map((activity) => ({ ...activity })),
+    ...(thread.customMetadata ? { customMetadata: { ...thread.customMetadata } } : {}),
   };
 }
 
@@ -297,6 +298,7 @@ function mapThreadShell(
     hasPendingApprovals: thread.hasPendingApprovals,
     hasPendingUserInput: thread.hasPendingUserInput,
     hasActionableProposedPlan: thread.hasActionableProposedPlan,
+    ...(thread.customMetadata ? { customMetadata: { ...thread.customMetadata } } : {}),
   };
   return {
     shell,

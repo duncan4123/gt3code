@@ -59,8 +59,10 @@ import type {
   GcGetConfigInput,
   GcFindThreadBindingInput,
   GcFindThreadBindingResult,
+  GcSetAgentMaxActiveSessionsInput,
   GcSetAgentSessionModeInput,
   GcSetAgentSuspendedInput,
+  GcSetCitySuspendedInput,
   GcSetRigSuspendedInput,
   GcGetThreadContextInput,
   GcThreadContextResult,
@@ -263,7 +265,9 @@ export interface LocalApi {
     findThreadBinding: (input: GcFindThreadBindingInput) => Promise<GcFindThreadBindingResult>;
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
     setAgentSuspended: (input: GcSetAgentSuspendedInput) => Promise<GcConfigResult>;
+    setAgentMaxActiveSessions: (input: GcSetAgentMaxActiveSessionsInput) => Promise<GcConfigResult>;
     setAgentSessionMode: (input: GcSetAgentSessionModeInput) => Promise<GcConfigResult>;
+    setCitySuspended: (input: GcSetCitySuspendedInput) => Promise<GcConfigResult>;
     setRigSuspended: (input: GcSetRigSuspendedInput) => Promise<GcConfigResult>;
   };
 }
@@ -344,7 +348,9 @@ export interface EnvironmentApi {
     findThreadBinding: (input: GcFindThreadBindingInput) => Promise<GcFindThreadBindingResult>;
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
     setAgentSuspended: (input: GcSetAgentSuspendedInput) => Promise<GcConfigResult>;
+    setAgentMaxActiveSessions: (input: GcSetAgentMaxActiveSessionsInput) => Promise<GcConfigResult>;
     setAgentSessionMode: (input: GcSetAgentSessionModeInput) => Promise<GcConfigResult>;
+    setCitySuspended: (input: GcSetCitySuspendedInput) => Promise<GcConfigResult>;
     setRigSuspended: (input: GcSetRigSuspendedInput) => Promise<GcConfigResult>;
   };
 }

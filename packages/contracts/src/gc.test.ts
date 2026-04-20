@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { groupThreadsByRigAndAgent, parseGcMeta } from "./gc.js";
+import { groupThreadsByRigAndAgent, parseGcMeta } from "./gc.ts";
 
 describe("parseGcMeta", () => {
   it("decodes serialized GC session env metadata", () => {
@@ -235,5 +235,124 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(rigGroups[0]?.label).toBe("GC");
     expect(rigGroups[0]?.agentGroups.map((group) => group.label)).toEqual(["deacon", "mayor"]);
     expect(rigGroups[0]?.agentGroups.map((group) => group.isSuspended)).toEqual([true, false]);
+  });
+
+  it("prefers canonical stamped group metadata over project heuristics", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          customMetadata: {
+            "gc.agent": "t3code/gastown.crew",
+            "gc.groupKind": "rig",
+            "gc.groupId": "t3code",
+            "gc.groupLabel": "t3code",
+            "gc.agentQualified": "t3code/gastown.crew",
+            "gc.agentLabel": "crew",
+          },
+        },
+        {
+          id: "thread-2",
+          customMetadata: {
+            "gc.agent": "gastown.boot",
+            "gc.groupKind": "workspace",
+            "gc.groupId": "gc",
+            "gc.groupLabel": "GC",
+            "gc.agentQualified": "gastown.boot",
+            "gc.agentLabel": "boot",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "gc",
+            suspended: false,
+          },
+          rigs: [],
+          agents: [],
+        },
+        projectName: "wrong-name",
+        projectCwd: "/tmp/not-the-city",
+      },
+    );
+
+    expect(standaloneThreads).toEqual([]);
+    expect(rigGroups.map((group) => group.id)).toEqual(["gc", "t3code"]);
+    expect(rigGroups[0]?.label).toBe("GC");
+    expect(rigGroups[0]?.agentGroups[0]?.label).toBe("boot");
+    expect(rigGroups[1]?.agentGroups[0]?.qualifiedName).toBe("t3code/gastown.crew");
+  });
+
+  it("falls back to configured agent matching from thread titles when gc metadata is absent", () => {
+    const config = {
+      workspace: {
+        name: "gc",
+        suspended: false,
+      },
+      rigs: [
+        {
+          name: "t3code",
+          path: "/data/projects/t3code",
+          suspended: false,
+        },
+      ],
+      agents: [
+        {
+          name: "gastown.crew",
+          dir: "t3code",
+          suspended: false,
+        },
+        {
+          name: "gastown.deacon",
+          suspended: false,
+          scope: "city",
+        },
+      ],
+    } as const;
+
+    const rigResult = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          title: "t3code--gastown__crew · gastown.crew",
+          customMetadata: {},
+        },
+      ],
+      {
+        config,
+        projectName: "t3code",
+        projectCwd: "/data/projects/t3code",
+      },
+    );
+
+    expect(rigResult.standaloneThreads).toEqual([]);
+    expect(rigResult.rigGroups.map((group) => group.id)).toEqual(["t3code"]);
+    expect(rigResult.rigGroups[0]?.agentGroups[0]?.qualifiedName).toBe("t3code/gastown.crew");
+    expect(rigResult.rigGroups[0]?.agentGroups[0]?.threads.map((thread) => thread.id)).toEqual([
+      "thread-1",
+    ]);
+
+    const cityResult = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-2",
+          title: "gastown__deacon · gastown.deacon",
+          customMetadata: {},
+        },
+      ],
+      {
+        config,
+        projectName: "gc",
+        projectCwd: "/data/projects/gc",
+      },
+    );
+
+    expect(cityResult.standaloneThreads).toEqual([]);
+    expect(cityResult.rigGroups.map((group) => group.id)).toEqual(["gc"]);
+    expect(cityResult.rigGroups[0]?.agentGroups[0]?.qualifiedName).toBe("gastown.deacon");
+    expect(cityResult.rigGroups[0]?.agentGroups[0]?.threads.map((thread) => thread.id)).toEqual([
+      "thread-2",
+    ]);
   });
 });

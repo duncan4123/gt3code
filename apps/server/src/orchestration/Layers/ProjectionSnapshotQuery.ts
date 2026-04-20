@@ -69,6 +69,12 @@ const ProjectionThreadProposedPlanDbRowSchema = ProjectionThreadProposedPlan;
 const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
   Struct.assign({
     modelSelection: Schema.fromJsonString(ModelSelection),
+    customMetadata: Schema.optional(
+      Schema.Union([
+        Schema.fromJsonString(Schema.Record(Schema.String, Schema.String)),
+        Schema.Record(Schema.String, Schema.String),
+      ]),
+    ).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   }),
 );
 const ProjectionThreadActivityDbRowSchema = ProjectionThreadActivity.mapFields(
@@ -928,6 +934,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 activities: activitiesByThread.get(row.threadId) ?? [],
                 checkpoints: checkpointsByThread.get(row.threadId) ?? [],
                 session: sessionsByThread.get(row.threadId) ?? null,
+                customMetadata: row.customMetadata,
               }));
 
               const snapshot = {
@@ -1069,6 +1076,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                     hasPendingApprovals: row.pendingApprovalCount > 0,
                     hasPendingUserInput: row.pendingUserInputCount > 0,
                     hasActionableProposedPlan: row.hasActionableProposedPlan > 0,
+                    customMetadata: row.customMetadata,
                   }),
                 ),
               updatedAt: updatedAt ?? new Date(0).toISOString(),
@@ -1265,6 +1273,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         hasPendingApprovals: threadRow.value.pendingApprovalCount > 0,
         hasPendingUserInput: threadRow.value.pendingUserInputCount > 0,
         hasActionableProposedPlan: threadRow.value.hasActionableProposedPlan > 0,
+        customMetadata: threadRow.value.customMetadata,
       } satisfies OrchestrationThreadShell);
     });
 
@@ -1404,6 +1413,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           completedAt: row.completedAt,
         })),
         session: Option.isSome(sessionRow) ? mapSessionRow(sessionRow.value) : null,
+        customMetadata: threadRow.value.customMetadata,
       };
 
       return Option.some(

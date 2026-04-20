@@ -121,7 +121,9 @@ export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
       getTurnDiff: rpcClient.orchestration.getTurnDiff,
       getFullThreadDiff: rpcClient.orchestration.getFullThreadDiff,
       replayEvents: (fromSequenceExclusive) =>
-        rpcClient.orchestration.replayEvents({ fromSequenceExclusive }),
+        rpcClient.orchestration
+          .replayEvents({ fromSequenceExclusive })
+          .then((events) => [...events]),
       searchThreadMessages: rpcClient.orchestration.searchThreadMessages,
       subscribeShell: (callback, options) =>
         rpcClient.orchestration.subscribeShell(callback, options),
@@ -129,12 +131,14 @@ export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
         rpcClient.orchestration.subscribeThread(input, callback, options),
     },
     gc: {
-      getConfig: rpcClient.gcGetConfig,
-      findThreadBinding: rpcClient.gcFindThreadBinding,
-      getThreadContext: rpcClient.gcGetThreadContext,
-      setAgentSuspended: rpcClient.gcSetAgentSuspended,
-      setAgentSessionMode: rpcClient.gcSetAgentSessionMode,
-      setRigSuspended: rpcClient.gcSetRigSuspended,
+      getConfig: rpcClient.gc.getConfig,
+      findThreadBinding: rpcClient.gc.findThreadBinding,
+      getThreadContext: rpcClient.gc.getThreadContext,
+      setAgentSuspended: rpcClient.gc.setAgentSuspended,
+      setAgentMaxActiveSessions: rpcClient.gc.setAgentMaxActiveSessions,
+      setAgentSessionMode: rpcClient.gc.setAgentSessionMode,
+      setCitySuspended: rpcClient.gc.setCitySuspended,
+      setRigSuspended: rpcClient.gc.setRigSuspended,
     },
   };
 }

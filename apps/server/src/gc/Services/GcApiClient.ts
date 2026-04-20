@@ -8,7 +8,7 @@
  * Source of truth for response shapes: gascity/internal/api/handler_convoys.go,
  * gascity/internal/beads/beads.go
  */
-import { ServiceMap } from "effect";
+import { Context } from "effect";
 import type { Effect, Stream } from "effect";
 import type {
   GcConfigResult,
@@ -91,15 +91,20 @@ export interface GcApiClientShape {
     },
   ) => Effect.Effect<GcSessionActionResult, Error>;
   readonly setAgentSuspended: (name: string, suspended: boolean) => Effect.Effect<void, Error>;
+  readonly setAgentMaxActiveSessions: (
+    name: string,
+    maxActiveSessions: number,
+  ) => Effect.Effect<void, Error>;
   readonly setAgentSessionMode: (
     name: string,
     mode: "always" | "on_demand",
   ) => Effect.Effect<void, Error>;
+  readonly setCitySuspended: (suspended: boolean) => Effect.Effect<void, Error>;
   readonly setRigSuspended: (name: string, suspended: boolean) => Effect.Effect<void, Error>;
   readonly streamEvents: Stream.Stream<GcEvent>;
   readonly isAvailable: Effect.Effect<boolean>;
 }
 
-export class GcApiClient extends ServiceMap.Service<GcApiClient, GcApiClientShape>()(
+export class GcApiClient extends Context.Service<GcApiClient, GcApiClientShape>()(
   "t3/gc/Services/GcApiClient",
 ) {}

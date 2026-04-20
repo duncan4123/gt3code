@@ -16,6 +16,7 @@ function makeRigGroups(): SidebarGcRigGroup[] {
     {
       id: "t3code",
       label: "t3code",
+      kind: "rig",
       isSuspended: false,
       agentGroups: [
         {
@@ -23,6 +24,8 @@ function makeRigGroups(): SidebarGcRigGroup[] {
           label: "refinery",
           qualifiedName: "t3code/refinery",
           isSuspended: false,
+          isPool: false,
+          runtimeState: { label: "Running", tone: "success" },
           threadIds: [threadId("thread-refinery-1"), threadId("thread-refinery-2")],
         },
         {
@@ -30,6 +33,8 @@ function makeRigGroups(): SidebarGcRigGroup[] {
           label: "witness",
           qualifiedName: "t3code/witness",
           isSuspended: true,
+          isPool: false,
+          runtimeState: { label: "Suspended", tone: "muted" },
           threadIds: [],
         },
       ],
@@ -37,6 +42,7 @@ function makeRigGroups(): SidebarGcRigGroup[] {
     {
       id: "GC",
       label: "GC",
+      kind: "workspace",
       isSuspended: false,
       agentGroups: [
         {
@@ -44,6 +50,8 @@ function makeRigGroups(): SidebarGcRigGroup[] {
           label: "mayor",
           qualifiedName: "mayor",
           isSuspended: false,
+          isPool: false,
+          runtimeState: { label: "Running", tone: "success" },
           threadIds: [threadId("thread-mayor-1")],
         },
         {
@@ -51,6 +59,8 @@ function makeRigGroups(): SidebarGcRigGroup[] {
           label: "deacon",
           qualifiedName: "deacon",
           isSuspended: true,
+          isPool: false,
+          runtimeState: { label: "Suspended", tone: "muted" },
           threadIds: [],
         },
       ],
@@ -62,8 +72,11 @@ async function renderSidebarGcFolders(options?: {
   rigGroups?: SidebarGcRigGroup[];
   gcAgentMutationsInFlight?: ReadonlySet<string>;
   gcRigMutationsInFlight?: ReadonlySet<string>;
+  gcCityMutationInFlight?: boolean;
+  onToggleCitySuspended?: (suspended: boolean) => void;
   onToggleRigSuspended?: (rig: string, suspended: boolean) => void;
   onToggleAgentSuspended?: (agent: string, suspended: boolean) => void;
+  onAdjustAgentMaxActiveSessions?: (agent: string, maxActiveSessions: number) => void;
 }) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -74,8 +87,15 @@ async function renderSidebarGcFolders(options?: {
         rigGroups={options?.rigGroups ?? makeRigGroups()}
         gcAgentMutationsInFlight={options?.gcAgentMutationsInFlight ?? new Set()}
         gcRigMutationsInFlight={options?.gcRigMutationsInFlight ?? new Set()}
+        gcCityMutationInFlight={options?.gcCityMutationInFlight ?? false}
+        gcAgentActionStateByAgent={new Map()}
+        gcRigActionStateByRig={new Map()}
+        gcCityActionState={null}
+        onToggleCitySuspended={options?.onToggleCitySuspended ?? vi.fn()}
         onToggleRigSuspended={options?.onToggleRigSuspended ?? vi.fn()}
         onToggleAgentSuspended={options?.onToggleAgentSuspended ?? vi.fn()}
+        onAdjustAgentMaxActiveSessions={options?.onAdjustAgentMaxActiveSessions ?? vi.fn()}
+        onToggleAgentSessionMode={vi.fn()}
         renderThreadRows={(threadIds, indentClassName) => (
           <>
             {threadIds.map((threadId) => (
@@ -108,6 +128,9 @@ describe("SidebarGcFolders", () => {
 
   it("renders configured rig folders once and shows play/stop controls for agent state", async () => {
     const toggleCalls: Array<[string, boolean]> = [];
+    const onToggleCitySuspended = (suspended: boolean) => {
+      toggleCalls.push(["__city__", suspended]);
+    };
     const onToggleRigSuspended = (rig: string, suspended: boolean) => {
       toggleCalls.push([rig, suspended]);
     };
@@ -115,6 +138,7 @@ describe("SidebarGcFolders", () => {
       toggleCalls.push([agent, suspended]);
     };
     const { host, screen } = await renderSidebarGcFolders({
+      onToggleCitySuspended,
       onToggleRigSuspended,
       onToggleAgentSuspended,
     });
@@ -145,6 +169,9 @@ describe("SidebarGcFolders", () => {
         .element(page.getByTestId("gc-rig-action-GC"))
         .toHaveAttribute("data-gc-action-icon", "stop");
       await expect
+        .element(page.getByTestId("gc-city-action"))
+        .toHaveAttribute("data-gc-action-icon", "stop");
+      await expect
         .element(page.getByTestId("gc-agent-folder-toggle-t3code--refinery"))
         .toHaveAttribute("aria-expanded", "true");
 
@@ -163,6 +190,9 @@ describe("SidebarGcFolders", () => {
 
       await page.getByTestId("gc-rig-action-t3code").click();
       expect(toggleCalls).toContainEqual(["t3code", true]);
+
+      await page.getByTestId("gc-city-action").click();
+      expect(toggleCalls).toContainEqual(["__city__", true]);
 
       await resumeWitness.click();
       expect(toggleCalls).toContainEqual(["t3code/witness", false]);
@@ -211,16 +241,22 @@ describe("SidebarGcFolders", () => {
   });
 
   it("shows loading states and disables controls while mutations are in flight", async () => {
+    const onToggleCitySuspended = vi.fn();
     const onToggleRigSuspended = vi.fn();
     const onToggleAgentSuspended = vi.fn();
     const { host, screen } = await renderSidebarGcFolders({
+      gcCityMutationInFlight: true,
       gcRigMutationsInFlight: new Set(["t3code"]),
       gcAgentMutationsInFlight: new Set(["t3code/refinery"]),
+      onToggleCitySuspended,
       onToggleRigSuspended,
       onToggleAgentSuspended,
     });
 
     try {
+      await expect
+        .element(page.getByTestId("gc-city-action"))
+        .toHaveAttribute("data-gc-action-icon", "loading");
       await expect
         .element(page.getByTestId("gc-rig-action-t3code"))
         .toHaveAttribute("data-gc-action-icon", "loading");
@@ -228,11 +264,60 @@ describe("SidebarGcFolders", () => {
         .element(page.getByTestId("gc-agent-toggle-t3code--refinery"))
         .toHaveAttribute("data-gc-action-icon", "loading");
 
+      await expect.element(page.getByTestId("gc-city-action")).toBeDisabled();
       await expect.element(page.getByTestId("gc-rig-action-t3code")).toBeDisabled();
       await expect.element(page.getByTestId("gc-agent-toggle-t3code--refinery")).toBeDisabled();
 
+      expect(onToggleCitySuspended).not.toHaveBeenCalled();
       expect(onToggleRigSuspended).not.toHaveBeenCalled();
       expect(onToggleAgentSuspended).not.toHaveBeenCalled();
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+
+  it("shows pool max controls for pool agents and adjusts the target max", async () => {
+    const adjustCalls: Array<[string, number]> = [];
+    const { host, screen } = await renderSidebarGcFolders({
+      rigGroups: [
+        {
+          id: "t3code",
+          label: "t3code",
+          kind: "rig",
+          isSuspended: false,
+          agentGroups: [
+            {
+              id: "t3code/polecat",
+              label: "polecat",
+              qualifiedName: "t3code/polecat",
+              isSuspended: false,
+              isPool: true,
+              maxActiveSessions: 5,
+              threadIds: [],
+              runtimeState: { label: "Pool", tone: "muted" },
+            },
+          ],
+        },
+      ],
+      onAdjustAgentMaxActiveSessions: (agent, maxActiveSessions) => {
+        adjustCalls.push([agent, maxActiveSessions]);
+      },
+    });
+
+    try {
+      await expect.element(page.getByTestId("gc-agent-pool-max-t3code--polecat")).toHaveTextContent(
+        "max 5",
+      );
+      await expect
+        .element(page.getByTestId("gc-agent-session-mode-t3code--polecat"))
+        .not.toBeInTheDocument();
+
+      await page.getByTestId("gc-agent-pool-increment-t3code--polecat").click();
+      expect(adjustCalls).toContainEqual(["t3code/polecat", 6]);
+
+      await page.getByTestId("gc-agent-pool-decrement-t3code--polecat").click();
+      expect(adjustCalls).toContainEqual(["t3code/polecat", 4]);
     } finally {
       await screen.unmount();
       host.remove();

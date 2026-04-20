@@ -11,16 +11,11 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Effect, Layer, Stream, PubSub, Config, Option } from "effect";
 import type {
+  GcConfigAgent,
   GcConfigResult,
   GcSessionActionResult,
   GcSubmitSessionResult,
 } from "@t3tools/contracts";
-import {
-  postV0CityByCityNameSessionByIdStop,
-  respondSession as respondGcSession,
-  submitSession as submitGcSession,
-} from "../generated/index.ts";
-import { client as generatedGcClient } from "../generated/client.gen.ts";
 import {
   GcApiClient,
   type GcApiClientShape,
@@ -111,24 +106,36 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
           agent.named_session_mode === "always" || agent.named_session_mode === "on_demand"
             ? agent.named_session_mode
             : undefined;
+        const qualifiedName =
+          typeof agent.name === "string" && agent.name.includes("/")
+            ? agent.name
+            : typeof agent.dir === "string" && agent.dir.trim().length > 0
+              ? `${agent.dir}/${String(agent.name)}`
+              : String(agent.name);
         const derivedNamedSessionMode = namedSessionModes.get(
-          typeof agent.dir === "string" && agent.dir.trim().length > 0
-            ? `${agent.dir}/${agent.name}`
-            : String(agent.name),
+          qualifiedName,
         );
         const effectiveNamedSessionMode =
-          namedSessionMode ??
-          derivedNamedSessionMode ??
-          (typeof agent.is_pool === "boolean" && agent.is_pool ? "on_demand" : "always");
+          typeof agent.is_pool === "boolean" && agent.is_pool
+            ? undefined
+            : namedSessionMode ?? derivedNamedSessionMode ?? "always";
         return [
           {
             name: agent.name,
             ...(typeof agent.dir === "string" ? { dir: agent.dir } : {}),
             ...(typeof agent.provider === "string" ? { provider: agent.provider } : {}),
             ...(typeof agent.is_pool === "boolean" ? { is_pool: agent.is_pool } : {}),
+            ...(typeof agent.min_active_sessions === "number"
+              ? { min_active_sessions: agent.min_active_sessions }
+              : {}),
+            ...(typeof agent.max_active_sessions === "number"
+              ? { max_active_sessions: agent.max_active_sessions }
+              : {}),
             ...(typeof agent.scope === "string" ? { scope: agent.scope } : {}),
             suspended: Boolean(agent.suspended),
-            named_session_mode: effectiveNamedSessionMode,
+            ...(effectiveNamedSessionMode
+              ? { named_session_mode: effectiveNamedSessionMode }
+              : {}),
           },
         ];
       })
@@ -244,6 +251,10 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
   };
 }
 
+function resolveAgentConfigKey(agent: Pick<GcConfigAgent, "dir" | "name">): string {
+  return agent.name.includes("/") ? agent.name : configuredAgentQualifiedName(agent);
+}
+
 function updateCachedAgentSuspended(
   config: GcConfigResult | null,
   name: string,
@@ -254,7 +265,9 @@ function updateCachedAgentSuspended(
   }
   return {
     ...config,
-    agents: config.agents.map((agent) => (agent.name === name ? { ...agent, suspended } : agent)),
+    agents: config.agents.map((agent) =>
+      resolveAgentConfigKey(agent) === name ? { ...agent, suspended } : agent,
+    ),
   };
 }
 
@@ -269,7 +282,7 @@ function updateCachedAgentSessionMode(
   return {
     ...config,
     agents: config.agents.map((agent) =>
-      agent.name === name
+      resolveAgentConfigKey(agent) === name
         ? mode === "disabled"
           ? {
               ...agent,
@@ -284,11 +297,80 @@ function updateCachedAgentSessionMode(
   };
 }
 
+function updateCachedAgentMaxActiveSessions(
+  config: GcConfigResult | null,
+  name: string,
+  maxActiveSessions: number,
+): GcConfigResult | null {
+  if (!config) {
+    return null;
+  }
+  return {
+    ...config,
+    agents: config.agents.map((agent) =>
+      resolveAgentConfigKey(agent) === name
+        ? {
+            ...agent,
+            max_active_sessions: maxActiveSessions,
+            ...(typeof agent.min_active_sessions === "number" &&
+            agent.min_active_sessions > maxActiveSessions
+              ? { min_active_sessions: maxActiveSessions }
+              : {}),
+          }
+        : agent,
+    ),
+  };
+}
+
 function isPoolAgent(config: GcConfigResult | null, name: string): boolean {
   if (!config) {
     return false;
   }
-  return config.agents.some((agent) => agent.name === name && agent.is_pool === true);
+  return config.agents.some(
+    (agent) => resolveAgentConfigKey(agent) === name && agent.is_pool === true,
+  );
+}
+
+function configuredAgentQualifiedName(agent: Pick<GcConfigAgent, "dir" | "name">): string {
+  const dir = typeof agent.dir === "string" && agent.dir.trim().length > 0 ? agent.dir.trim() : "";
+  return dir ? `${dir}/${agent.name}` : agent.name;
+}
+
+function findConfiguredAgentIdentity(
+  config: GcConfigResult | null,
+  qualifiedAgentName: string,
+): { readonly dir: string; readonly template: string } | null {
+  if (!config) {
+    return null;
+  }
+
+  const normalizedName = sanitizeKey(qualifiedAgentName);
+  const direct = config.agents.find(
+    (agent) => resolveAgentConfigKey(agent) === normalizedName,
+  );
+  if (direct) {
+    return {
+      dir: typeof direct.dir === "string" ? direct.dir.trim() : "",
+      template: direct.name,
+    };
+  }
+
+  const unqualified =
+    normalizedName.includes("/") ? normalizedName.slice(normalizedName.indexOf("/") + 1) : normalizedName;
+  const fallback = config.agents.find(
+    (agent) =>
+      agent.name === unqualified &&
+      ((typeof agent.dir === "string" ? agent.dir.trim() : "") ===
+        (normalizedName.includes("/") ? normalizedName.slice(0, normalizedName.indexOf("/")) : "")),
+  );
+  if (!fallback) {
+    return null;
+  }
+
+  return {
+    dir: typeof fallback.dir === "string" ? fallback.dir.trim() : "",
+    template: fallback.name,
+  };
 }
 
 function updateCachedRigSuspended(
@@ -392,26 +474,34 @@ function cityTomlMentionsRigPath(cityPath: string, rigPath: string): boolean {
 }
 
 function findSiblingGcCityRoot(startCwd: string): string | null {
-  const parentDir = path.dirname(path.resolve(startCwd));
-  const preferred = path.join(parentDir, "gc");
-  if (isGcCityRoot(preferred)) {
-    return preferred;
-  }
+  const resolvedStart = path.resolve(startCwd);
+  let searchDir = path.dirname(resolvedStart);
 
-  try {
-    for (const entry of readdirSync(parentDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const candidate = path.join(parentDir, entry.name);
-      if (!isGcCityRoot(candidate)) continue;
-      if (cityTomlMentionsRigPath(candidate, path.resolve(startCwd))) {
-        return candidate;
-      }
+  while (true) {
+    const preferred = path.join(searchDir, "gc");
+    if (isGcCityRoot(preferred)) {
+      return preferred;
     }
-  } catch {
-    return null;
-  }
 
-  return null;
+    try {
+      for (const entry of readdirSync(searchDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const candidate = path.join(searchDir, entry.name);
+        if (!isGcCityRoot(candidate)) continue;
+        if (cityTomlMentionsRigPath(candidate, resolvedStart)) {
+          return candidate;
+        }
+      }
+    } catch {
+      // Keep walking upward.
+    }
+
+    const parent = path.dirname(searchDir);
+    if (parent === searchDir) {
+      return null;
+    }
+    searchDir = parent;
+  }
 }
 
 function discoverGcCityRoot(startCwd: string): string | null {
@@ -572,13 +662,11 @@ function replaceOrInsertNamedSessionModeLine(
 
 function updateNamedSessionModePatchInCityToml(
   cityTomlContent: string,
-  qualifiedAgentName: string,
+  identity: { readonly dir: string; readonly template: string },
   mode: "always" | "on_demand",
 ): string {
-  const separatorIndex = qualifiedAgentName.indexOf("/");
-  const dir = separatorIndex > 0 ? qualifiedAgentName.slice(0, separatorIndex) : "";
-  const template =
-    separatorIndex > 0 ? qualifiedAgentName.slice(separatorIndex + 1) : qualifiedAgentName;
+  const dir = identity.dir;
+  const template = identity.template;
   const lines = cityTomlContent.split("\n");
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -615,16 +703,120 @@ function updateNamedSessionModePatchInCityToml(
 
 function writeAgentSessionModeToCityToml(
   cityPath: string,
-  qualifiedAgentName: string,
+  identity: { readonly dir: string; readonly template: string },
   mode: "always" | "on_demand",
 ): void {
   const cityTomlPath = path.join(cityPath, "city.toml");
   const nextContent = updateNamedSessionModePatchInCityToml(
     readFileSync(cityTomlPath, "utf8"),
-    qualifiedAgentName,
+    identity,
     mode,
   );
   writeFileSync(cityTomlPath, nextContent, "utf8");
+}
+
+function replaceOrInsertNumberLine(
+  lines: string[],
+  start: number,
+  end: number,
+  key: "max_active_sessions" | "min_active_sessions",
+  value: number,
+): void {
+  const nextLine = `${key} = ${value}`;
+  for (let index = start; index < end; index += 1) {
+    if (lines[index]?.trim().startsWith(`${key} =`)) {
+      lines[index] = nextLine;
+      return;
+    }
+  }
+  lines.splice(end, 0, nextLine);
+}
+
+function updateAgentPatchInCityToml(
+  cityTomlContent: string,
+  identity: { readonly dir: string; readonly template: string },
+  patch: { readonly maxActiveSessions: number },
+): string {
+  const lines = cityTomlContent.split("\n");
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index]?.trim() !== "[[patches.agent]]") continue;
+    let blockEnd = index + 1;
+    let foundDir: string | null = null;
+    let foundName: string | null = null;
+    while (blockEnd < lines.length) {
+      const trimmed = lines[blockEnd]?.trim() ?? "";
+      if (trimmed === "[[patches.agent]]") break;
+      if (trimmed.startsWith("[") && trimmed !== "[patches]") break;
+      foundDir ??= parseQuotedTomlString(lines[blockEnd] ?? "", "dir");
+      foundName ??= parseQuotedTomlString(lines[blockEnd] ?? "", "name");
+      blockEnd += 1;
+    }
+    if ((foundDir ?? "") === identity.dir && foundName === identity.template) {
+      replaceOrInsertNumberLine(
+        lines,
+        index + 1,
+        blockEnd,
+        "max_active_sessions",
+        patch.maxActiveSessions,
+      );
+      return lines.join("\n");
+    }
+    index = blockEnd - 1;
+  }
+
+  const hasPatchesSection = lines.some((line) => line.trim() === "[patches]");
+  const blockLines = [
+    ...(hasPatchesSection ? [""] : ["", "[patches]", ""]),
+    "[[patches.agent]]",
+    ...(identity.dir ? [`dir = "${identity.dir}"`] : []),
+    `name = "${identity.template}"`,
+    `max_active_sessions = ${patch.maxActiveSessions}`,
+  ];
+  lines.push(...blockLines);
+  return lines.join("\n");
+}
+
+function writeAgentMaxActiveSessionsToCityToml(
+  cityPath: string,
+  identity: { readonly dir: string; readonly template: string },
+  maxActiveSessions: number,
+): void {
+  const cityTomlPath = path.join(cityPath, "city.toml");
+  const nextContent = updateAgentPatchInCityToml(readFileSync(cityTomlPath, "utf8"), identity, {
+    maxActiveSessions,
+  });
+  writeFileSync(cityTomlPath, nextContent, "utf8");
+}
+
+function mergeCliExpandedConfig(
+  primary: GcConfigResult,
+  expanded: GcConfigResult | null,
+): GcConfigResult {
+  if (!expanded) {
+    return primary;
+  }
+  const expandedByQualifiedName = new Map(
+    expanded.agents.map((agent) => [resolveAgentConfigKey(agent), agent] as const),
+  );
+  return {
+    ...primary,
+    agents: primary.agents.map((agent) => {
+      const expandedAgent = expandedByQualifiedName.get(resolveAgentConfigKey(agent));
+      if (!expandedAgent) {
+        return agent;
+      }
+      return {
+        ...agent,
+        ...(typeof expandedAgent.min_active_sessions === "number"
+          ? { min_active_sessions: expandedAgent.min_active_sessions }
+          : {}),
+        ...(typeof expandedAgent.max_active_sessions === "number"
+          ? { max_active_sessions: expandedAgent.max_active_sessions }
+          : {}),
+      };
+    }),
+  };
 }
 
 function discoverGcApiBaseUrl(startCwd: string): string | null {
@@ -674,7 +866,8 @@ const makeGcApiClient = Effect.gen(function* () {
     discoverGcApiBaseUrl(process.cwd()) ??
     GC_API_DEFAULT_URL;
   let cachedCityName = Option.getOrUndefined(configuredCityName)?.trim() || null;
-  const useCityScopedRoutes = Option.isSome(configuredCityName);
+  const useCityScopedRoutes =
+    Option.isSome(configuredCityName) || (cityPath !== null && cityPath.trim().length > 0);
 
   const eventPubSub = yield* PubSub.unbounded<GcEvent>();
   const beadCache = createResourceCache<string, GcBead | null>({
@@ -690,14 +883,6 @@ const makeGcApiClient = Effect.gen(function* () {
     maxEntries: Math.max(64, CACHE_MAX_ENTRIES / 4),
   });
   let lastKnownConfig: GcConfigResult | null = null;
-
-  generatedGcClient.setConfig({
-    baseUrl,
-    headers: {
-      "X-GC-Request": "t3code",
-    },
-    responseStyle: "fields",
-  });
 
   const connectSse = Effect.callback<void, never, never>((resume, signal) => {
     let aborted = false;
@@ -847,23 +1032,6 @@ const makeGcApiClient = Effect.gen(function* () {
     return cityName;
   };
 
-  const extractGeneratedErrorMessage = (
-    fallback: string,
-    result: {
-      response?: { status?: number };
-      error?: unknown;
-    },
-  ): string => {
-    const status = typeof result.response?.status === "number" ? result.response.status : undefined;
-    const body =
-      result.error == null
-        ? null
-        : typeof result.error === "string"
-          ? result.error
-          : JSON.stringify(result.error);
-    return status ? extractGcProblemMessage(status, body) : fallback;
-  };
-
   const buildScopedOrLegacyPath = (
     cityName: string | null,
     cityScopedPath: string,
@@ -942,6 +1110,28 @@ const makeGcApiClient = Effect.gen(function* () {
     }
   };
 
+  const patchJson = async <T>(path: string, body: unknown): Promise<T> => {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "X-GC-Request": "t3code",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(GC_API_REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      let text: string | null = null;
+      try {
+        text = await response.text();
+      } catch {
+        // Ignore malformed or empty error bodies and fall back to the status code.
+      }
+      throw new Error(extractGcProblemMessage(response.status, text));
+    }
+    return (await response.json()) as T;
+  };
+
   const getBead: GcApiClientShape["getBead"] = (id) => {
     const beadId = sanitizeKey(id);
     if (!beadId) return Effect.succeed(null);
@@ -1004,6 +1194,22 @@ const makeGcApiClient = Effect.gen(function* () {
   const getConfig: GcApiClientShape["getConfig"] = () =>
     Effect.tryPromise({
       try: async () => {
+        const loadExpandedCliConfig = (): GcConfigResult | null => {
+          if (!cityPath) {
+            return null;
+          }
+          const cli = runGcCli(cityPath, ["config", "show"]);
+          if (cli.exitCode !== 0) {
+            logGcWarning("gc config show fallback failed", {
+              cityPath,
+              exitCode: cli.exitCode,
+              stderr: cli.stderr,
+            });
+            return null;
+          }
+          return normalizeGcConfig(Bun.TOML.parse(cli.stdout), cityPath);
+        };
+
         const cityName = await resolveGcCityName();
         const remote = await fetchJson<GcConfigResult>(
           buildScopedOrLegacyPath(cityName, "/config", "/v0/config"),
@@ -1011,24 +1217,18 @@ const makeGcApiClient = Effect.gen(function* () {
         if (remote) {
           const normalizedRemote =
             cityPath && cityPath.trim().length > 0 ? normalizeGcConfig(remote, cityPath) : null;
-          lastKnownConfig = normalizedRemote ?? remote;
+          lastKnownConfig =
+            normalizedRemote && cityPath
+              ? mergeCliExpandedConfig(normalizedRemote, loadExpandedCliConfig())
+              : normalizedRemote ?? remote;
           cachedCityName = lastKnownConfig.workspace.name?.trim() || cachedCityName;
           return lastKnownConfig;
         }
         if (cityPath) {
-          const cli = runGcCli(cityPath, ["config", "show"]);
-          if (cli.exitCode === 0) {
-            const parsed = normalizeGcConfig(Bun.TOML.parse(cli.stdout), cityPath);
-            if (parsed) {
-              lastKnownConfig = parsed;
-              return parsed;
-            }
-          } else {
-            logGcWarning("gc config show fallback failed", {
-              cityPath,
-              exitCode: cli.exitCode,
-              stderr: cli.stderr,
-            });
+          const parsed = loadExpandedCliConfig();
+          if (parsed) {
+            lastKnownConfig = parsed;
+            return parsed;
           }
         }
         return lastKnownConfig;
@@ -1041,25 +1241,10 @@ const makeGcApiClient = Effect.gen(function* () {
       const normalizedSessionName = sanitizeKey(sessionName);
       if (useCityScopedRoutes) {
         const cityName = await requireGcCityName();
-        const result = await submitGcSession({
-          client: generatedGcClient,
-          path: {
-            cityName,
-            id: normalizedSessionName,
-          },
-          body: {
-            message,
-          },
-        });
-        if (result.data) {
-          return {
-            id: result.data.id,
-            status: result.data.status,
-            queued: result.data.queued,
-            intent: result.data.intent,
-          } satisfies GcSubmitSessionResult;
-        }
-        throw new Error(extractGeneratedErrorMessage("GC submit failed", result));
+        return postJson<GcSubmitSessionResult>(
+          buildGcCityPath(cityName, `/session/${encodeURIComponent(normalizedSessionName)}/submit`),
+          { message },
+        );
       }
       return postJson<GcSubmitSessionResult>(
         `/v0/session/${escapePathSegments(normalizedSessionName)}/submit`,
@@ -1072,20 +1257,9 @@ const makeGcApiClient = Effect.gen(function* () {
       const normalizedSessionName = sanitizeKey(sessionName);
       if (useCityScopedRoutes) {
         const cityName = await requireGcCityName();
-        const result = await postV0CityByCityNameSessionByIdStop({
-          client: generatedGcClient,
-          path: {
-            cityName,
-            id: normalizedSessionName,
-          },
-        });
-        if (result.data) {
-          return {
-            id: result.data.id ?? normalizedSessionName,
-            status: result.data.status,
-          } satisfies GcSessionActionResult;
-        }
-        throw new Error(extractGeneratedErrorMessage("GC stop failed", result));
+        return postJson<GcSessionActionResult>(
+          buildGcCityPath(cityName, `/session/${encodeURIComponent(normalizedSessionName)}/stop`),
+        );
       }
       return postJson<GcSessionActionResult>(
         `/v0/session/${escapePathSegments(normalizedSessionName)}/stop`,
@@ -1103,21 +1277,13 @@ const makeGcApiClient = Effect.gen(function* () {
       };
       if (useCityScopedRoutes) {
         const cityName = await requireGcCityName();
-        const result = await respondGcSession({
-          client: generatedGcClient,
-          path: {
+        return postJson<GcSessionActionResult>(
+          buildGcCityPath(
             cityName,
-            id: normalizedSessionName,
-          },
+            `/session/${encodeURIComponent(normalizedSessionName)}/respond`,
+          ),
           body,
-        });
-        if (result.data) {
-          return {
-            id: result.data.id,
-            status: result.data.status,
-          } satisfies GcSessionActionResult;
-        }
-        throw new Error(extractGeneratedErrorMessage("GC respond failed", result));
+        );
       }
       return postJson<GcSessionActionResult>(
         `/v0/session/${escapePathSegments(normalizedSessionName)}/respond`,
@@ -1170,6 +1336,42 @@ const makeGcApiClient = Effect.gen(function* () {
       }
     });
 
+  const setAgentMaxActiveSessions: GcApiClientShape["setAgentMaxActiveSessions"] = (
+    name,
+    maxActiveSessions,
+  ) =>
+    Effect.promise(async () => {
+      const normalizedName = sanitizeKey(name);
+      if (!Number.isInteger(maxActiveSessions)) {
+        throw new Error("GC pool size must be an integer");
+      }
+      if (maxActiveSessions < 0) {
+        throw new Error("GC pool size must be greater than or equal to 0");
+      }
+      if (!isPoolAgent(lastKnownConfig, normalizedName)) {
+        throw new Error(`pool-size control for non-pool agent ${normalizedName} is not supported`);
+      }
+      if (!cityPath) {
+        throw new Error("GC city path unavailable for pool-size mutation");
+      }
+      const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+      if (!identity) {
+        throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
+      }
+      logGcWarning("routing pool-size mutation via city.toml", {
+        baseUrl,
+        cityPath,
+        agent: normalizedName,
+        maxActiveSessions,
+      });
+      writeAgentMaxActiveSessionsToCityToml(cityPath, identity, maxActiveSessions);
+      lastKnownConfig = updateCachedAgentMaxActiveSessions(
+        lastKnownConfig,
+        normalizedName,
+        maxActiveSessions,
+      );
+    });
+
   const setAgentSessionMode: GcApiClientShape["setAgentSessionMode"] = (name, mode) =>
     Effect.promise(async () => {
       const normalizedName = sanitizeKey(name);
@@ -1187,8 +1389,50 @@ const makeGcApiClient = Effect.gen(function* () {
         agent: normalizedName,
         mode,
       });
-      writeAgentSessionModeToCityToml(cityPath, normalizedName, mode);
+      const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+      if (!identity) {
+        throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
+      }
+      writeAgentSessionModeToCityToml(cityPath, identity, mode);
       lastKnownConfig = updateCachedAgentSessionMode(lastKnownConfig, normalizedName, mode);
+    });
+
+  const setCitySuspended: GcApiClientShape["setCitySuspended"] = (suspended) =>
+    Effect.promise(async () => {
+      const cityName = await requireGcCityName();
+      try {
+        await patchJson<{ status: string }>(`/v0/city/${encodeURIComponent(cityName)}`, {
+          suspended,
+        });
+        if (lastKnownConfig) {
+          lastKnownConfig = {
+            ...lastKnownConfig,
+            workspace: {
+              ...lastKnownConfig.workspace,
+              suspended,
+            },
+          };
+        }
+        return;
+      } catch (error) {
+        if (!cityPath) {
+          throw error;
+        }
+        const cli = runGcCli(cityPath, [suspended ? "suspend" : "resume"]);
+        if (cli.exitCode === 0) {
+          if (lastKnownConfig) {
+            lastKnownConfig = {
+              ...lastKnownConfig,
+              workspace: {
+                ...lastKnownConfig.workspace,
+                suspended,
+              },
+            };
+          }
+          return;
+        }
+        throw new Error(cli.stderr.trim() || cli.stdout.trim() || String(error), { cause: error });
+      }
     });
 
   const setRigSuspended: GcApiClientShape["setRigSuspended"] = (name, suspended) =>
@@ -1241,7 +1485,9 @@ const makeGcApiClient = Effect.gen(function* () {
     stopSession,
     respondToPending,
     setAgentSuspended,
+    setAgentMaxActiveSessions,
     setAgentSessionMode,
+    setCitySuspended,
     setRigSuspended,
     streamEvents: Stream.fromPubSub(eventPubSub),
     isAvailable,

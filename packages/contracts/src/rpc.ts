@@ -86,10 +86,14 @@ import {
   GcGetConfigInput,
   GcGetThreadContextError,
   GcGetThreadContextInput,
+  GcSetAgentMaxActiveSessionsError,
+  GcSetAgentMaxActiveSessionsInput,
   GcSetAgentSessionModeError,
   GcSetAgentSessionModeInput,
   GcSetAgentSuspendedInput,
   GcSetAgentSuspendedError,
+  GcSetCitySuspendedError,
+  GcSetCitySuspendedInput,
   GcSetRigSuspendedInput,
   GcSetRigSuspendedError,
   GcThreadContextResult,
@@ -142,7 +146,9 @@ export const WS_METHODS = {
   gcFindThreadBinding: "gc.findThreadBinding",
   gcGetThreadContext: "gc.getThreadContext",
   gcSetAgentSuspended: "gc.setAgentSuspended",
+  gcSetAgentMaxActiveSessions: "gc.setAgentMaxActiveSessions",
   gcSetAgentSessionMode: "gc.setAgentSessionMode",
+  gcSetCitySuspended: "gc.setCitySuspended",
   gcSetRigSuspended: "gc.setRigSuspended",
 
   // Streaming subscriptions
@@ -318,6 +324,12 @@ export const WsOrchestrationDispatchCommandRpc = Rpc.make(
   },
 );
 
+export const WsOrchestrationGetSnapshotRpc = Rpc.make(ORCHESTRATION_WS_METHODS.getSnapshot, {
+  payload: OrchestrationRpcSchemas.getSnapshot.input,
+  success: OrchestrationRpcSchemas.getSnapshot.output,
+  error: OrchestrationGetSnapshotError,
+});
+
 export const WsOrchestrationGetTurnDiffRpc = Rpc.make(ORCHESTRATION_WS_METHODS.getTurnDiff, {
   payload: OrchestrationGetTurnDiffInput,
   success: OrchestrationRpcSchemas.getTurnDiff.output,
@@ -408,6 +420,15 @@ export const WsGcSetAgentSuspendedRpc = Rpc.make(WS_METHODS.gcSetAgentSuspended,
   error: GcSetAgentSuspendedError,
 });
 
+export const WsGcSetAgentMaxActiveSessionsRpc = Rpc.make(
+  WS_METHODS.gcSetAgentMaxActiveSessions,
+  {
+    payload: GcSetAgentMaxActiveSessionsInput,
+    success: GcConfigResult,
+    error: GcSetAgentMaxActiveSessionsError,
+  },
+);
+
 export const WsGcSetAgentSessionModeRpc = Rpc.make(WS_METHODS.gcSetAgentSessionMode, {
   payload: GcSetAgentSessionModeInput,
   success: GcConfigResult,
@@ -418,6 +439,12 @@ export const WsGcSetRigSuspendedRpc = Rpc.make(WS_METHODS.gcSetRigSuspended, {
   payload: GcSetRigSuspendedInput,
   success: GcConfigResult,
   error: GcSetRigSuspendedError,
+});
+
+export const WsGcSetCitySuspendedRpc = Rpc.make(WS_METHODS.gcSetCitySuspended, {
+  payload: GcSetCitySuspendedInput,
+  success: GcConfigResult,
+  error: GcSetCitySuspendedError,
 });
 
 export const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess, {
@@ -459,6 +486,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,
   WsOrchestrationDispatchCommandRpc,
+  WsOrchestrationGetSnapshotRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
@@ -469,6 +497,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsGcFindThreadBindingRpc,
   WsGcGetThreadContextRpc,
   WsGcSetAgentSuspendedRpc,
+  WsGcSetAgentMaxActiveSessionsRpc,
   WsGcSetAgentSessionModeRpc,
+  WsGcSetCitySuspendedRpc,
   WsGcSetRigSuspendedRpc,
 );

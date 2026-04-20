@@ -22,8 +22,10 @@ import {
   GcGetConfigError,
   GcFindThreadBindingError,
   GcGetThreadContextError,
+  GcSetAgentMaxActiveSessionsError,
   GcSetAgentSessionModeError,
   GcSetAgentSuspendedError,
+  GcSetCitySuspendedError,
   GcSetRigSuspendedError,
   ThreadId,
   type TerminalEvent,
@@ -166,6 +168,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const serverAuth = yield* ServerAuth;
       const bootstrapCredentials = yield* BootstrapCredentialService;
       const sessions = yield* SessionCredentialService;
+      const projectAliasMap = yield* Ref.make(new Map<string, string>());
       const serverCommandId = (tag: string) =>
         CommandId.make(`server:${tag}:${crypto.randomUUID()}`);
 
@@ -217,6 +220,43 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               cause,
             });
       };
+
+      const rewriteAliasedProjectIds = (command: OrchestrationCommand) =>
+        Effect.gen(function* () {
+          const aliases = yield* Ref.get(projectAliasMap);
+          const resolveProjectId = (projectId: string) => aliases.get(projectId) ?? projectId;
+
+          switch (command.type) {
+            case "project.create":
+            case "project.meta.update":
+            case "project.delete":
+              return {
+                ...command,
+                projectId: resolveProjectId(command.projectId),
+              } satisfies OrchestrationCommand;
+            case "thread.create":
+              return {
+                ...command,
+                projectId: resolveProjectId(command.projectId),
+              } satisfies OrchestrationCommand;
+            case "thread.turn.start":
+              if (!command.bootstrap?.createThread) {
+                return command;
+              }
+              return {
+                ...command,
+                bootstrap: {
+                  ...command.bootstrap,
+                  createThread: {
+                    ...command.bootstrap.createThread,
+                    projectId: resolveProjectId(command.bootstrap.createThread.projectId),
+                  },
+                },
+              } satisfies OrchestrationCommand;
+            default:
+              return command;
+          }
+        });
 
       const enrichProjectEvent = (
         event: OrchestrationEvent,
@@ -502,16 +542,46 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const dispatchNormalizedCommand = (
         normalizedCommand: OrchestrationCommand,
       ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> => {
-        const dispatchEffect =
-          normalizedCommand.type === "thread.turn.start" && normalizedCommand.bootstrap
-            ? dispatchBootstrapTurnStart(normalizedCommand)
+        const dispatchEffect = Effect.gen(function* () {
+          if (normalizedCommand.type === "project.create") {
+            const existingProject = yield* projectionSnapshotQuery
+              .getActiveProjectByWorkspaceRoot(normalizedCommand.workspaceRoot)
+              .pipe(
+                Effect.mapError((cause) =>
+                  toDispatchCommandError(cause, "Failed to inspect existing project"),
+                ),
+              );
+            if (
+              Option.isSome(existingProject) &&
+              existingProject.value.id !== normalizedCommand.projectId
+            ) {
+              yield* Ref.update(projectAliasMap, (aliases) => {
+                const next = new Map(aliases);
+                next.set(normalizedCommand.projectId, existingProject.value.id);
+                return next;
+              });
+              const readModel = yield* orchestrationEngine
+                .getReadModel()
+                .pipe(
+                  Effect.mapError((cause) =>
+                    toDispatchCommandError(cause, "Failed to inspect orchestration snapshot"),
+                  ),
+                );
+              return { sequence: readModel.snapshotSequence };
+            }
+          }
+
+          const effectiveCommand = yield* rewriteAliasedProjectIds(normalizedCommand);
+          return yield* effectiveCommand.type === "thread.turn.start" && effectiveCommand.bootstrap
+            ? dispatchBootstrapTurnStart(effectiveCommand)
             : orchestrationEngine
-                .dispatch(normalizedCommand)
+                .dispatch(effectiveCommand)
                 .pipe(
                   Effect.mapError((cause) =>
                     toDispatchCommandError(cause, "Failed to dispatch orchestration command"),
                   ),
                 );
+        });
 
         return startup
           .enqueueCommand(dispatchEffect)
@@ -620,6 +690,20 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                       message: "Failed to dispatch orchestration command",
                       cause,
                     }),
+              ),
+            ),
+            { "rpc.aggregate": "orchestration" },
+          ),
+        [ORCHESTRATION_WS_METHODS.getSnapshot]: (_input) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.getSnapshot,
+            projectionSnapshotQuery.getSnapshot().pipe(
+              Effect.mapError(
+                (cause) =>
+                  new OrchestrationGetSnapshotError({
+                    message: "Failed to load orchestration snapshot",
+                    cause,
+                  }),
               ),
             ),
             { "rpc.aggregate": "orchestration" },
@@ -1170,6 +1254,32 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ),
             { "rpc.aggregate": "gc" },
           ),
+        [WS_METHODS.gcSetAgentMaxActiveSessions]: ({ agent, maxActiveSessions }) =>
+          observeRpcEffect(
+            WS_METHODS.gcSetAgentMaxActiveSessions,
+            Effect.gen(function* () {
+              const gcApi = yield* GcApiClient;
+              yield* gcApi.setAgentMaxActiveSessions(agent, maxActiveSessions);
+              const config = yield* gcApi.getConfig();
+              if (!config) {
+                return yield* Effect.fail(
+                  new Error("GC config unavailable after agent pool-size update"),
+                );
+              }
+              return config;
+            }).pipe(
+              Effect.mapError(
+                (error) =>
+                  new GcSetAgentMaxActiveSessionsError({
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to update GC agent pool size",
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "gc" },
+          ),
         [WS_METHODS.gcSetAgentSessionMode]: ({ agent, mode }) =>
           observeRpcEffect(
             WS_METHODS.gcSetAgentSessionMode,
@@ -1211,7 +1321,30 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               Effect.mapError(
                 (error) =>
                   new GcSetRigSuspendedError({
-                    message: error instanceof Error ? error.message : "Failed to update GC rig state",
+                    message:
+                      error instanceof Error ? error.message : "Failed to update GC rig state",
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "gc" },
+          ),
+        [WS_METHODS.gcSetCitySuspended]: ({ suspended }) =>
+          observeRpcEffect(
+            WS_METHODS.gcSetCitySuspended,
+            Effect.gen(function* () {
+              const gcApi = yield* GcApiClient;
+              yield* gcApi.setCitySuspended(suspended);
+              const config = yield* gcApi.getConfig();
+              if (!config) {
+                return yield* Effect.fail(new Error("GC config unavailable after city update"));
+              }
+              return config;
+            }).pipe(
+              Effect.mapError(
+                (error) =>
+                  new GcSetCitySuspendedError({
+                    message:
+                      error instanceof Error ? error.message : "Failed to update GC city state",
                   }),
               ),
             ),

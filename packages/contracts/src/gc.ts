@@ -9,7 +9,7 @@
  */
 import { Effect } from "effect";
 import * as Schema from "effect/Schema";
-import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.js";
+import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 // ---------------------------------------------------------------------------
 // gc.* metadata keys (set on OrchestrationThread.customMetadata)
@@ -53,6 +53,18 @@ export const GcThreadMeta = Schema.Struct({
   molecule: Schema.optional(Schema.String),
   /** Formula name. */
   formula: Schema.optional(Schema.String),
+  /** Canonical sidebar group kind. */
+  groupKind: Schema.optional(
+    Schema.Union([Schema.Literal("workspace"), Schema.Literal("rig")]),
+  ),
+  /** Canonical sidebar group id. */
+  groupId: Schema.optional(Schema.String),
+  /** Canonical sidebar group label. */
+  groupLabel: Schema.optional(Schema.String),
+  /** Canonical agent qualified name for grouping. */
+  agentQualified: Schema.optional(Schema.String),
+  /** Canonical agent label for grouping. */
+  agentLabel: Schema.optional(Schema.String),
 });
 export type GcThreadMeta = typeof GcThreadMeta.Type;
 
@@ -103,6 +115,11 @@ export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMe
       sessionEnv: undefined,
       molecule: undefined,
       formula: undefined,
+      groupKind: undefined,
+      groupId: undefined,
+      groupLabel: undefined,
+      agentQualified: undefined,
+      agentLabel: undefined,
     };
   }
   const sessionEnv = parseGcSessionEnv(customMetadata["gc.sessionEnv"]);
@@ -125,6 +142,14 @@ export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMe
     sessionEnv,
     molecule: customMetadata["gc.molecule"],
     formula: customMetadata["gc.formula"],
+    groupKind:
+      customMetadata["gc.groupKind"] === "workspace" || customMetadata["gc.groupKind"] === "rig"
+        ? customMetadata["gc.groupKind"]
+        : undefined,
+    groupId: customMetadata["gc.groupId"],
+    groupLabel: customMetadata["gc.groupLabel"],
+    agentQualified: customMetadata["gc.agentQualified"],
+    agentLabel: customMetadata["gc.agentLabel"],
   };
 }
 
@@ -172,6 +197,8 @@ export const GcConfigAgent = Schema.Struct({
   dir: Schema.optional(Schema.String),
   provider: Schema.optional(Schema.String),
   is_pool: Schema.optional(Schema.Boolean),
+  min_active_sessions: Schema.optional(Schema.Number),
+  max_active_sessions: Schema.optional(Schema.Number),
   scope: Schema.optional(Schema.String),
   suspended: Schema.Boolean,
   named_session_mode: Schema.optional(GcNamedSessionMode),
@@ -225,6 +252,7 @@ export interface VirtualAgentGroup<TThread> {
   isConfigured: boolean;
   isPool: boolean;
   isSuspended: boolean;
+  maxActiveSessions?: number;
   namedSessionMode?: GcNamedSessionMode;
   scope?: string;
   threads: TThread[];
@@ -278,6 +306,26 @@ function candidateAgentLabels(agent: string): string[] {
   return [...labels];
 }
 
+function titleSegments(title?: string): { sessionName: string | null; agentHint: string | null } {
+  const trimmed = normalizeMetadataValue(title);
+  if (!trimmed) {
+    return { sessionName: null, agentHint: null };
+  }
+  const parts = trimmed.split("·").map((part) => normalizeMetadataValue(part) ?? "");
+  if (parts.length >= 2) {
+    return {
+      sessionName: normalizeMetadataValue(parts[0] ?? undefined),
+      agentHint: normalizeMetadataValue(parts.at(-1) ?? undefined),
+    };
+  }
+  return { sessionName: null, agentHint: trimmed };
+}
+
+function configuredAgentSessionName(agent: Pick<GcConfigAgent, "dir" | "name">): string {
+  const qualifiedName = configuredAgentQualifiedName(agent);
+  return qualifiedName.replaceAll("/", "--").replaceAll(".", "__");
+}
+
 function findMatchingAgentGroup<TThread>(
   agentGroupsById: ReadonlyMap<string, VirtualAgentGroup<TThread>>,
   agent: string,
@@ -297,7 +345,7 @@ function findMatchingAgentGroup<TThread>(
 
 /** Partition threads into rig folders, agent folders, and standalone threads. */
 export function groupThreadsByRigAndAgent<
-  TThread extends { customMetadata?: Record<string, string> },
+  TThread extends { customMetadata?: Record<string, string>; title?: string },
 >(
   threads: TThread[],
   options?: {
@@ -376,6 +424,9 @@ export function groupThreadsByRigAndAgent<
         isConfigured: true,
         isPool: agent.is_pool ?? false,
         isSuspended: rigGroup.isSuspended || agent.suspended,
+        ...(typeof agent.max_active_sessions === "number"
+          ? { maxActiveSessions: agent.max_active_sessions }
+          : {}),
         ...(agent.named_session_mode ? { namedSessionMode: agent.named_session_mode } : {}),
         ...(agent.scope ? { scope: agent.scope } : {}),
         threads: [],
@@ -384,11 +435,11 @@ export function groupThreadsByRigAndAgent<
   }
 
   if ((!relevantRigs || relevantRigs.length === 0) && isCityProject && workspaceName) {
-    const cityGroupId = workspaceName.toUpperCase();
+    const cityGroupId = workspaceName;
     cityScopedRigGroupId = cityGroupId;
     rigGroupsById.set(cityGroupId, {
       id: cityGroupId,
-      label: cityGroupId,
+      label: workspaceName.toUpperCase(),
       kind: "workspace",
       isConfigured: true,
       isSuspended: options?.config?.workspace.suspended ?? false,
@@ -413,6 +464,9 @@ export function groupThreadsByRigAndAgent<
           isConfigured: true,
           isPool: agent.is_pool ?? false,
           isSuspended: cityGroup.isSuspended || agent.suspended,
+          ...(typeof agent.max_active_sessions === "number"
+            ? { maxActiveSessions: agent.max_active_sessions }
+            : {}),
           ...(agent.named_session_mode ? { namedSessionMode: agent.named_session_mode } : {}),
           ...(agent.scope ? { scope: agent.scope } : {}),
           threads: [],
@@ -425,8 +479,59 @@ export function groupThreadsByRigAndAgent<
     const meta = parseGcMeta(thread.customMetadata);
     const rig = normalizeMetadataValue(meta.rig);
     const agent = normalizeMetadataValue(meta.agent);
-    const resolvedRig = rig ?? cityScopedRigGroupId;
-    if (!meta.isGcManaged || !resolvedRig || !agent) {
+    const canonicalGroupId = normalizeMetadataValue(meta.groupId);
+    const canonicalGroupLabel = normalizeMetadataValue(meta.groupLabel);
+    const canonicalAgentQualified = normalizeMetadataValue(meta.agentQualified);
+    const canonicalAgentLabel = normalizeMetadataValue(meta.agentLabel);
+    let resolvedRig = canonicalGroupId ?? rig ?? cityScopedRigGroupId;
+    let resolvedAgent = canonicalAgentQualified ?? agent;
+
+    if (!meta.isGcManaged && options?.config) {
+      const { sessionName, agentHint } = titleSegments(thread.title);
+      const configuredGroups = Array.from(rigGroupsById.values());
+      let fallbackMatch:
+        | { rigId: string; agentGroup: VirtualAgentGroup<TThread> }
+        | undefined;
+
+      if (agentHint) {
+        for (const group of configuredGroups) {
+          const matched = findMatchingAgentGroup(group.agentGroupsById, agentHint);
+          if (matched) {
+            fallbackMatch = { rigId: group.id, agentGroup: matched };
+            break;
+          }
+        }
+      }
+
+      if (!fallbackMatch && sessionName) {
+        for (const configuredAgent of options.config.agents) {
+          if (configuredAgentSessionName(configuredAgent) !== sessionName) {
+            continue;
+          }
+          const rigId = normalizeMetadataValue(configuredAgent.dir) ?? cityScopedRigGroupId;
+          if (!rigId) {
+            continue;
+          }
+          const rigGroup = rigGroupsById.get(rigId);
+          if (!rigGroup) {
+            continue;
+          }
+          const qualifiedName = configuredAgentQualifiedName(configuredAgent);
+          const matched = rigGroup.agentGroupsById.get(qualifiedName);
+          if (matched) {
+            fallbackMatch = { rigId, agentGroup: matched };
+            break;
+          }
+        }
+      }
+
+      if (fallbackMatch) {
+        resolvedRig = fallbackMatch.rigId;
+        resolvedAgent = fallbackMatch.agentGroup.qualifiedName;
+      }
+    }
+
+    if ((!meta.isGcManaged && !resolvedAgent) || !resolvedRig || !resolvedAgent) {
       standaloneThreads.push(thread);
       continue;
     }
@@ -435,25 +540,33 @@ export function groupThreadsByRigAndAgent<
     if (!rigGroup) {
       rigGroup = {
         id: resolvedRig,
-        label: resolvedRig,
-        kind: resolvedRig === cityScopedRigGroupId ? "workspace" : "rig",
+        label:
+          canonicalGroupLabel ??
+          (resolvedRig === cityScopedRigGroupId ? (workspaceName?.toUpperCase() ?? resolvedRig) : resolvedRig),
+        kind:
+          meta.groupKind === "workspace" || meta.groupKind === "rig"
+            ? meta.groupKind
+            : resolvedRig === cityScopedRigGroupId
+              ? "workspace"
+              : "rig",
         isConfigured: false,
         isSuspended: false,
         agentGroupsById: new Map(),
       };
       rigGroupsById.set(resolvedRig, rigGroup);
     }
+    const ensuredRigGroup = rigGroup!;
 
-    const existingAgentGroup = findMatchingAgentGroup(rigGroup.agentGroupsById, agent);
+    const existingAgentGroup = findMatchingAgentGroup(ensuredRigGroup.agentGroupsById, resolvedAgent);
     if (existingAgentGroup) {
       existingAgentGroup.threads.push(thread);
       continue;
     }
 
-    rigGroup.agentGroupsById.set(agent, {
-      id: `${resolvedRig}/${agent}`,
-      label: agentFolderLabel(agent),
-      qualifiedName: agent,
+    ensuredRigGroup.agentGroupsById.set(resolvedAgent, {
+      id: `${resolvedRig}/${resolvedAgent}`,
+      label: canonicalAgentLabel ?? agentFolderLabel(resolvedAgent),
+      qualifiedName: resolvedAgent,
       isConfigured: false,
       isPool: false,
       isSuspended: false,
@@ -558,11 +671,22 @@ export const GcSetRigSuspendedInput = Schema.Struct({
 });
 export type GcSetRigSuspendedInput = typeof GcSetRigSuspendedInput.Type;
 
+export const GcSetCitySuspendedInput = Schema.Struct({
+  suspended: Schema.Boolean,
+});
+export type GcSetCitySuspendedInput = typeof GcSetCitySuspendedInput.Type;
+
 export const GcSetAgentSessionModeInput = Schema.Struct({
   agent: Schema.String,
   mode: GcNamedSessionMode,
 });
 export type GcSetAgentSessionModeInput = typeof GcSetAgentSessionModeInput.Type;
+
+export const GcSetAgentMaxActiveSessionsInput = Schema.Struct({
+  agent: Schema.String,
+  maxActiveSessions: Schema.Number,
+});
+export type GcSetAgentMaxActiveSessionsInput = typeof GcSetAgentMaxActiveSessionsInput.Type;
 
 export const GcFindThreadBindingInput = Schema.Struct({
   sessionName: Schema.String,
@@ -730,7 +854,17 @@ export class GcSetRigSuspendedError extends Schema.TaggedErrorClass<GcSetRigSusp
   { message: Schema.String },
 ) {}
 
+export class GcSetCitySuspendedError extends Schema.TaggedErrorClass<GcSetCitySuspendedError>()(
+  "GcSetCitySuspendedError",
+  { message: Schema.String },
+) {}
+
 export class GcSetAgentSessionModeError extends Schema.TaggedErrorClass<GcSetAgentSessionModeError>()(
   "GcSetAgentSessionModeError",
+  { message: Schema.String },
+) {}
+
+export class GcSetAgentMaxActiveSessionsError extends Schema.TaggedErrorClass<GcSetAgentMaxActiveSessionsError>()(
+  "GcSetAgentMaxActiveSessionsError",
   { message: Schema.String },
 ) {}
