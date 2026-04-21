@@ -1,9 +1,37 @@
 #!/usr/bin/env node
 
 const DEFAULT_HTTP_URL = "http://127.0.0.1:3773";
+const DEFAULT_HTTP_TIMEOUT_MS = 5000;
+const DEFAULT_RPC_TIMEOUT_MS = 5000;
 
 function trim(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function withTimeout(factory, timeoutMs, label) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    Promise.resolve()
+      .then(factory)
+      .then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+  });
+}
+
+function parseTimeout(name, fallback) {
+  const raw = process.env[name];
+  const parsed = Number.parseInt(raw ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function agentLabel(agentQualified) {
@@ -40,11 +68,15 @@ function needsBackfill(meta) {
 }
 
 async function issueBridgeWsToken(baseUrl) {
+  const timeoutMs = parseTimeout("T3_BRIDGE_HTTP_TIMEOUT_MS", DEFAULT_HTTP_TIMEOUT_MS);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const response = await fetch(`${baseUrl}/api/auth/bridge-ws-token`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: "{}",
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timer));
   if (!response.ok) {
     throw new Error(`bridge ws token failed: ${response.status} ${await response.text()}`);
   }
@@ -56,46 +88,58 @@ async function issueBridgeWsToken(baseUrl) {
 }
 
 async function rpcCall(wsUrl, tag, payload) {
+  const timeoutMs = parseTimeout("T3_BRIDGE_RPC_TIMEOUT_MS", DEFAULT_RPC_TIMEOUT_MS);
   const ws = new WebSocket(wsUrl);
-  await new Promise((resolve, reject) => {
-    ws.addEventListener("open", resolve, { once: true });
-    ws.addEventListener("error", reject, { once: true });
-  });
-
-  const result = await new Promise((resolve, reject) => {
-    ws.addEventListener(
-      "message",
-      (event) => {
-        try {
-          const msg = JSON.parse(String(event.data));
-          if (msg?._tag !== "Response") {
-            return;
-          }
-          if (msg?.exit?._tag === "Failure") {
-            reject(new Error(`rpc ${tag} failed: ${JSON.stringify(msg.exit.cause)}`));
-            return;
-          }
-          resolve(msg.exit?.value ?? {});
-        } catch (error) {
-          reject(error);
-        } finally {
-          ws.close();
-        }
-      },
-      { once: true },
+  try {
+    await withTimeout(
+      () =>
+        new Promise((resolve, reject) => {
+          ws.addEventListener("open", resolve, { once: true });
+          ws.addEventListener("error", reject, { once: true });
+        }),
+      timeoutMs,
+      `rpc ${tag} websocket open`,
     );
-    ws.send(
-      JSON.stringify({
-        _tag: "Request",
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        tag,
-        payload: payload ?? {},
-        headers: [],
-      }),
-    );
-  });
 
-  return result;
+    return await withTimeout(
+      () =>
+        new Promise((resolve, reject) => {
+          ws.addEventListener(
+            "message",
+            (event) => {
+              try {
+                const msg = JSON.parse(String(event.data));
+                if (msg?._tag !== "Response") {
+                  return;
+                }
+                if (msg?.exit?._tag === "Failure") {
+                  reject(new Error(`rpc ${tag} failed: ${JSON.stringify(msg.exit.cause)}`));
+                  return;
+                }
+                resolve(msg.exit?.value ?? {});
+              } catch (error) {
+                reject(error);
+              }
+            },
+            { once: true },
+          );
+          ws.addEventListener("error", reject, { once: true });
+          ws.send(
+            JSON.stringify({
+              _tag: "Request",
+              id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+              tag,
+              payload: payload ?? {},
+              headers: [],
+            }),
+          );
+        }),
+      timeoutMs,
+      `rpc ${tag} response`,
+    );
+  } finally {
+    ws.close();
+  }
 }
 
 async function main() {

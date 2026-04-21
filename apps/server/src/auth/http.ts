@@ -156,14 +156,30 @@ export const authBridgeWebSocketTokenRouteLayer = HttpRouter.add(
         status: 401,
       });
     }
-    const issuedSession = yield* sessions.issue({
-      method: "bearer-session-token",
-      subject: "local-gc-bridge",
-      role: "owner",
-      client: deriveAuthClientMetadata({ request }),
-      ttl: Duration.minutes(10),
-    });
-    const result = yield* sessions.issueWebSocketToken(issuedSession.sessionId);
+    const result = yield* Effect.gen(function* () {
+      const issuedSession = yield* sessions.issue({
+        method: "bearer-session-token",
+        subject: "local-gc-bridge",
+        role: "owner",
+        client: deriveAuthClientMetadata({ request }),
+        ttl: Duration.minutes(10),
+      });
+      return yield* sessions.issueWebSocketToken(issuedSession.sessionId);
+    }).pipe(
+      Effect.timeoutOption(Duration.seconds(2)),
+      Effect.flatMap((result) =>
+        Option.match(result, {
+          onNone: () =>
+            Effect.fail(
+              new AuthError({
+                message: "Bridge websocket token unavailable.",
+                status: 500,
+              }),
+            ),
+          onSome: (value) => Effect.succeed(value),
+        }),
+      ),
+    );
     return HttpServerResponse.jsonUnsafe(
       {
         token: result.token,

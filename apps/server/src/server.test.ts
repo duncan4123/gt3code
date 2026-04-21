@@ -957,6 +957,32 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("issues bridge websocket tokens for loopback requests without prior auth", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+
+      const wsTokenUrl = yield* getHttpServerUrl("/api/auth/bridge-ws-token");
+      const wsTokenResponse = yield* Effect.promise(() =>
+        fetch(wsTokenUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: "{}",
+        }),
+      );
+      const wsTokenBody = (yield* Effect.promise(() => wsTokenResponse.json())) as {
+        readonly token: string;
+        readonly expiresAt: string;
+      };
+
+      assert.equal(wsTokenResponse.status, 200);
+      assert.equal(typeof wsTokenBody.token, "string");
+      assert.isTrue(wsTokenBody.token.length > 0);
+      assert.equal(typeof wsTokenBody.expiresAt, "string");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect(
     "responds to remote auth websocket-token preflight requests with authorization CORS headers",
     () =>
