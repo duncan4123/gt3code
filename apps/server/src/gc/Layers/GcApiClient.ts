@@ -794,25 +794,47 @@ function mergeCliExpandedConfig(
   const expandedByQualifiedName = new Map(
     expanded.agents.map((agent) => [resolveAgentConfigKey(agent), agent] as const),
   );
-  return {
-    ...primary,
-    agents: primary.agents.map((agent) => {
-      const expandedAgent = expandedByQualifiedName.get(resolveAgentConfigKey(agent));
-      if (!expandedAgent) {
-        return agent;
-      }
-      return {
-        ...agent,
-        ...(typeof expandedAgent.min_active_sessions === "number"
+  const mergedAgents = primary.agents.map((agent) => {
+    const expandedAgent = expandedByQualifiedName.get(resolveAgentConfigKey(agent));
+    if (!expandedAgent) {
+      return agent;
+    }
+    return {
+      ...expandedAgent,
+      ...agent,
+      ...(typeof agent.min_active_sessions === "number"
+        ? { min_active_sessions: agent.min_active_sessions }
+        : typeof expandedAgent.min_active_sessions === "number"
           ? { min_active_sessions: expandedAgent.min_active_sessions }
           : {}),
-        ...(typeof expandedAgent.max_active_sessions === "number"
+      ...(typeof agent.max_active_sessions === "number"
+        ? { max_active_sessions: agent.max_active_sessions }
+        : typeof expandedAgent.max_active_sessions === "number"
           ? { max_active_sessions: expandedAgent.max_active_sessions }
           : {}),
-      };
-    }),
+    };
+  });
+  const mergedAgentKeys = new Set(mergedAgents.map((agent) => resolveAgentConfigKey(agent)));
+  for (const agent of expanded.agents) {
+    if (!mergedAgentKeys.has(resolveAgentConfigKey(agent))) {
+      mergedAgents.push(agent);
+    }
+  }
+
+  const primaryRigKeys = new Set(primary.rigs.map((rig) => `${rig.name}:${rig.path}`));
+  const mergedRigs = [
+    ...primary.rigs,
+    ...expanded.rigs.filter((rig) => !primaryRigKeys.has(`${rig.name}:${rig.path}`)),
+  ];
+
+  return {
+    ...primary,
+    agents: mergedAgents,
+    rigs: mergedRigs,
   };
 }
+
+export const mergeCliExpandedConfigForTest = mergeCliExpandedConfig;
 
 function discoverGcApiBaseUrl(startCwd: string): string | null {
   const cityPath = discoverGcCityRoot(startCwd);
