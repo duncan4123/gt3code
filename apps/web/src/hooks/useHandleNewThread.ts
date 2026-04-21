@@ -19,10 +19,17 @@ import { useSettings } from "./useSettings";
 
 function useNewThreadState() {
   const projects = useStore(useShallow((store) => selectProjectsAcrossEnvironments(store)));
-  const projectGroupingSettings = useSettings((settings) => ({
-    sidebarProjectGroupingMode: settings.sidebarProjectGroupingMode,
-    sidebarProjectGroupingOverrides: settings.sidebarProjectGroupingOverrides,
-  }));
+  const sidebarProjectGroupingMode = useSettings((settings) => settings.sidebarProjectGroupingMode);
+  const sidebarProjectGroupingOverrides = useSettings(
+    (settings) => settings.sidebarProjectGroupingOverrides,
+  );
+  const projectGroupingSettings = useMemo(
+    () => ({
+      sidebarProjectGroupingMode,
+      sidebarProjectGroupingOverrides,
+    }),
+    [sidebarProjectGroupingMode, sidebarProjectGroupingOverrides],
+  );
   const router = useRouter();
   const getCurrentRouteTarget = useCallback(() => {
     const currentRouteParams = router.state.matches[router.state.matches.length - 1]?.params ?? {};

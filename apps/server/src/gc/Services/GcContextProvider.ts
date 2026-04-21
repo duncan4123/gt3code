@@ -4,7 +4,7 @@
  * Enriches GC-managed threads with live bead data, formula steps,
  * and convoy status from the GC API.
  */
-import { ServiceMap } from "effect";
+import { Context } from "effect";
 import type { Effect } from "effect";
 import type { GcBead, GcConvoy, GcFormula } from "./GcApiClient.ts";
 
@@ -19,7 +19,6 @@ export interface GcContextProviderShape {
   readonly isAvailable: Effect.Effect<boolean>;
 }
 
-export class GcContextProvider extends ServiceMap.Service<
-  GcContextProvider,
-  GcContextProviderShape
->()("t3/gc/Services/GcContextProvider") {}
+export class GcContextProvider extends Context.Service<GcContextProvider, GcContextProviderShape>()(
+  "t3/gc/Services/GcContextProvider",
+) {}

@@ -12,6 +12,7 @@
 import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const serverDir = resolve(fileURLToPath(import.meta.url), "../..");
@@ -41,9 +42,17 @@ function findBetterSqlite3(base) {
   // bun stores packages at node_modules/.bun/better-sqlite3@<version>/node_modules/better-sqlite3
   const bunCache = join(base, ".bun");
   if (existsSync(bunCache)) {
-    const entries = readdirSync(bunCache).filter((e) => e.startsWith("better-sqlite3@"));
-    if (entries.length > 0) {
-      return join(bunCache, entries[0], "node_modules", "better-sqlite3");
+    try {
+      const req = createRequire(join(workspaceRoot, "packages", "doltlite", "package.json"));
+      const resolvedPkgJson = req.resolve("better-sqlite3/package.json");
+      return resolve(resolvedPkgJson, "..");
+    } catch {
+      const entries = readdirSync(bunCache)
+        .filter((e) => e.startsWith("better-sqlite3@"))
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      if (entries.length > 0) {
+        return join(bunCache, entries[0], "node_modules", "better-sqlite3");
+      }
     }
   }
   // Fallback: regular node_modules

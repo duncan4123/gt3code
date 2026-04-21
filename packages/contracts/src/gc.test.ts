@@ -91,7 +91,7 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(rigGroups[1]?.agentGroups[0]?.qualifiedName).toBe("ops/mayor");
   });
 
-  it("leaves non-GC and incomplete GC metadata as standalone threads", () => {
+  it("leaves non-GC threads standalone and recovers a missing rig from the agent name", () => {
     const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent([
       { id: "thread-1" },
       {
@@ -104,15 +104,16 @@ describe("groupThreadsByRigAndAgent", () => {
         id: "thread-3",
         customMetadata: {
           "gc.agent": "t3code/witness",
-          "gc.rig": "alpha",
+          "gc.rig": "t3code",
         },
       },
     ]);
 
-    expect(standaloneThreads.map((thread) => thread.id)).toEqual(["thread-1", "thread-2"]);
+    expect(standaloneThreads.map((thread) => thread.id)).toEqual(["thread-1"]);
     expect(rigGroups).toHaveLength(1);
-    expect(rigGroups[0]?.label).toBe("alpha");
-    expect(rigGroups[0]?.agentGroups[0]?.threads.map((thread) => thread.id)).toEqual(["thread-3"]);
+    expect(rigGroups[0]?.label).toBe("t3code");
+    expect(rigGroups[0]?.agentGroups[0]?.threads.map((thread) => thread.id)).toEqual(["thread-2"]);
+    expect(rigGroups[0]?.agentGroups[1]?.threads.map((thread) => thread.id)).toEqual(["thread-3"]);
   });
 
   it("includes configured agent folders even when no threads exist yet", () => {

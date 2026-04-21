@@ -7,7 +7,7 @@ import {
   useLocation,
   useNavigate,
 } from "@tanstack/react-router";
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef } from "react";
 import { QueryClient, useQueryClient } from "@tanstack/react-query";
 
 import { APP_DISPLAY_NAME } from "../branding";
@@ -209,10 +209,17 @@ function EventRouter() {
   const setActiveEnvironmentId = useStore((store) => store.setActiveEnvironmentId);
   const navigate = useNavigate();
   const pathname = useLocation({ select: (loc) => loc.pathname });
-  const projectGroupingSettings = useSettings((settings) => ({
-    sidebarProjectGroupingMode: settings.sidebarProjectGroupingMode,
-    sidebarProjectGroupingOverrides: settings.sidebarProjectGroupingOverrides,
-  }));
+  const sidebarProjectGroupingMode = useSettings((settings) => settings.sidebarProjectGroupingMode);
+  const sidebarProjectGroupingOverrides = useSettings(
+    (settings) => settings.sidebarProjectGroupingOverrides,
+  );
+  const projectGroupingSettings = useMemo(
+    () => ({
+      sidebarProjectGroupingMode,
+      sidebarProjectGroupingOverrides,
+    }),
+    [sidebarProjectGroupingMode, sidebarProjectGroupingOverrides],
+  );
   const readPathname = useEffectEvent(() => pathname);
   const handledBootstrapThreadIdRef = useRef<string | null>(null);
   const seenServerConfigUpdateIdRef = useRef(getServerConfigUpdatedNotification()?.id ?? 0);

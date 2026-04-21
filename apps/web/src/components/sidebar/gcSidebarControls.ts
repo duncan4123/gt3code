@@ -1,7 +1,4 @@
-import type {
-  GcFindThreadBindingResult,
-  OrchestrationLatestTurn,
-} from "@t3tools/contracts";
+import type { GcFindThreadBindingResult, OrchestrationLatestTurn } from "@t3tools/contracts";
 
 import { isSessionActivelyRunning } from "../../session-logic";
 
@@ -141,17 +138,11 @@ export function resolveGcAgentRuntimeState(input: {
     return { label: "Suspended", tone: "muted" };
   }
 
-  if (
-    input.threads.some((thread) => isSessionActivelyRunning(thread.session, thread.latestTurn))
-  ) {
+  if (input.threads.some((thread) => isSessionActivelyRunning(thread.session, thread.latestTurn))) {
     return { label: "Running", tone: "success" };
   }
 
-  if (
-    input.threads.some(
-      (thread) => thread.session?.status === "connecting",
-    )
-  ) {
+  if (input.threads.some((thread) => thread.session?.status === "connecting")) {
     return { label: "Connecting", tone: "info" };
   }
 

@@ -5,6 +5,7 @@ import type {
 } from "@t3tools/contracts";
 import { Effect } from "effect";
 
+import { buildStampedGcMetadataUpdate } from "../gc/folderMetadata.ts";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import {
   listThreadsByProjectId,
@@ -233,6 +234,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           interactionMode: command.interactionMode,
           branch: command.branch,
           worktreePath: command.worktreePath,
+          ...(command.customMetadata !== undefined
+            ? { customMetadata: command.customMetadata }
+            : {}),
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
         },
@@ -307,10 +311,14 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
     }
 
     case "thread.meta.update": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
+      });
+      const customMetadata = buildStampedGcMetadataUpdate({
+        existingMetadata: thread.customMetadata,
+        incomingMetadata: command.customMetadata,
       });
       const occurredAt = nowIso();
       return {
@@ -329,9 +337,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
             : {}),
           ...(command.branch !== undefined ? { branch: command.branch } : {}),
           ...(command.worktreePath !== undefined ? { worktreePath: command.worktreePath } : {}),
-          ...(command.customMetadata !== undefined
-            ? { customMetadata: command.customMetadata }
-            : {}),
+          ...(customMetadata !== undefined ? { customMetadata } : {}),
           updatedAt: occurredAt,
         },
       };

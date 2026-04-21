@@ -16,8 +16,7 @@ import {
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
-import { Option, Schema, Context } from "effect";
-import type { Effect } from "effect";
+import { Context, Effect, Option, Schema } from "effect";
 
 import type { ProjectionRepositoryError } from "../Errors.ts";
 
@@ -39,7 +38,7 @@ export const ProjectionThread = Schema.Struct({
   pendingUserInputCount: NonNegativeInt,
   hasActionableProposedPlan: NonNegativeInt,
   deletedAt: Schema.NullOr(IsoDateTime),
-  customMetadata: Schema.String.pipe(Schema.withDecodingDefault(() => "{}")),
+  customMetadata: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("{}"))),
 });
 export type ProjectionThread = typeof ProjectionThread.Type;
 

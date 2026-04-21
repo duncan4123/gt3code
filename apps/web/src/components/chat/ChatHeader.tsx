@@ -36,6 +36,7 @@ interface ChatHeaderProps {
   gitCwd: string | null;
   diffOpen: boolean;
   gcOpen: boolean;
+  gcAvailable: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
@@ -64,6 +65,7 @@ export const ChatHeader = memo(function ChatHeader({
   gitCwd,
   diffOpen,
   gcOpen,
+  gcAvailable,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
@@ -177,12 +179,15 @@ export const ChatHeader = memo(function ChatHeader({
                 aria-label="Toggle GC panel"
                 variant="outline"
                 size="xs"
+                disabled={!gcAvailable}
               >
                 <WorkflowIcon className="size-3" />
               </Toggle>
             }
           />
-          <TooltipPopup side="bottom">Toggle GC panel</TooltipPopup>
+          <TooltipPopup side="bottom">
+            {gcAvailable ? "Toggle GC panel" : "GC panel is unavailable for this thread."}
+          </TooltipPopup>
         </Tooltip>
       </div>
     </div>

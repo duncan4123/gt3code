@@ -131,20 +131,24 @@ export function formatElapsed(startIso: string, endIso: string | undefined): str
 }
 
 type LatestTurnTiming = Pick<OrchestrationLatestTurn, "turnId" | "startedAt" | "completedAt">;
-type SessionActivityState = Pick<
-  ThreadSession,
-  "status" | "updatedAt" | "orchestrationStatus" | "activeTurnId"
->;
+type SessionActivityState = Pick<ThreadSession, "orchestrationStatus" | "activeTurnId"> &
+  Partial<Pick<ThreadSession, "status" | "updatedAt">>;
 
 export function isSessionActivelyRunning(
   session: SessionActivityState | null,
   latestTurn: LatestTurnTiming | null,
 ): boolean {
   if (!session) return false;
-  if (session.status !== "running" || session.orchestrationStatus !== "running") {
+  if (session.orchestrationStatus !== "running") {
+    return false;
+  }
+  if (session.status !== undefined && session.status !== "running") {
     return false;
   }
   if (session.activeTurnId) {
+    return true;
+  }
+  if (!session.updatedAt) {
     return true;
   }
   if (!latestTurn?.completedAt) {

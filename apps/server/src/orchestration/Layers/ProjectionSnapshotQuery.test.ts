@@ -1023,4 +1023,318 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       }
     }),
   );
+
+  it.effect("finds the newest active GC thread binding by explicit gc.sessionName", () =>
+    Effect.gen(function* () {
+      const snapshotQuery = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+
+      yield* sql`DELETE FROM projection_projects`;
+      yield* sql`DELETE FROM projection_threads`;
+
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id,
+          title,
+          workspace_root,
+          default_model_selection_json,
+          scripts_json,
+          created_at,
+          updated_at,
+          deleted_at
+        )
+        VALUES
+          (
+            'project-1',
+            'Project 1',
+            '/tmp/project-1',
+            '{"provider":"codex","model":"gpt-5-codex"}',
+            '[]',
+            '2026-04-01T00:00:00.000Z',
+            '2026-04-01T00:00:01.000Z',
+            NULL
+          ),
+          (
+            'project-2',
+            'Project 2',
+            '/tmp/project-2',
+            '{"provider":"codex","model":"gpt-5-codex"}',
+            '[]',
+            '2026-04-01T00:00:00.000Z',
+            '2026-04-01T00:00:01.000Z',
+            NULL
+          )
+      `;
+
+      yield* sql`
+        INSERT INTO projection_threads (
+          thread_id,
+          project_id,
+          title,
+          model_selection_json,
+          runtime_mode,
+          interaction_mode,
+          branch,
+          worktree_path,
+          latest_turn_id,
+          custom_metadata,
+          latest_user_message_at,
+          pending_approval_count,
+          pending_user_input_count,
+          has_actionable_proposed_plan,
+          created_at,
+          updated_at,
+          archived_at,
+          deleted_at
+        )
+        VALUES
+          (
+            'thread-old',
+            'project-1',
+            'Old thread',
+            '{"provider":"codex","model":"gpt-5-codex"}',
+            'full-access',
+            'default',
+            NULL,
+            NULL,
+            NULL,
+            '{"gc.agent":"t3code/polecat","gc.sessionName":"t3code--polecat"}',
+            NULL,
+            0,
+            0,
+            0,
+            '2026-04-01T00:00:02.000Z',
+            '2026-04-01T00:00:03.000Z',
+            NULL,
+            NULL
+          ),
+          (
+            'thread-new',
+            'project-2',
+            'New thread',
+            '{"provider":"codex","model":"gpt-5-codex"}',
+            'full-access',
+            'default',
+            NULL,
+            NULL,
+            NULL,
+            '{"gc.agent":"t3code/polecat","gc.sessionName":"t3code--polecat"}',
+            NULL,
+            0,
+            0,
+            0,
+            '2026-04-01T00:00:04.000Z',
+            '2026-04-01T00:00:05.000Z',
+            NULL,
+            NULL
+          ),
+          (
+            'thread-archived',
+            'project-1',
+            'Archived thread',
+            '{"provider":"codex","model":"gpt-5-codex"}',
+            'full-access',
+            'default',
+            NULL,
+            NULL,
+            NULL,
+            '{"gc.agent":"t3code/polecat","gc.sessionName":"t3code--polecat"}',
+            NULL,
+            0,
+            0,
+            0,
+            '2026-04-01T00:00:06.000Z',
+            '2026-04-01T00:00:07.000Z',
+            '2026-04-01T00:00:08.000Z',
+            NULL
+          )
+      `;
+
+      const binding = yield* snapshotQuery.getActiveThreadBindingByGcSessionName("t3code--polecat");
+
+      assert.equal(binding._tag, "Some");
+      if (binding._tag === "Some") {
+        assert.deepStrictEqual(binding.value, {
+          threadId: ThreadId.make("thread-new"),
+          projectId: ProjectId.make("project-2"),
+        });
+      }
+    }),
+  );
+
+  it.effect("falls back to GC_SESSION_NAME inside gc.sessionEnv when resolving bindings", () =>
+    Effect.gen(function* () {
+      const snapshotQuery = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+
+      yield* sql`DELETE FROM projection_projects`;
+      yield* sql`DELETE FROM projection_threads`;
+
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id,
+          title,
+          workspace_root,
+          default_model_selection_json,
+          scripts_json,
+          created_at,
+          updated_at,
+          deleted_at
+        )
+        VALUES (
+          'project-1',
+          'Project 1',
+          '/tmp/project-1',
+          '{"provider":"codex","model":"gpt-5-codex"}',
+          '[]',
+          '2026-04-01T00:00:00.000Z',
+          '2026-04-01T00:00:01.000Z',
+          NULL
+        )
+      `;
+
+      yield* sql`
+        INSERT INTO projection_threads (
+          thread_id,
+          project_id,
+          title,
+          model_selection_json,
+          runtime_mode,
+          interaction_mode,
+          branch,
+          worktree_path,
+          latest_turn_id,
+          custom_metadata,
+          latest_user_message_at,
+          pending_approval_count,
+          pending_user_input_count,
+          has_actionable_proposed_plan,
+          created_at,
+          updated_at,
+          archived_at,
+          deleted_at
+        )
+        VALUES (
+          'thread-env',
+          'project-1',
+          'Env thread',
+          '{"provider":"codex","model":"gpt-5-codex"}',
+          'full-access',
+          'default',
+          NULL,
+          NULL,
+          NULL,
+          '{"gc.agent":"t3code/polecat","gc.sessionEnv":"{\"GC_SESSION_NAME\":\"t3code--polecat-env\"}"}',
+          NULL,
+          0,
+          0,
+          0,
+          '2026-04-01T00:00:02.000Z',
+          '2026-04-01T00:00:03.000Z',
+          NULL,
+          NULL
+        )
+      `;
+
+      const binding =
+        yield* snapshotQuery.getActiveThreadBindingByGcSessionName("t3code--polecat-env");
+
+      assert.equal(binding._tag, "Some");
+      if (binding._tag === "Some") {
+        assert.deepStrictEqual(binding.value, {
+          threadId: ThreadId.make("thread-env"),
+          projectId: ProjectId.make("project-1"),
+        });
+      }
+    }),
+  );
+
+  it.effect(
+    "falls back to the session name encoded in the thread title when GC metadata is absent",
+    () =>
+      Effect.gen(function* () {
+        const snapshotQuery = yield* ProjectionSnapshotQuery;
+        const sql = yield* SqlClient.SqlClient;
+
+        yield* sql`DELETE FROM projection_projects`;
+        yield* sql`DELETE FROM projection_threads`;
+
+        yield* sql`
+        INSERT INTO projection_projects (
+          project_id,
+          title,
+          workspace_root,
+          default_model_selection_json,
+          scripts_json,
+          created_at,
+          updated_at,
+          deleted_at
+        )
+        VALUES (
+          'project-1',
+          'Project 1',
+          '/tmp/project-1',
+          '{"provider":"codex","model":"gpt-5-codex"}',
+          '[]',
+          '2026-04-01T00:00:00.000Z',
+          '2026-04-01T00:00:01.000Z',
+          NULL
+        )
+      `;
+
+        yield* sql`
+        INSERT INTO projection_threads (
+          thread_id,
+          project_id,
+          title,
+          model_selection_json,
+          runtime_mode,
+          interaction_mode,
+          branch,
+          worktree_path,
+          latest_turn_id,
+          custom_metadata,
+          latest_user_message_at,
+          pending_approval_count,
+          pending_user_input_count,
+          has_actionable_proposed_plan,
+          created_at,
+          updated_at,
+          archived_at,
+          deleted_at
+        )
+        VALUES (
+          'thread-title',
+          'project-1',
+          't3code--gastown__crew · gastown.crew',
+          '{"provider":"codex","model":"gpt-5-codex"}',
+          'full-access',
+          'default',
+          NULL,
+          NULL,
+          NULL,
+          '{}',
+          NULL,
+          0,
+          0,
+          0,
+          '2026-04-01T00:00:02.000Z',
+          '2026-04-01T00:00:03.000Z',
+          NULL,
+          NULL
+        )
+      `;
+
+        const binding =
+          yield* snapshotQuery.getActiveThreadBindingByGcSessionName("t3code--gastown__crew");
+
+        assert.equal(binding._tag, "Some");
+        if (binding._tag === "Some") {
+          assert.deepStrictEqual(binding.value, {
+            threadId: ThreadId.make("thread-title"),
+            projectId: ProjectId.make("project-1"),
+          });
+        }
+      }),
+  );
 });

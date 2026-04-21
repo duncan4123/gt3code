@@ -66,7 +66,9 @@ function isLoopbackAddress(value: string): boolean {
     return true;
   }
   const host = normalized.startsWith("::ffff:") ? normalized.slice("::ffff:".length) : normalized;
-  return host === "127.0.0.1" || host === "::1" || host === "::ffff:127.0.0.1" || host.startsWith("127.");
+  return (
+    host === "127.0.0.1" || host === "::1" || host === "::ffff:127.0.0.1" || host.startsWith("127.")
+  );
 }
 
 export const authBootstrapRouteLayer = HttpRouter.add(

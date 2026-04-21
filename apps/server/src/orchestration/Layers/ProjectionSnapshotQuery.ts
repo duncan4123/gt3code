@@ -3,6 +3,8 @@ import {
   IsoDateTime,
   MessageId,
   NonNegativeInt,
+  parseGcMeta,
+  parseGcSessionTitleSegments,
   OrchestrationCheckpointFile,
   OrchestrationProposedPlanId,
   OrchestrationReadModel,
@@ -46,6 +48,7 @@ import { ORCHESTRATION_PROJECTOR_NAMES } from "./ProjectionPipeline.ts";
 import {
   ProjectionSnapshotQuery,
   type ProjectionSnapshotCounts,
+  type ProjectionGcThreadBinding,
   type ProjectionThreadCheckpointContext,
   type ProjectionSnapshotQueryShape,
 } from "../Services/ProjectionSnapshotQuery.ts";
@@ -273,6 +276,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          custom_metadata AS "customMetadata",
           latest_user_message_at AS "latestUserMessageAt",
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
@@ -527,6 +531,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          custom_metadata AS "customMetadata",
           latest_user_message_at AS "latestUserMessageAt",
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
@@ -1277,6 +1282,40 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       } satisfies OrchestrationThreadShell);
     });
 
+  const getActiveThreadBindingByGcSessionName: ProjectionSnapshotQueryShape["getActiveThreadBindingByGcSessionName"] =
+    (sessionName) =>
+      listThreadRows(undefined).pipe(
+        Effect.mapError(
+          toPersistenceSqlOrDecodeError(
+            "ProjectionSnapshotQuery.getActiveThreadBindingByGcSessionName:query",
+            "ProjectionSnapshotQuery.getActiveThreadBindingByGcSessionName:decodeRows",
+          ),
+        ),
+        Effect.map((rows) => {
+          const binding = rows
+            .filter((row) => {
+              if (row.deletedAt !== null || row.archivedAt !== null) {
+                return false;
+              }
+              const gcMeta = parseGcMeta(row.customMetadata);
+              const titleSessionName = parseGcSessionTitleSegments(row.title).sessionName;
+              return (gcMeta.sessionName ?? titleSessionName) === sessionName;
+            })
+            .toSorted(
+              (left, right) =>
+                right.updatedAt.localeCompare(left.updatedAt) ||
+                right.createdAt.localeCompare(left.createdAt) ||
+                right.threadId.localeCompare(left.threadId),
+            )[0];
+          return binding
+            ? Option.some({
+                threadId: binding.threadId,
+                projectId: binding.projectId,
+              } satisfies ProjectionGcThreadBinding)
+            : Option.none<ProjectionGcThreadBinding>();
+        }),
+      );
+
   const getThreadDetailById: ProjectionSnapshotQueryShape["getThreadDetailById"] = (threadId) =>
     Effect.gen(function* () {
       const [
@@ -1434,6 +1473,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getFirstActiveThreadIdByProjectId,
     getThreadCheckpointContext,
     getThreadShellById,
+    getActiveThreadBindingByGcSessionName,
     getThreadDetailById,
   } satisfies ProjectionSnapshotQueryShape;
 });

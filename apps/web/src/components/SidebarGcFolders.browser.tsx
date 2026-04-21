@@ -306,9 +306,9 @@ describe("SidebarGcFolders", () => {
     });
 
     try {
-      await expect.element(page.getByTestId("gc-agent-pool-max-t3code--polecat")).toHaveTextContent(
-        "max 5",
-      );
+      await expect
+        .element(page.getByTestId("gc-agent-pool-max-t3code--polecat"))
+        .toHaveTextContent("max 5");
       await expect
         .element(page.getByTestId("gc-agent-session-mode-t3code--polecat"))
         .not.toBeInTheDocument();

@@ -42,7 +42,6 @@ import {
   type DesktopUpdateState,
   type GcFindThreadBindingResult,
   ProjectId,
-  groupThreadsByRigAndAgent,
   type GcConfigResult,
   type ScopedThreadRef,
   type SidebarProjectGroupingMode,
@@ -153,6 +152,7 @@ import {
   resolveMissingGcRigProjects,
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
+  partitionProjectThreadsForSidebar,
   resolveProjectStatusIndicator,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
@@ -167,7 +167,6 @@ import {
 import { sortThreads } from "../lib/threadSort";
 import { SidebarGcFolders } from "./SidebarGcFolders";
 import {
-  gcSessionNameForQualifiedAgent,
   resolveGcAgentRuntimeState,
   type GcAgentActionState,
   waitForGcAgentBinding,
@@ -734,6 +733,7 @@ interface SidebarProjectThreadListProps {
   hasOverflowingThreads: boolean;
   hiddenThreadStatus: ThreadStatusPill | null;
   orderedProjectThreadKeys: readonly string[];
+  folderThreads: readonly SidebarThreadSummary[];
   renderedThreads: readonly SidebarThreadSummary[];
   rigGroups: ReadonlyArray<{
     id: string;
@@ -840,6 +840,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     hasOverflowingThreads,
     hiddenThreadStatus,
     orderedProjectThreadKeys,
+    folderThreads,
     renderedThreads,
     rigGroups,
     showEmptyThreadState,
@@ -884,10 +885,9 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
   } = props;
   const showMoreButtonRender = useMemo(() => <button type="button" />, []);
   const showLessButtonRender = useMemo(() => <button type="button" />, []);
-  const renderedThreadById = useMemo(
-    () => new Map(renderedThreads.map((thread) => [thread.id, thread] as const)),
-    [renderedThreads],
-  );
+  const folderThreadById = useMemo(() => {
+    return new Map(folderThreads.map((thread) => [thread.id, thread] as const));
+  }, [folderThreads]);
 
   return (
     <SidebarMenuSub
@@ -907,9 +907,9 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
       {shouldShowThreadPanel && rigGroups.length > 0 ? (
         <SidebarGcFolders
           rigGroups={rigGroups}
-    gcAgentMutationsInFlight={gcAgentMutationsInFlight}
-    gcAgentStartsInFlight={gcAgentStartsInFlight}
-    gcRigMutationsInFlight={gcRigMutationsInFlight}
+          gcAgentMutationsInFlight={gcAgentMutationsInFlight}
+          gcAgentStartsInFlight={gcAgentStartsInFlight}
+          gcRigMutationsInFlight={gcRigMutationsInFlight}
           gcCityMutationInFlight={gcCityMutationInFlight}
           gcAgentActionStateByAgent={gcAgentActionStateByAgent}
           gcRigActionStateByRig={gcRigActionStateByRig}
@@ -921,7 +921,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
           onToggleAgentSessionMode={onToggleGcAgentSessionMode}
           renderThreadRows={(threadIds, indentClassName) =>
             threadIds.flatMap((threadId) => {
-              const thread = renderedThreadById.get(threadId);
+              const thread = folderThreadById.get(threadId);
               if (!thread) {
                 return [];
               }
@@ -1129,10 +1129,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const defaultThreadEnvMode = useSettings<ThreadEnvMode>(
     (settings) => settings.defaultThreadEnvMode,
   );
-  const projectGroupingSettings = useSettings((settings) => ({
-    sidebarProjectGroupingMode: settings.sidebarProjectGroupingMode,
-    sidebarProjectGroupingOverrides: settings.sidebarProjectGroupingOverrides,
-  }));
+  const sidebarProjectGroupingMode = useSettings((settings) => settings.sidebarProjectGroupingMode);
+  const sidebarProjectGroupingOverrides = useSettings(
+    (settings) => settings.sidebarProjectGroupingOverrides,
+  );
   const { updateSettings } = useUpdateSettings();
   const router = useRouter();
   const markThreadUnread = useUiStateStore((state) => state.markThreadUnread);
@@ -1327,6 +1327,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   }, [activeRouteThreadKey, projectExpanded, visibleProjectThreads]);
 
   const {
+    folderThreads,
     hasOverflowingThreads,
     hiddenThreadStatus,
     renderedThreads,
@@ -1351,37 +1352,29 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         },
       });
     };
-    const hasOverflowingThreads = visibleProjectThreads.length > THREAD_PREVIEW_LIMIT;
-    const previewThreads =
-      isThreadListExpanded || !hasOverflowingThreads
-        ? visibleProjectThreads
-        : visibleProjectThreads.slice(0, THREAD_PREVIEW_LIMIT);
-    const visibleThreadKeys = new Set(
-      [...previewThreads, ...(pinnedCollapsedThread ? [pinnedCollapsedThread] : [])].map((thread) =>
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-      ),
-    );
-    const renderedThreads = pinnedCollapsedThread
-      ? [pinnedCollapsedThread]
-      : visibleProjectThreads.filter((thread) =>
-          visibleThreadKeys.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
-        );
-    const { rigGroups, standaloneThreads } = groupThreadsByRigAndAgent(renderedThreads, {
-      config: gcConfig,
+    const folderThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : visibleProjectThreads;
+    const {
+      rigGroups,
+      visibleStandaloneThreads,
+      hiddenStandaloneThreads,
+      hasHiddenStandaloneThreads,
+    } = partitionProjectThreadsForSidebar({
+      threads: folderThreads,
+      activeThreadId: pinnedCollapsedThread?.id,
+      isThreadListExpanded,
+      previewLimit: THREAD_PREVIEW_LIMIT,
+      gcConfig,
       projectCwd: project.cwd,
       projectName: project.displayName,
     });
     const hasVirtualAgentFolders = rigGroups.some((rigGroup) => rigGroup.agentGroups.length > 0);
-    const hiddenThreads = visibleProjectThreads.filter(
-      (thread) =>
-        !visibleThreadKeys.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
-    );
     return {
-      hasOverflowingThreads,
+      folderThreads,
+      hasOverflowingThreads: hasHiddenStandaloneThreads,
       hiddenThreadStatus: resolveProjectStatusIndicator(
-        hiddenThreads.map((thread) => resolveProjectThreadStatus(thread)),
+        hiddenStandaloneThreads.map((thread) => resolveProjectThreadStatus(thread)),
       ),
-      renderedThreads: standaloneThreads,
+      renderedThreads: visibleStandaloneThreads,
       rigGroups: rigGroups.map((rigGroup) => ({
         id: rigGroup.id,
         label: rigGroup.label,
@@ -1396,9 +1389,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           ...(typeof agentGroup.maxActiveSessions === "number"
             ? { maxActiveSessions: agentGroup.maxActiveSessions }
             : {}),
-          ...(agentGroup.namedSessionMode
-            ? { namedSessionMode: agentGroup.namedSessionMode }
-            : {}),
+          ...(agentGroup.namedSessionMode ? { namedSessionMode: agentGroup.namedSessionMode } : {}),
           runtimeState: resolveGcAgentRuntimeState({
             isPool: agentGroup.isPool,
             isSuspended: agentGroup.isSuspended,
@@ -1408,9 +1399,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             ...(gcAgentActionStateByAgent.get(agentGroup.qualifiedName)
               ? { actionState: gcAgentActionStateByAgent.get(agentGroup.qualifiedName) }
               : {}),
-            ...(gcAgentStartsInFlight.has(agentGroup.qualifiedName)
-              ? { startPending: true }
-              : {}),
+            ...(gcAgentStartsInFlight.has(agentGroup.qualifiedName) ? { startPending: true } : {}),
             threads: agentGroup.threads.map((thread) => ({
               latestTurn: thread.latestTurn ?? null,
               session: thread.session ?? null,
@@ -1422,7 +1411,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       showEmptyThreadState:
         projectExpanded &&
         visibleProjectThreads.length === 0 &&
-        standaloneThreads.length === 0 &&
+        visibleStandaloneThreads.length === 0 &&
         !hasVirtualAgentFolders,
       shouldShowThreadPanel: projectExpanded || pinnedCollapsedThread !== null,
     };
@@ -1514,11 +1503,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     (member: SidebarProjectGroupMember) => {
       const overrideKey = deriveProjectGroupingOverrideKey(member);
       setProjectGroupingTarget(member);
-      setProjectGroupingSelection(
-        projectGroupingSettings.sidebarProjectGroupingOverrides?.[overrideKey] ?? "inherit",
-      );
+      setProjectGroupingSelection(sidebarProjectGroupingOverrides?.[overrideKey] ?? "inherit");
     },
-    [projectGroupingSettings.sidebarProjectGroupingOverrides],
+    [sidebarProjectGroupingOverrides],
   );
 
   const removeProject = useCallback(
@@ -2088,7 +2075,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
     const overrideKey = deriveProjectGroupingOverrideKey(projectGroupingTarget);
     const nextOverrides = {
-      ...projectGroupingSettings.sidebarProjectGroupingOverrides,
+      ...sidebarProjectGroupingOverrides,
     };
     if (projectGroupingSelection === "inherit") {
       delete nextOverrides[overrideKey];
@@ -2102,7 +2089,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   }, [
     closeProjectGroupingDialog,
     projectGroupingSelection,
-    projectGroupingSettings.sidebarProjectGroupingOverrides,
+    sidebarProjectGroupingOverrides,
     projectGroupingTarget,
     updateSettings,
   ]);
@@ -2283,6 +2270,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         hasOverflowingThreads={hasOverflowingThreads}
         hiddenThreadStatus={hiddenThreadStatus}
         orderedProjectThreadKeys={orderedProjectThreadKeys}
+        folderThreads={folderThreads}
         renderedThreads={renderedThreads}
         rigGroups={rigGroups}
         showEmptyThreadState={showEmptyThreadState}
@@ -2409,7 +2397,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 <SelectTrigger className="w-full" aria-label="Project grouping rule">
                   <SelectValue>
                     {projectGroupingSelection === "inherit"
-                      ? `Use global default (${PROJECT_GROUPING_MODE_LABELS[projectGroupingSettings.sidebarProjectGroupingMode]})`
+                      ? `Use global default (${PROJECT_GROUPING_MODE_LABELS[sidebarProjectGroupingMode]})`
                       : PROJECT_GROUPING_MODE_LABELS[projectGroupingSelection]}
                   </SelectValue>
                 </SelectTrigger>
@@ -2431,7 +2419,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             </div>
             <p className="text-xs text-muted-foreground">
               {projectGroupingSelection === "inherit"
-                ? projectGroupingModeDescription(projectGroupingSettings.sidebarProjectGroupingMode)
+                ? projectGroupingModeDescription(sidebarProjectGroupingMode)
                 : projectGroupingModeDescription(projectGroupingSelection)}
             </p>
           </DialogPanel>
@@ -3023,10 +3011,14 @@ export default function Sidebar() {
   const sidebarThreadSortOrder = useSettings((s) => s.sidebarThreadSortOrder);
   const sidebarProjectSortOrder = useSettings((s) => s.sidebarProjectSortOrder);
   const sidebarProjectGroupingMode = useSettings((s) => s.sidebarProjectGroupingMode);
-  const projectGroupingSettings = useSettings((settings) => ({
-    sidebarProjectGroupingMode: settings.sidebarProjectGroupingMode,
-    sidebarProjectGroupingOverrides: settings.sidebarProjectGroupingOverrides,
-  }));
+  const sidebarProjectGroupingOverrides = useSettings((s) => s.sidebarProjectGroupingOverrides);
+  const projectGroupingSettings = useMemo(
+    () => ({
+      sidebarProjectGroupingMode,
+      sidebarProjectGroupingOverrides,
+    }),
+    [sidebarProjectGroupingMode, sidebarProjectGroupingOverrides],
+  );
   const { updateSettings } = useUpdateSettings();
   const { handleNewThread } = useNewThreadHandler();
   const { archiveThread, deleteThread } = useThreadActions();
@@ -3184,11 +3176,12 @@ export default function Sidebar() {
   );
 
   useEffect(() => {
+    const abortControllers = gcAgentStartAbortControllersRef.current;
     return () => {
-      for (const controller of gcAgentStartAbortControllersRef.current.values()) {
+      for (const controller of abortControllers.values()) {
         controller.abort();
       }
-      gcAgentStartAbortControllersRef.current.clear();
+      abortControllers.clear();
     };
   }, []);
 
@@ -3424,7 +3417,9 @@ export default function Sidebar() {
   );
 
   const describeAgentBinding = useCallback((binding: NonNullable<GcFindThreadBindingResult>) => {
-    const matchingThread = sidebarThreadsRef.current.find((thread) => thread.id === binding.threadId);
+    const matchingThread = sidebarThreadsRef.current.find(
+      (thread) => thread.id === binding.threadId,
+    );
     if (!matchingThread) {
       return `Named session is now bound to thread ${binding.threadId}.`;
     }
@@ -3928,14 +3923,13 @@ export default function Sidebar() {
           return [];
         }
         const isThreadListExpanded = expandedThreadListsByProject.has(project.projectKey);
-        const hasOverflowingThreads = projectThreads.length > THREAD_PREVIEW_LIMIT;
-        const previewThreads =
-          isThreadListExpanded || !hasOverflowingThreads
-            ? projectThreads
-            : projectThreads.slice(0, THREAD_PREVIEW_LIMIT);
-        const renderedThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : previewThreads;
-        const { rigGroups, standaloneThreads } = groupThreadsByRigAndAgent(renderedThreads, {
-          config: gcConfig,
+        const renderedThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : projectThreads;
+        const { rigGroups, visibleStandaloneThreads } = partitionProjectThreadsForSidebar({
+          threads: renderedThreads,
+          activeThreadId: pinnedCollapsedThread?.id,
+          isThreadListExpanded,
+          previewLimit: THREAD_PREVIEW_LIMIT,
+          gcConfig,
           projectCwd: project.cwd,
           projectName: project.displayName,
         });
@@ -3947,7 +3941,7 @@ export default function Sidebar() {
               ),
             ),
           ),
-          ...standaloneThreads.map((thread) =>
+          ...visibleStandaloneThreads.map((thread) =>
             scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
           ),
         ];

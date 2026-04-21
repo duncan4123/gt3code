@@ -264,6 +264,9 @@ export function projectEvent(
             updatedAt: payload.updatedAt,
             archivedAt: null,
             deletedAt: null,
+            ...(payload.customMetadata !== undefined
+              ? { customMetadata: payload.customMetadata }
+              : {}),
             messages: [],
             activities: [],
             checkpoints: [],

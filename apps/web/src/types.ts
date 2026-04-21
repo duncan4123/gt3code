@@ -132,6 +132,7 @@ export interface ThreadShell {
   updatedAt?: string | undefined;
   branch: string | null;
   worktreePath: string | null;
+  customMetadata?: Record<string, string>;
 }
 
 export interface ThreadTurnState {

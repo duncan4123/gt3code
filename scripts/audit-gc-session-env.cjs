@@ -18,14 +18,30 @@ if (typeof Bun !== "undefined" && process.env.T3_AUDIT_NODE_REEXEC !== "1") {
 
 function loadSqliteDatabase() {
   const candidates = [
-    "/data/projects/t3code/node_modules/.bun/better-sqlite3@12.8.0/node_modules/better-sqlite3",
     "better-sqlite3",
-  ];
+    (() => {
+      try {
+        return require.resolve("better-sqlite3", {
+          paths: [
+            "/data/projects/t3code/packages/doltlite",
+            "/data/projects/t3code/apps/server",
+            "/data/projects/t3code",
+          ],
+        });
+      } catch {
+        return null;
+      }
+    })(),
+  ].filter(Boolean);
   for (const candidate of candidates) {
     try {
       return require(candidate);
     } catch {}
   }
+  try {
+    const { DatabaseSync } = require("node:sqlite");
+    return DatabaseSync;
+  } catch {}
   if (typeof Bun !== "undefined") {
     try {
       return require("bun:sqlite").Database;
@@ -161,8 +177,10 @@ function resolveProjectionDbPath() {
   }
 
   const candidates = [
-    path.join(os.homedir(), ".t3", "userdata", "state-proj.sqlite"),
     path.join(os.homedir(), ".t3", "dev", "state-proj.sqlite"),
+    path.join(os.homedir(), ".t3", "userdata", "state-proj.sqlite"),
+    path.join(os.homedir(), ".t3", "dev", "userdata", "state-proj.sqlite"),
+    path.join(os.homedir(), ".t3", "state-proj.sqlite"),
   ];
 
   for (const candidate of candidates) {

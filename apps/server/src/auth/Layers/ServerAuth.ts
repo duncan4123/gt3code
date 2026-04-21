@@ -46,10 +46,13 @@ function isLoopbackAddress(value: string): boolean {
   if (normalized.startsWith("[") && normalized.endsWith("]")) {
     return isLoopbackAddress(normalized.slice(1, -1));
   }
-  const host = normalized.includes(":") && !normalized.includes("::")
-    ? normalized.slice(0, normalized.lastIndexOf(":"))
-    : normalized;
-  return host === "127.0.0.1" || host === "::1" || host === "::ffff:127.0.0.1" || host.startsWith("127.");
+  const host =
+    normalized.includes(":") && !normalized.includes("::")
+      ? normalized.slice(0, normalized.lastIndexOf(":"))
+      : normalized;
+  return (
+    host === "127.0.0.1" || host === "::1" || host === "::ffff:127.0.0.1" || host.startsWith("127.")
+  );
 }
 
 export function toBootstrapExchangeAuthError(cause: BootstrapCredentialError): AuthError {
@@ -388,8 +391,13 @@ export const makeServerAuth = Effect.gen(function* () {
       return yield* authenticateRequest(request).pipe(
         Effect.catchTag("AuthError", (error) =>
           Effect.gen(function* () {
-            if (Option.isSome(request.remoteAddress) && isLoopbackAddress(request.remoteAddress.value)) {
-              yield* Effect.logWarning("Allowing unauthenticated loopback websocket upgrade for GC bridge compatibility.").pipe(
+            if (
+              Option.isSome(request.remoteAddress) &&
+              isLoopbackAddress(request.remoteAddress.value)
+            ) {
+              yield* Effect.logWarning(
+                "Allowing unauthenticated loopback websocket upgrade for GC bridge compatibility.",
+              ).pipe(
                 Effect.annotateLogs({
                   remoteAddress: request.remoteAddress.value,
                 }),

@@ -71,6 +71,11 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
     Effect.gen(function* () {
       const threads = yield* ProjectionThreadRepository;
       const sql = yield* SqlClient.SqlClient;
+      const customMetadata = JSON.stringify({
+        "gc.agent": "t3code/polecat",
+        "gc.rig": "t3code",
+        "gc.groupKind": "rig",
+      });
 
       yield* threads.upsert({
         threadId: ThreadId.make("thread-null-options"),
@@ -93,13 +98,16 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         pendingUserInputCount: 0,
         hasActionableProposedPlan: 0,
         deletedAt: null,
-        customMetadata: "{}",
+        customMetadata,
       });
 
       const rows = yield* sql<{
         readonly modelSelection: string | null;
+        readonly customMetadata: string | null;
       }>`
-        SELECT model_selection_json AS "modelSelection"
+        SELECT
+          model_selection_json AS "modelSelection",
+          custom_metadata AS "customMetadata"
         FROM projection_threads
         WHERE thread_id = 'thread-null-options'
       `;
@@ -115,6 +123,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
           model: "claude-opus-4-6",
         }),
       );
+      assert.strictEqual(row.customMetadata, customMetadata);
 
       const persisted = yield* threads.getById({
         threadId: ThreadId.make("thread-null-options"),
@@ -123,6 +132,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         provider: "claudeAgent",
         model: "claude-opus-4-6",
       });
+      assert.strictEqual(Option.getOrNull(persisted)?.customMetadata, customMetadata);
     }),
   );
 });

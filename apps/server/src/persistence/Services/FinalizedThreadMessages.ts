@@ -6,7 +6,7 @@ import {
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
-import { Option, Schema, ServiceMap } from "effect";
+import { Context, Option, Schema } from "effect";
 import type { Effect } from "effect";
 
 import type { ProjectionRepositoryError } from "../Errors.ts";
@@ -40,7 +40,7 @@ export interface FinalizedThreadMessageRepositoryShape {
   ) => Effect.Effect<Option.Option<FinalizedThreadMessage>, ProjectionRepositoryError>;
 }
 
-export class FinalizedThreadMessageRepository extends ServiceMap.Service<
+export class FinalizedThreadMessageRepository extends Context.Service<
   FinalizedThreadMessageRepository,
   FinalizedThreadMessageRepositoryShape
 >()("t3/persistence/Services/FinalizedThreadMessages/FinalizedThreadMessageRepository") {}

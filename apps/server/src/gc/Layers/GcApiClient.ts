@@ -112,13 +112,11 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
             : typeof agent.dir === "string" && agent.dir.trim().length > 0
               ? `${agent.dir}/${String(agent.name)}`
               : String(agent.name);
-        const derivedNamedSessionMode = namedSessionModes.get(
-          qualifiedName,
-        );
+        const derivedNamedSessionMode = namedSessionModes.get(qualifiedName);
         const effectiveNamedSessionMode =
           typeof agent.is_pool === "boolean" && agent.is_pool
             ? undefined
-            : namedSessionMode ?? derivedNamedSessionMode ?? "always";
+            : (namedSessionMode ?? derivedNamedSessionMode ?? "always");
         return [
           {
             name: agent.name,
@@ -133,9 +131,7 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
               : {}),
             ...(typeof agent.scope === "string" ? { scope: agent.scope } : {}),
             suspended: Boolean(agent.suspended),
-            ...(effectiveNamedSessionMode
-              ? { named_session_mode: effectiveNamedSessionMode }
-              : {}),
+            ...(effectiveNamedSessionMode ? { named_session_mode: effectiveNamedSessionMode } : {}),
           },
         ];
       })
@@ -345,9 +341,7 @@ function findConfiguredAgentIdentity(
   }
 
   const normalizedName = sanitizeKey(qualifiedAgentName);
-  const direct = config.agents.find(
-    (agent) => resolveAgentConfigKey(agent) === normalizedName,
-  );
+  const direct = config.agents.find((agent) => resolveAgentConfigKey(agent) === normalizedName);
   if (direct) {
     return {
       dir: typeof direct.dir === "string" ? direct.dir.trim() : "",
@@ -355,13 +349,14 @@ function findConfiguredAgentIdentity(
     };
   }
 
-  const unqualified =
-    normalizedName.includes("/") ? normalizedName.slice(normalizedName.indexOf("/") + 1) : normalizedName;
+  const unqualified = normalizedName.includes("/")
+    ? normalizedName.slice(normalizedName.indexOf("/") + 1)
+    : normalizedName;
   const fallback = config.agents.find(
     (agent) =>
       agent.name === unqualified &&
-      ((typeof agent.dir === "string" ? agent.dir.trim() : "") ===
-        (normalizedName.includes("/") ? normalizedName.slice(0, normalizedName.indexOf("/")) : "")),
+      (typeof agent.dir === "string" ? agent.dir.trim() : "") ===
+        (normalizedName.includes("/") ? normalizedName.slice(0, normalizedName.indexOf("/")) : ""),
   );
   if (!fallback) {
     return null;
@@ -1220,7 +1215,7 @@ const makeGcApiClient = Effect.gen(function* () {
           lastKnownConfig =
             normalizedRemote && cityPath
               ? mergeCliExpandedConfig(normalizedRemote, loadExpandedCliConfig())
-              : normalizedRemote ?? remote;
+              : (normalizedRemote ?? remote);
           cachedCityName = lastKnownConfig.workspace.name?.trim() || cachedCityName;
           return lastKnownConfig;
         }

@@ -32,12 +32,18 @@ import Migration0016 from "./Migrations/016_CanonicalizeModelSelections.ts";
 import Migration0017 from "./Migrations/017_ProjectionThreadsArchivedAt.ts";
 import Migration0018 from "./Migrations/018_ProjectionThreadsArchivedAtIndex.ts";
 import Migration0019 from "./Migrations/019_ProjectionSnapshotLookupIndexes.ts";
-import Migration0020 from "./Migrations/020_AuthAccessManagement.ts";
-import Migration0021 from "./Migrations/021_AuthSessionClientMetadata.ts";
-import Migration0022 from "./Migrations/022_AuthSessionLastConnectedAt.ts";
-import Migration0023 from "./Migrations/023_ProjectionThreadShellSummary.ts";
-import Migration0024 from "./Migrations/024_BackfillProjectionThreadShellSummary.ts";
-import Migration0025 from "./Migrations/025_CleanupInvalidProjectionPendingApprovals.ts";
+import Migration0020 from "./Migrations/020_ProjectionThreadsCustomMetadata.ts";
+import Migration0021 from "./Migrations/021_MoveProjectionsToBtreeSidecar.ts";
+import Migration0022 from "./Migrations/022_HybridAttachGcBeads.ts";
+import Migration0023 from "./Migrations/023_ProjectionThreadMessagesFts.ts";
+import Migration0024 from "./Migrations/024_FinalizedThreadMessages.ts";
+import Migration0025 from "./Migrations/025_MoveEventStoreToBtreeSidecar.ts";
+import Migration0026 from "./Migrations/020_AuthAccessManagement.ts";
+import Migration0027 from "./Migrations/021_AuthSessionClientMetadata.ts";
+import Migration0028 from "./Migrations/022_AuthSessionLastConnectedAt.ts";
+import Migration0029 from "./Migrations/023_ProjectionThreadShellSummary.ts";
+import Migration0030 from "./Migrations/024_BackfillProjectionThreadShellSummary.ts";
+import Migration0031 from "./Migrations/025_CleanupInvalidProjectionPendingApprovals.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -69,12 +75,18 @@ export const migrationEntries = [
   [17, "ProjectionThreadsArchivedAt", Migration0017],
   [18, "ProjectionThreadsArchivedAtIndex", Migration0018],
   [19, "ProjectionSnapshotLookupIndexes", Migration0019],
-  [20, "AuthAccessManagement", Migration0020],
-  [21, "AuthSessionClientMetadata", Migration0021],
-  [22, "AuthSessionLastConnectedAt", Migration0022],
-  [23, "ProjectionThreadShellSummary", Migration0023],
-  [24, "BackfillProjectionThreadShellSummary", Migration0024],
-  [25, "CleanupInvalidProjectionPendingApprovals", Migration0025],
+  [20, "ProjectionThreadsCustomMetadata", Migration0020],
+  [21, "MoveProjectionsToBtreeSidecar", Migration0021],
+  [22, "HybridAttachGcBeads", Migration0022],
+  [23, "ProjectionThreadMessagesFts", Migration0023],
+  [24, "FinalizedThreadMessages", Migration0024],
+  [25, "MoveEventStoreToBtreeSidecar", Migration0025],
+  [26, "AuthAccessManagement", Migration0026],
+  [27, "AuthSessionClientMetadata", Migration0027],
+  [28, "AuthSessionLastConnectedAt", Migration0028],
+  [29, "ProjectionThreadShellSummary", Migration0029],
+  [30, "BackfillProjectionThreadShellSummary", Migration0030],
+  [31, "CleanupInvalidProjectionPendingApprovals", Migration0031],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

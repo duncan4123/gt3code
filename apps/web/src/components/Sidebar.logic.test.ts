@@ -7,6 +7,7 @@ import {
   getSidebarThreadIdsToPrewarm,
   getVisibleSidebarThreadIds,
   normalizeThreadSearchQuery,
+  partitionProjectThreadsForSidebar,
   resolveAdjacentThreadId,
   resolveMissingGcRigProjects,
   getFallbackThreadIdAfterDelete,
@@ -26,7 +27,7 @@ import {
   sortThreadsForSidebar,
   THREAD_JUMP_HINT_SHOW_DELAY_MS,
 } from "./Sidebar.logic";
-import { OrchestrationLatestTurn, ProjectId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, OrchestrationLatestTurn, ProjectId, ThreadId } from "@t3tools/contracts";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -316,10 +317,7 @@ describe("groupProjectsByWorkspacePath", () => {
           name: "t3code",
           cwd: "/data/projects/t3code/",
         },
-        projectIds: [
-          ProjectId.make("project-t3code-a"),
-          ProjectId.make("project-t3code-b"),
-        ],
+        projectIds: [ProjectId.make("project-t3code-a"), ProjectId.make("project-t3code-b")],
       },
       {
         project: {
@@ -514,10 +512,7 @@ describe("getVisibleSidebarThreadIds", () => {
       getVisibleSidebarThreadIds([
         {
           shouldShowThreadPanel: false,
-          renderedThreadIds: [
-            ThreadId.make("thread-hidden-2"),
-            ThreadId.make("thread-hidden-1"),
-          ],
+          renderedThreadIds: [ThreadId.make("thread-hidden-2"), ThreadId.make("thread-hidden-1")],
         },
         {
           shouldShowThreadPanel: true,
@@ -760,9 +755,7 @@ describe("getVisibleThreadsForProject", () => {
       ThreadId.make("thread-6"),
       ThreadId.make("thread-8"),
     ]);
-    expect(result.hiddenThreads.map((thread) => thread.id)).toEqual([
-      ThreadId.make("thread-7"),
-    ]);
+    expect(result.hiddenThreads.map((thread) => thread.id)).toEqual([ThreadId.make("thread-7")]);
   });
 
   it("returns all threads when the list is expanded", () => {
@@ -787,10 +780,58 @@ describe("getVisibleThreadsForProject", () => {
   });
 });
 
+describe("partitionProjectThreadsForSidebar", () => {
+  it("keeps GC-managed threads visible even when standalone rows overflow the preview", () => {
+    const threads = [
+      ...Array.from({ length: 7 }, (_, index) =>
+        makeThread({
+          id: ThreadId.make(`thread-${index + 1}`),
+          title: `Thread ${index + 1}`,
+        }),
+      ),
+      makeThread({
+        id: ThreadId.make("thread-gc"),
+        title: "Crew thread",
+        customMetadata: {
+          "gc.agent": "t3code/gastown.crew",
+          "gc.rig": "t3code",
+        },
+      }),
+    ];
+
+    const result = partitionProjectThreadsForSidebar({
+      threads,
+      activeThreadId: undefined,
+      isThreadListExpanded: false,
+      previewLimit: 6,
+      gcConfig: null,
+      projectCwd: "/data/projects/t3code",
+      projectName: "t3code",
+    });
+
+    expect(result.hasHiddenStandaloneThreads).toBe(true);
+    expect(result.visibleStandaloneThreads.map((thread) => thread.id)).toEqual([
+      ThreadId.make("thread-1"),
+      ThreadId.make("thread-2"),
+      ThreadId.make("thread-3"),
+      ThreadId.make("thread-4"),
+      ThreadId.make("thread-5"),
+      ThreadId.make("thread-6"),
+    ]);
+    expect(result.hiddenStandaloneThreads.map((thread) => thread.id)).toEqual([
+      ThreadId.make("thread-7"),
+    ]);
+    expect(result.rigGroups[0]?.agentGroups[0]?.threads.map((thread) => thread.id)).toEqual([
+      ThreadId.make("thread-gc"),
+    ]);
+  });
+});
+
 function makeProject(overrides: Partial<Project> = {}): Project {
   const { defaultModelSelection, ...rest } = overrides;
   return {
     id: ProjectId.make("project-1"),
+    environmentId: EnvironmentId.make("environment-1"),
     name: "Project",
     cwd: "/tmp/project",
     defaultModelSelection: {
@@ -802,12 +843,13 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     updatedAt: "2026-03-09T10:00:00.000Z",
     scripts: [],
     ...rest,
-  };
+  } as Project;
 }
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
   return {
     id: ThreadId.make("thread-1"),
+    environmentId: EnvironmentId.make("environment-1"),
     codexThreadId: null,
     projectId: ProjectId.make("project-1"),
     title: "Thread",
@@ -831,7 +873,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     turnDiffSummaries: [],
     activities: [],
     ...overrides,
-  };
+  } as Thread;
 }
 
 describe("sortThreadsForSidebar", () => {
@@ -1020,10 +1062,7 @@ describe("getFallbackThreadIdAfterDelete", () => {
         }),
       ],
       deletedThreadId: ThreadId.make("thread-active"),
-      deletedThreadIds: new Set([
-        ThreadId.make("thread-active"),
-        ThreadId.make("thread-newest"),
-      ]),
+      deletedThreadIds: new Set([ThreadId.make("thread-active"), ThreadId.make("thread-newest")]),
       sortOrder: "created_at",
     });
 

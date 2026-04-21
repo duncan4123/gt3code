@@ -1,21 +1,27 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { type GcThreadContextResult, type ThreadId, parseGcMeta } from "@t3tools/contracts";
-import { selectSidebarThreadsAcrossEnvironments, useStore } from "../store";
+import {
+  type EnvironmentId,
+  type GcThreadContextResult,
+  type ThreadId,
+  parseGcMeta,
+} from "@t3tools/contracts";
 import { readLocalApi } from "../localApi";
+import type { Thread, ThreadShell } from "../types";
 import GcContextSidebar from "./GcContextSidebar";
 
 interface GcPanelProps {
+  environmentId: EnvironmentId;
   threadId: ThreadId;
+  thread: Pick<Thread | ThreadShell, "customMetadata"> | null | undefined;
 }
 
-const GcPanel = memo(function GcPanel({ threadId }: GcPanelProps) {
-  const threads = useStore(selectSidebarThreadsAcrossEnvironments);
-  const thread = useMemo(() => threads.find((entry) => entry.id === threadId) ?? null, [threadId, threads]);
+const GcPanel = memo(function GcPanel({ environmentId, threadId, thread }: GcPanelProps) {
   const gcMeta = useMemo(() => parseGcMeta(thread?.customMetadata), [thread?.customMetadata]);
 
   const [threadContext, setThreadContext] = useState<GcThreadContextResult | null>(null);
 
   useEffect(() => {
+    setThreadContext(null);
     if (!gcMeta.isGcManaged) return;
     const api = readLocalApi();
     if (!api) return;
@@ -31,7 +37,7 @@ const GcPanel = memo(function GcPanel({ threadId }: GcPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [threadId, gcMeta.isGcManaged]);
+  }, [environmentId, threadId, gcMeta.isGcManaged]);
 
   if (!thread?.customMetadata || !gcMeta.isGcManaged) {
     return null;

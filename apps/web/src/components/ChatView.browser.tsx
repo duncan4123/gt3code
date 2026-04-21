@@ -211,6 +211,10 @@ function createMockEnvironmentApi(input: {
       getFullThreadDiff: (() => {
         throw new Error("Not implemented in browser test.");
       }) as EnvironmentApi["orchestration"]["getFullThreadDiff"],
+      replayEvents: (async () => []) as EnvironmentApi["orchestration"]["replayEvents"],
+      searchThreadMessages: (async () => ({
+        results: [],
+      })) as EnvironmentApi["orchestration"]["searchThreadMessages"],
       subscribeShell: (() => () => undefined) as EnvironmentApi["orchestration"]["subscribeShell"],
       subscribeThread: (() => () =>
         undefined) as EnvironmentApi["orchestration"]["subscribeThread"],
@@ -3506,7 +3510,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      useComposerDraftStore.getState().setPrompt(THREAD_ID, "send should be available");
+      useComposerDraftStore.getState().setPrompt(THREAD_REF, "send should be available");
 
       await vi.waitFor(
         async () => {

@@ -9,7 +9,7 @@ import { Config, Data, Effect, Hash, Layer, Logger, Option, Path, Schema } from 
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import { ChildProcess } from "effect/unstable/process";
 
-const BASE_SERVER_PORT = 13773;
+const BASE_SERVER_PORT = 3773;
 const BASE_WEB_PORT = 5733;
 const MAX_HASH_OFFSET = 3000;
 const MAX_PORT = 65535;
@@ -375,6 +375,100 @@ interface DevRunnerCliInput {
   readonly turboArgs: ReadonlyArray<string>;
 }
 
+function parseBooleanFlagValue(raw: string | undefined, flagName: string): boolean {
+  if (raw === undefined || raw === "true" || raw === "1") {
+    return true;
+  }
+  if (raw === "false" || raw === "0") {
+    return false;
+  }
+  throw new Error(`Invalid value for --${flagName}: ${raw}`);
+}
+
+function parseDirectDevRunnerArgs(argv: ReadonlyArray<string>): DevRunnerCliInput {
+  const [modeRaw, ...rest] = argv;
+  if (!modeRaw || !DEV_RUNNER_MODES.includes(modeRaw as DevMode)) {
+    throw new Error(`Expected mode: ${DEV_RUNNER_MODES.join(", ")}`);
+  }
+
+  const parsed: DevRunnerCliInput = {
+    mode: modeRaw as DevMode,
+    t3Home: undefined,
+    noBrowser: undefined,
+    autoBootstrapProjectFromCwd: undefined,
+    logWebSocketEvents: undefined,
+    host: undefined,
+    port: undefined,
+    devUrl: undefined,
+    dryRun: false,
+    turboArgs: [],
+  };
+
+  const turboArgs: Array<string> = [];
+  for (let index = 0; index < rest.length; index += 1) {
+    const arg = rest[index];
+    if (arg === "--") {
+      turboArgs.push(...rest.slice(index + 1));
+      break;
+    }
+    if (!arg.startsWith("--")) {
+      turboArgs.push(arg);
+      continue;
+    }
+
+    const [flagName, inlineValue] = arg.slice(2).split("=", 2);
+    const nextValue = () => {
+      if (inlineValue !== undefined) {
+        return inlineValue;
+      }
+      index += 1;
+      if (index >= rest.length) {
+        throw new Error(`Missing value for --${flagName}`);
+      }
+      return rest[index]!;
+    };
+
+    switch (flagName) {
+      case "home-dir":
+        parsed.t3Home = nextValue();
+        break;
+      case "no-browser":
+        parsed.noBrowser = parseBooleanFlagValue(inlineValue, flagName);
+        break;
+      case "auto-bootstrap-project-from-cwd":
+        parsed.autoBootstrapProjectFromCwd = parseBooleanFlagValue(inlineValue, flagName);
+        break;
+      case "log-websocket-events":
+      case "log-ws-events":
+        parsed.logWebSocketEvents = parseBooleanFlagValue(inlineValue, flagName);
+        break;
+      case "host":
+        parsed.host = nextValue();
+        break;
+      case "port": {
+        const value = Number(nextValue());
+        if (!Number.isInteger(value) || value < 1 || value > 65535) {
+          throw new Error(`Invalid value for --port: ${String(value)}`);
+        }
+        parsed.port = value;
+        break;
+      }
+      case "dev-url":
+        parsed.devUrl = new URL(nextValue());
+        break;
+      case "dry-run":
+        parsed.dryRun = parseBooleanFlagValue(inlineValue, flagName);
+        break;
+      default:
+        turboArgs.push(arg);
+        break;
+    }
+  }
+
+  parsed.turboArgs = turboArgs;
+  return parsed;
+}
+
 export function runDevRunnerWithInput(input: DevRunnerCliInput) {
   return Effect.gen(function* () {
     const { portOffset, devInstance } = yield* OffsetConfig.asEffect().pipe(
@@ -524,9 +618,17 @@ const cliRuntimeLayer = Layer.mergeAll(
 );
 
 if (import.meta.main) {
-  Command.run(devRunnerCli, { version: "0.0.0" }).pipe(
-    Effect.scoped,
-    Effect.provide(cliRuntimeLayer),
-    NodeRuntime.runMain,
-  );
+  const runtimeProgram = Effect.try({
+    try: () => parseDirectDevRunnerArgs(process.argv.slice(2)),
+    catch: (cause) =>
+      new DevRunnerError({
+        message:
+          cause instanceof Error
+            ? `${cause.message}\nUsage: node scripts/dev-runner.ts <${DEV_RUNNER_MODES.join("|")}> [options] [-- turbo args...]`
+            : "Failed to parse dev-runner arguments.",
+        cause,
+      }),
+  }).pipe(Effect.flatMap(runDevRunnerWithInput), Effect.scoped, Effect.provide(cliRuntimeLayer));
+
+  NodeRuntime.runMain(runtimeProgram);
 }

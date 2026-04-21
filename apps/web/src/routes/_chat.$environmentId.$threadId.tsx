@@ -288,7 +288,11 @@ function ChatThreadRouteView() {
           renderContent={renderRightSidebarContent}
         >
           {gcOpen ? (
-            <GcPanel threadId={threadRef.threadId} />
+            <GcPanel
+              environmentId={threadRef.environmentId}
+              threadId={threadRef.threadId}
+              thread={serverThread}
+            />
           ) : shouldRenderDiffContent ? (
             <LazyDiffPanel mode="sidebar" />
           ) : null}
@@ -311,7 +315,11 @@ function ChatThreadRouteView() {
       </SidebarInset>
       <RightPanelSheet open={diffOpen || gcOpen} onClose={closePanel}>
         {gcOpen ? (
-          <GcPanel threadId={threadRef.threadId} />
+          <GcPanel
+            environmentId={threadRef.environmentId}
+            threadId={threadRef.threadId}
+            thread={serverThread}
+          />
         ) : shouldRenderDiffContent ? (
           <LazyDiffPanel mode="sheet" />
         ) : null}

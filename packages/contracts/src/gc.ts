@@ -54,9 +54,7 @@ export const GcThreadMeta = Schema.Struct({
   /** Formula name. */
   formula: Schema.optional(Schema.String),
   /** Canonical sidebar group kind. */
-  groupKind: Schema.optional(
-    Schema.Union([Schema.Literal("workspace"), Schema.Literal("rig")]),
-  ),
+  groupKind: Schema.optional(Schema.Union([Schema.Literal("workspace"), Schema.Literal("rig")])),
   /** Canonical sidebar group id. */
   groupId: Schema.optional(Schema.String),
   /** Canonical sidebar group label. */
@@ -306,7 +304,10 @@ function candidateAgentLabels(agent: string): string[] {
   return [...labels];
 }
 
-function titleSegments(title?: string): { sessionName: string | null; agentHint: string | null } {
+export function parseGcSessionTitleSegments(title?: string): {
+  sessionName: string | null;
+  agentHint: string | null;
+} {
   const trimmed = normalizeMetadataValue(title);
   if (!trimmed) {
     return { sessionName: null, agentHint: null };
@@ -324,6 +325,20 @@ function titleSegments(title?: string): { sessionName: string | null; agentHint:
 function configuredAgentSessionName(agent: Pick<GcConfigAgent, "dir" | "name">): string {
   const qualifiedName = configuredAgentQualifiedName(agent);
   return qualifiedName.replaceAll("/", "--").replaceAll(".", "__");
+}
+
+function deriveRigIdFromQualifiedAgent(agent: string): string | null {
+  const normalized = normalizeMetadataValue(agent);
+  if (!normalized) {
+    return null;
+  }
+
+  const lastSlashIndex = normalized.lastIndexOf("/");
+  if (lastSlashIndex <= 0) {
+    return null;
+  }
+
+  return normalizeMetadataValue(normalized.slice(0, lastSlashIndex));
 }
 
 function findMatchingAgentGroup<TThread>(
@@ -345,7 +360,10 @@ function findMatchingAgentGroup<TThread>(
 
 /** Partition threads into rig folders, agent folders, and standalone threads. */
 export function groupThreadsByRigAndAgent<
-  TThread extends { customMetadata?: Record<string, string>; title?: string },
+  TThread extends {
+    customMetadata?: Record<string, string> | undefined;
+    title?: string | undefined;
+  },
 >(
   threads: TThread[],
   options?: {
@@ -483,15 +501,30 @@ export function groupThreadsByRigAndAgent<
     const canonicalGroupLabel = normalizeMetadataValue(meta.groupLabel);
     const canonicalAgentQualified = normalizeMetadataValue(meta.agentQualified);
     const canonicalAgentLabel = normalizeMetadataValue(meta.agentLabel);
-    let resolvedRig = canonicalGroupId ?? rig ?? cityScopedRigGroupId;
+    let resolvedRig = canonicalGroupId ?? rig ?? null;
     let resolvedAgent = canonicalAgentQualified ?? agent;
 
+    if (!resolvedRig && resolvedAgent && options?.config) {
+      const configuredAgent = options.config.agents.find(
+        (entry) => configuredAgentQualifiedName(entry) === resolvedAgent,
+      );
+      if (configuredAgent) {
+        resolvedRig = normalizeMetadataValue(configuredAgent.dir) ?? cityScopedRigGroupId;
+      }
+    }
+
+    if (!resolvedRig && resolvedAgent) {
+      resolvedRig = deriveRigIdFromQualifiedAgent(resolvedAgent);
+    }
+
+    if (!resolvedRig) {
+      resolvedRig = cityScopedRigGroupId;
+    }
+
     if (!meta.isGcManaged && options?.config) {
-      const { sessionName, agentHint } = titleSegments(thread.title);
+      const { sessionName, agentHint } = parseGcSessionTitleSegments(thread.title);
       const configuredGroups = Array.from(rigGroupsById.values());
-      let fallbackMatch:
-        | { rigId: string; agentGroup: VirtualAgentGroup<TThread> }
-        | undefined;
+      let fallbackMatch: { rigId: string; agentGroup: VirtualAgentGroup<TThread> } | undefined;
 
       if (agentHint) {
         for (const group of configuredGroups) {
@@ -542,7 +575,9 @@ export function groupThreadsByRigAndAgent<
         id: resolvedRig,
         label:
           canonicalGroupLabel ??
-          (resolvedRig === cityScopedRigGroupId ? (workspaceName?.toUpperCase() ?? resolvedRig) : resolvedRig),
+          (resolvedRig === cityScopedRigGroupId
+            ? (workspaceName?.toUpperCase() ?? resolvedRig)
+            : resolvedRig),
         kind:
           meta.groupKind === "workspace" || meta.groupKind === "rig"
             ? meta.groupKind
@@ -557,7 +592,10 @@ export function groupThreadsByRigAndAgent<
     }
     const ensuredRigGroup = rigGroup!;
 
-    const existingAgentGroup = findMatchingAgentGroup(ensuredRigGroup.agentGroupsById, resolvedAgent);
+    const existingAgentGroup = findMatchingAgentGroup(
+      ensuredRigGroup.agentGroupsById,
+      resolvedAgent,
+    );
     if (existingAgentGroup) {
       existingAgentGroup.threads.push(thread);
       continue;

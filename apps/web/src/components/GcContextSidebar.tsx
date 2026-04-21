@@ -112,6 +112,8 @@ const GcContextSidebar = memo(function GcContextSidebar({
             <ContextRow label="Agent" value={gcMeta.agent} />
             <ContextRow label="Rig" value={gcMeta.rig} />
             <ContextRow label="Provider" value={gcMeta.runtimeProvider ?? gcMeta.provider} />
+            <ContextRow label="Session" value={gcMeta.sessionName} />
+            <ContextRow label="City" value={gcMeta.city} />
             {gcMeta.state && (
               <div>
                 <Badge variant={gcMeta.state === "active" ? "default" : "secondary"}>
@@ -121,6 +123,23 @@ const GcContextSidebar = memo(function GcContextSidebar({
             )}
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {(gcMeta.groupKind ||
+          gcMeta.groupId ||
+          gcMeta.groupLabel ||
+          gcMeta.agentQualified ||
+          gcMeta.agentLabel) && (
+          <SidebarGroup className="px-4 py-3">
+            <SectionHeader>Folder</SectionHeader>
+            <SidebarGroupContent className="space-y-3 pt-1">
+              <ContextRow label="Kind" value={gcMeta.groupKind} />
+              <ContextRow label="Group ID" value={gcMeta.groupId} />
+              <ContextRow label="Label" value={gcMeta.groupLabel} />
+              <ContextRow label="Qualified Agent" value={gcMeta.agentQualified} />
+              <ContextRow label="Agent Label" value={gcMeta.agentLabel} />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {(gcMeta.bead || threadContext?.bead) && (
           <SidebarGroup className="px-4 py-3">

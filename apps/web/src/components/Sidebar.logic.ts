@@ -1,5 +1,10 @@
 import * as React from "react";
-import type { GcConfigResult, GcConfigRig } from "@t3tools/contracts";
+import {
+  groupThreadsByRigAndAgent,
+  type GcConfigResult,
+  type GcConfigRig,
+  type VirtualRigGroup,
+} from "@t3tools/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import {
   getThreadSortTimestamp,
@@ -665,6 +670,44 @@ export function getVisibleThreadsForProject<T extends Pick<Thread, "id">>(input:
   };
 }
 
+export function partitionProjectThreadsForSidebar<
+  T extends Pick<Thread, "id" | "title"> & {
+    customMetadata?: Record<string, string> | undefined;
+  },
+>(input: {
+  threads: readonly T[];
+  activeThreadId: T["id"] | undefined;
+  isThreadListExpanded: boolean;
+  previewLimit: number;
+  gcConfig?: GcConfigResult | null;
+  projectCwd?: string | null;
+  projectName?: string | null;
+}): {
+  rigGroups: VirtualRigGroup<T>[];
+  visibleStandaloneThreads: T[];
+  hiddenStandaloneThreads: T[];
+  hasHiddenStandaloneThreads: boolean;
+} {
+  const { rigGroups, standaloneThreads } = groupThreadsByRigAndAgent<T>([...input.threads], {
+    config: input.gcConfig,
+    projectCwd: input.projectCwd,
+    projectName: input.projectName,
+  });
+  const standaloneVisibility = getVisibleThreadsForProject({
+    threads: standaloneThreads,
+    activeThreadId: input.activeThreadId,
+    isThreadListExpanded: input.isThreadListExpanded,
+    previewLimit: input.previewLimit,
+  });
+
+  return {
+    rigGroups,
+    visibleStandaloneThreads: standaloneVisibility.visibleThreads,
+    hiddenStandaloneThreads: standaloneVisibility.hiddenThreads,
+    hasHiddenStandaloneThreads: standaloneVisibility.hasHiddenThreads,
+  };
+}
+
 export function getFallbackThreadIdAfterDelete<
   T extends Pick<Thread, "id" | "projectId" | "createdAt" | "updatedAt"> & ThreadSortInput,
 >(input: {
@@ -746,9 +789,8 @@ export function sortProjectsForSidebar<
   });
 }
 
-export function sortThreadsForSidebar<TThread extends ThreadSortInput>(
-  threads: readonly TThread[],
-  sortOrder: SidebarThreadSortOrder,
-): TThread[] {
-  return sortThreads(threads, sortOrder);
+export function sortThreadsForSidebar<
+  TThread extends ThreadSortInput & Pick<Thread, "id" | "createdAt" | "updatedAt">,
+>(threads: readonly TThread[], sortOrder: SidebarThreadSortOrder): TThread[] {
+  return sortThreads(threads, sortOrder) as TThread[];
 }

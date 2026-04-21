@@ -420,14 +420,11 @@ export const WsGcSetAgentSuspendedRpc = Rpc.make(WS_METHODS.gcSetAgentSuspended,
   error: GcSetAgentSuspendedError,
 });
 
-export const WsGcSetAgentMaxActiveSessionsRpc = Rpc.make(
-  WS_METHODS.gcSetAgentMaxActiveSessions,
-  {
-    payload: GcSetAgentMaxActiveSessionsInput,
-    success: GcConfigResult,
-    error: GcSetAgentMaxActiveSessionsError,
-  },
-);
+export const WsGcSetAgentMaxActiveSessionsRpc = Rpc.make(WS_METHODS.gcSetAgentMaxActiveSessions, {
+  payload: GcSetAgentMaxActiveSessionsInput,
+  success: GcConfigResult,
+  error: GcSetAgentMaxActiveSessionsError,
+});
 
 export const WsGcSetAgentSessionModeRpc = Rpc.make(WS_METHODS.gcSetAgentSessionMode, {
   payload: GcSetAgentSessionModeInput,
