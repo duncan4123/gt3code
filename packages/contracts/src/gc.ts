@@ -10,6 +10,7 @@
 import { Effect } from "effect";
 import * as Schema from "effect/Schema";
 import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { OrchestrationThreadShell } from "./orchestration.ts";
 
 // ---------------------------------------------------------------------------
 // gc.* metadata keys (set on OrchestrationThread.customMetadata)
@@ -238,6 +239,37 @@ export const GcConfigResult = Schema.Struct({
 });
 export type GcConfigResult = typeof GcConfigResult.Type;
 
+export const GcSidebarLayoutAgentGroup = Schema.Struct({
+  id: Schema.String,
+  label: Schema.String,
+  qualifiedName: Schema.String,
+  isConfigured: Schema.Boolean,
+  isPool: Schema.Boolean,
+  isSuspended: Schema.Boolean,
+  maxActiveSessions: Schema.optional(Schema.Number),
+  namedSessionMode: Schema.optional(GcNamedSessionMode),
+  scope: Schema.optional(Schema.String),
+  threads: Schema.Array(OrchestrationThreadShell),
+});
+export type GcSidebarLayoutAgentGroup = typeof GcSidebarLayoutAgentGroup.Type;
+
+export const GcSidebarLayoutRigGroup = Schema.Struct({
+  id: Schema.String,
+  label: Schema.String,
+  kind: Schema.Union([Schema.Literal("workspace"), Schema.Literal("rig")]),
+  isConfigured: Schema.Boolean,
+  isSuspended: Schema.Boolean,
+  agentGroups: Schema.Array(GcSidebarLayoutAgentGroup),
+});
+export type GcSidebarLayoutRigGroup = typeof GcSidebarLayoutRigGroup.Type;
+
+export const GcSidebarLayoutResult = Schema.Struct({
+  config: GcConfigResult,
+  rigGroups: Schema.Array(GcSidebarLayoutRigGroup),
+  standaloneThreads: Schema.Array(OrchestrationThreadShell),
+});
+export type GcSidebarLayoutResult = typeof GcSidebarLayoutResult.Type;
+
 // ---------------------------------------------------------------------------
 // Sidebar virtual folder grouping
 // ---------------------------------------------------------------------------
@@ -273,7 +305,9 @@ function normalizeMetadataValue(value?: string): string | null {
 
 function agentFolderLabel(agent: string): string {
   const segments = agent.split("/").filter(Boolean);
-  return segments.at(-1) ?? agent;
+  const scoped = segments.at(-1) ?? agent;
+  const dotIndex = scoped.lastIndexOf(".");
+  return dotIndex >= 0 ? scoped.slice(dotIndex + 1) : scoped;
 }
 
 function pathBasename(value: string): string {
@@ -285,23 +319,6 @@ function pathBasename(value: string): string {
 function configuredAgentQualifiedName(agent: Pick<GcConfigAgent, "dir" | "name">): string {
   const dir = normalizeMetadataValue(agent.dir);
   return dir ? `${dir}/${agent.name}` : agent.name;
-}
-
-function candidateAgentLabels(agent: string): string[] {
-  const trimmed = agent.trim();
-  if (trimmed.length === 0) {
-    return [];
-  }
-
-  const labels = new Set<string>([trimmed, agentFolderLabel(trimmed)]);
-  const lastDotSegment = trimmed
-    .split(".")
-    .toReversed()
-    .find((segment) => segment.length > 0);
-  if (lastDotSegment) {
-    labels.add(lastDotSegment);
-  }
-  return [...labels];
 }
 
 export function parseGcSessionTitleSegments(title?: string): {
@@ -322,9 +339,21 @@ export function parseGcSessionTitleSegments(title?: string): {
   return { sessionName: null, agentHint: trimmed };
 }
 
-function configuredAgentSessionName(agent: Pick<GcConfigAgent, "dir" | "name">): string {
-  const qualifiedName = configuredAgentQualifiedName(agent);
-  return qualifiedName.replaceAll("/", "--").replaceAll(".", "__");
+function candidateAgentLabels(agent: string): string[] {
+  const trimmed = agent.trim();
+  if (trimmed.length === 0) {
+    return [];
+  }
+
+  const labels = new Set<string>([trimmed, agentFolderLabel(trimmed)]);
+  const lastDotSegment = trimmed
+    .split(".")
+    .toReversed()
+    .find((segment) => segment.length > 0);
+  if (lastDotSegment) {
+    labels.add(lastDotSegment);
+  }
+  return [...labels];
 }
 
 function deriveRigIdFromQualifiedAgent(agent: string): string | null {
@@ -367,9 +396,15 @@ export function groupThreadsByRigAndAgent<
 >(
   threads: TThread[],
   options?: {
-    config?: GcConfigResult | null;
-    projectCwd?: string | null;
-    projectName?: string | null;
+    config?: GcConfigResult | null | undefined;
+    projectCwd?: string | null | undefined;
+    projectName?: string | null | undefined;
+    projectMembers?:
+      | ReadonlyArray<{
+          cwd?: string | null | undefined;
+          name?: string | null | undefined;
+        }>
+      | undefined;
   },
 ): {
   standaloneThreads: TThread[];
@@ -391,17 +426,44 @@ export function groupThreadsByRigAndAgent<
   const projectCwd = normalizeMetadataValue(options?.projectCwd ?? undefined);
   const projectName = normalizeMetadataValue(options?.projectName ?? undefined);
   const workspaceName = normalizeMetadataValue(options?.config?.workspace.name);
-  const projectDirName = projectCwd ? normalizeMetadataValue(pathBasename(projectCwd)) : null;
+  const projectCwds = new Set<string>();
+  const projectLabels = new Set<string>();
+
+  const addProjectContext = (context?: {
+    cwd?: string | null | undefined;
+    name?: string | null | undefined;
+  }): void => {
+    const normalizedCwd = normalizeMetadataValue(context?.cwd ?? undefined);
+    if (normalizedCwd) {
+      projectCwds.add(normalizedCwd);
+      const baseName = normalizeMetadataValue(pathBasename(normalizedCwd));
+      if (baseName) {
+        projectLabels.add(baseName);
+      }
+    }
+
+    const normalizedName = normalizeMetadataValue(context?.name ?? undefined);
+    if (normalizedName) {
+      projectLabels.add(normalizedName);
+    }
+  };
+
+  addProjectContext({ cwd: projectCwd, name: projectName });
+  for (const member of options?.projectMembers ?? []) {
+    addProjectContext(member);
+  }
+  const isGlobalScope =
+    projectCwds.size === 0 && projectLabels.size === 0 && options?.config !== undefined;
+
   const isCityProject = Boolean(
     workspaceName &&
-    ((projectName &&
-      projectName.localeCompare(workspaceName, undefined, { sensitivity: "accent" }) === 0) ||
-      (projectDirName &&
-        projectDirName.localeCompare(workspaceName, undefined, { sensitivity: "accent" }) === 0)),
+    [...projectLabels].some(
+      (label) => label.localeCompare(workspaceName, undefined, { sensitivity: "accent" }) === 0,
+    ),
   );
   let cityScopedRigGroupId: string | null = null;
   const relevantRigs = options?.config?.rigs.filter(
-    (rig) => !projectCwd || normalizeMetadataValue(rig.path) === projectCwd,
+    (rig) => projectCwds.size === 0 || projectCwds.has(normalizeMetadataValue(rig.path) ?? ""),
   );
   if (relevantRigs && relevantRigs.length > 0) {
     const relevantRigNames = new Set(relevantRigs.map((rig) => rig.name));
@@ -416,12 +478,17 @@ export function groupThreadsByRigAndAgent<
       });
     }
 
-    if (isCityProject && workspaceName) {
+    if ((isCityProject || isGlobalScope) && workspaceName) {
       const workspaceRig = relevantRigs.find(
         (rig) => rig.name.localeCompare(workspaceName, undefined, { sensitivity: "accent" }) === 0,
       );
       if (workspaceRig) {
         cityScopedRigGroupId = workspaceRig.name;
+        const existingWorkspaceRig = rigGroupsById.get(workspaceRig.name);
+        if (existingWorkspaceRig) {
+          existingWorkspaceRig.kind = "workspace";
+          existingWorkspaceRig.label = workspaceName.toUpperCase();
+        }
       }
     }
 
@@ -452,7 +519,11 @@ export function groupThreadsByRigAndAgent<
     }
   }
 
-  if ((!relevantRigs || relevantRigs.length === 0) && isCityProject && workspaceName) {
+  if (
+    (!cityScopedRigGroupId || !rigGroupsById.has(cityScopedRigGroupId)) &&
+    workspaceName &&
+    (isCityProject || isGlobalScope)
+  ) {
     const cityGroupId = workspaceName;
     cityScopedRigGroupId = cityGroupId;
     rigGroupsById.set(cityGroupId, {
@@ -519,49 +590,6 @@ export function groupThreadsByRigAndAgent<
 
     if (!resolvedRig) {
       resolvedRig = cityScopedRigGroupId;
-    }
-
-    if (!meta.isGcManaged && options?.config) {
-      const { sessionName, agentHint } = parseGcSessionTitleSegments(thread.title);
-      const configuredGroups = Array.from(rigGroupsById.values());
-      let fallbackMatch: { rigId: string; agentGroup: VirtualAgentGroup<TThread> } | undefined;
-
-      if (agentHint) {
-        for (const group of configuredGroups) {
-          const matched = findMatchingAgentGroup(group.agentGroupsById, agentHint);
-          if (matched) {
-            fallbackMatch = { rigId: group.id, agentGroup: matched };
-            break;
-          }
-        }
-      }
-
-      if (!fallbackMatch && sessionName) {
-        for (const configuredAgent of options.config.agents) {
-          if (configuredAgentSessionName(configuredAgent) !== sessionName) {
-            continue;
-          }
-          const rigId = normalizeMetadataValue(configuredAgent.dir) ?? cityScopedRigGroupId;
-          if (!rigId) {
-            continue;
-          }
-          const rigGroup = rigGroupsById.get(rigId);
-          if (!rigGroup) {
-            continue;
-          }
-          const qualifiedName = configuredAgentQualifiedName(configuredAgent);
-          const matched = rigGroup.agentGroupsById.get(qualifiedName);
-          if (matched) {
-            fallbackMatch = { rigId, agentGroup: matched };
-            break;
-          }
-        }
-      }
-
-      if (fallbackMatch) {
-        resolvedRig = fallbackMatch.rigId;
-        resolvedAgent = fallbackMatch.agentGroup.qualifiedName;
-      }
     }
 
     if ((!meta.isGcManaged && !resolvedAgent) || !resolvedRig || !resolvedAgent) {

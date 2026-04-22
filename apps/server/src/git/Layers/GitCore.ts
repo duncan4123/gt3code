@@ -1339,11 +1339,14 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     },
   );
 
+  const refreshStatusUpstreamIfStalePublic: GitCoreShape["refreshStatusUpstreamIfStale"] =
+    Effect.fn("refreshStatusUpstreamIfStale")(function* (cwd) {
+      yield* refreshStatusUpstreamIfStale(cwd).pipe(
+        Effect.catchIf(isMissingGitCwdError, () => Effect.void),
+      );
+    });
+
   const statusDetails: GitCoreShape["statusDetails"] = Effect.fn("statusDetails")(function* (cwd) {
-    yield* refreshStatusUpstreamIfStale(cwd).pipe(
-      Effect.catchIf(isMissingGitCwdError, () => Effect.void),
-      Effect.ignoreCause({ log: true }),
-    );
     return yield* readStatusDetailsLocal(cwd);
   });
 
@@ -2179,6 +2182,7 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     status,
     statusDetails,
     statusDetailsLocal,
+    refreshStatusUpstreamIfStale: refreshStatusUpstreamIfStalePublic,
     prepareCommitContext,
     commit,
     pushCurrentBranch,

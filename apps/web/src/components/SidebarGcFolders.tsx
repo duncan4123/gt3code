@@ -83,6 +83,26 @@ function statusBadgeClassName(tone: "info" | "muted" | "success" | "warning"): s
   }
 }
 
+function gcConfigToggleLabel(
+  kind: "workspace" | "rig" | "agent",
+  label: string,
+  isSuspended: boolean,
+): string {
+  if (isSuspended) {
+    return kind === "workspace"
+      ? `Resume city ${label} in config`
+      : kind === "rig"
+        ? `Resume rig ${label} in config`
+        : `Resume ${label} in config`;
+  }
+
+  return kind === "workspace"
+    ? `Suspend city ${label} in config`
+    : kind === "rig"
+      ? `Suspend rig ${label} in config`
+      : `Suspend ${label} in config`;
+}
+
 export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   const [collapsedRigIds, setCollapsedRigIds] = useState<Set<string>>(() => new Set());
   const [collapsedAgentIds, setCollapsedAgentIds] = useState<Set<string>>(() => new Set());
@@ -187,15 +207,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                             ? "play"
                             : "stop"
                     }
-                    aria-label={
-                      rigGroup.isSuspended
-                        ? rigGroup.kind === "workspace"
-                          ? `Resume city ${rigGroup.label}`
-                          : `Resume rig ${rigGroup.label}`
-                        : rigGroup.kind === "workspace"
-                          ? `Suspend city ${rigGroup.label}`
-                          : `Suspend rig ${rigGroup.label}`
-                    }
+                    aria-label={gcConfigToggleLabel(rigGroup.kind, rigGroup.label, rigGroup.isSuspended)}
                     disabled={
                       rigGroup.kind === "workspace"
                         ? props.gcCityMutationInFlight
@@ -231,13 +243,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 }
               />
               <TooltipPopup side="top">
-                {rigGroup.isSuspended
-                  ? rigGroup.kind === "workspace"
-                    ? `Resume city ${rigGroup.label}`
-                    : `Resume rig ${rigGroup.label}`
-                  : rigGroup.kind === "workspace"
-                    ? `Suspend city ${rigGroup.label}`
-                    : `Suspend rig ${rigGroup.label}`}
+                {gcConfigToggleLabel(rigGroup.kind, rigGroup.label, rigGroup.isSuspended)}
               </TooltipPopup>
             </Tooltip>
           </div>
@@ -247,9 +253,11 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
             const isMutating = props.gcAgentMutationsInFlight.has(agentGroup.qualifiedName);
             const actionState = props.gcAgentActionStateByAgent.get(agentGroup.qualifiedName);
             const testIdSuffix = gcControlTestIdSuffix(agentGroup.qualifiedName);
-            const actionLabel = agentGroup.isSuspended
-              ? `Resume ${agentGroup.qualifiedName}`
-              : `Suspend ${agentGroup.qualifiedName}`;
+            const actionLabel = gcConfigToggleLabel(
+              "agent",
+              agentGroup.qualifiedName,
+              agentGroup.isSuspended,
+            );
             const showNamedSessionModeControl = !agentGroup.isPool;
             const nextNamedSessionMode = !showNamedSessionModeControl
               ? null
@@ -382,7 +390,11 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                               data-testid={`gc-agent-toggle-${testIdSuffix}`}
                               data-gc-agent={agentGroup.qualifiedName}
                               data-gc-action-icon={
-                                isMutating ? "loading" : agentGroup.isSuspended ? "play" : "stop"
+                                isMutating
+                                  ? "loading"
+                                  : agentGroup.isSuspended
+                                    ? "play"
+                                    : "stop"
                               }
                               aria-label={actionLabel}
                               disabled={isMutating}

@@ -4,16 +4,14 @@ This document captures the sidebar folder model that is currently working after 
 
 ## High-Level Model
 
-The sidebar has two separate grouping stages:
+The sidebar now has two separate trees:
 
-1. **Project grouping**
-   Projects are first grouped into logical sidebar projects.
-2. **Thread grouping inside a project**
-   Threads under one logical project are then split into:
-   - GC-backed virtual rig / agent folders
-   - standalone threads that still render as plain thread rows
+1. **Global GC control tree**
+   Built directly from Gas City config, then enriched with runtime thread state.
+2. **Project thread lists**
+   Logical sidebar projects still render plain thread rows under each project.
 
-Those two stages are independent and both matter.
+Those two trees are independent and both matter.
 
 ## 1. Project Grouping
 
@@ -54,57 +52,47 @@ The sidebar snapshot builder then creates one `SidebarProjectSnapshot` per logic
 
 That is why one visible sidebar project can represent multiple local/remote project entries.
 
-## 2. Thread Grouping Within a Project
+## 2. Global GC Tree
 
-Thread partitioning happens in:
+GC grouping happens in:
 
+- [packages/contracts/src/gc.ts](/data/projects/t3code/packages/contracts/src/gc.ts)
 - [Sidebar.logic.ts](/data/projects/t3code/apps/web/src/components/Sidebar.logic.ts)
-- function: `partitionProjectThreadsForSidebar(...)`
+- [Sidebar.tsx](/data/projects/t3code/apps/web/src/components/Sidebar.tsx)
 
-For a given logical project:
+The important split is:
 
-1. collect the project threads
-2. optionally keep the active thread visible when the project is collapsed
-3. pass those threads into `partitionProjectThreadsForSidebar`
+- `gcConfig` defines which workspace / rig / agent folders exist
+- live threads only enrich runtime state for those configured nodes
 
-`partitionProjectThreadsForSidebar` returns:
+The global GC section is built from:
 
 - `rigGroups`
-- `visibleStandaloneThreads`
-- `hiddenStandaloneThreads`
-- `hasHiddenStandaloneThreads`
 
-Internally it does two things:
+using:
 
 1. `groupThreadsByRigAndAgent(...)`
-   Detects which threads belong under GC virtual folders.
-2. `getVisibleThreadsForProject(...)`
-   Applies preview / show-more rules to only the standalone thread list.
-
-Important consequence:
-
-- GC folder contents are computed before standalone-thread preview trimming
-- standalone thread preview rules do **not** decide what goes into rig folders
+   Builds the canonical config-first workspace / rig / agent tree.
+2. `resolveGcAgentRuntimeState(...)`
+   Attaches runtime labels like `Running`, `Ready`, `Suspended`, `No session`.
 
 ## 3. What Renders As A Folder
 
-Folders only exist for GC-derived virtual groups.
+Folders in the GC section come from config, not from project cwd matching and not from “whatever threads exist”.
 
 Rendering flow in [Sidebar.tsx](/data/projects/t3code/apps/web/src/components/Sidebar.tsx):
 
-- `rigGroups.length > 0` => render `SidebarGcFolders`
-- each rig group contains `agentGroups`
-- each agent group contains `threadIds`
-- thread rows for those IDs are rendered by looking them up from `folderThreads`
+- fetch `gcConfig`
+- build one top-level `SidebarGlobalGcSection`
+- render `SidebarGcFolders` from the global `rigGroups`
 
-Plain non-GC threads are rendered from `renderedThreads` as normal sidebar rows.
+Important consequence:
 
-So the sidebar for one logical project can contain both:
+- a configured agent shows up even with no running thread
+- a suspended rig or agent still shows up
+- project rows do not control GC folder existence anymore
 
-- GC folders
-- plain standalone thread rows
-
-at the same time.
+Plain threads still render under projects as normal thread rows.
 
 ## 4. Collapsed Project Pinning
 
@@ -118,35 +106,19 @@ Meaning:
 - if project collapsed and the active route thread belongs to that project:
   - that thread is kept visible
 
-Then:
+Project rows still do this:
 
-- `folderThreads` becomes either:
-  - `[pinnedCollapsedThread]`, or
-  - the full visible project thread list
+- optionally pin the active thread when collapsed
+- preview / show-more trimming
+- plain thread row rendering
 
-This pinned thread must be available to both:
-
-- folder lookup for GC thread IDs
-- plain standalone row rendering
-
-That is the main reason the `folderThreads` / `renderedThreads` split exists.
+But they no longer own the GC folder tree.
 
 ## 5. Why `folderThreads` And `renderedThreads` Are Different
 
-They serve different purposes.
+`renderedThreads` under a project are now just the visible plain thread rows for that project.
 
-- `folderThreads`
-  Source of truth for looking up threads referenced by GC rig / agent folders.
-- `renderedThreads`
-  Standalone rows that should render directly in the project list.
-
-Do not collapse these into one array unless you re-check:
-
-- collapsed active-thread pinning
-- GC folder row lookup
-- standalone preview / hidden-thread status
-
-The previous breakages came from mixing those responsibilities.
+The GC control tree is separate and config-driven.
 
 ## 6. Stability Rules
 
@@ -163,9 +135,11 @@ Rules that matter:
 ## 7. Files That Define The Current Behavior
 
 - [Sidebar.tsx](/data/projects/t3code/apps/web/src/components/Sidebar.tsx)
-  Main rendering and per-project derived state.
+  Main rendering, global GC section, and per-project thread state.
 - [Sidebar.logic.ts](/data/projects/t3code/apps/web/src/components/Sidebar.logic.ts)
-  Thread partitioning and visibility rules.
+  Project thread partitioning and visibility rules.
+- [gc.ts](/data/projects/t3code/packages/contracts/src/gc.ts)
+  Canonical GC config/tree grouping.
 - [sidebarProjectGrouping.ts](/data/projects/t3code/apps/web/src/sidebarProjectGrouping.ts)
   Logical project snapshot construction.
 - [logicalProject.ts](/data/projects/t3code/apps/web/src/logicalProject.ts)
@@ -177,9 +151,9 @@ Rules that matter:
 
 The working mental model is:
 
-- first decide what a "project" means in the sidebar
-- then decide which of that project's threads belong in GC folders
-- then decide which standalone threads are visible vs hidden
-- finally render GC folders and standalone rows side by side
+- first build the GC control tree from config
+- then overlay runtime state and thread bindings onto that tree
+- separately decide what a "project" means in the sidebar
+- then render plain project thread rows with their own visibility rules
 
 If a future change breaks folders again, start debugging in exactly that order.

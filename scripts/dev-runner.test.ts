@@ -96,7 +96,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
       }),
     );
 
-    it.effect("does not force websocket logging on in dev mode when unset", () =>
+    it.effect("defaults websocket logging and telemetry off in dev mode when unset", () =>
       Effect.gen(function* () {
         const env = yield* createDevRunnerEnv({
           mode: "dev",
@@ -115,7 +115,8 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         });
 
         assert.equal(env.T3CODE_MODE, "web");
-        assert.equal(env.T3CODE_LOG_WS_EVENTS, undefined);
+        assert.equal(env.T3CODE_LOG_WS_EVENTS, "0");
+        assert.equal(env.T3CODE_TELEMETRY_ENABLED, "0");
       }),
     );
 
@@ -138,6 +139,28 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         });
 
         assert.equal(env.T3CODE_LOG_WS_EVENTS, "0");
+      }),
+    );
+
+    it.effect("preserves explicit telemetry enablement when provided in base env", () =>
+      Effect.gen(function* () {
+        const env = yield* createDevRunnerEnv({
+          mode: "dev",
+          baseEnv: {
+            T3CODE_TELEMETRY_ENABLED: "1",
+          },
+          serverOffset: 0,
+          webOffset: 0,
+          t3Home: undefined,
+          noBrowser: undefined,
+          autoBootstrapProjectFromCwd: undefined,
+          logWebSocketEvents: undefined,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
+
+        assert.equal(env.T3CODE_TELEMETRY_ENABLED, "1");
       }),
     );
 

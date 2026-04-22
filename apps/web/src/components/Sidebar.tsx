@@ -1366,6 +1366,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       gcConfig,
       projectCwd: project.cwd,
       projectName: project.displayName,
+      projectMembers: project.memberProjects,
     });
     const hasVirtualAgentFolders = rigGroups.some((rigGroup) => rigGroup.agentGroups.length > 0);
     return {
@@ -1423,6 +1424,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     pinnedCollapsedThread,
     project.cwd,
     project.displayName,
+    project.memberProjects,
     projectExpanded,
     projectThreads,
     threadLastVisitedAts,
@@ -2706,6 +2708,7 @@ interface SidebarProjectsContentProps {
   suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
   attachProjectListAutoAnimateRef: (node: HTMLElement | null) => void;
   projectsLength: number;
+  navigateToThread: (threadRef: ScopedThreadRef) => void;
   onToggleGcRigSuspended: (
     rig: string,
     suspended: boolean,
@@ -2783,6 +2786,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     suppressProjectClickForContextMenuRef,
     attachProjectListAutoAnimateRef,
     projectsLength,
+    navigateToThread,
     onToggleGcRigSuspended,
     onToggleGcCitySuspended,
     onToggleGcAgentSuspended,
@@ -3932,6 +3936,7 @@ export default function Sidebar() {
           gcConfig,
           projectCwd: project.cwd,
           projectName: project.displayName,
+          projectMembers: project.memberProjects,
         });
         return [
           ...rigGroups.flatMap((rigGroup) =>
@@ -4347,6 +4352,7 @@ export default function Sidebar() {
             suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
             attachProjectListAutoAnimateRef={attachProjectListAutoAnimateRef}
             projectsLength={projects.length}
+            navigateToThread={navigateToThread}
             onToggleGcCitySuspended={handleGcCitySuspendedChange}
             onToggleGcRigSuspended={handleGcRigSuspendedChange}
             onToggleGcAgentSuspended={handleGcAgentSuspendedChange}

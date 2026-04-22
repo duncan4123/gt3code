@@ -164,6 +164,11 @@ export interface GitCoreShape {
   readonly statusDetailsLocal: (cwd: string) => Effect.Effect<GitStatusDetails, GitCommandError>;
 
   /**
+   * Refresh remote tracking refs for status when the cache is stale.
+   */
+  readonly refreshStatusUpstreamIfStale: (cwd: string) => Effect.Effect<void, GitCommandError>;
+
+  /**
    * Build staged change context for commit generation.
    */
   readonly prepareCommitContext: (

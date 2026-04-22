@@ -680,19 +680,28 @@ export function partitionProjectThreadsForSidebar<
   isThreadListExpanded: boolean;
   previewLimit: number;
   gcConfig?: GcConfigResult | null;
+  includeGcFolders?: boolean;
   projectCwd?: string | null;
   projectName?: string | null;
+  projectMembers?: ReadonlyArray<{
+    cwd?: string | null;
+    name?: string | null;
+  }>;
 }): {
   rigGroups: VirtualRigGroup<T>[];
   visibleStandaloneThreads: T[];
   hiddenStandaloneThreads: T[];
   hasHiddenStandaloneThreads: boolean;
 } {
-  const { rigGroups, standaloneThreads } = groupThreadsByRigAndAgent<T>([...input.threads], {
-    config: input.gcConfig,
-    projectCwd: input.projectCwd,
-    projectName: input.projectName,
-  });
+  const includeGcFolders = input.includeGcFolders ?? true;
+  const { rigGroups, standaloneThreads } = includeGcFolders
+    ? groupThreadsByRigAndAgent<T>([...input.threads], {
+        config: input.gcConfig,
+        projectCwd: input.projectCwd,
+        projectName: input.projectName,
+        projectMembers: input.projectMembers,
+      })
+    : { rigGroups: [], standaloneThreads: [...input.threads] };
   const standaloneVisibility = getVisibleThreadsForProject({
     threads: standaloneThreads,
     activeThreadId: input.activeThreadId,

@@ -285,7 +285,7 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(rigGroups[1]?.agentGroups[0]?.qualifiedName).toBe("t3code/gastown.crew");
   });
 
-  it("falls back to configured agent matching from thread titles when gc metadata is absent", () => {
+  it("seeds configured agent folders from grouped project members", () => {
     const config = {
       workspace: {
         name: "gc",
@@ -303,57 +303,51 @@ describe("groupThreadsByRigAndAgent", () => {
           name: "gastown.crew",
           dir: "t3code",
           suspended: false,
+          named_session_mode: "always",
         },
         {
-          name: "gastown.deacon",
+          name: "deacon",
           suspended: false,
-          scope: "city",
+          named_session_mode: "on_demand",
         },
       ],
     } as const;
 
-    const rigResult = groupThreadsByRigAndAgent(
-      [
+    const rigResult = groupThreadsByRigAndAgent([], {
+      config,
+      projectCwd: "/data/projects/shared-group",
+      projectName: "Shared Group",
+      projectMembers: [
         {
-          id: "thread-1",
-          title: "t3code--gastown__crew · gastown.crew",
-          customMetadata: {},
+          cwd: "/data/projects/t3code",
+          name: "t3code",
         },
       ],
-      {
-        config,
-        projectName: "t3code",
-        projectCwd: "/data/projects/t3code",
-      },
-    );
+    });
 
-    expect(rigResult.standaloneThreads).toEqual([]);
     expect(rigResult.rigGroups.map((group) => group.id)).toEqual(["t3code"]);
-    expect(rigResult.rigGroups[0]?.agentGroups[0]?.qualifiedName).toBe("t3code/gastown.crew");
-    expect(rigResult.rigGroups[0]?.agentGroups[0]?.threads.map((thread) => thread.id)).toEqual([
-      "thread-1",
-    ]);
+    expect(rigResult.rigGroups[0]?.agentGroups[0]).toMatchObject({
+      qualifiedName: "t3code/gastown.crew",
+      label: "crew",
+      namedSessionMode: "always",
+    });
 
-    const cityResult = groupThreadsByRigAndAgent(
-      [
+    const cityResult = groupThreadsByRigAndAgent([], {
+      config,
+      projectCwd: "/data/projects/shared-group",
+      projectName: "Shared Group",
+      projectMembers: [
         {
-          id: "thread-2",
-          title: "gastown__deacon · gastown.deacon",
-          customMetadata: {},
+          cwd: "/data/projects/gc",
+          name: "gc",
         },
       ],
-      {
-        config,
-        projectName: "gc",
-        projectCwd: "/data/projects/gc",
-      },
-    );
+    });
 
-    expect(cityResult.standaloneThreads).toEqual([]);
     expect(cityResult.rigGroups.map((group) => group.id)).toEqual(["gc"]);
-    expect(cityResult.rigGroups[0]?.agentGroups[0]?.qualifiedName).toBe("gastown.deacon");
-    expect(cityResult.rigGroups[0]?.agentGroups[0]?.threads.map((thread) => thread.id)).toEqual([
-      "thread-2",
-    ]);
+    expect(cityResult.rigGroups[0]?.agentGroups[0]).toMatchObject({
+      qualifiedName: "deacon",
+      namedSessionMode: "on_demand",
+    });
   });
 });

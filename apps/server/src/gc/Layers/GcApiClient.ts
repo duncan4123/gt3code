@@ -61,10 +61,19 @@ function escapePathSegments(value: string): string {
 }
 
 function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+  const candidate =
+    raw &&
+    typeof raw === "object" &&
+    !Array.isArray(raw) &&
+    "Body" in raw &&
+    (raw as { Body?: unknown }).Body !== undefined
+      ? (raw as { Body: unknown }).Body
+      : raw;
+
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
     return null;
   }
-  const record = raw as Record<string, unknown>;
+  const record = candidate as Record<string, unknown>;
   const workspaceRaw =
     record.workspace && typeof record.workspace === "object" && !Array.isArray(record.workspace)
       ? (record.workspace as Record<string, unknown>)
@@ -499,6 +508,77 @@ function findSiblingGcCityRoot(startCwd: string): string | null {
   }
 }
 
+function findRegisteredGcCityRoot(startCwd: string): string | null {
+  const registryPath = path.join(process.env.HOME ?? "/home/ubuntu", ".gc", "cities.toml");
+  if (!existsSync(registryPath)) {
+    return null;
+  }
+
+  const resolvedStart = path.resolve(startCwd);
+  const lines = readFileSync(registryPath, "utf8").split("\n");
+
+  let currentSection: "cities" | "rigs" | null = null;
+  let currentCityPath: string | null = null;
+  let currentRigPath: string | null = null;
+  let currentRigDefaultCity: string | null = null;
+
+  const flushRig = (): string | null => {
+    if (
+      currentSection === "rigs" &&
+      currentRigPath &&
+      path.resolve(currentRigPath) === resolvedStart &&
+      currentRigDefaultCity
+    ) {
+      const resolved = path.resolve(currentRigDefaultCity);
+      return isGcCityRoot(resolved) ? resolved : null;
+    }
+    return null;
+  };
+
+  const flushCity = (): string | null => {
+    if (currentSection === "cities" && currentCityPath) {
+      const resolved = path.resolve(currentCityPath);
+      return isGcCityRoot(resolved) ? resolved : null;
+    }
+    return null;
+  };
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (trimmed === "[[cities]]") {
+      const rigMatch = flushRig();
+      if (rigMatch) return rigMatch;
+      currentSection = "cities";
+      currentCityPath = null;
+      currentRigPath = null;
+      currentRigDefaultCity = null;
+      continue;
+    }
+    if (trimmed === "[[rigs]]") {
+      const rigMatch = flushRig();
+      if (rigMatch) return rigMatch;
+      currentSection = "rigs";
+      currentCityPath = null;
+      currentRigPath = null;
+      currentRigDefaultCity = null;
+      continue;
+    }
+    if (trimmed.startsWith("[") || trimmed.length === 0) {
+      continue;
+    }
+    if (currentSection === "cities") {
+      currentCityPath ??= parseQuotedTomlString(rawLine, "path");
+      continue;
+    }
+    if (currentSection === "rigs") {
+      currentRigPath ??= parseQuotedTomlString(rawLine, "path");
+      currentRigDefaultCity ??= parseQuotedTomlString(rawLine, "default_city");
+    }
+  }
+
+  return flushRig() ?? flushCity();
+}
+
 function discoverGcCityRoot(startCwd: string): string | null {
   const envCityPath = process.env.GC_CITY_PATH ?? process.env.GC_CITY;
   if (envCityPath) {
@@ -508,7 +588,11 @@ function discoverGcCityRoot(startCwd: string): string | null {
     }
   }
 
-  return findGcCityRootUpward(startCwd) ?? findSiblingGcCityRoot(startCwd);
+  return (
+    findGcCityRootUpward(startCwd) ??
+    findSiblingGcCityRoot(startCwd) ??
+    findRegisteredGcCityRoot(startCwd)
+  );
 }
 
 function readGcCityTomlValue(
@@ -1191,6 +1275,9 @@ const makeGcApiClient = Effect.gen(function* () {
       try: async () => {
         const loadExpandedCliConfig = (): GcConfigResult | null => {
           if (!cityPath) {
+            return null;
+          }
+          if (typeof Bun === "undefined") {
             return null;
           }
           const cli = runGcCli(cityPath, ["config", "show"]);
