@@ -108,6 +108,7 @@ function toRuntimePayloadFromSession(
 ): Record<string, unknown> {
   return {
     cwd: session.cwd ?? null,
+    pid: session.pid ?? null,
     model: session.model ?? null,
     activeTurnId: session.activeTurnId ?? null,
     lastError: session.lastError ?? null,
@@ -651,6 +652,16 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         adapter.listSessions(),
       );
       const activeSessions = sessionsByProvider.flatMap((sessions) => sessions);
+      const listedAt = new Date().toISOString();
+      yield* Effect.forEach(
+        activeSessions,
+        (session) =>
+          upsertSessionBinding(session, session.threadId, {
+            lastRuntimeEvent: "provider.listSessions",
+            lastRuntimeEventAt: listedAt,
+          }),
+        { discard: true },
+      ).pipe(Effect.asVoid);
       const persistedBindings = yield* directory.listThreadIds().pipe(
         Effect.flatMap((threadIds) =>
           Effect.forEach(

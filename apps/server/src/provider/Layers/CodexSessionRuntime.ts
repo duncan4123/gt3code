@@ -30,6 +30,7 @@ import {
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
+import { expandHomePath } from "../../pathExpansion.ts";
 
 const PROVIDER = "codex" as const;
 
@@ -686,7 +687,7 @@ export const makeCodexSessionRuntime = (
           cwd: options.cwd,
           env: {
             ...process.env,
-            ...(options.homePath ? { CODEX_HOME: options.homePath } : {}),
+            ...(options.homePath ? { CODEX_HOME: expandHomePath(options.homePath) } : {}),
             ...(options.env ?? {}),
           },
           shell: process.platform === "win32",
