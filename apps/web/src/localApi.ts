@@ -1,7 +1,6 @@
 import type { ContextMenuItem, LocalApi } from "@t3tools/contracts";
 
 import { resetGitStatusStateForTests } from "./lib/gitStatusState";
-import { resetSourceControlDiscoveryStateForTests } from "./lib/sourceControlDiscoveryState";
 import { resetRequestLatencyStateForTests } from "./rpc/requestLatencyState";
 import { resetServerStateForTests } from "./rpc/serverState";
 import { resetWsConnectionStateForTests } from "./rpc/wsConnectionState";
@@ -13,7 +12,6 @@ import {
   getPrimaryEnvironmentConnection,
   resetEnvironmentServiceForTests,
 } from "./environments/runtime";
-import { getPrimaryKnownEnvironment } from "./environments/primary";
 import { type WsRpcClient } from "./rpc/wsRpcClient";
 import { showContextMenuFallback } from "./contextMenuFallback";
 import {
@@ -28,11 +26,7 @@ import {
 
 let cachedApi: LocalApi | undefined;
 
-function unavailableLocalBackendError(): Error {
-  return new Error("Local backend API is unavailable before a backend is paired.");
-}
-
-function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
+export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
   return {
     dialogs: {
       pickFolder: async (options) => {
@@ -47,10 +41,7 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
       },
     },
     shell: {
-      openInEditor: (cwd, editor) =>
-        rpcClient
-          ? rpcClient.shell.openInEditor({ cwd, editor })
-          : Promise.reject(unavailableLocalBackendError()),
+      openInEditor: (cwd, editor) => rpcClient.shell.openInEditor({ cwd, editor }),
       openExternal: async (url) => {
         if (window.desktopBridge) {
           const opened = await window.desktopBridge.openExternal(url);
@@ -119,56 +110,39 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
       },
     },
     server: {
-      getConfig: () =>
-        rpcClient ? rpcClient.server.getConfig() : Promise.reject(unavailableLocalBackendError()),
-      refreshProviders: () =>
-        rpcClient
-          ? rpcClient.server.refreshProviders()
-          : Promise.reject(unavailableLocalBackendError()),
-      updateProvider: (input) =>
-        rpcClient
-          ? rpcClient.server.updateProvider(input)
-          : Promise.reject(unavailableLocalBackendError()),
-      upsertKeybinding: (input) =>
-        rpcClient
-          ? rpcClient.server.upsertKeybinding(input)
-          : Promise.reject(unavailableLocalBackendError()),
-      removeKeybinding: (input) =>
-        rpcClient
-          ? rpcClient.server.removeKeybinding(input)
-          : Promise.reject(unavailableLocalBackendError()),
-      getSettings: () =>
-        rpcClient ? rpcClient.server.getSettings() : Promise.reject(unavailableLocalBackendError()),
-      updateSettings: (patch) =>
-        rpcClient
-          ? rpcClient.server.updateSettings(patch)
-          : Promise.reject(unavailableLocalBackendError()),
-      discoverSourceControl: () =>
-        rpcClient
-          ? rpcClient.server.discoverSourceControl()
-          : Promise.reject(unavailableLocalBackendError()),
-      getTraceDiagnostics: () =>
-        rpcClient
-          ? rpcClient.server.getTraceDiagnostics()
-          : Promise.reject(unavailableLocalBackendError()),
-      getProcessDiagnostics: () =>
-        rpcClient
-          ? rpcClient.server.getProcessDiagnostics()
-          : Promise.reject(unavailableLocalBackendError()),
-      getProcessResourceHistory: (input) =>
-        rpcClient
-          ? rpcClient.server.getProcessResourceHistory(input)
-          : Promise.reject(unavailableLocalBackendError()),
-      signalProcess: (input) =>
-        rpcClient
-          ? rpcClient.server.signalProcess(input)
-          : Promise.reject(unavailableLocalBackendError()),
+      getConfig: rpcClient.server.getConfig,
+      refreshProviders: rpcClient.server.refreshProviders,
+      upsertKeybinding: rpcClient.server.upsertKeybinding,
+      getSettings: rpcClient.server.getSettings,
+      updateSettings: rpcClient.server.updateSettings,
+    },
+    orchestration: {
+      dispatchCommand: rpcClient.orchestration.dispatchCommand,
+      getTurnDiff: rpcClient.orchestration.getTurnDiff,
+      getFullThreadDiff: rpcClient.orchestration.getFullThreadDiff,
+      replayEvents: (fromSequenceExclusive) =>
+        rpcClient.orchestration
+          .replayEvents({ fromSequenceExclusive })
+          .then((events) => [...events]),
+      searchThreadMessages: rpcClient.orchestration.searchThreadMessages,
+      subscribeShell: (callback, options) =>
+        rpcClient.orchestration.subscribeShell(callback, options),
+      subscribeThread: (input, callback, options) =>
+        rpcClient.orchestration.subscribeThread(input, callback, options),
+    },
+    gc: {
+      getConfig: rpcClient.gc.getConfig,
+      findThreadBinding: rpcClient.gc.findThreadBinding,
+      getThreadContext: rpcClient.gc.getThreadContext,
+      setAgentSuspended: rpcClient.gc.setAgentSuspended,
+      setAgentMaxActiveSessions: rpcClient.gc.setAgentMaxActiveSessions,
+      setAgentMinActiveSessions: rpcClient.gc.setAgentMinActiveSessions,
+      setAgentWakeMode: rpcClient.gc.setAgentWakeMode,
+      setAgentSessionMode: rpcClient.gc.setAgentSessionMode,
+      setCitySuspended: rpcClient.gc.setCitySuspended,
+      setRigSuspended: rpcClient.gc.setRigSuspended,
     },
   };
-}
-
-export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
-  return createBrowserLocalApi(rpcClient);
 }
 
 export function readLocalApi(): LocalApi | undefined {
@@ -180,10 +154,7 @@ export function readLocalApi(): LocalApi | undefined {
     return cachedApi;
   }
 
-  const primaryEnvironment = getPrimaryKnownEnvironment();
-  cachedApi = primaryEnvironment
-    ? createLocalApi(getPrimaryEnvironmentConnection().client)
-    : createBrowserLocalApi();
+  cachedApi = createLocalApi(getPrimaryEnvironmentConnection().client);
   return cachedApi;
 }
 
@@ -201,7 +172,6 @@ export async function __resetLocalApiForTests() {
   __resetClientSettingsPersistenceForTests();
   await resetEnvironmentServiceForTests();
   resetGitStatusStateForTests();
-  resetSourceControlDiscoveryStateForTests();
   resetRequestLatencyStateForTests();
   resetSavedEnvironmentRegistryStoreForTests();
   resetSavedEnvironmentRuntimeStoreForTests();

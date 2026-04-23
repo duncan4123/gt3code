@@ -1,231 +1,173 @@
 import {
-  DEFAULT_MODEL,
   DEFAULT_MODEL_BY_PROVIDER,
   MODEL_SLUG_ALIASES_BY_PROVIDER,
+  type ClaudeAgentEffort,
+  type ClaudeModelOptions,
+  type CodexModelOptions,
+  type CursorModelOptions,
   type ModelCapabilities,
   type ModelSelection,
-  ProviderDriverKind,
-  ProviderInstanceId,
-  type ProviderOptionDescriptor,
-  type ProviderOptionSelection,
+  type OpenCodeModelOptions,
+  type ProviderKind,
+  type ProviderModelOptions,
 } from "@t3tools/contracts";
-
-const DEFAULT_PROVIDER_DRIVER_KIND = ProviderDriverKind.make("codex");
 
 export interface SelectableModelOption {
   slug: string;
   name: string;
 }
 
-export function createModelCapabilities(input: {
-  optionDescriptors: ReadonlyArray<ProviderOptionDescriptor>;
-}): ModelCapabilities {
-  return {
-    optionDescriptors: input.optionDescriptors.map(cloneDescriptor),
-  };
+/** Check whether a capabilities object includes a given effort value. */
+export function hasEffortLevel(caps: ModelCapabilities, value: string): boolean {
+  return caps.reasoningEffortLevels.some((l) => l.value === value);
 }
 
-function getRawSelectionValueById(
-  selections: ReadonlyArray<ProviderOptionSelection> | null | undefined,
-  id: string,
-): string | boolean | undefined {
-  const selection = selections?.find((candidate) => candidate.id === id);
-  return selection?.value;
+/** Return the default effort value for a capabilities object, or null if none. */
+export function getDefaultEffort(caps: ModelCapabilities): string | null {
+  return caps.reasoningEffortLevels.find((l) => l.isDefault)?.value ?? null;
 }
 
-export function getProviderOptionSelectionValue(
-  selections: ReadonlyArray<ProviderOptionSelection> | null | undefined,
-  id: string,
-): string | boolean | undefined {
-  return getRawSelectionValueById(selections, id);
-}
-
-export function getProviderOptionStringSelectionValue(
-  selections: ReadonlyArray<ProviderOptionSelection> | null | undefined,
-  id: string,
-): string | undefined {
-  const value = getProviderOptionSelectionValue(selections, id);
-  return typeof value === "string" ? value : undefined;
-}
-
-export function getProviderOptionBooleanSelectionValue(
-  selections: ReadonlyArray<ProviderOptionSelection> | null | undefined,
-  id: string,
-): boolean | undefined {
-  const value = getProviderOptionSelectionValue(selections, id);
-  return typeof value === "boolean" ? value : undefined;
-}
-
-export function getModelSelectionOptionValue(
-  modelSelection: ModelSelection | null | undefined,
-  id: string,
-): string | boolean | undefined {
-  return getProviderOptionSelectionValue(modelSelection?.options, id);
-}
-
-export function getModelSelectionStringOptionValue(
-  modelSelection: ModelSelection | null | undefined,
-  id: string,
-): string | undefined {
-  return getProviderOptionStringSelectionValue(modelSelection?.options, id);
-}
-
-export function getModelSelectionBooleanOptionValue(
-  modelSelection: ModelSelection | null | undefined,
-  id: string,
-): boolean | undefined {
-  return getProviderOptionBooleanSelectionValue(modelSelection?.options, id);
-}
-
-function resolveDescriptorChoiceValue(
-  descriptor: Extract<ProviderOptionDescriptor, { type: "select" }>,
+/**
+ * Resolve a raw effort option against capabilities.
+ *
+ * Returns the explicit supported value when present and not prompt-injected,
+ * otherwise the model default. Returns `undefined` when the model exposes no
+ * effort levels.
+ */
+export function resolveEffort(
+  caps: ModelCapabilities,
   raw: string | null | undefined,
 ): string | undefined {
-  const trimmed = trimOrNull(raw);
-  if (!trimmed) {
-    return descriptor.currentValue ?? descriptor.options.find((option) => option.isDefault)?.id;
-  }
-  if (descriptor.options.length === 0) {
-    return trimmed;
-  }
+  const defaultValue = getDefaultEffort(caps);
+  const trimmed = typeof raw === "string" ? raw.trim() : null;
   if (
-    descriptor.promptInjectedValues?.includes(trimmed) &&
-    descriptor.options.some((option) => option.id === trimmed)
+    trimmed &&
+    !caps.promptInjectedEffortLevels.includes(trimmed) &&
+    hasEffortLevel(caps, trimmed)
   ) {
-    return descriptor.options.find((option) => option.isDefault)?.id;
-  }
-  if (descriptor.options.some((option) => option.id === trimmed)) {
     return trimmed;
   }
-  return descriptor.currentValue ?? descriptor.options.find((option) => option.isDefault)?.id;
+  return defaultValue ?? undefined;
 }
 
-function cloneDescriptor(descriptor: ProviderOptionDescriptor): ProviderOptionDescriptor {
-  return descriptor.type === "select"
-    ? {
-        ...descriptor,
-        options: [...descriptor.options],
-        ...(descriptor.promptInjectedValues
-          ? { promptInjectedValues: [...descriptor.promptInjectedValues] }
-          : {}),
-      }
-    : { ...descriptor };
+/** Check whether a capabilities object includes a given context window value. */
+export function hasContextWindowOption(caps: ModelCapabilities, value: string): boolean {
+  return caps.contextWindowOptions.some((o) => o.value === value);
 }
 
-function cloneSelection(selection: ProviderOptionSelection): ProviderOptionSelection {
-  return { ...selection };
+/** Return the default context window value, or `null` if none is defined. */
+export function getDefaultContextWindow(caps: ModelCapabilities): string | null {
+  return caps.contextWindowOptions.find((o) => o.isDefault)?.value ?? null;
 }
 
-function withDescriptorCurrentValue(
-  descriptor: ProviderOptionDescriptor,
-  rawCurrentValue: string | boolean | undefined,
-): ProviderOptionDescriptor {
-  if (descriptor.type === "boolean") {
-    if (typeof rawCurrentValue === "boolean") {
-      return {
-        ...descriptor,
-        currentValue: rawCurrentValue,
-      };
-    }
-    return descriptor;
-  }
-  const currentValue =
-    typeof rawCurrentValue === "string"
-      ? resolveDescriptorChoiceValue(descriptor, rawCurrentValue)
-      : resolveDescriptorChoiceValue(descriptor, descriptor.currentValue);
-  if (!currentValue) {
-    const { currentValue: _unusedCurrentValue, ...rest } = descriptor;
-    return rest;
-  }
-  return {
-    ...descriptor,
-    currentValue,
-  };
-}
-
-export function getProviderOptionDescriptors(input: {
-  caps: ModelCapabilities;
-  selections?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
-}): ReadonlyArray<ProviderOptionDescriptor> {
-  const { caps, selections } = input;
-  const baseDescriptors = (caps.optionDescriptors ?? []).map(cloneDescriptor);
-
-  return baseDescriptors.map((descriptor) =>
-    withDescriptorCurrentValue(
-      descriptor,
-      getRawSelectionValueById(selections, descriptor.id) ?? descriptor.currentValue,
-    ),
-  );
-}
-
-export function getProviderOptionCurrentValue(
-  descriptor: ProviderOptionDescriptor | null | undefined,
-): string | boolean | undefined {
-  if (!descriptor) {
-    return undefined;
-  }
-  if (descriptor.type === "boolean") {
-    return descriptor.currentValue;
-  }
-  if (descriptor.currentValue) {
-    return descriptor.currentValue;
-  }
-  return descriptor.options.find((option) => option.isDefault)?.id;
-}
-
-export function getProviderOptionCurrentLabel(
-  descriptor: ProviderOptionDescriptor | null | undefined,
+/**
+ * Resolve a raw `contextWindow` option against capabilities.
+ *
+ * Returns the explicit supported value when present, otherwise the model
+ * default. Returns `undefined` when the model exposes no context window options.
+ */
+export function resolveContextWindow(
+  caps: ModelCapabilities,
+  raw: string | null | undefined,
 ): string | undefined {
-  if (!descriptor) {
-    return undefined;
-  }
-  if (descriptor.type === "boolean") {
-    return typeof descriptor.currentValue === "boolean"
-      ? descriptor.currentValue
-        ? "On"
-        : "Off"
-      : undefined;
-  }
-  const currentValue = getProviderOptionCurrentValue(descriptor);
-  if (typeof currentValue !== "string") {
-    return undefined;
-  }
-  return descriptor.options.find((option) => option.id === currentValue)?.label;
+  const defaultValue = getDefaultContextWindow(caps);
+  if (!raw) return defaultValue ?? undefined;
+  return hasContextWindowOption(caps, raw) ? raw : (defaultValue ?? undefined);
 }
 
-export function buildProviderOptionSelectionsFromDescriptors(
-  descriptors: ReadonlyArray<ProviderOptionDescriptor> | null | undefined,
-): Array<ProviderOptionSelection> | undefined {
-  if (!descriptors || descriptors.length === 0) {
-    return undefined;
-  }
-
-  const nextSelections: Array<ProviderOptionSelection> = [];
-
-  for (const descriptor of descriptors) {
-    const value = getProviderOptionCurrentValue(descriptor);
-    if (typeof value === "string" || typeof value === "boolean") {
-      nextSelections.push({ id: descriptor.id, value });
-    }
-  }
-
-  return nextSelections.length > 0 ? nextSelections : undefined;
+export function normalizeCodexModelOptionsWithCapabilities(
+  caps: ModelCapabilities,
+  modelOptions: CodexModelOptions | null | undefined,
+): CodexModelOptions | undefined {
+  const reasoningEffort = resolveEffort(caps, modelOptions?.reasoningEffort);
+  const fastMode = caps.supportsFastMode ? modelOptions?.fastMode : undefined;
+  const nextOptions: CodexModelOptions = {
+    ...(reasoningEffort
+      ? { reasoningEffort: reasoningEffort as CodexModelOptions["reasoningEffort"] }
+      : {}),
+    ...(fastMode !== undefined ? { fastMode } : {}),
+  };
+  return Object.keys(nextOptions).length > 0 ? nextOptions : undefined;
 }
 
-export function getModelSelectionOptionDescriptors(
-  modelSelection: ModelSelection | null | undefined,
-  caps?: ModelCapabilities | null | undefined,
-): ReadonlyArray<ProviderOptionDescriptor> {
-  if (!modelSelection) {
-    return [];
+export function normalizeClaudeModelOptionsWithCapabilities(
+  caps: ModelCapabilities,
+  modelOptions: ClaudeModelOptions | null | undefined,
+): ClaudeModelOptions | undefined {
+  const effort = resolveEffort(caps, modelOptions?.effort);
+  const thinking = caps.supportsThinkingToggle ? modelOptions?.thinking : undefined;
+  const fastMode = caps.supportsFastMode ? modelOptions?.fastMode : undefined;
+  const contextWindow = resolveContextWindow(caps, modelOptions?.contextWindow);
+  const nextOptions: ClaudeModelOptions = {
+    ...(thinking !== undefined ? { thinking } : {}),
+    ...(effort ? { effort: effort as ClaudeModelOptions["effort"] } : {}),
+    ...(fastMode !== undefined ? { fastMode } : {}),
+    ...(contextWindow !== undefined ? { contextWindow } : {}),
+  };
+  return Object.keys(nextOptions).length > 0 ? nextOptions : undefined;
+}
+
+export function normalizeCursorModelOptionsWithCapabilities(
+  caps: ModelCapabilities,
+  modelOptions: CursorModelOptions | null | undefined,
+): CursorModelOptions | undefined {
+  const reasoning = resolveEffort(caps, modelOptions?.reasoning);
+  const thinking = caps.supportsThinkingToggle ? modelOptions?.thinking : undefined;
+  const fastMode = caps.supportsFastMode ? modelOptions?.fastMode : undefined;
+  const contextWindow = resolveContextWindow(caps, modelOptions?.contextWindow);
+  const nextOptions: CursorModelOptions = {
+    ...(reasoning ? { reasoning: reasoning as CursorModelOptions["reasoning"] } : {}),
+    ...(fastMode !== undefined ? { fastMode } : {}),
+    ...(thinking !== undefined ? { thinking } : {}),
+    ...(contextWindow !== undefined ? { contextWindow } : {}),
+  };
+  return Object.keys(nextOptions).length > 0 ? nextOptions : undefined;
+}
+
+function resolveLabeledOption(
+  options: ReadonlyArray<{ value: string; isDefault?: boolean | undefined }> | undefined,
+  raw: string | null | undefined,
+): string | undefined {
+  if (!options || options.length === 0) {
+    return raw ?? undefined;
   }
-  if (!caps) {
-    return [];
+  if (raw && options.some((option) => option.value === raw)) {
+    return raw;
   }
-  return getProviderOptionDescriptors({
-    caps,
-    selections: modelSelection.options,
-  });
+  return options.find((option) => option.isDefault)?.value ?? options[0]?.value;
+}
+
+export function normalizeOpenCodeModelOptionsWithCapabilities(
+  caps: ModelCapabilities,
+  modelOptions: OpenCodeModelOptions | null | undefined,
+): OpenCodeModelOptions | undefined {
+  const variant = resolveLabeledOption(caps.variantOptions, trimOrNull(modelOptions?.variant));
+  const agent = resolveLabeledOption(caps.agentOptions, trimOrNull(modelOptions?.agent));
+  const nextOptions: OpenCodeModelOptions = {
+    ...(variant ? { variant } : {}),
+    ...(agent ? { agent } : {}),
+  };
+  return Object.keys(nextOptions).length > 0 ? nextOptions : undefined;
+}
+
+export function normalizeProviderModelOptionsWithCapabilities(
+  provider: ProviderKind,
+  caps: ModelCapabilities,
+  modelOptions: ProviderModelOptions[ProviderKind] | null | undefined,
+): ProviderModelOptions[ProviderKind] | undefined {
+  switch (provider) {
+    case "codex":
+      return normalizeCodexModelOptionsWithCapabilities(caps, modelOptions as CodexModelOptions);
+    case "claudeAgent":
+      return normalizeClaudeModelOptionsWithCapabilities(caps, modelOptions as ClaudeModelOptions);
+    case "cursor":
+      return normalizeCursorModelOptionsWithCapabilities(caps, modelOptions as CursorModelOptions);
+    case "opencode":
+      return normalizeOpenCodeModelOptionsWithCapabilities(
+        caps,
+        modelOptions as OpenCodeModelOptions,
+      );
+  }
 }
 
 export function isClaudeUltrathinkPrompt(text: string | null | undefined): boolean {
@@ -234,7 +176,7 @@ export function isClaudeUltrathinkPrompt(text: string | null | undefined): boole
 
 export function normalizeModelSlug(
   model: string | null | undefined,
-  provider: ProviderDriverKind = DEFAULT_PROVIDER_DRIVER_KIND,
+  provider: ProviderKind = "codex",
 ): string | null {
   if (typeof model !== "string") {
     return null;
@@ -245,7 +187,7 @@ export function normalizeModelSlug(
     return null;
   }
 
-  const aliases = MODEL_SLUG_ALIASES_BY_PROVIDER[provider] ?? {};
+  const aliases = MODEL_SLUG_ALIASES_BY_PROVIDER[provider] as Record<string, string>;
   const aliased = Object.prototype.hasOwnProperty.call(aliases, trimmed)
     ? aliases[trimmed]
     : undefined;
@@ -253,7 +195,7 @@ export function normalizeModelSlug(
 }
 
 export function resolveSelectableModel(
-  provider: ProviderDriverKind,
+  provider: ProviderKind,
   value: string | null | undefined,
   options: ReadonlyArray<SelectableModelOption>,
 ): string | null {
@@ -285,16 +227,16 @@ export function resolveSelectableModel(
   return resolved ? resolved.slug : null;
 }
 
-function resolveModelSlug(model: string | null | undefined, provider: ProviderDriverKind): string {
+function resolveModelSlug(model: string | null | undefined, provider: ProviderKind): string {
   const normalized = normalizeModelSlug(model, provider);
   if (!normalized) {
-    return DEFAULT_MODEL_BY_PROVIDER[provider] ?? DEFAULT_MODEL;
+    return DEFAULT_MODEL_BY_PROVIDER[provider];
   }
   return normalized;
 }
 
 export function resolveModelSlugForProvider(
-  provider: ProviderDriverKind,
+  provider: ProviderKind,
   model: string | null | undefined,
 ): string {
   return resolveModelSlug(model, provider);
@@ -307,51 +249,47 @@ export function trimOrNull<T extends string>(value: T | null | undefined): T | n
   return trimmed || null;
 }
 
-function cloneSelections(
-  selections: ReadonlyArray<ProviderOptionSelection>,
-): Array<ProviderOptionSelection> {
-  return selections.map(cloneSelection);
-}
-
 export function createModelSelection(
-  instanceId: ProviderInstanceId,
+  provider: ProviderKind,
   model: string,
-  options?: ReadonlyArray<ProviderOptionSelection> | null,
+  options?: ProviderModelOptions[ProviderKind] | undefined,
 ): ModelSelection {
-  const selections = options ? cloneSelections(options) : [];
-  const base: ModelSelection = {
-    instanceId,
-    model,
-  };
-  return selections.length > 0 ? { ...base, options: selections } : base;
-}
-
-/**
- * Returns the effort value if it is a prompt-injected value according to
- * any select descriptor in the given capabilities, or null otherwise.
- *
- * Unlike a single `find`, this checks every descriptor so that the
- * correct descriptor's `promptInjectedValues` list is consulted even when
- * multiple select descriptors exist.
- */
-export function resolvePromptInjectedEffort(
-  caps: ModelCapabilities,
-  rawEffort: string | null | undefined,
-): string | null {
-  const trimmed = trimOrNull(rawEffort);
-  if (!trimmed) return null;
-  const descriptors = getProviderOptionDescriptors({ caps });
-  for (const descriptor of descriptors) {
-    if (descriptor.type === "select" && descriptor.promptInjectedValues?.includes(trimmed)) {
-      return trimmed;
-    }
+  switch (provider) {
+    case "codex":
+      return {
+        provider,
+        model,
+        ...(options ? { options: options as CodexModelOptions } : {}),
+      };
+    case "claudeAgent":
+      return {
+        provider,
+        model,
+        ...(options ? { options: options as ClaudeModelOptions } : {}),
+      };
+    case "cursor":
+      return {
+        provider,
+        model,
+        ...(options ? { options: options as CursorModelOptions } : {}),
+      };
+    case "opencode":
+      return {
+        provider,
+        model,
+        ...(options ? { options: options as OpenCodeModelOptions } : {}),
+      };
+    case "gc":
+      return {
+        provider,
+        model,
+      };
   }
-  return null;
 }
 
 export function applyClaudePromptEffortPrefix(
   text: string,
-  effort: string | null | undefined,
+  effort: ClaudeAgentEffort | null | undefined,
 ): string {
   const trimmed = text.trim();
   if (!trimmed) {

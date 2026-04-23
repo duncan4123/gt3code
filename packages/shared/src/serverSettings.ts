@@ -1,12 +1,16 @@
-import { ServerSettings, type ServerSettingsPatch } from "@t3tools/contracts";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
+import {
+  ServerSettings,
+  type ClaudeModelOptions,
+  type CodexModelOptions,
+  type CursorModelOptions,
+  type OpenCodeModelOptions,
+  type ServerSettingsPatch,
+} from "@t3tools/contracts";
+import { Schema } from "effect";
 import { deepMerge } from "./Struct.ts";
 import { fromLenientJson } from "./schemaJson.ts";
-import { createModelSelection } from "./model.ts";
 
 const ServerSettingsJson = fromLenientJson(ServerSettings);
-const decodeServerSettingsJson = Schema.decodeUnknownOption(ServerSettingsJson);
 
 export interface PersistedServerObservabilitySettings {
   readonly otlpTracesUrl: string | undefined;
@@ -35,35 +39,45 @@ export function extractPersistedServerObservabilitySettings(input: {
 export function parsePersistedServerObservabilitySettings(
   raw: string,
 ): PersistedServerObservabilitySettings {
-  const decoded = decodeServerSettingsJson(raw);
-  if (Option.isSome(decoded)) {
-    return extractPersistedServerObservabilitySettings(decoded.value);
+  try {
+    const decoded = Schema.decodeUnknownSync(ServerSettingsJson)(raw);
+    return extractPersistedServerObservabilitySettings(decoded);
+  } catch {
+    return { otlpTracesUrl: undefined, otlpMetricsUrl: undefined };
   }
-  return { otlpTracesUrl: undefined, otlpMetricsUrl: undefined };
 }
 
 function shouldReplaceTextGenerationModelSelection(
   patch: ServerSettingsPatch["textGenerationModelSelection"] | undefined,
 ): boolean {
-  return Boolean(patch && (patch.instanceId !== undefined || patch.model !== undefined));
+  return Boolean(patch && (patch.provider !== undefined || patch.model !== undefined));
 }
 
-function mergeModelSelectionOptionsById(input: {
-  current: ReadonlyArray<{ readonly id: string; readonly value: string | boolean }> | undefined;
-  patch: ReadonlyArray<{ readonly id: string; readonly value: string | boolean }> | undefined;
-}): Array<{ id: string; value: string | boolean }> | undefined {
-  if (input.patch === undefined) {
-    return input.current ? [...input.current] : undefined;
-  }
-  if (input.patch.length === 0) {
-    return undefined;
-  }
+const withModelSelectionOptions = <Options>(options: Options | undefined) =>
+  options ? { options } : {};
 
-  const merged = new Map((input.current ?? []).map((selection) => [selection.id, selection.value]));
-  for (const selection of input.patch) {
-    merged.set(selection.id, selection.value);
-  }
-  return [...merged.entries()].map(([id, value]) => ({ id, value }));
+function codexSelectionOptions(
+  selection: ServerSettingsPatch["textGenerationModelSelection"] | undefined,
+): CodexModelOptions | undefined {
+  return selection?.provider === "codex" ? selection.options : undefined;
+}
+
+function claudeSelectionOptions(
+  selection: ServerSettingsPatch["textGenerationModelSelection"] | undefined,
+): ClaudeModelOptions | undefined {
+  return selection?.provider === "claudeAgent" ? selection.options : undefined;
+}
+
+function cursorSelectionOptions(
+  selection: ServerSettingsPatch["textGenerationModelSelection"] | undefined,
+): CursorModelOptions | undefined {
+  return selection?.provider === "cursor" ? selection.options : undefined;
+}
+
+function openCodeSelectionOptions(
+  selection: ServerSettingsPatch["textGenerationModelSelection"] | undefined,
+): OpenCodeModelOptions | undefined {
+  return selection?.provider === "opencode" ? selection.options : undefined;
 }
 
 /**
@@ -76,30 +90,44 @@ export function applyServerSettingsPatch(
   patch: ServerSettingsPatch,
 ): ServerSettings {
   const selectionPatch = patch.textGenerationModelSelection;
-  const { automaticGitFetchInterval, ...patchForMerge } = patch;
-  const next = deepMerge(current, patchForMerge);
-  const nextWithReplacements = {
-    ...next,
-    ...(patch.providerInstances !== undefined
-      ? { providerInstances: patch.providerInstances }
-      : {}),
-    ...(automaticGitFetchInterval !== undefined ? { automaticGitFetchInterval } : {}),
-  };
-  if (!selectionPatch) {
-    return nextWithReplacements;
+  const next = deepMerge(current, patch);
+  if (!selectionPatch || !shouldReplaceTextGenerationModelSelection(selectionPatch)) {
+    return next;
   }
 
-  const instanceId = selectionPatch.instanceId ?? current.textGenerationModelSelection.instanceId;
+  const provider = selectionPatch.provider ?? current.textGenerationModelSelection.provider;
   const model = selectionPatch.model ?? current.textGenerationModelSelection.model;
-  const options = shouldReplaceTextGenerationModelSelection(selectionPatch)
-    ? selectionPatch.options
-    : mergeModelSelectionOptionsById({
-        current: current.textGenerationModelSelection.options,
-        patch: selectionPatch.options,
-      });
 
   return {
-    ...nextWithReplacements,
-    textGenerationModelSelection: createModelSelection(instanceId, model, options),
+    ...next,
+    textGenerationModelSelection:
+      provider === "codex"
+        ? {
+            provider,
+            model,
+            ...withModelSelectionOptions(codexSelectionOptions(selectionPatch)),
+          }
+        : provider === "claudeAgent"
+          ? {
+              provider,
+              model,
+              ...withModelSelectionOptions(claudeSelectionOptions(selectionPatch)),
+            }
+          : provider === "cursor"
+            ? {
+                provider,
+                model,
+                ...withModelSelectionOptions(cursorSelectionOptions(selectionPatch)),
+              }
+            : provider === "opencode"
+              ? {
+                  provider,
+                  model,
+                  ...withModelSelectionOptions(openCodeSelectionOptions(selectionPatch)),
+                }
+              : {
+                  provider,
+                  model,
+                },
   };
 }

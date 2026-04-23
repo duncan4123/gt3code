@@ -6,7 +6,7 @@ import {
   type OrchestrationLatestTurn,
   type OrchestrationThreadActivity,
   type OrchestrationProposedPlanId,
-  ProviderDriverKind,
+  type ProviderKind,
   type ToolLifecycleItemType,
   type UserInputQuestion,
   type ThreadId,
@@ -22,29 +22,18 @@ import type {
   TurnDiffSummary,
 } from "./types";
 
-export type ProviderPickerKind = ProviderDriverKind;
+export type ProviderPickerKind = ProviderKind;
 
 export const PROVIDER_OPTIONS: Array<{
   value: ProviderPickerKind;
   label: string;
   available: boolean;
-  /** Shown on the model picker sidebar when relevant */
-  pickerSidebarBadge?: "new" | "soon";
 }> = [
-  { value: ProviderDriverKind.make("codex"), label: "Codex", available: true },
-  { value: ProviderDriverKind.make("claudeAgent"), label: "Claude", available: true },
-  {
-    value: ProviderDriverKind.make("opencode"),
-    label: "OpenCode",
-    available: true,
-    pickerSidebarBadge: "new",
-  },
-  {
-    value: ProviderDriverKind.make("cursor"),
-    label: "Cursor",
-    available: true,
-    pickerSidebarBadge: "new",
-  },
+  { value: "codex", label: "Codex", available: true },
+  { value: "claudeAgent", label: "Claude", available: true },
+  { value: "opencode", label: "OpenCode", available: true },
+  { value: "cursor", label: "Cursor", available: true },
+  { value: "gc", label: "Gas City", available: true },
 ];
 
 export interface WorkLogEntry {
@@ -143,7 +132,36 @@ export function formatElapsed(startIso: string, endIso: string | undefined): str
 }
 
 type LatestTurnTiming = Pick<OrchestrationLatestTurn, "turnId" | "startedAt" | "completedAt">;
-type SessionActivityState = Pick<ThreadSession, "orchestrationStatus" | "activeTurnId">;
+type SessionActivityState = Pick<ThreadSession, "orchestrationStatus" | "activeTurnId"> &
+  Partial<Pick<ThreadSession, "status" | "updatedAt">>;
+
+export function isSessionActivelyRunning(
+  session: SessionActivityState | null,
+  latestTurn: LatestTurnTiming | null,
+): boolean {
+  if (!session) return false;
+  if (session.orchestrationStatus !== "running") {
+    return false;
+  }
+  if (session.status !== undefined && session.status !== "running") {
+    return false;
+  }
+  if (session.activeTurnId) {
+    return true;
+  }
+  if (!session.updatedAt) {
+    return true;
+  }
+  if (!latestTurn?.completedAt) {
+    return true;
+  }
+  const sessionUpdatedAt = Date.parse(session.updatedAt);
+  const latestCompletedAt = Date.parse(latestTurn.completedAt);
+  if (Number.isNaN(sessionUpdatedAt) || Number.isNaN(latestCompletedAt)) {
+    return true;
+  }
+  return sessionUpdatedAt >= latestCompletedAt;
+}
 
 export function isLatestTurnSettled(
   latestTurn: LatestTurnTiming | null,
@@ -179,7 +197,6 @@ function requestKindFromRequestType(requestType: unknown): PendingApproval["requ
   switch (requestType) {
     case "command_execution_approval":
     case "exec_command_approval":
-    case "dynamic_tool_call":
       return "command";
     case "file_read_approval":
       return "file-read";
