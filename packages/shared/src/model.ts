@@ -279,6 +279,11 @@ export function createModelSelection(
         model,
         ...(options ? { options: options as OpenCodeModelOptions } : {}),
       };
+    case "gc":
+      return {
+        provider,
+        model,
+      };
   }
 }
 

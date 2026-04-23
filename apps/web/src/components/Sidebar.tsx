@@ -78,13 +78,11 @@ import { useUiStateStore } from "../uiStateStore";
 import {
   resolveShortcutCommand,
   shortcutLabelForCommand,
-  shouldShowThreadJumpHintsForModifiers,
+  shouldShowThreadJumpHints,
   threadJumpCommandForIndex,
   threadJumpIndexFromCommand,
   threadTraversalDirectionFromCommand,
 } from "../keybindings";
-import { useModelPickerOpen } from "../modelPickerOpenState";
-import { useShortcutModifierState } from "../shortcutModifierState";
 import { useGitStatus } from "../lib/gitStatusState";
 import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
@@ -97,7 +95,7 @@ import {
   resolveThreadRouteRef,
   resolveThreadRouteTarget,
 } from "../threadRoutes";
-import { stackedThreadToast, toastManager } from "./ui/toast";
+import { toastManager } from "./ui/toast";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { Kbd } from "./ui/kbd";
@@ -179,11 +177,7 @@ import { CommandDialogTrigger } from "./ui/command";
 import { readEnvironmentApi } from "../environmentApi";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "../rpc/serverState";
-import {
-  derivePhysicalProjectKey,
-  deriveProjectGroupingOverrideKey,
-  getProjectOrderKey,
-} from "../logicalProject";
+import { derivePhysicalProjectKey, deriveProjectGroupingOverrideKey } from "../logicalProject";
 import {
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
@@ -215,6 +209,41 @@ const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> =
   repository_path: "Group by repository path",
   separate: "Keep separate",
 };
+
+function gcConfiguredAgentQualifiedName(
+  agent: Pick<GcConfigResult["agents"][number], "dir" | "name">,
+) {
+  const dir = typeof agent.dir === "string" && agent.dir.trim().length > 0 ? agent.dir.trim() : "";
+  return dir ? `${dir}/${agent.name}` : agent.name;
+}
+
+function findGcConfigAgent(config: GcConfigResult, qualifiedName: string) {
+  return (
+    config.agents.find((agent) => gcConfiguredAgentQualifiedName(agent) === qualifiedName) ?? null
+  );
+}
+
+function describeGcSuspendedState(suspended: boolean): string {
+  return suspended ? "suspended" : "active";
+}
+
+function threadJumpLabelMapsEqual(
+  left: ReadonlyMap<string, string>,
+  right: ReadonlyMap<string, string>,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left.size !== right.size) {
+    return false;
+  }
+  for (const [key, value] of left) {
+    if (right.get(key) !== value) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function formatProjectMemberActionLabel(
   member: SidebarProjectGroupMember,
@@ -1142,13 +1171,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       });
     },
     onError: (error) => {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Failed to copy thread ID",
-          description: error instanceof Error ? error.message : "An error occurred.",
-        }),
-      );
+      toastManager.add({
+        type: "error",
+        title: "Failed to copy thread ID",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
     },
   });
   const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{
@@ -1162,13 +1189,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       });
     },
     onError: (error) => {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Failed to copy path",
-          description: error instanceof Error ? error.message : "An error occurred.",
-        }),
-      );
+      toastManager.add({
+        type: "error",
+        title: "Failed to copy path",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
     },
   });
   const openPrLink = useCallback((event: React.MouseEvent<HTMLElement>, prUrl: string) => {
@@ -1185,13 +1210,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     }
 
     void api.shell.openExternal(prUrl).catch((error) => {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Unable to open PR link",
-          description: error instanceof Error ? error.message : "An error occurred.",
-        }),
-      );
+      toastManager.add({
+        type: "error",
+        title: "Unable to open PR link",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
     });
   }, []);
   const sidebarThreads = useStore(
@@ -1539,73 +1562,72 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       const memberProjectRef = scopeProjectRef(member.environmentId, member.id);
       const memberThreadCount = memberThreadCountByPhysicalKey.get(member.physicalProjectKey) ?? 0;
       if (memberThreadCount > 0) {
-        const warningToastId = toastManager.add(
-          stackedThreadToast({
-            type: "warning",
-            title: "Project is not empty",
-            description: "Delete all threads in this project before removing it.",
+        const warningToastId = toastManager.add({
+          type: "warning",
+          title: "Project is not empty",
+          description: "Delete all threads in this project before removing it.",
+          data: {
+            actionLayout: "stacked-end",
             actionVariant: "destructive",
-            actionProps: {
-              children: "Delete anyway",
-              onClick: () => {
-                void (async () => {
-                  toastManager.close(warningToastId);
-                  await new Promise<void>((resolve) => {
-                    window.setTimeout(resolve, 180);
-                  });
-
-                  const latestProjectThreads = selectSidebarThreadsForProjectRefs(
-                    useStore.getState(),
-                    [memberProjectRef],
-                  );
-                  const confirmed = await api.dialogs.confirm(
-                    latestProjectThreads.length > 0
-                      ? [
-                          `Remove project "${member.name}" and delete its ${latestProjectThreads.length} thread${
-                            latestProjectThreads.length === 1 ? "" : "s"
-                          }?`,
-                          `Path: ${member.cwd}`,
-                          ...(member.environmentLabel
-                            ? [`Environment: ${member.environmentLabel}`]
-                            : []),
-                          "This permanently clears conversation history for those threads.",
-                          "This removes only this project entry.",
-                          "This action cannot be undone.",
-                        ].join("\n")
-                      : [
-                          `Remove project "${member.name}"?`,
-                          `Path: ${member.cwd}`,
-                          ...(member.environmentLabel
-                            ? [`Environment: ${member.environmentLabel}`]
-                            : []),
-                          "This removes only this project entry.",
-                        ].join("\n"),
-                  );
-                  if (!confirmed) {
-                    return;
-                  }
-
-                  await removeProject(member, { force: true });
-                })().catch((error) => {
-                  const message =
-                    error instanceof Error ? error.message : "Unknown error removing project.";
-                  console.error("Failed to remove project", {
-                    projectId: member.id,
-                    environmentId: member.environmentId,
-                    error,
-                  });
-                  toastManager.add(
-                    stackedThreadToast({
-                      type: "error",
-                      title: `Failed to remove "${member.name}"`,
-                      description: message,
-                    }),
-                  );
+          },
+          actionProps: {
+            children: "Delete anyway",
+            onClick: () => {
+              void (async () => {
+                toastManager.close(warningToastId);
+                await new Promise<void>((resolve) => {
+                  window.setTimeout(resolve, 180);
                 });
-              },
+
+                const latestProjectThreads = selectSidebarThreadsForProjectRefs(
+                  useStore.getState(),
+                  [memberProjectRef],
+                );
+                const confirmed = await api.dialogs.confirm(
+                  latestProjectThreads.length > 0
+                    ? [
+                        `Remove project "${member.name}" and delete its ${latestProjectThreads.length} thread${
+                          latestProjectThreads.length === 1 ? "" : "s"
+                        }?`,
+                        `Path: ${member.cwd}`,
+                        ...(member.environmentLabel
+                          ? [`Environment: ${member.environmentLabel}`]
+                          : []),
+                        "This permanently clears conversation history for those threads.",
+                        "This removes only this project entry.",
+                        "This action cannot be undone.",
+                      ].join("\n")
+                    : [
+                        `Remove project "${member.name}"?`,
+                        `Path: ${member.cwd}`,
+                        ...(member.environmentLabel
+                          ? [`Environment: ${member.environmentLabel}`]
+                          : []),
+                        "This removes only this project entry.",
+                      ].join("\n"),
+                );
+                if (!confirmed) {
+                  return;
+                }
+
+                await removeProject(member, { force: true });
+              })().catch((error) => {
+                const message =
+                  error instanceof Error ? error.message : "Unknown error removing project.";
+                console.error("Failed to remove project", {
+                  projectId: member.id,
+                  environmentId: member.environmentId,
+                  error,
+                });
+                toastManager.add({
+                  type: "error",
+                  title: `Failed to remove "${member.name}"`,
+                  description: message,
+                });
+              });
             },
-          }),
-        );
+          },
+        });
         return;
       }
 
@@ -1629,13 +1651,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           environmentId: member.environmentId,
           error,
         });
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: `Failed to remove "${member.name}"`,
-            description: message,
-          }),
-        );
+        toastManager.add({
+          type: "error",
+          title: `Failed to remove "${member.name}"`,
+          description: message,
+        });
       }
     },
     [memberThreadCountByPhysicalKey, removeProject],
@@ -1948,13 +1968,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       try {
         await archiveThread(threadRef);
       } catch (error) {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Failed to archive thread",
-            description: error instanceof Error ? error.message : "An error occurred.",
-          }),
-        );
+        toastManager.add({
+          type: "error",
+          title: "Failed to archive thread",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
       }
     },
     [archiveThread],
@@ -2002,13 +2020,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           title: trimmed,
         });
       } catch (error) {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Failed to rename thread",
-            description: error instanceof Error ? error.message : "An error occurred.",
-          }),
-        );
+        toastManager.add({
+          type: "error",
+          title: "Failed to rename thread",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
       }
       finishRename();
     },
@@ -2041,13 +2057,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
     const api = readEnvironmentApi(projectRenameTarget.environmentId);
     if (!api) {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Failed to rename project",
-          description: "Project API unavailable.",
-        }),
-      );
+      toastManager.add({
+        type: "error",
+        title: "Failed to rename project",
+        description: "Project API unavailable.",
+      });
       return;
     }
 
@@ -2060,13 +2074,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       });
       closeProjectRenameDialog();
     } catch (error) {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Failed to rename project",
-          description: error instanceof Error ? error.message : "An error occurred.",
-        }),
-      );
+      toastManager.add({
+        type: "error",
+        title: "Failed to rename project",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
     }
   }, [closeProjectRenameDialog, projectRenameTarget, projectRenameTitle]);
 
@@ -2136,13 +2148,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       }
       if (clicked === "copy-path") {
         if (!threadWorkspacePath) {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Path unavailable",
-              description: "This thread does not have a workspace path to copy.",
-            }),
-          );
+          toastManager.add({
+            type: "error",
+            title: "Path unavailable",
+            description: "This thread does not have a workspace path to copy.",
+          });
           return;
         }
         copyPathToClipboard(threadWorkspacePath, { path: threadWorkspacePath });
@@ -3076,8 +3086,6 @@ export default function Sidebar() {
   const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
   const platform = navigator.platform;
-  const shortcutModifiers = useShortcutModifierState();
-  const modelPickerOpen = useModelPickerOpen();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const savedEnvironmentRegistry = useSavedEnvironmentRegistryStore((s) => s.byId);
   const savedEnvironmentRuntimeById = useSavedEnvironmentRuntimeStore((s) => s.byId);
@@ -3284,7 +3292,7 @@ export default function Sidebar() {
     return orderItemsByPreferredIds({
       items: projects,
       preferredIds: projectOrder,
-      getId: getProjectOrderKey,
+      getId: (project) => scopedProjectKey(scopeProjectRef(project.environmentId, project.id)),
     });
   }, [projectOrder, projects]);
 
@@ -3384,9 +3392,8 @@ export default function Sidebar() {
             routeThreadRef,
           ).terminalOpen
         : false,
-      modelPickerOpen,
     }),
-    [modelPickerOpen, routeThreadRef],
+    [routeThreadRef],
   );
   const newThreadShortcutLabelOptions = useMemo(
     () => ({
@@ -3454,23 +3461,53 @@ export default function Sidebar() {
       if (!api?.gc?.setAgentSuspended) {
         return;
       }
+      const freshConfig = await refreshGcConfig();
+      if (!freshConfig) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to refresh ${agent}`,
+          description:
+            "Gas City config is unavailable, so the sidebar could not verify the latest state.",
+        });
+        return;
+      }
+      const freshAgent = findGcConfigAgent(freshConfig, agent);
+      if (!freshAgent) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to update ${agent}`,
+          description: "The agent was not present in the latest Gas City config snapshot.",
+        });
+        return;
+      }
+      if (freshAgent.suspended === suspended) {
+        setGcConfig(freshConfig);
+        toastManager.add({
+          type: "warning",
+          title: `${agent} already ${describeGcSuspendedState(suspended)}`,
+          description: `The sidebar was out of sync. Gas City reports ${agent} is already ${describeGcSuspendedState(
+            suspended,
+          )}, so no change was sent.`,
+        });
+        return;
+      }
       const toastId = toastManager.add({
         type: "loading",
-        title: suspended ? `Resuming ${agent}` : `Suspending ${agent}`,
+        title: suspended ? `Suspending ${agent}` : `Resuming ${agent}`,
         description: suspended
-          ? "Gas City is updating the agent and reconciling the named session."
-          : "Gas City is stopping the agent in the background.",
+          ? "Gas City is stopping the agent in the background."
+          : "Gas City is updating the agent and reconciling the named session.",
         timeout: 0,
       });
-      if (!suspended) {
+      if (suspended) {
         stopWatchingGcAgentStart(agent);
       }
-      setGcAgentActionState(agent, suspended ? { kind: "resume" } : { kind: "suspend" });
+      setGcAgentActionState(agent, suspended ? { kind: "suspend" } : { kind: "resume" });
 
       try {
         const nextConfig = await api.gc.setAgentSuspended({ agent, suspended });
         setGcConfig(nextConfig);
-        if (suspended && !agentGroup.isPool && agentGroup.namedSessionMode === "always") {
+        if (!suspended && !agentGroup.isPool && agentGroup.namedSessionMode === "always") {
           toastManager.update(toastId, {
             type: "loading",
             title: `Waiting for ${agent} to start`,
@@ -3504,10 +3541,10 @@ export default function Sidebar() {
         } else {
           toastManager.update(toastId, {
             type: "success",
-            title: suspended ? `${agent} resumed` : `${agent} suspended`,
+            title: suspended ? `${agent} suspended` : `${agent} resumed`,
             description: suspended
-              ? "Gas City accepted the resume request."
-              : "Gas City accepted the suspend request.",
+              ? "Gas City accepted the suspend request."
+              : "Gas City accepted the resume request.",
             timeout: 0,
             data: {
               dismissAfterVisibleMs: 6_000,
@@ -3539,6 +3576,34 @@ export default function Sidebar() {
     async (agent: string, mode: "always" | "on_demand") => {
       const api = readLocalApi();
       if (!api?.gc?.setAgentSessionMode) {
+        return;
+      }
+      const freshConfig = await refreshGcConfig();
+      if (!freshConfig) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to refresh ${agent}`,
+          description:
+            "Gas City config is unavailable, so the sidebar could not verify the latest state.",
+        });
+        return;
+      }
+      const freshAgent = findGcConfigAgent(freshConfig, agent);
+      if (!freshAgent) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to update ${agent}`,
+          description: "The agent was not present in the latest Gas City config snapshot.",
+        });
+        return;
+      }
+      if (freshAgent.named_session_mode === mode) {
+        setGcConfig(freshConfig);
+        toastManager.add({
+          type: "warning",
+          title: `${agent} already set to ${mode === "always" ? "auto" : "demand"}`,
+          description: `The sidebar was out of sync. Gas City already reports ${mode === "always" ? "auto-start" : "on-demand"} mode for ${agent}.`,
+        });
         return;
       }
       const toastId = toastManager.add({
@@ -3634,6 +3699,34 @@ export default function Sidebar() {
       if (!api?.gc?.setAgentMaxActiveSessions) {
         return;
       }
+      const freshConfig = await refreshGcConfig();
+      if (!freshConfig) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to refresh ${agent}`,
+          description:
+            "Gas City config is unavailable, so the sidebar could not verify the latest state.",
+        });
+        return;
+      }
+      const freshAgent = findGcConfigAgent(freshConfig, agent);
+      if (!freshAgent) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to scale ${agent}`,
+          description: "The agent was not present in the latest Gas City config snapshot.",
+        });
+        return;
+      }
+      if (freshAgent.max_active_sessions === maxActiveSessions) {
+        setGcConfig(freshConfig);
+        toastManager.add({
+          type: "warning",
+          title: `${agent} already at max ${maxActiveSessions}`,
+          description: `The sidebar was out of sync. Gas City already reports max active sessions = ${maxActiveSessions}.`,
+        });
+        return;
+      }
       const toastId = toastManager.add({
         type: "loading",
         title: `Scaling ${agent}`,
@@ -3685,39 +3778,69 @@ export default function Sidebar() {
       if (!api?.gc?.setRigSuspended) {
         return;
       }
+      const freshConfig = await refreshGcConfig();
+      if (!freshConfig) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to refresh ${rig}`,
+          description:
+            "Gas City config is unavailable, so the sidebar could not verify the latest state.",
+        });
+        return;
+      }
+      const freshRig = freshConfig.rigs.find((entry) => entry.name === rig) ?? null;
+      if (!freshRig) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to update ${rig}`,
+          description: "The rig was not present in the latest Gas City config snapshot.",
+        });
+        return;
+      }
+      if (freshRig.suspended === suspended) {
+        setGcConfig(freshConfig);
+        toastManager.add({
+          type: "warning",
+          title: `${rig} already ${describeGcSuspendedState(suspended)}`,
+          description: `The sidebar was out of sync. Gas City reports ${rig} is already ${describeGcSuspendedState(
+            suspended,
+          )}, so no change was sent.`,
+        });
+        return;
+      }
       const toastId = toastManager.add({
         type: "loading",
-        title: suspended ? `Resuming ${rig}` : `Suspending ${rig}`,
+        title: suspended ? `Suspending ${rig}` : `Resuming ${rig}`,
         description: suspended
-          ? "Gas City is waking the rig and its named sessions."
-          : "Gas City is pausing the rig in the background.",
+          ? "Gas City is pausing the rig in the background."
+          : "Gas City is waking the rig and its named sessions.",
         timeout: 0,
       });
-      if (!suspended) {
+      if (suspended) {
         for (const agent of affectedAgents) {
           stopWatchingGcAgentStart(agent.qualifiedName);
         }
       }
-      setGcRigActionState(rig, suspended ? "resume" : "suspend");
+      setGcRigActionState(rig, suspended ? "suspend" : "resume");
 
       try {
         const nextConfig = await api.gc.setRigSuspended({ rig, suspended });
         setGcConfig(nextConfig);
         const autoStartAgents = filterAutoStartAgents(affectedAgents);
-        if (suspended && autoStartAgents.length > 0) {
+        if (!suspended && autoStartAgents.length > 0) {
           for (const agent of autoStartAgents) {
             void waitForAgentStart(agent.qualifiedName);
           }
         }
         toastManager.update(toastId, {
           type: "success",
-          title: suspended ? `${rig} resumed` : `${rig} suspended`,
+          title: suspended ? `${rig} suspended` : `${rig} resumed`,
           description:
-            suspended && autoStartAgents.length > 0
+            !suspended && autoStartAgents.length > 0
               ? `Gas City is starting ${autoStartAgents.length} named session${autoStartAgents.length === 1 ? "" : "s"} in the background.`
               : suspended
-                ? "Gas City accepted the resume request."
-                : "Gas City accepted the suspend request.",
+                ? "Gas City accepted the suspend request."
+                : "Gas City accepted the resume request.",
           timeout: 0,
           data: {
             dismissAfterVisibleMs: 8_000,
@@ -3757,39 +3880,60 @@ export default function Sidebar() {
       if (!api?.gc?.setCitySuspended) {
         return;
       }
+      const freshConfig = await refreshGcConfig();
+      if (!freshConfig) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to refresh Gas City",
+          description:
+            "Gas City config is unavailable, so the sidebar could not verify the latest state.",
+        });
+        return;
+      }
+      if (freshConfig.workspace.suspended === suspended) {
+        setGcConfig(freshConfig);
+        toastManager.add({
+          type: "warning",
+          title: `Gas City already ${describeGcSuspendedState(suspended)}`,
+          description: `The sidebar was out of sync. Gas City is already ${describeGcSuspendedState(
+            suspended,
+          )}, so no change was sent.`,
+        });
+        return;
+      }
       const toastId = toastManager.add({
         type: "loading",
-        title: suspended ? "Resuming Gas City" : "Suspending Gas City",
+        title: suspended ? "Suspending Gas City" : "Resuming Gas City",
         description: suspended
-          ? "Gas City is restoring workspace-level named sessions."
-          : "Gas City is pausing workspace-level agents.",
+          ? "Gas City is pausing workspace-level agents."
+          : "Gas City is restoring workspace-level named sessions.",
         timeout: 0,
       });
-      if (!suspended) {
+      if (suspended) {
         for (const agent of affectedAgents) {
           stopWatchingGcAgentStart(agent.qualifiedName);
         }
       }
-      setGcCityActionState(suspended ? "resume" : "suspend");
+      setGcCityActionState(suspended ? "suspend" : "resume");
 
       try {
         const nextConfig = await api.gc.setCitySuspended({ suspended });
         setGcConfig(nextConfig);
         const autoStartAgents = filterAutoStartAgents(affectedAgents);
-        if (suspended && autoStartAgents.length > 0) {
+        if (!suspended && autoStartAgents.length > 0) {
           for (const agent of autoStartAgents) {
             void waitForAgentStart(agent.qualifiedName);
           }
         }
         toastManager.update(toastId, {
           type: "success",
-          title: suspended ? "Gas City resumed" : "Gas City suspended",
+          title: suspended ? "Gas City suspended" : "Gas City resumed",
           description:
-            suspended && autoStartAgents.length > 0
+            !suspended && autoStartAgents.length > 0
               ? `Gas City is starting ${autoStartAgents.length} workspace named session${autoStartAgents.length === 1 ? "" : "s"} in the background.`
               : suspended
-                ? "Gas City accepted the resume request."
-                : "Gas City accepted the suspend request.",
+                ? "Gas City accepted the suspend request."
+                : "Gas City accepted the resume request.",
           timeout: 0,
           data: {
             dismissAfterVisibleMs: 8_000,
@@ -3987,37 +4131,12 @@ export default function Sidebar() {
     () => [...threadJumpCommandByKey.keys()],
     [threadJumpCommandByKey],
   );
-  const sidebarShortcutContext = useMemo(
-    () => ({
-      terminalFocus: false,
-      terminalOpen: routeThreadRef
-        ? selectThreadTerminalState(
-            useTerminalStateStore.getState().terminalStateByThreadKey,
-            routeThreadRef,
-          ).terminalOpen
-        : false,
-      modelPickerOpen,
-    }),
-    [modelPickerOpen, routeThreadRef],
-  );
-  const threadJumpLabelByKey = useMemo(
-    () =>
-      buildThreadJumpLabelMap({
-        keybindings,
-        platform,
-        terminalOpen: sidebarShortcutContext.terminalOpen,
-        threadJumpCommandByKey,
-      }),
-    [keybindings, platform, sidebarShortcutContext.terminalOpen, threadJumpCommandByKey],
-  );
-  const shouldShowThreadJumpHintsNow = shouldShowThreadJumpHintsForModifiers(
-    shortcutModifiers,
-    keybindings,
-    {
-      platform,
-      context: sidebarShortcutContext,
-    },
-  );
+  const [threadJumpLabelByKey, setThreadJumpLabelByKey] =
+    useState<ReadonlyMap<string, string>>(EMPTY_THREAD_JUMP_LABELS);
+  const threadJumpLabelsRef = useRef<ReadonlyMap<string, string>>(EMPTY_THREAD_JUMP_LABELS);
+  threadJumpLabelsRef.current = threadJumpLabelByKey;
+  const showThreadJumpHintsRef = useRef(showThreadJumpHints);
+  showThreadJumpHintsRef.current = showThreadJumpHints;
   const visibleThreadJumpLabelByKey = showThreadJumpHints
     ? threadJumpLabelByKey
     : EMPTY_THREAD_JUMP_LABELS;
@@ -4048,12 +4167,52 @@ export default function Sidebar() {
   }, [prewarmedSidebarThreadRefs]);
 
   useEffect(() => {
-    updateThreadJumpHintsVisibility(shouldShowThreadJumpHintsNow);
-  }, [shouldShowThreadJumpHintsNow, updateThreadJumpHintsVisibility]);
+    const clearThreadJumpHints = () => {
+      setThreadJumpLabelByKey((current) =>
+        current === EMPTY_THREAD_JUMP_LABELS ? current : EMPTY_THREAD_JUMP_LABELS,
+      );
+      updateThreadJumpHintsVisibility(false);
+    };
+    const shouldIgnoreThreadJumpHintUpdate = (event: globalThis.KeyboardEvent) =>
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      event.key !== "Meta" &&
+      event.key !== "Control" &&
+      event.key !== "Alt" &&
+      event.key !== "Shift" &&
+      !showThreadJumpHintsRef.current &&
+      threadJumpLabelsRef.current === EMPTY_THREAD_JUMP_LABELS;
 
-  useEffect(() => {
     const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (shouldIgnoreThreadJumpHintUpdate(event)) {
+        return;
+      }
       const shortcutContext = getCurrentSidebarShortcutContext();
+      const shouldShowHints = shouldShowThreadJumpHints(event, keybindings, {
+        platform,
+        context: shortcutContext,
+      });
+      if (!shouldShowHints) {
+        if (
+          showThreadJumpHintsRef.current ||
+          threadJumpLabelsRef.current !== EMPTY_THREAD_JUMP_LABELS
+        ) {
+          clearThreadJumpHints();
+        }
+      } else {
+        setThreadJumpLabelByKey((current) => {
+          const nextLabelMap = buildThreadJumpLabelMap({
+            keybindings,
+            platform,
+            terminalOpen: shortcutContext.terminalOpen,
+            threadJumpCommandByKey,
+          });
+          return threadJumpLabelMapsEqual(current, nextLabelMap) ? current : nextLabelMap;
+        });
+        updateThreadJumpHintsVisibility(true);
+      }
 
       if (event.defaultPrevented || event.repeat) {
         return;
@@ -4103,10 +4262,43 @@ export default function Sidebar() {
       navigateToThread(scopeThreadRef(targetThread.environmentId, targetThread.id));
     };
 
+    const onWindowKeyUp = (event: globalThis.KeyboardEvent) => {
+      if (shouldIgnoreThreadJumpHintUpdate(event)) {
+        return;
+      }
+      const shortcutContext = getCurrentSidebarShortcutContext();
+      const shouldShowHints = shouldShowThreadJumpHints(event, keybindings, {
+        platform,
+        context: shortcutContext,
+      });
+      if (!shouldShowHints) {
+        clearThreadJumpHints();
+        return;
+      }
+      setThreadJumpLabelByKey((current) => {
+        const nextLabelMap = buildThreadJumpLabelMap({
+          keybindings,
+          platform,
+          terminalOpen: shortcutContext.terminalOpen,
+          threadJumpCommandByKey,
+        });
+        return threadJumpLabelMapsEqual(current, nextLabelMap) ? current : nextLabelMap;
+      });
+      updateThreadJumpHintsVisibility(true);
+    };
+
+    const onWindowBlur = () => {
+      clearThreadJumpHints();
+    };
+
     window.addEventListener("keydown", onWindowKeyDown);
+    window.addEventListener("keyup", onWindowKeyUp);
+    window.addEventListener("blur", onWindowBlur);
 
     return () => {
       window.removeEventListener("keydown", onWindowKeyDown);
+      window.removeEventListener("keyup", onWindowKeyUp);
+      window.removeEventListener("blur", onWindowBlur);
     };
   }, [
     getCurrentSidebarShortcutContext,
@@ -4116,7 +4308,9 @@ export default function Sidebar() {
     platform,
     routeThreadKey,
     sidebarThreadByKey,
+    threadJumpCommandByKey,
     threadJumpThreadKeys,
+    updateThreadJumpHintsVisibility,
   ]);
 
   useEffect(() => {
@@ -4200,22 +4394,18 @@ export default function Sidebar() {
           if (!shouldToastDesktopUpdateActionResult(result)) return;
           const actionError = getDesktopUpdateActionError(result);
           if (!actionError) return;
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not download update",
-              description: actionError,
-            }),
-          );
+          toastManager.add({
+            type: "error",
+            title: "Could not download update",
+            description: actionError,
+          });
         })
         .catch((error) => {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not start update download",
-              description: error instanceof Error ? error.message : "An unexpected error occurred.",
-            }),
-          );
+          toastManager.add({
+            type: "error",
+            title: "Could not start update download",
+            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+          });
         });
       return;
     }
@@ -4231,22 +4421,18 @@ export default function Sidebar() {
           if (!shouldToastDesktopUpdateActionResult(result)) return;
           const actionError = getDesktopUpdateActionError(result);
           if (!actionError) return;
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not install update",
-              description: actionError,
-            }),
-          );
+          toastManager.add({
+            type: "error",
+            title: "Could not install update",
+            description: actionError,
+          });
         })
         .catch((error) => {
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Could not install update",
-              description: error instanceof Error ? error.message : "An unexpected error occurred.",
-            }),
-          );
+          toastManager.add({
+            type: "error",
+            title: "Could not install update",
+            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+          });
         });
     }
   }, [desktopUpdateButtonAction, desktopUpdateButtonDisabled, desktopUpdateState]);

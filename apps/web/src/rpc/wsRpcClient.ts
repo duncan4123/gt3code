@@ -131,6 +131,10 @@ export interface WsRpcClient {
     readonly setAgentMaxActiveSessions: RpcUnaryMethod<
       typeof WS_METHODS.gcSetAgentMaxActiveSessions
     >;
+    readonly setAgentMinActiveSessions: RpcUnaryMethod<
+      typeof WS_METHODS.gcSetAgentMinActiveSessions
+    >;
+    readonly setAgentWakeMode: RpcUnaryMethod<typeof WS_METHODS.gcSetAgentWakeMode>;
     readonly setAgentSessionMode: RpcUnaryMethod<typeof WS_METHODS.gcSetAgentSessionMode>;
     readonly setCitySuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetCitySuspended>;
     readonly setRigSuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetRigSuspended>;
@@ -284,6 +288,10 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.gcSetAgentSuspended](input)),
       setAgentMaxActiveSessions: (input) =>
         transport.request((client) => client[WS_METHODS.gcSetAgentMaxActiveSessions](input)),
+      setAgentMinActiveSessions: (input) =>
+        transport.request((client) => client[WS_METHODS.gcSetAgentMinActiveSessions](input)),
+      setAgentWakeMode: (input) =>
+        transport.request((client) => client[WS_METHODS.gcSetAgentWakeMode](input)),
       setAgentSessionMode: (input) =>
         transport.request((client) => client[WS_METHODS.gcSetAgentSessionMode](input)),
       setCitySuspended: (input) =>

@@ -56,6 +56,30 @@ function shouldReplaceTextGenerationModelSelection(
 const withModelSelectionOptions = <Options>(options: Options | undefined) =>
   options ? { options } : {};
 
+function codexSelectionOptions(
+  selection: ServerSettingsPatch["textGenerationModelSelection"] | undefined,
+): CodexModelOptions | undefined {
+  return selection?.provider === "codex" ? selection.options : undefined;
+}
+
+function claudeSelectionOptions(
+  selection: ServerSettingsPatch["textGenerationModelSelection"] | undefined,
+): ClaudeModelOptions | undefined {
+  return selection?.provider === "claudeAgent" ? selection.options : undefined;
+}
+
+function cursorSelectionOptions(
+  selection: ServerSettingsPatch["textGenerationModelSelection"] | undefined,
+): CursorModelOptions | undefined {
+  return selection?.provider === "cursor" ? selection.options : undefined;
+}
+
+function openCodeSelectionOptions(
+  selection: ServerSettingsPatch["textGenerationModelSelection"] | undefined,
+): OpenCodeModelOptions | undefined {
+  return selection?.provider === "opencode" ? selection.options : undefined;
+}
+
 /**
  * Applies a server settings patch while treating textGenerationModelSelection as
  * replace-on-provider/model updates. This prevents stale nested options from
@@ -81,30 +105,29 @@ export function applyServerSettingsPatch(
         ? {
             provider,
             model,
-            ...withModelSelectionOptions(selectionPatch.options as CodexModelOptions | undefined),
+            ...withModelSelectionOptions(codexSelectionOptions(selectionPatch)),
           }
         : provider === "claudeAgent"
           ? {
               provider,
               model,
-              ...withModelSelectionOptions(
-                selectionPatch.options as ClaudeModelOptions | undefined,
-              ),
+              ...withModelSelectionOptions(claudeSelectionOptions(selectionPatch)),
             }
           : provider === "cursor"
             ? {
                 provider,
                 model,
-                ...withModelSelectionOptions(
-                  selectionPatch.options as CursorModelOptions | undefined,
-                ),
+                ...withModelSelectionOptions(cursorSelectionOptions(selectionPatch)),
               }
-            : {
-                provider,
-                model,
-                ...withModelSelectionOptions(
-                  selectionPatch.options as OpenCodeModelOptions | undefined,
-                ),
-              },
+            : provider === "opencode"
+              ? {
+                  provider,
+                  model,
+                  ...withModelSelectionOptions(openCodeSelectionOptions(selectionPatch)),
+                }
+              : {
+                  provider,
+                  model,
+                },
   };
 }

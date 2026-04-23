@@ -106,6 +106,8 @@ function gcConfigToggleLabel(
 export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   const [collapsedRigIds, setCollapsedRigIds] = useState<Set<string>>(() => new Set());
   const [collapsedAgentIds, setCollapsedAgentIds] = useState<Set<string>>(() => new Set());
+  const workspaceSuspensionHint =
+    "Workspace is suspended. Gas City will not start or reconcile agents until GC is resumed.";
 
   const toggleRig = (rigId: string) => {
     setCollapsedRigIds((current) => {
@@ -156,7 +158,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
           className="w-full"
           data-testid={`gc-rig-folder-${gcControlTestIdSuffix(rigGroup.id)}`}
         >
-          <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold tracking-wide text-muted-foreground/60 uppercase">
+          <div className="flex items-center gap-1.5 px-2 py-1 text-muted-foreground/60 uppercase">
             <button
               type="button"
               data-thread-selection-safe
@@ -175,8 +177,17 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 }`}
               />
               <FolderIcon className="size-3 shrink-0" />
-              <span className="truncate">{rigGroup.label}</span>
-              <span className="truncate text-[9px] font-medium tracking-normal text-muted-foreground/60 lowercase">
+              <span className="truncate text-xs font-semibold leading-none">{rigGroup.label}</span>
+              {rigGroup.kind === "workspace" && rigGroup.isSuspended ? (
+                <Badge
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full border-amber-500/25 bg-amber-500/10 px-1.5 tracking-wide text-amber-700 uppercase dark:text-amber-300"
+                >
+                  blocks starts
+                </Badge>
+              ) : null}
+              <span className="truncate text-[.625rem] font-medium tracking-normal text-muted-foreground/60 lowercase sm:text-[.625rem]">
                 {rigStateSummary}
               </span>
             </button>
@@ -207,7 +218,11 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                             ? "play"
                             : "stop"
                     }
-                    aria-label={gcConfigToggleLabel(rigGroup.kind, rigGroup.label, rigGroup.isSuspended)}
+                    aria-label={gcConfigToggleLabel(
+                      rigGroup.kind,
+                      rigGroup.label,
+                      rigGroup.isSuspended,
+                    )}
                     disabled={
                       rigGroup.kind === "workspace"
                         ? props.gcCityMutationInFlight
@@ -243,7 +258,16 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 }
               />
               <TooltipPopup side="top">
-                {gcConfigToggleLabel(rigGroup.kind, rigGroup.label, rigGroup.isSuspended)}
+                <div className="space-y-1">
+                  <div>
+                    {gcConfigToggleLabel(rigGroup.kind, rigGroup.label, rigGroup.isSuspended)}
+                  </div>
+                  {rigGroup.kind === "workspace" && rigGroup.isSuspended ? (
+                    <div className="max-w-56 text-[10px] text-muted-foreground">
+                      {workspaceSuspensionHint}
+                    </div>
+                  ) : null}
+                </div>
               </TooltipPopup>
             </Tooltip>
           </div>
@@ -282,7 +306,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                   data-thread-selection-safe
                   data-testid={`gc-agent-folder-${testIdSuffix}`}
                 >
-                  <div className="flex items-center gap-1.5 px-4 py-1 text-[10px] font-medium text-muted-foreground/60">
+                  <div className="flex items-center gap-1.5 px-4 py-1 text-muted-foreground/60">
                     <button
                       type="button"
                       data-thread-selection-safe
@@ -301,7 +325,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         }`}
                       />
                       <FolderIcon className="size-3 shrink-0" />
-                      <span className="truncate">{agentGroup.label}</span>
+                      <span className="truncate text-xs font-medium leading-none">
+                        {agentGroup.label}
+                      </span>
                     </button>
                     <Tooltip>
                       <TooltipTrigger
@@ -328,9 +354,10 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                                   <MinusIcon className="size-3.5 shrink-0" />
                                 </button>
                                 <Badge
+                                  size="sm"
                                   variant="outline"
                                   data-testid={`gc-agent-pool-max-${testIdSuffix}`}
-                                  className="h-5 rounded-full px-1.5 text-[9px] font-semibold tracking-wide uppercase"
+                                  className="rounded-full px-1.5 tracking-wide uppercase"
                                 >
                                   max {agentGroup.maxActiveSessions}
                                 </Badge>
@@ -362,7 +389,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                                 data-gc-agent-session-mode={agentGroup.qualifiedName}
                                 aria-label={`Set ${agentGroup.qualifiedName} session mode to ${nextNamedSessionMode}`}
                                 disabled={isMutating}
-                                className="inline-flex h-5 cursor-pointer items-center justify-center rounded-md px-1.5 text-[9px] font-semibold tracking-wide text-muted-foreground/70 uppercase transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+                                className="inline-flex h-5 cursor-pointer items-center justify-center rounded-md px-1.5 font-semibold tracking-wide text-muted-foreground/70 text-xs uppercase transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60 sm:text-[.625rem]"
                                 onClick={(event) => {
                                   event.preventDefault();
                                   event.stopPropagation();
@@ -376,9 +403,10 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                               </button>
                             ) : null}
                             <Badge
+                              size="sm"
                               variant="outline"
                               data-testid={`gc-agent-status-${testIdSuffix}`}
-                              className={`h-5 rounded-full px-1.5 text-[9px] font-semibold tracking-wide uppercase ${statusBadgeClassName(
+                              className={`rounded-full px-1.5 tracking-wide uppercase ${statusBadgeClassName(
                                 agentGroup.runtimeState.tone,
                               )}`}
                             >
@@ -390,11 +418,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                               data-testid={`gc-agent-toggle-${testIdSuffix}`}
                               data-gc-agent={agentGroup.qualifiedName}
                               data-gc-action-icon={
-                                isMutating
-                                  ? "loading"
-                                  : agentGroup.isSuspended
-                                    ? "play"
-                                    : "stop"
+                                isMutating ? "loading" : agentGroup.isSuspended ? "play" : "stop"
                               }
                               aria-label={actionLabel}
                               disabled={isMutating}

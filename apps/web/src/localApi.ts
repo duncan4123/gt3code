@@ -136,6 +136,8 @@ export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
       getThreadContext: rpcClient.gc.getThreadContext,
       setAgentSuspended: rpcClient.gc.setAgentSuspended,
       setAgentMaxActiveSessions: rpcClient.gc.setAgentMaxActiveSessions,
+      setAgentMinActiveSessions: rpcClient.gc.setAgentMinActiveSessions,
+      setAgentWakeMode: rpcClient.gc.setAgentWakeMode,
       setAgentSessionMode: rpcClient.gc.setAgentSessionMode,
       setCitySuspended: rpcClient.gc.setCitySuspended,
       setRigSuspended: rpcClient.gc.setRigSuspended,

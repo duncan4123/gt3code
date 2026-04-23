@@ -86,16 +86,28 @@ import {
   GcGetConfigInput,
   GcGetThreadContextError,
   GcGetThreadContextInput,
+  GcRespondToPendingError,
+  GcRespondToPendingInput,
+  GcSessionActionResult,
   GcSetAgentMaxActiveSessionsError,
   GcSetAgentMaxActiveSessionsInput,
+  GcSetAgentMinActiveSessionsError,
+  GcSetAgentMinActiveSessionsInput,
   GcSetAgentSessionModeError,
   GcSetAgentSessionModeInput,
   GcSetAgentSuspendedInput,
   GcSetAgentSuspendedError,
+  GcSetAgentWakeModeError,
+  GcSetAgentWakeModeInput,
   GcSetCitySuspendedError,
   GcSetCitySuspendedInput,
   GcSetRigSuspendedInput,
   GcSetRigSuspendedError,
+  GcStopSessionError,
+  GcStopSessionInput,
+  GcSubmitSessionError,
+  GcSubmitSessionInput,
+  GcSubmitSessionResult,
   GcThreadContextResult,
 } from "./gc.ts";
 
@@ -145,8 +157,13 @@ export const WS_METHODS = {
   gcGetConfig: "gc.getConfig",
   gcFindThreadBinding: "gc.findThreadBinding",
   gcGetThreadContext: "gc.getThreadContext",
+  gcSubmitSession: "gc.submitSession",
+  gcStopSession: "gc.stopSession",
+  gcRespondToPending: "gc.respondToPending",
   gcSetAgentSuspended: "gc.setAgentSuspended",
   gcSetAgentMaxActiveSessions: "gc.setAgentMaxActiveSessions",
+  gcSetAgentMinActiveSessions: "gc.setAgentMinActiveSessions",
+  gcSetAgentWakeMode: "gc.setAgentWakeMode",
   gcSetAgentSessionMode: "gc.setAgentSessionMode",
   gcSetCitySuspended: "gc.setCitySuspended",
   gcSetRigSuspended: "gc.setRigSuspended",
@@ -414,6 +431,24 @@ export const WsGcFindThreadBindingRpc = Rpc.make(WS_METHODS.gcFindThreadBinding,
   error: GcFindThreadBindingError,
 });
 
+export const WsGcSubmitSessionRpc = Rpc.make(WS_METHODS.gcSubmitSession, {
+  payload: GcSubmitSessionInput,
+  success: GcSubmitSessionResult,
+  error: GcSubmitSessionError,
+});
+
+export const WsGcStopSessionRpc = Rpc.make(WS_METHODS.gcStopSession, {
+  payload: GcStopSessionInput,
+  success: GcSessionActionResult,
+  error: GcStopSessionError,
+});
+
+export const WsGcRespondToPendingRpc = Rpc.make(WS_METHODS.gcRespondToPending, {
+  payload: GcRespondToPendingInput,
+  success: GcSessionActionResult,
+  error: GcRespondToPendingError,
+});
+
 export const WsGcSetAgentSuspendedRpc = Rpc.make(WS_METHODS.gcSetAgentSuspended, {
   payload: GcSetAgentSuspendedInput,
   success: GcConfigResult,
@@ -424,6 +459,18 @@ export const WsGcSetAgentMaxActiveSessionsRpc = Rpc.make(WS_METHODS.gcSetAgentMa
   payload: GcSetAgentMaxActiveSessionsInput,
   success: GcConfigResult,
   error: GcSetAgentMaxActiveSessionsError,
+});
+
+export const WsGcSetAgentMinActiveSessionsRpc = Rpc.make(WS_METHODS.gcSetAgentMinActiveSessions, {
+  payload: GcSetAgentMinActiveSessionsInput,
+  success: GcConfigResult,
+  error: GcSetAgentMinActiveSessionsError,
+});
+
+export const WsGcSetAgentWakeModeRpc = Rpc.make(WS_METHODS.gcSetAgentWakeMode, {
+  payload: GcSetAgentWakeModeInput,
+  success: GcConfigResult,
+  error: GcSetAgentWakeModeError,
 });
 
 export const WsGcSetAgentSessionModeRpc = Rpc.make(WS_METHODS.gcSetAgentSessionMode, {
@@ -493,8 +540,13 @@ export const WsRpcGroup = RpcGroup.make(
   WsGcGetConfigRpc,
   WsGcFindThreadBindingRpc,
   WsGcGetThreadContextRpc,
+  WsGcSubmitSessionRpc,
+  WsGcStopSessionRpc,
+  WsGcRespondToPendingRpc,
   WsGcSetAgentSuspendedRpc,
   WsGcSetAgentMaxActiveSessionsRpc,
+  WsGcSetAgentMinActiveSessionsRpc,
+  WsGcSetAgentWakeModeRpc,
   WsGcSetAgentSessionModeRpc,
   WsGcSetCitySuspendedRpc,
   WsGcSetRigSuspendedRpc,

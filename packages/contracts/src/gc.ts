@@ -191,6 +191,9 @@ export const GcNamedSessionMode = Schema.Union([
 ]);
 export type GcNamedSessionMode = typeof GcNamedSessionMode.Type;
 
+export const GcWakeMode = Schema.Union([Schema.Literal("resume"), Schema.Literal("fresh")]);
+export type GcWakeMode = typeof GcWakeMode.Type;
+
 export const GcConfigAgent = Schema.Struct({
   name: Schema.String,
   dir: Schema.optional(Schema.String),
@@ -198,6 +201,7 @@ export const GcConfigAgent = Schema.Struct({
   is_pool: Schema.optional(Schema.Boolean),
   min_active_sessions: Schema.optional(Schema.Number),
   max_active_sessions: Schema.optional(Schema.Number),
+  wake_mode: Schema.optional(GcWakeMode),
   scope: Schema.optional(Schema.String),
   suspended: Schema.Boolean,
   named_session_mode: Schema.optional(GcNamedSessionMode),
@@ -246,7 +250,9 @@ export const GcSidebarLayoutAgentGroup = Schema.Struct({
   isConfigured: Schema.Boolean,
   isPool: Schema.Boolean,
   isSuspended: Schema.Boolean,
+  minActiveSessions: Schema.optional(Schema.Number),
   maxActiveSessions: Schema.optional(Schema.Number),
+  wakeMode: Schema.optional(GcWakeMode),
   namedSessionMode: Schema.optional(GcNamedSessionMode),
   scope: Schema.optional(Schema.String),
   threads: Schema.Array(OrchestrationThreadShell),
@@ -282,7 +288,9 @@ export interface VirtualAgentGroup<TThread> {
   isConfigured: boolean;
   isPool: boolean;
   isSuspended: boolean;
+  minActiveSessions?: number;
   maxActiveSessions?: number;
+  wakeMode?: GcWakeMode;
   namedSessionMode?: GcNamedSessionMode;
   scope?: string;
   threads: TThread[];
@@ -385,6 +393,32 @@ function findMatchingAgentGroup<TThread>(
   }
 
   return [...agentGroupsById.values()].find((group) => candidateLabels.has(group.label));
+}
+
+function findConfiguredAgent(
+  config: GcConfigResult | null | undefined,
+  qualifiedAgent: string,
+): GcConfigResult["agents"][number] | undefined {
+  if (!config) {
+    return undefined;
+  }
+
+  const exactMatch = config.agents.find(
+    (entry) => configuredAgentQualifiedName(entry) === qualifiedAgent,
+  );
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const candidateLabels = new Set(candidateAgentLabels(qualifiedAgent));
+  if (candidateLabels.size === 0) {
+    return undefined;
+  }
+
+  return config.agents.find((entry) => {
+    const qualifiedName = configuredAgentQualifiedName(entry);
+    return candidateAgentLabels(qualifiedName).some((label) => candidateLabels.has(label));
+  });
 }
 
 /** Partition threads into rig folders, agent folders, and standalone threads. */
@@ -509,9 +543,13 @@ export function groupThreadsByRigAndAgent<
         isConfigured: true,
         isPool: agent.is_pool ?? false,
         isSuspended: rigGroup.isSuspended || agent.suspended,
+        ...(typeof agent.min_active_sessions === "number"
+          ? { minActiveSessions: agent.min_active_sessions }
+          : {}),
         ...(typeof agent.max_active_sessions === "number"
           ? { maxActiveSessions: agent.max_active_sessions }
           : {}),
+        ...(agent.wake_mode ? { wakeMode: agent.wake_mode } : {}),
         ...(agent.named_session_mode ? { namedSessionMode: agent.named_session_mode } : {}),
         ...(agent.scope ? { scope: agent.scope } : {}),
         threads: [],
@@ -553,9 +591,13 @@ export function groupThreadsByRigAndAgent<
           isConfigured: true,
           isPool: agent.is_pool ?? false,
           isSuspended: cityGroup.isSuspended || agent.suspended,
+          ...(typeof agent.min_active_sessions === "number"
+            ? { minActiveSessions: agent.min_active_sessions }
+            : {}),
           ...(typeof agent.max_active_sessions === "number"
             ? { maxActiveSessions: agent.max_active_sessions }
             : {}),
+          ...(agent.wake_mode ? { wakeMode: agent.wake_mode } : {}),
           ...(agent.named_session_mode ? { namedSessionMode: agent.named_session_mode } : {}),
           ...(agent.scope ? { scope: agent.scope } : {}),
           threads: [],
@@ -626,16 +668,55 @@ export function groupThreadsByRigAndAgent<
     );
     if (existingAgentGroup) {
       existingAgentGroup.threads.push(thread);
+      const configuredAgent = findConfiguredAgent(
+        options?.config,
+        existingAgentGroup.qualifiedName,
+      );
+      if (configuredAgent) {
+        existingAgentGroup.isConfigured = true;
+        existingAgentGroup.isPool = configuredAgent.is_pool ?? existingAgentGroup.isPool;
+        existingAgentGroup.isSuspended =
+          ensuredRigGroup.isSuspended ||
+          configuredAgent.suspended ||
+          existingAgentGroup.isSuspended;
+        if (typeof configuredAgent.min_active_sessions === "number") {
+          existingAgentGroup.minActiveSessions = configuredAgent.min_active_sessions;
+        }
+        if (typeof configuredAgent.max_active_sessions === "number") {
+          existingAgentGroup.maxActiveSessions = configuredAgent.max_active_sessions;
+        }
+        if (configuredAgent.wake_mode) {
+          existingAgentGroup.wakeMode = configuredAgent.wake_mode;
+        }
+        if (configuredAgent.named_session_mode) {
+          existingAgentGroup.namedSessionMode = configuredAgent.named_session_mode;
+        }
+        if (configuredAgent.scope) {
+          existingAgentGroup.scope = configuredAgent.scope;
+        }
+      }
       continue;
     }
 
+    const configuredAgent = findConfiguredAgent(options?.config, resolvedAgent);
     ensuredRigGroup.agentGroupsById.set(resolvedAgent, {
       id: `${resolvedRig}/${resolvedAgent}`,
       label: canonicalAgentLabel ?? agentFolderLabel(resolvedAgent),
       qualifiedName: resolvedAgent,
-      isConfigured: false,
-      isPool: false,
-      isSuspended: false,
+      isConfigured: Boolean(configuredAgent),
+      isPool: configuredAgent?.is_pool ?? false,
+      isSuspended: ensuredRigGroup.isSuspended || configuredAgent?.suspended || false,
+      ...(typeof configuredAgent?.min_active_sessions === "number"
+        ? { minActiveSessions: configuredAgent.min_active_sessions }
+        : {}),
+      ...(typeof configuredAgent?.max_active_sessions === "number"
+        ? { maxActiveSessions: configuredAgent.max_active_sessions }
+        : {}),
+      ...(configuredAgent?.wake_mode ? { wakeMode: configuredAgent.wake_mode } : {}),
+      ...(configuredAgent?.named_session_mode
+        ? { namedSessionMode: configuredAgent.named_session_mode }
+        : {}),
+      ...(configuredAgent?.scope ? { scope: configuredAgent.scope } : {}),
       threads: [thread],
     });
   }
@@ -753,6 +834,18 @@ export const GcSetAgentMaxActiveSessionsInput = Schema.Struct({
   maxActiveSessions: Schema.Number,
 });
 export type GcSetAgentMaxActiveSessionsInput = typeof GcSetAgentMaxActiveSessionsInput.Type;
+
+export const GcSetAgentMinActiveSessionsInput = Schema.Struct({
+  agent: Schema.String,
+  minActiveSessions: Schema.Number,
+});
+export type GcSetAgentMinActiveSessionsInput = typeof GcSetAgentMinActiveSessionsInput.Type;
+
+export const GcSetAgentWakeModeInput = Schema.Struct({
+  agent: Schema.String,
+  wakeMode: GcWakeMode,
+});
+export type GcSetAgentWakeModeInput = typeof GcSetAgentWakeModeInput.Type;
 
 export const GcFindThreadBindingInput = Schema.Struct({
   sessionName: Schema.String,
@@ -932,5 +1025,15 @@ export class GcSetAgentSessionModeError extends Schema.TaggedErrorClass<GcSetAge
 
 export class GcSetAgentMaxActiveSessionsError extends Schema.TaggedErrorClass<GcSetAgentMaxActiveSessionsError>()(
   "GcSetAgentMaxActiveSessionsError",
+  { message: Schema.String },
+) {}
+
+export class GcSetAgentMinActiveSessionsError extends Schema.TaggedErrorClass<GcSetAgentMinActiveSessionsError>()(
+  "GcSetAgentMinActiveSessionsError",
+  { message: Schema.String },
+) {}
+
+export class GcSetAgentWakeModeError extends Schema.TaggedErrorClass<GcSetAgentWakeModeError>()(
+  "GcSetAgentWakeModeError",
   { message: Schema.String },
 ) {}

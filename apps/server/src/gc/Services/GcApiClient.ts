@@ -95,6 +95,14 @@ export interface GcApiClientShape {
     name: string,
     maxActiveSessions: number,
   ) => Effect.Effect<void, Error>;
+  readonly setAgentMinActiveSessions: (
+    name: string,
+    minActiveSessions: number,
+  ) => Effect.Effect<void, Error>;
+  readonly setAgentWakeMode: (
+    name: string,
+    wakeMode: "resume" | "fresh",
+  ) => Effect.Effect<void, Error>;
   readonly setAgentSessionMode: (
     name: string,
     mode: "always" | "on_demand",

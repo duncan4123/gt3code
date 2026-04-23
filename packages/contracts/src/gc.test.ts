@@ -350,4 +350,106 @@ describe("groupThreadsByRigAndAgent", () => {
       namedSessionMode: "on_demand",
     });
   });
+
+  it("enriches thread-created named-session rows from config", () => {
+    const { rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          customMetadata: {
+            "gc.agent": "gascity/gastown.witness",
+            "gc.rig": "gascity",
+            "gc.agentQualified": "gascity/gastown.witness",
+            "gc.agentLabel": "witness",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "gc",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "gascity",
+              path: "/data/projects/gascity",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "gastown.witness",
+              dir: "gascity",
+              suspended: false,
+              named_session_mode: "on_demand",
+            },
+          ],
+        },
+        projectCwd: "/data/projects/some-other-project",
+      },
+    );
+
+    expect(rigGroups).toHaveLength(1);
+    expect(rigGroups[0]?.agentGroups[0]).toMatchObject({
+      qualifiedName: "gascity/gastown.witness",
+      isConfigured: true,
+      isPool: false,
+      namedSessionMode: "on_demand",
+    });
+  });
+
+  it("enriches thread-created pool rows from config", () => {
+    const { rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          customMetadata: {
+            "gc.agent": "gascity/gastown.polecat",
+            "gc.rig": "gascity",
+            "gc.agentQualified": "gascity/gastown.polecat",
+            "gc.agentLabel": "polecat",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "gc",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "gascity",
+              path: "/data/projects/gascity",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "gastown.polecat",
+              dir: "gascity",
+              suspended: false,
+              is_pool: true,
+              min_active_sessions: 0,
+              max_active_sessions: 5,
+              wake_mode: "fresh",
+            },
+          ],
+        },
+        projectCwd: "/data/projects/some-other-project",
+      },
+    );
+
+    expect(rigGroups).toHaveLength(1);
+    expect(rigGroups[0]?.agentGroups[0]).toMatchObject({
+      qualifiedName: "gascity/gastown.polecat",
+      isConfigured: true,
+      isPool: true,
+      minActiveSessions: 0,
+      maxActiveSessions: 5,
+      wakeMode: "fresh",
+    });
+    expect(rigGroups[0]?.agentGroups[0]?.namedSessionMode).toBeUndefined();
+  });
 });

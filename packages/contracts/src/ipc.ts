@@ -59,11 +59,18 @@ import type {
   GcGetConfigInput,
   GcFindThreadBindingInput,
   GcFindThreadBindingResult,
+  GcRespondToPendingInput,
+  GcSessionActionResult,
   GcSetAgentMaxActiveSessionsInput,
+  GcSetAgentMinActiveSessionsInput,
   GcSetAgentSessionModeInput,
   GcSetAgentSuspendedInput,
+  GcSetAgentWakeModeInput,
   GcSetCitySuspendedInput,
   GcSetRigSuspendedInput,
+  GcStopSessionInput,
+  GcSubmitSessionInput,
+  GcSubmitSessionResult,
   GcGetThreadContextInput,
   GcThreadContextResult,
 } from "./gc.ts";
@@ -264,8 +271,13 @@ export interface LocalApi {
     getConfig: (input: GcGetConfigInput) => Promise<GcConfigResult>;
     findThreadBinding: (input: GcFindThreadBindingInput) => Promise<GcFindThreadBindingResult>;
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
+    submitSession: (input: GcSubmitSessionInput) => Promise<GcSubmitSessionResult>;
+    stopSession: (input: GcStopSessionInput) => Promise<GcSessionActionResult>;
+    respondToPending: (input: GcRespondToPendingInput) => Promise<GcSessionActionResult>;
     setAgentSuspended: (input: GcSetAgentSuspendedInput) => Promise<GcConfigResult>;
     setAgentMaxActiveSessions: (input: GcSetAgentMaxActiveSessionsInput) => Promise<GcConfigResult>;
+    setAgentMinActiveSessions: (input: GcSetAgentMinActiveSessionsInput) => Promise<GcConfigResult>;
+    setAgentWakeMode: (input: GcSetAgentWakeModeInput) => Promise<GcConfigResult>;
     setAgentSessionMode: (input: GcSetAgentSessionModeInput) => Promise<GcConfigResult>;
     setCitySuspended: (input: GcSetCitySuspendedInput) => Promise<GcConfigResult>;
     setRigSuspended: (input: GcSetRigSuspendedInput) => Promise<GcConfigResult>;
@@ -347,8 +359,13 @@ export interface EnvironmentApi {
     getConfig: (input: GcGetConfigInput) => Promise<GcConfigResult>;
     findThreadBinding: (input: GcFindThreadBindingInput) => Promise<GcFindThreadBindingResult>;
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
+    submitSession: (input: GcSubmitSessionInput) => Promise<GcSubmitSessionResult>;
+    stopSession: (input: GcStopSessionInput) => Promise<GcSessionActionResult>;
+    respondToPending: (input: GcRespondToPendingInput) => Promise<GcSessionActionResult>;
     setAgentSuspended: (input: GcSetAgentSuspendedInput) => Promise<GcConfigResult>;
     setAgentMaxActiveSessions: (input: GcSetAgentMaxActiveSessionsInput) => Promise<GcConfigResult>;
+    setAgentMinActiveSessions: (input: GcSetAgentMinActiveSessionsInput) => Promise<GcConfigResult>;
+    setAgentWakeMode: (input: GcSetAgentWakeModeInput) => Promise<GcConfigResult>;
     setAgentSessionMode: (input: GcSetAgentSessionModeInput) => Promise<GcConfigResult>;
     setCitySuspended: (input: GcSetCitySuspendedInput) => Promise<GcConfigResult>;
     setRigSuspended: (input: GcSetRigSuspendedInput) => Promise<GcConfigResult>;

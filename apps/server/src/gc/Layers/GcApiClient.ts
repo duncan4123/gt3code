@@ -34,7 +34,7 @@ import {
 import { createResourceCache } from "../resourceCache.ts";
 
 const GC_API_DEFAULT_URL = "http://localhost:9443";
-const GC_API_REQUEST_TIMEOUT_MS = 8_000;
+const GC_API_REQUEST_TIMEOUT_MS = 30_000;
 const GC_CLI_REQUEST_TIMEOUT_MS = 8_000;
 
 function logGcWarning(message: string, context: Record<string, unknown>): void {
@@ -43,6 +43,44 @@ function logGcWarning(message: string, context: Record<string, unknown>): void {
 
 function logGcError(message: string, context: Record<string, unknown>): void {
   console.error("[gc-api]", message, context);
+}
+
+function logGcInfo(message: string, context: Record<string, unknown>): void {
+  console.info("[gc-api]", message, context);
+}
+
+async function runLoggedGcMutation<T>(
+  kind: string,
+  target: string,
+  requested: Record<string, unknown>,
+  run: () => Promise<{ result: T; path: string }>,
+): Promise<T> {
+  const startedAt = Date.now();
+  logGcInfo("mutation started", {
+    kind,
+    target,
+    ...requested,
+  });
+  try {
+    const { result, path } = await run();
+    logGcInfo("mutation succeeded", {
+      kind,
+      target,
+      path,
+      durationMs: Date.now() - startedAt,
+      ...requested,
+    });
+    return result;
+  } catch (error) {
+    logGcError("mutation failed", {
+      kind,
+      target,
+      durationMs: Date.now() - startedAt,
+      ...requested,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 function parseJsonSafe<T>(text: string): T | null {
@@ -102,74 +140,85 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
     namedSessionModes.set(identity, mode);
   }
 
-  const agents = Array.isArray(record.agents)
-    ? record.agents.flatMap((value) => {
-        if (!value || typeof value !== "object" || Array.isArray(value)) {
-          return [];
-        }
-        const agent = value as Record<string, unknown>;
-        if (typeof agent.name !== "string" || agent.name.trim().length === 0) {
-          return [];
-        }
-        const namedSessionMode: "always" | "on_demand" | undefined =
-          agent.named_session_mode === "always" || agent.named_session_mode === "on_demand"
-            ? agent.named_session_mode
-            : undefined;
-        const qualifiedName =
-          typeof agent.name === "string" && agent.name.includes("/")
-            ? agent.name
-            : typeof agent.dir === "string" && agent.dir.trim().length > 0
-              ? `${agent.dir}/${String(agent.name)}`
-              : String(agent.name);
-        const derivedNamedSessionMode = namedSessionModes.get(qualifiedName);
-        const effectiveNamedSessionMode =
-          typeof agent.is_pool === "boolean" && agent.is_pool
-            ? undefined
-            : (namedSessionMode ?? derivedNamedSessionMode ?? "always");
-        return [
-          {
-            name: agent.name,
-            ...(typeof agent.dir === "string" ? { dir: agent.dir } : {}),
-            ...(typeof agent.provider === "string" ? { provider: agent.provider } : {}),
-            ...(typeof agent.is_pool === "boolean" ? { is_pool: agent.is_pool } : {}),
-            ...(typeof agent.min_active_sessions === "number"
-              ? { min_active_sessions: agent.min_active_sessions }
-              : {}),
-            ...(typeof agent.max_active_sessions === "number"
-              ? { max_active_sessions: agent.max_active_sessions }
-              : {}),
-            ...(typeof agent.scope === "string" ? { scope: agent.scope } : {}),
-            suspended: Boolean(agent.suspended),
-            ...(effectiveNamedSessionMode ? { named_session_mode: effectiveNamedSessionMode } : {}),
-          },
-        ];
-      })
-    : [];
+  const agentValues = Array.isArray(record.agents)
+    ? record.agents
+    : Array.isArray(record.agent)
+      ? record.agent
+      : [];
 
-  const rigs = Array.isArray(record.rigs)
-    ? record.rigs.flatMap((value) => {
-        if (!value || typeof value !== "object" || Array.isArray(value)) {
-          return [];
-        }
-        const rig = value as Record<string, unknown>;
-        if (
-          typeof rig.name !== "string" ||
-          rig.name.trim().length === 0 ||
-          typeof rig.path !== "string" ||
-          rig.path.trim().length === 0
-        ) {
-          return [];
-        }
-        return [
-          {
-            name: rig.name,
-            path: rig.path,
-            ...(typeof rig.prefix === "string" ? { prefix: rig.prefix } : {}),
-            suspended: Boolean(rig.suspended),
-          },
-        ];
-      })
-    : [];
+  const agents = agentValues.flatMap((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return [];
+    }
+    const agent = value as Record<string, unknown>;
+    if (typeof agent.name !== "string" || agent.name.trim().length === 0) {
+      return [];
+    }
+    const namedSessionMode: "always" | "on_demand" | undefined =
+      agent.named_session_mode === "always" || agent.named_session_mode === "on_demand"
+        ? agent.named_session_mode
+        : undefined;
+    const qualifiedName =
+      typeof agent.name === "string" && agent.name.includes("/")
+        ? agent.name
+        : typeof agent.dir === "string" && agent.dir.trim().length > 0
+          ? `${agent.dir}/${String(agent.name)}`
+          : String(agent.name);
+    const derivedNamedSessionMode = namedSessionModes.get(qualifiedName);
+    const effectiveNamedSessionMode =
+      typeof agent.is_pool === "boolean" && agent.is_pool
+        ? undefined
+        : (namedSessionMode ?? derivedNamedSessionMode ?? "always");
+    return [
+      {
+        name: agent.name,
+        ...(typeof agent.dir === "string" ? { dir: agent.dir } : {}),
+        ...(typeof agent.provider === "string" ? { provider: agent.provider } : {}),
+        ...(typeof agent.session_template === "string"
+          ? { session_template: agent.session_template }
+          : {}),
+        ...(typeof agent.is_pool === "boolean" ? { is_pool: agent.is_pool } : {}),
+        ...(typeof agent.min_active_sessions === "number"
+          ? { min_active_sessions: agent.min_active_sessions }
+          : {}),
+        ...(typeof agent.max_active_sessions === "number"
+          ? { max_active_sessions: agent.max_active_sessions }
+          : {}),
+        ...(typeof agent.scope === "string" ? { scope: agent.scope } : {}),
+        suspended: Boolean(agent.suspended),
+        ...(effectiveNamedSessionMode ? { named_session_mode: effectiveNamedSessionMode } : {}),
+      },
+    ];
+  });
+
+  const rigValues = Array.isArray(record.rigs)
+    ? record.rigs
+    : Array.isArray(record.rig)
+      ? record.rig
+      : [];
+
+  const rigs = rigValues.flatMap((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return [];
+    }
+    const rig = value as Record<string, unknown>;
+    if (
+      typeof rig.name !== "string" ||
+      rig.name.trim().length === 0 ||
+      typeof rig.path !== "string" ||
+      rig.path.trim().length === 0
+    ) {
+      return [];
+    }
+    return [
+      {
+        name: rig.name,
+        path: rig.path,
+        ...(typeof rig.prefix === "string" ? { prefix: rig.prefix } : {}),
+        suspended: Boolean(rig.suspended),
+      },
+    ];
+  });
 
   const providers =
     record.providers && typeof record.providers === "object" && !Array.isArray(record.providers)
@@ -341,6 +390,18 @@ function configuredAgentQualifiedName(agent: Pick<GcConfigAgent, "dir" | "name">
   return dir ? `${dir}/${agent.name}` : agent.name;
 }
 
+function resolveNamedSessionTemplate(
+  agent: Pick<GcConfigAgent, "name" | "session_template" | "named_session_mode">,
+): string {
+  if (typeof agent.session_template === "string" && agent.session_template.trim().length > 0) {
+    return agent.session_template.trim();
+  }
+  if (agent.named_session_mode && agent.name.includes(".")) {
+    return agent.name.slice(agent.name.lastIndexOf(".") + 1);
+  }
+  return agent.name;
+}
+
 function findConfiguredAgentIdentity(
   config: GcConfigResult | null,
   qualifiedAgentName: string,
@@ -354,7 +415,7 @@ function findConfiguredAgentIdentity(
   if (direct) {
     return {
       dir: typeof direct.dir === "string" ? direct.dir.trim() : "",
-      template: direct.name,
+      template: resolveNamedSessionTemplate(direct),
     };
   }
 
@@ -373,7 +434,7 @@ function findConfiguredAgentIdentity(
 
   return {
     dir: typeof fallback.dir === "string" ? fallback.dir.trim() : "",
-    template: fallback.name,
+    template: resolveNamedSessionTemplate(fallback),
   };
 }
 
@@ -890,6 +951,9 @@ function mergeCliExpandedConfig(
         ...(typeof expandedAgent.min_active_sessions === "number"
           ? { min_active_sessions: expandedAgent.min_active_sessions }
           : {}),
+        ...(typeof expandedAgent.session_template === "string"
+          ? { session_template: expandedAgent.session_template }
+          : {}),
         ...(typeof expandedAgent.max_active_sessions === "number"
           ? { max_active_sessions: expandedAgent.max_active_sessions }
           : {}),
@@ -1374,134 +1438,144 @@ const makeGcApiClient = Effect.gen(function* () {
     });
 
   const setAgentSuspended: GcApiClientShape["setAgentSuspended"] = (name, suspended) =>
-    Effect.promise(async () => {
-      const normalizedName = sanitizeKey(name);
-      const action = suspended ? "suspend" : "resume";
-      const cityName = await resolveGcCityName();
-      try {
-        await postMutation(
-          buildScopedOrLegacyPath(
-            cityName,
-            `/${buildGcAgentActionPath(cityName ?? "city", normalizedName, action)
-              .split("/")
-              .slice(4)
-              .join("/")}`,
-            `/v0/agent/${escapePathSegments(normalizedName)}/${action}`,
-          ),
-        );
-        lastKnownConfig = updateCachedAgentSuspended(lastKnownConfig, normalizedName, suspended);
-        return;
-      } catch (error) {
-        if (normalizedName.includes("/")) {
+    Effect.promise(async () =>
+      runLoggedGcMutation("agent-suspended", sanitizeKey(name), { suspended }, async () => {
+        const normalizedName = sanitizeKey(name);
+        const action = suspended ? "suspend" : "resume";
+        const cityName = await resolveGcCityName();
+        try {
+          await postMutation(
+            buildScopedOrLegacyPath(
+              cityName,
+              `/${buildGcAgentActionPath(cityName ?? "city", normalizedName, action)
+                .split("/")
+                .slice(4)
+                .join("/")}`,
+              `/v0/agent/${escapePathSegments(normalizedName)}/${action}`,
+            ),
+          );
+          lastKnownConfig = updateCachedAgentSuspended(lastKnownConfig, normalizedName, suspended);
+          return { result: undefined, path: "gc-api" };
+        } catch (error) {
+          if (normalizedName.includes("/")) {
+            if (!cityPath) {
+              throw error;
+            }
+            logGcWarning("routing rig-scoped agent mutation via city.toml", {
+              baseUrl,
+              cityPath,
+              agent: normalizedName,
+              suspended,
+            });
+            writeRigAgentSuspendedToCityToml(cityPath, normalizedName, suspended);
+            lastKnownConfig = updateCachedAgentSuspended(
+              lastKnownConfig,
+              normalizedName,
+              suspended,
+            );
+            return { result: undefined, path: "city.toml" };
+          }
           if (!cityPath) {
             throw error;
           }
-          logGcWarning("routing rig-scoped agent mutation via city.toml", {
-            baseUrl,
-            cityPath,
-            agent: normalizedName,
-            suspended,
+          const cli = runGcCli(cityPath, ["agent", action, normalizedName]);
+          if (cli.exitCode === 0) {
+            lastKnownConfig = updateCachedAgentSuspended(
+              lastKnownConfig,
+              normalizedName,
+              suspended,
+            );
+            return { result: undefined, path: "gc-cli" };
+          }
+          throw new Error(cli.stderr.trim() || cli.stdout.trim() || String(error), {
+            cause: error,
           });
-          writeRigAgentSuspendedToCityToml(cityPath, normalizedName, suspended);
-          lastKnownConfig = updateCachedAgentSuspended(lastKnownConfig, normalizedName, suspended);
-          return;
         }
-        if (!cityPath) {
-          throw error;
-        }
-        const cli = runGcCli(cityPath, ["agent", action, normalizedName]);
-        if (cli.exitCode === 0) {
-          lastKnownConfig = updateCachedAgentSuspended(lastKnownConfig, normalizedName, suspended);
-          return;
-        }
-        throw new Error(cli.stderr.trim() || cli.stdout.trim() || String(error), { cause: error });
-      }
-    });
+      }),
+    );
 
   const setAgentMaxActiveSessions: GcApiClientShape["setAgentMaxActiveSessions"] = (
     name,
     maxActiveSessions,
   ) =>
-    Effect.promise(async () => {
-      const normalizedName = sanitizeKey(name);
-      if (!Number.isInteger(maxActiveSessions)) {
-        throw new Error("GC pool size must be an integer");
-      }
-      if (maxActiveSessions < 0) {
-        throw new Error("GC pool size must be greater than or equal to 0");
-      }
-      if (!isPoolAgent(lastKnownConfig, normalizedName)) {
-        throw new Error(`pool-size control for non-pool agent ${normalizedName} is not supported`);
-      }
-      if (!cityPath) {
-        throw new Error("GC city path unavailable for pool-size mutation");
-      }
-      const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
-      if (!identity) {
-        throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
-      }
-      logGcWarning("routing pool-size mutation via city.toml", {
-        baseUrl,
-        cityPath,
-        agent: normalizedName,
-        maxActiveSessions,
-      });
-      writeAgentMaxActiveSessionsToCityToml(cityPath, identity, maxActiveSessions);
-      lastKnownConfig = updateCachedAgentMaxActiveSessions(
-        lastKnownConfig,
-        normalizedName,
-        maxActiveSessions,
-      );
-    });
+    Effect.promise(async () =>
+      runLoggedGcMutation(
+        "agent-max-active-sessions",
+        sanitizeKey(name),
+        { maxActiveSessions },
+        async () => {
+          const normalizedName = sanitizeKey(name);
+          if (!Number.isInteger(maxActiveSessions)) {
+            throw new Error("GC pool size must be an integer");
+          }
+          if (maxActiveSessions < 0) {
+            throw new Error("GC pool size must be greater than or equal to 0");
+          }
+          if (!isPoolAgent(lastKnownConfig, normalizedName)) {
+            throw new Error(
+              `pool-size control for non-pool agent ${normalizedName} is not supported`,
+            );
+          }
+          if (!cityPath) {
+            throw new Error("GC city path unavailable for pool-size mutation");
+          }
+          const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+          if (!identity) {
+            throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
+          }
+          logGcWarning("routing pool-size mutation via city.toml", {
+            baseUrl,
+            cityPath,
+            agent: normalizedName,
+            maxActiveSessions,
+          });
+          writeAgentMaxActiveSessionsToCityToml(cityPath, identity, maxActiveSessions);
+          lastKnownConfig = updateCachedAgentMaxActiveSessions(
+            lastKnownConfig,
+            normalizedName,
+            maxActiveSessions,
+          );
+          return { result: undefined, path: "city.toml" };
+        },
+      ),
+    );
 
   const setAgentSessionMode: GcApiClientShape["setAgentSessionMode"] = (name, mode) =>
-    Effect.promise(async () => {
-      const normalizedName = sanitizeKey(name);
-      if (!cityPath) {
-        throw new Error("GC city path unavailable for named-session mode mutation");
-      }
-      if (isPoolAgent(lastKnownConfig, normalizedName)) {
-        throw new Error(
-          `session-mode toggle for pool agent ${normalizedName} is not supported yet`,
-        );
-      }
-      logGcWarning("routing named-session mode mutation via city.toml", {
-        baseUrl,
-        cityPath,
-        agent: normalizedName,
-        mode,
-      });
-      const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
-      if (!identity) {
-        throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
-      }
-      writeAgentSessionModeToCityToml(cityPath, identity, mode);
-      lastKnownConfig = updateCachedAgentSessionMode(lastKnownConfig, normalizedName, mode);
-    });
+    Effect.promise(async () =>
+      runLoggedGcMutation("agent-session-mode", sanitizeKey(name), { mode }, async () => {
+        const normalizedName = sanitizeKey(name);
+        if (!cityPath) {
+          throw new Error("GC city path unavailable for named-session mode mutation");
+        }
+        if (isPoolAgent(lastKnownConfig, normalizedName)) {
+          throw new Error(
+            `session-mode toggle for pool agent ${normalizedName} is not supported yet`,
+          );
+        }
+        logGcWarning("routing named-session mode mutation via city.toml", {
+          baseUrl,
+          cityPath,
+          agent: normalizedName,
+          mode,
+        });
+        const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+        if (!identity) {
+          throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
+        }
+        writeAgentSessionModeToCityToml(cityPath, identity, mode);
+        lastKnownConfig = updateCachedAgentSessionMode(lastKnownConfig, normalizedName, mode);
+        return { result: undefined, path: "city.toml" };
+      }),
+    );
 
   const setCitySuspended: GcApiClientShape["setCitySuspended"] = (suspended) =>
-    Effect.promise(async () => {
-      const cityName = await requireGcCityName();
-      try {
-        await patchJson<{ status: string }>(`/v0/city/${encodeURIComponent(cityName)}`, {
-          suspended,
-        });
-        if (lastKnownConfig) {
-          lastKnownConfig = {
-            ...lastKnownConfig,
-            workspace: {
-              ...lastKnownConfig.workspace,
-              suspended,
-            },
-          };
-        }
-        return;
-      } catch (error) {
-        if (!cityPath) {
-          throw error;
-        }
-        const cli = runGcCli(cityPath, [suspended ? "suspend" : "resume"]);
-        if (cli.exitCode === 0) {
+    Effect.promise(async () =>
+      runLoggedGcMutation("city-suspended", "workspace", { suspended }, async () => {
+        const cityName = await requireGcCityName();
+        try {
+          await patchJson<{ status: string }>(`/v0/city/${encodeURIComponent(cityName)}`, {
+            suspended,
+          });
           if (lastKnownConfig) {
             lastKnownConfig = {
               ...lastKnownConfig,
@@ -1511,42 +1585,65 @@ const makeGcApiClient = Effect.gen(function* () {
               },
             };
           }
-          return;
+          return { result: undefined, path: "gc-api" };
+        } catch (error) {
+          if (!cityPath) {
+            throw error;
+          }
+          const cli = runGcCli(cityPath, [suspended ? "suspend" : "resume"]);
+          if (cli.exitCode === 0) {
+            if (lastKnownConfig) {
+              lastKnownConfig = {
+                ...lastKnownConfig,
+                workspace: {
+                  ...lastKnownConfig.workspace,
+                  suspended,
+                },
+              };
+            }
+            return { result: undefined, path: "gc-cli" };
+          }
+          throw new Error(cli.stderr.trim() || cli.stdout.trim() || String(error), {
+            cause: error,
+          });
         }
-        throw new Error(cli.stderr.trim() || cli.stdout.trim() || String(error), { cause: error });
-      }
-    });
+      }),
+    );
 
   const setRigSuspended: GcApiClientShape["setRigSuspended"] = (name, suspended) =>
-    Effect.promise(async () => {
-      const normalizedName = sanitizeKey(name);
-      const action = suspended ? "suspend" : "resume";
-      const cityName = await resolveGcCityName();
-      try {
-        await postMutation(
-          buildScopedOrLegacyPath(
-            cityName,
-            `/${buildGcRigActionPath(cityName ?? "city", normalizedName, action)
-              .split("/")
-              .slice(4)
-              .join("/")}`,
-            `/v0/rig/${escapePathSegments(normalizedName)}/${action}`,
-          ),
-        );
-        lastKnownConfig = updateCachedRigSuspended(lastKnownConfig, normalizedName, suspended);
-        return;
-      } catch (error) {
-        if (!cityPath) {
-          throw error;
-        }
-        const cli = runGcCli(cityPath, ["rig", action, normalizedName]);
-        if (cli.exitCode === 0) {
+    Effect.promise(async () =>
+      runLoggedGcMutation("rig-suspended", sanitizeKey(name), { suspended }, async () => {
+        const normalizedName = sanitizeKey(name);
+        const action = suspended ? "suspend" : "resume";
+        const cityName = await resolveGcCityName();
+        try {
+          await postMutation(
+            buildScopedOrLegacyPath(
+              cityName,
+              `/${buildGcRigActionPath(cityName ?? "city", normalizedName, action)
+                .split("/")
+                .slice(4)
+                .join("/")}`,
+              `/v0/rig/${escapePathSegments(normalizedName)}/${action}`,
+            ),
+          );
           lastKnownConfig = updateCachedRigSuspended(lastKnownConfig, normalizedName, suspended);
-          return;
+          return { result: undefined, path: "gc-api" };
+        } catch (error) {
+          if (!cityPath) {
+            throw error;
+          }
+          const cli = runGcCli(cityPath, ["rig", action, normalizedName]);
+          if (cli.exitCode === 0) {
+            lastKnownConfig = updateCachedRigSuspended(lastKnownConfig, normalizedName, suspended);
+            return { result: undefined, path: "gc-cli" };
+          }
+          throw new Error(cli.stderr.trim() || cli.stdout.trim() || String(error), {
+            cause: error,
+          });
         }
-        throw new Error(cli.stderr.trim() || cli.stdout.trim() || String(error), { cause: error });
-      }
-    });
+      }),
+    );
 
   const isAvailable: GcApiClientShape["isAvailable"] = Effect.tryPromise({
     try: async () => {
