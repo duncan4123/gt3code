@@ -262,6 +262,38 @@ validationLayer("CodexAdapterLive validation", (it) => {
       });
     }),
   );
+
+  it.effect("forwards provider env when starting a session", () =>
+    Effect.gen(function* () {
+      validationManager.startSessionImpl.mockClear();
+      const adapter = yield* CodexAdapter;
+
+      yield* adapter.startSession({
+        provider: "codex",
+        threadId: asThreadId("thread-env"),
+        env: {
+          GC_AGENT: "t3code/gastown.polecat",
+          GC_ALIAS: "t3code/gastown.polecat",
+          GC_TEMPLATE: "polecat",
+          GC_SESSION_NAME: "gastown__polecat-gc-test",
+        },
+        runtimeMode: "full-access",
+      });
+
+      assert.deepStrictEqual(validationManager.startSessionImpl.mock.calls[0]?.[0], {
+        provider: "codex",
+        threadId: asThreadId("thread-env"),
+        env: {
+          GC_AGENT: "t3code/gastown.polecat",
+          GC_ALIAS: "t3code/gastown.polecat",
+          GC_TEMPLATE: "polecat",
+          GC_SESSION_NAME: "gastown__polecat-gc-test",
+        },
+        binaryPath: "codex",
+        runtimeMode: "full-access",
+      });
+    }),
+  );
 });
 
 const sessionRuntimeFactory = makeRuntimeFactory();

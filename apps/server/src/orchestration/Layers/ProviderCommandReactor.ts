@@ -62,6 +62,20 @@ function gcRuntimeProviderToProviderKind(value: string | undefined): ProviderKin
   }
 }
 
+function toNonEmptyEnv(
+  env: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!env) {
+    return undefined;
+  }
+  const entries = Object.entries(env).flatMap(([key, value]) => {
+    const normalizedKey = key.trim();
+    const normalizedValue = value.trim();
+    return normalizedKey && normalizedValue ? [[normalizedKey, normalizedValue] as const] : [];
+  });
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
 function mapProviderSessionStatusToOrchestrationStatus(
   status: "connecting" | "ready" | "running" | "error" | "closed",
 ): OrchestrationSession["status"] {
@@ -290,9 +304,9 @@ const make = Effect.gen(function* () {
     )
       ? thread.session.providerName
       : undefined;
-    const gcRuntimeProvider = gcRuntimeProviderToProviderKind(
-      parseGcMeta(thread.customMetadata).runtimeProvider,
-    );
+    const gcMeta = parseGcMeta(thread.customMetadata);
+    const gcRuntimeProvider = gcRuntimeProviderToProviderKind(gcMeta.runtimeProvider);
+    const gcSessionEnv = toNonEmptyEnv(gcMeta.sessionEnv);
     const requestedModelSelection = options?.modelSelection;
     const threadProvider: ProviderKind =
       currentProvider ?? gcRuntimeProvider ?? thread.modelSelection.provider;
@@ -326,6 +340,7 @@ const make = Effect.gen(function* () {
         threadId,
         ...(preferredProvider ? { provider: preferredProvider } : {}),
         ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
+        ...(gcSessionEnv ? { env: gcSessionEnv } : {}),
         modelSelection: desiredModelSelection,
         ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
         runtimeMode: desiredRuntimeMode,

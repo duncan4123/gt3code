@@ -78,6 +78,7 @@ export interface CodexSessionRuntimeOptions {
   readonly binaryPath: string;
   readonly homePath?: string;
   readonly cwd: string;
+  readonly env?: Record<string, string>;
   readonly runtimeMode: RuntimeMode;
   readonly model?: string;
   readonly serviceTier?: EffectCodexSchema.V2ThreadStartParams__ServiceTier | undefined;
@@ -683,7 +684,11 @@ export const makeCodexSessionRuntime = (
       .spawn(
         ChildProcess.make(options.binaryPath, ["app-server"], {
           cwd: options.cwd,
-          ...(options.homePath ? { env: { ...process.env, CODEX_HOME: options.homePath } } : {}),
+          env: {
+            ...process.env,
+            ...(options.homePath ? { CODEX_HOME: options.homePath } : {}),
+            ...(options.env ?? {}),
+          },
           shell: process.platform === "win32",
         }),
       )
