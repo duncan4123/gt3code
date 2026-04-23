@@ -79,6 +79,7 @@ import {
 } from "./orchestration/http.ts";
 import { gcSidebarLayoutRouteLayer } from "./gc/http.ts";
 import { GcApiClientLive } from "./gc/Layers/GcApiClient.ts";
+import { NetService } from "@t3tools/shared/Net";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -247,6 +248,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(AnalyticsServiceLayerLive),
   Layer.provideMerge(OpenLive),
   Layer.provideMerge(ServerLifecycleEventsLive),
+  Layer.provide(NetService.layer),
 );
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
