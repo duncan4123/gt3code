@@ -13,6 +13,11 @@ import { AuthError, ServerAuth } from "./Services/ServerAuth.ts";
 import { SessionCredentialService } from "./Services/SessionCredentialService.ts";
 import { deriveAuthClientMetadata } from "./utils.ts";
 
+type CachedBridgeSession = {
+  readonly sessionId: string;
+  readonly expiresAtEpochMs: number;
+};
+
 export const respondToAuthError = (error: AuthError) =>
   Effect.gen(function* () {
     if ((error.status ?? 500) >= 500) {
@@ -69,6 +74,15 @@ function isLoopbackAddress(value: string): boolean {
   return (
     host === "127.0.0.1" || host === "::1" || host === "::ffff:127.0.0.1" || host.startsWith("127.")
   );
+}
+
+let cachedBridgeSession: CachedBridgeSession | null = null;
+
+function bridgeSessionIsUsable(now: number): boolean {
+  if (cachedBridgeSession === null) {
+    return false;
+  }
+  return cachedBridgeSession.expiresAtEpochMs - now > Duration.toMillis(Duration.minutes(1));
 }
 
 export const authBootstrapRouteLayer = HttpRouter.add(
@@ -156,17 +170,24 @@ export const authBridgeWebSocketTokenRouteLayer = HttpRouter.add(
         status: 401,
       });
     }
+    const now = Date.now();
     const result = yield* Effect.gen(function* () {
-      const issuedSession = yield* sessions.issue({
-        method: "bearer-session-token",
-        subject: "local-gc-bridge",
-        role: "owner",
-        client: deriveAuthClientMetadata({ request }),
-        ttl: Duration.minutes(10),
-      });
-      return yield* sessions.issueWebSocketToken(issuedSession.sessionId);
+      if (!bridgeSessionIsUsable(now)) {
+        const issuedSession = yield* sessions.issue({
+          method: "bearer-session-token",
+          subject: "local-gc-bridge",
+          role: "owner",
+          client: deriveAuthClientMetadata({ request }),
+          ttl: Duration.hours(8),
+        });
+        cachedBridgeSession = {
+          sessionId: issuedSession.sessionId,
+          expiresAtEpochMs: issuedSession.expiresAt.epochMilliseconds,
+        };
+      }
+      return yield* sessions.issueWebSocketToken(cachedBridgeSession!.sessionId);
     }).pipe(
-      Effect.timeoutOption(Duration.seconds(2)),
+      Effect.timeoutOption(Duration.seconds(10)),
       Effect.flatMap((result) =>
         Option.match(result, {
           onNone: () =>
