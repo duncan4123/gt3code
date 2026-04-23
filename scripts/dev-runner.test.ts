@@ -317,48 +317,54 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
   });
 
   describe("resolveModePortOffsets", () => {
-    it.effect("uses a shared fallback offset for dev mode", () =>
+    it.effect("fails instead of silently shifting dev mode ports", () =>
       Effect.gen(function* () {
         const taken = new Set([13773, 5733]);
-        const offsets = yield* resolveModePortOffsets({
-          mode: "dev",
-          startOffset: 0,
-          hasExplicitServerPort: false,
-          hasExplicitDevUrl: false,
-          checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
-        });
+        const error = yield* Effect.flip(
+          resolveModePortOffsets({
+            mode: "dev",
+            startOffset: 0,
+            hasExplicitServerPort: false,
+            hasExplicitDevUrl: false,
+            checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
+          }),
+        );
 
-        assert.deepStrictEqual(offsets, { serverOffset: 1, webOffset: 1 });
+        assert.ok(error.message.includes("Required dev port"));
       }),
     );
 
-    it.effect("keeps server offset stable for dev:web and only shifts web offset", () =>
+    it.effect("fails instead of silently shifting dev:web ports", () =>
       Effect.gen(function* () {
         const taken = new Set([5733]);
-        const offsets = yield* resolveModePortOffsets({
-          mode: "dev:web",
-          startOffset: 0,
-          hasExplicitServerPort: false,
-          hasExplicitDevUrl: false,
-          checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
-        });
+        const error = yield* Effect.flip(
+          resolveModePortOffsets({
+            mode: "dev:web",
+            startOffset: 0,
+            hasExplicitServerPort: false,
+            hasExplicitDevUrl: false,
+            checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
+          }),
+        );
 
-        assert.deepStrictEqual(offsets, { serverOffset: 0, webOffset: 1 });
+        assert.ok(error.message.includes("Required dev port 5733"));
       }),
     );
 
-    it.effect("shifts only server offset for dev:server", () =>
+    it.effect("fails instead of silently shifting dev:server ports", () =>
       Effect.gen(function* () {
         const taken = new Set([13773]);
-        const offsets = yield* resolveModePortOffsets({
-          mode: "dev:server",
-          startOffset: 0,
-          hasExplicitServerPort: false,
-          hasExplicitDevUrl: false,
-          checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
-        });
+        const error = yield* Effect.flip(
+          resolveModePortOffsets({
+            mode: "dev:server",
+            startOffset: 0,
+            hasExplicitServerPort: false,
+            hasExplicitDevUrl: false,
+            checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
+          }),
+        );
 
-        assert.deepStrictEqual(offsets, { serverOffset: 1, webOffset: 1 });
+        assert.ok(error.message.includes("Required dev port"));
       }),
     );
 

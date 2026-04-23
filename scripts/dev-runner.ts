@@ -324,43 +324,26 @@ export function resolveModePortOffsets<R = NetService>({
   return Effect.gen(function* () {
     const checkPort = (checkPortAvailability ??
       defaultCheckPortAvailability) as PortAvailabilityCheck<R>;
+    const { serverPort, webPort } = portPairForOffset(startOffset);
+    const requiredPorts: Array<number> = [];
 
-    if (mode === "dev:web") {
-      if (hasExplicitDevUrl) {
-        return { serverOffset: startOffset, webOffset: startOffset };
-      }
-
-      const webOffset = yield* findFirstAvailableOffset({
-        startOffset,
-        requireServerPort: false,
-        requireWebPort: true,
-        checkPortAvailability: checkPort,
-      });
-      return { serverOffset: startOffset, webOffset };
+    if (mode !== "dev:web" && !hasExplicitServerPort) {
+      requiredPorts.push(serverPort);
+    }
+    if (mode !== "dev:server" && !hasExplicitDevUrl) {
+      requiredPorts.push(webPort);
     }
 
-    if (mode === "dev:server") {
-      if (hasExplicitServerPort) {
-        return { serverOffset: startOffset, webOffset: startOffset };
+    for (const port of requiredPorts) {
+      const available = yield* checkPort(port);
+      if (!available) {
+        return yield* new DevRunnerError({
+          message: `Required dev port ${port} is unavailable. Dev runner no longer auto-shifts ports; stop the conflicting process or set an explicit override.`,
+        });
       }
-
-      const serverOffset = yield* findFirstAvailableOffset({
-        startOffset,
-        requireServerPort: true,
-        requireWebPort: false,
-        checkPortAvailability: checkPort,
-      });
-      return { serverOffset, webOffset: serverOffset };
     }
 
-    const sharedOffset = yield* findFirstAvailableOffset({
-      startOffset,
-      requireServerPort: !hasExplicitServerPort,
-      requireWebPort: !hasExplicitDevUrl,
-      checkPortAvailability: checkPort,
-    });
-
-    return { serverOffset: sharedOffset, webOffset: sharedOffset };
+    return { serverOffset: startOffset, webOffset: startOffset };
   });
 }
 
