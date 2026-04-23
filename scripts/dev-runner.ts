@@ -375,6 +375,10 @@ interface DevRunnerCliInput {
   readonly turboArgs: ReadonlyArray<string>;
 }
 
+type MutableDevRunnerCliInput = {
+  -readonly [K in keyof DevRunnerCliInput]: DevRunnerCliInput[K];
+};
+
 function parseBooleanFlagValue(raw: string | undefined, flagName: string): boolean {
   if (raw === undefined || raw === "true" || raw === "1") {
     return true;
@@ -391,7 +395,7 @@ function parseDirectDevRunnerArgs(argv: ReadonlyArray<string>): DevRunnerCliInpu
     throw new Error(`Expected mode: ${DEV_RUNNER_MODES.join(", ")}`);
   }
 
-  const parsed: DevRunnerCliInput = {
+  const parsed: MutableDevRunnerCliInput = {
     mode: modeRaw as DevMode,
     t3Home: undefined,
     noBrowser: undefined,
@@ -407,6 +411,9 @@ function parseDirectDevRunnerArgs(argv: ReadonlyArray<string>): DevRunnerCliInpu
   const turboArgs: Array<string> = [];
   for (let index = 0; index < rest.length; index += 1) {
     const arg = rest[index];
+    if (arg === undefined) {
+      throw new Error("Unexpected missing CLI argument.");
+    }
     if (arg === "--") {
       turboArgs.push(...rest.slice(index + 1));
       break;
@@ -425,7 +432,11 @@ function parseDirectDevRunnerArgs(argv: ReadonlyArray<string>): DevRunnerCliInpu
       if (index >= rest.length) {
         throw new Error(`Missing value for --${flagName}`);
       }
-      return rest[index]!;
+      const value = rest[index];
+      if (value === undefined) {
+        throw new Error(`Missing value for --${flagName}`);
+      }
+      return value;
     };
 
     switch (flagName) {

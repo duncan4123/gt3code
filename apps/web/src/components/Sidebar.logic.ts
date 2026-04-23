@@ -689,9 +689,9 @@ export function partitionProjectThreadsForSidebar<
   hasHiddenStandaloneThreads: boolean;
 } {
   const { rigGroups, standaloneThreads } = groupThreadsByRigAndAgent<T>([...input.threads], {
-    config: input.gcConfig,
-    projectCwd: input.projectCwd,
-    projectName: input.projectName,
+    ...(input.gcConfig !== undefined ? { config: input.gcConfig } : {}),
+    ...(input.projectCwd !== undefined ? { projectCwd: input.projectCwd } : {}),
+    ...(input.projectName !== undefined ? { projectName: input.projectName } : {}),
   });
   const standaloneVisibility = getVisibleThreadsForProject({
     threads: standaloneThreads,
