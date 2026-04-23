@@ -160,22 +160,12 @@ export const GitStatusBroadcasterLive = Layer.effect(
       return yield* loadLocalStatus(cwd);
     });
 
-    const getOrLoadRemoteStatus = Effect.fn("getOrLoadRemoteStatus")(function* (cwd: string) {
-      const cached = yield* getCachedStatus(cwd);
-      if (cached?.remote) {
-        return cached.remote.value;
-      }
-      return yield* loadRemoteStatus(cwd);
-    });
-
     const getStatus: GitStatusBroadcasterShape["getStatus"] = Effect.fn("getStatus")(function* (
       input: GitStatusInput,
     ) {
       const normalizedCwd = normalizeCwd(input.cwd);
-      const [local, remote] = yield* Effect.all([
-        getOrLoadLocalStatus(normalizedCwd),
-        getOrLoadRemoteStatus(normalizedCwd),
-      ]);
+      const local = yield* getOrLoadLocalStatus(normalizedCwd);
+      const remote = (yield* getCachedStatus(normalizedCwd))?.remote?.value ?? null;
       return mergeGitStatusParts(local, remote);
     });
 
@@ -283,9 +273,7 @@ export const GitStatusBroadcasterLive = Layer.effect(
           const subscription = yield* PubSub.subscribe(changesPubSub);
           const initialLocal = yield* getOrLoadLocalStatus(normalizedCwd);
           const initialRemote = (yield* getCachedStatus(normalizedCwd))?.remote?.value ?? null;
-          yield* retainRemotePoller(normalizedCwd);
-
-          const release = releaseRemotePoller(normalizedCwd).pipe(Effect.ignore, Effect.asVoid);
+          const release = Effect.void;
 
           return Stream.concat(
             Stream.make({

@@ -65,16 +65,6 @@ function isNotGitRepositoryError(error: GitCommandError): boolean {
   return error.message.toLowerCase().includes("not a git repository");
 }
 
-function isMissingGitCwdError(error: GitCommandError): boolean {
-  const normalized = `${error.detail}\n${error.message}`.toLowerCase();
-  return (
-    normalized.includes("no such file or directory") ||
-    normalized.includes("notfound: filesystem.access") ||
-    normalized.includes("enoent") ||
-    normalized.includes("not a directory")
-  );
-}
-
 interface OpenPrInfo {
   number: number;
   title: string;
@@ -685,12 +675,8 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   const invalidateLocalStatusResultCache = (cwd: string) =>
     Cache.invalidate(localStatusResultCache, normalizeStatusCacheKey(cwd));
   const readRemoteStatus = Effect.fn("readRemoteStatus")(function* (cwd: string) {
-    yield* gitCore.refreshStatusUpstreamIfStale(cwd).pipe(
-      Effect.catchIf(isMissingGitCwdError, () => Effect.void),
-      Effect.ignoreCause({ log: true }),
-    );
     const details = yield* gitCore
-      .statusDetailsLocal(cwd)
+      .statusDetails(cwd)
       .pipe(Effect.catchIf(isNotGitRepositoryError, () => Effect.succeed(null)));
     if (details === null || !details.isRepo) {
       return null;
