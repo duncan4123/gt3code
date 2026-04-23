@@ -688,9 +688,29 @@ const make = Effect.gen(function* () {
       return;
     }
 
+    yield* Effect.logInfo("provider command reactor sending provider turn", {
+      threadId: event.payload.threadId,
+      messageId: event.payload.messageId,
+      attachmentCount: message.attachments?.length ?? 0,
+      hasInput: message.text.trim().length > 0,
+      interactionMode: event.payload.interactionMode ?? "default",
+      modelSelection: sendTurnRequest.value.modelSelection?.model,
+    });
+
     yield* providerService
       .sendTurn(sendTurnRequest.value)
-      .pipe(Effect.catchCause(recoverTurnStartFailure), Effect.forkScoped);
+      .pipe(
+        Effect.tap((result) =>
+          Effect.logInfo("provider command reactor provider turn started", {
+            threadId: event.payload.threadId,
+            messageId: event.payload.messageId,
+            turnId: result.turnId,
+            hasResumeCursor: result.resumeCursor !== undefined,
+          }),
+        ),
+        Effect.catchCause(recoverTurnStartFailure),
+        Effect.forkScoped,
+      );
   });
 
   const processTurnInterruptRequested = Effect.fn("processTurnInterruptRequested")(function* (

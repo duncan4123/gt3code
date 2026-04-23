@@ -91,7 +91,7 @@ const makeFinalizedThreadMessageRepository = Effect.gen(function* () {
   });
 
   const upsert: FinalizedThreadMessageRepositoryShape["upsert"] = (row) =>
-    upsertFinalizedThreadMessageRow(row).pipe(
+    sql.withTransaction(upsertFinalizedThreadMessageRow(row)).pipe(
       Effect.mapError(toPersistenceSqlError("FinalizedThreadMessageRepository.upsert:query")),
     );
 

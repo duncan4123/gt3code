@@ -117,6 +117,93 @@ function assistantSegmentMessageId(baseKey: string, segmentIndex: number): Messa
     segmentIndex === 0 ? `assistant:${baseKey}` : `assistant:${baseKey}:segment:${segmentIndex}`,
   );
 }
+
+function runtimeEventLogDetail(detail: unknown): string | undefined {
+  if (detail === undefined || detail === null) {
+    return undefined;
+  }
+  if (typeof detail === "string") {
+    return truncateDetail(detail);
+  }
+  try {
+    return truncateDetail(JSON.stringify(detail));
+  } catch {
+    return truncateDetail(String(detail));
+  }
+}
+
+function logRuntimeLifecycleEvent(event: ProviderRuntimeEvent) {
+  switch (event.type) {
+    case "session.started":
+    case "thread.started":
+      return Effect.logInfo("provider runtime session started", {
+        threadId: event.threadId,
+        provider: event.provider,
+        eventId: event.eventId,
+        eventType: event.type,
+        turnId: event.turnId,
+      });
+    case "turn.started":
+      return Effect.logInfo("provider runtime turn started", {
+        threadId: event.threadId,
+        provider: event.provider,
+        eventId: event.eventId,
+        turnId: event.turnId,
+      });
+    case "turn.completed": {
+      const state = normalizeRuntimeTurnState(event.payload.state);
+      const payload = {
+        threadId: event.threadId,
+        provider: event.provider,
+        eventId: event.eventId,
+        turnId: event.turnId,
+        state,
+        errorMessage: event.payload.errorMessage,
+      };
+      return state === "failed"
+        ? Effect.logWarning("provider runtime turn failed", payload)
+        : Effect.logInfo("provider runtime turn completed", payload);
+    }
+    case "session.state.changed":
+      return event.payload.state === "error"
+        ? Effect.logWarning("provider runtime session error", {
+            threadId: event.threadId,
+            provider: event.provider,
+            eventId: event.eventId,
+            state: event.payload.state,
+            reason: event.payload.reason,
+            detail: runtimeEventLogDetail(event.payload.detail),
+          })
+        : Effect.logInfo("provider runtime session state changed", {
+            threadId: event.threadId,
+            provider: event.provider,
+            eventId: event.eventId,
+            state: event.payload.state,
+            reason: event.payload.reason,
+          });
+    case "runtime.error":
+      return Effect.logWarning("provider runtime error", {
+        threadId: event.threadId,
+        provider: event.provider,
+        eventId: event.eventId,
+        turnId: event.turnId,
+        message: event.payload.message,
+        detail: runtimeEventLogDetail(event.payload.detail),
+      });
+    case "runtime.warning":
+      return Effect.logWarning("provider runtime warning", {
+        threadId: event.threadId,
+        provider: event.provider,
+        eventId: event.eventId,
+        turnId: event.turnId,
+        message: event.payload.message,
+        detail: runtimeEventLogDetail(event.payload.detail),
+      });
+    default:
+      return Effect.void;
+  }
+}
+
 function buildContextWindowActivityPayload(
   event: ProviderRuntimeEvent,
 ): ThreadTokenUsageSnapshot | undefined {
@@ -1096,6 +1183,7 @@ const make = Effect.gen(function* () {
 
   const processRuntimeEvent = (event: ProviderRuntimeEvent) =>
     Effect.gen(function* () {
+      yield* logRuntimeLifecycleEvent(event);
       const readModel = yield* orchestrationEngine.getReadModel();
       const thread = readModel.threads.find((entry) => entry.id === event.threadId);
       if (!thread) return;

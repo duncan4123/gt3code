@@ -1373,6 +1373,8 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const sessions = new Map<ThreadId, CodexAdapterSessionContext>();
   const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
+  const firstMappedRuntimeEventLogged = new Set<ThreadId>();
+  const unhandledEventCounts = new Map<string, number>();
 
   const startSession: CodexAdapterShape["startSession"] = Effect.fn("startSession")(
     function* (input) {
@@ -1414,6 +1416,20 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           : {}),
       };
 
+      yield* Effect.logInfo("codex.session.starting", {
+        threadId: input.threadId,
+        cwd: runtimeInput.cwd,
+        runtimeMode: input.runtimeMode,
+        hasResumeCursor: input.resumeCursor !== undefined,
+        hasEnv: input.env !== undefined,
+        model:
+          input.modelSelection?.provider === "codex" ? input.modelSelection.model : undefined,
+        fastMode:
+          input.modelSelection?.provider === "codex"
+            ? (input.modelSelection.options?.fastMode ?? false)
+            : false,
+      });
+
       const sessionScope = yield* Scope.make("sequential");
       let sessionScopeTransferred = false;
       yield* Effect.addFinalizer(() =>
@@ -1439,13 +1455,36 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           yield* writeNativeEvent(event);
           const runtimeEvents = mapToRuntimeEvents(event, event.threadId);
           if (runtimeEvents.length === 0) {
-            yield* Effect.logDebug("ignoring unhandled Codex provider event", {
+            const count = (unhandledEventCounts.get(event.method) ?? 0) + 1;
+            unhandledEventCounts.set(event.method, count);
+            if (count === 1 || count % 25 === 0) {
+              yield* Effect.logWarning("codex.session.unhandled-event", {
+                method: event.method,
+                threadId: event.threadId,
+                turnId: event.turnId,
+                itemId: event.itemId,
+                count,
+              });
+            } else {
+              yield* Effect.logDebug("ignoring unhandled Codex provider event", {
+                method: event.method,
+                threadId: event.threadId,
+                turnId: event.turnId,
+                itemId: event.itemId,
+                count,
+              });
+            }
+            return;
+          }
+          if (!firstMappedRuntimeEventLogged.has(event.threadId)) {
+            firstMappedRuntimeEventLogged.add(event.threadId);
+            yield* Effect.logInfo("codex.session.first-runtime-event", {
               method: event.method,
               threadId: event.threadId,
               turnId: event.turnId,
               itemId: event.itemId,
+              mappedEventTypes: runtimeEvents.map((runtimeEvent) => runtimeEvent.type),
             });
-            return;
           }
           yield* Queue.offerAll(runtimeEventQueue, runtimeEvents);
         }),
@@ -1478,6 +1517,14 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         stopped: false,
       });
       sessionScopeTransferred = true;
+
+      yield* Effect.logInfo("codex.session.started", {
+        threadId: input.threadId,
+        status: started.status,
+        pid: started.pid,
+        cwd: started.cwd,
+        model: started.model,
+      });
 
       return started;
     },
@@ -1523,7 +1570,23 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     );
 
     const session = yield* requireSession(input.threadId);
-    return yield* session.runtime
+    yield* Effect.logInfo("codex.turn.starting", {
+      threadId: input.threadId,
+      attachmentCount: codexAttachments.length,
+      hasInput: input.input !== undefined,
+      interactionMode: input.interactionMode ?? "default",
+      model:
+        input.modelSelection?.provider === "codex" ? input.modelSelection.model : undefined,
+      reasoningEffort:
+        input.modelSelection?.provider === "codex"
+          ? input.modelSelection.options?.reasoningEffort
+          : undefined,
+      fastMode:
+        input.modelSelection?.provider === "codex"
+          ? (input.modelSelection.options?.fastMode ?? false)
+          : false,
+    });
+    const startedTurn = yield* session.runtime
       .sendTurn({
         ...(input.input !== undefined ? { input: input.input } : {}),
         ...(input.modelSelection?.provider === "codex"
@@ -1540,6 +1603,12 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         ...(codexAttachments.length > 0 ? { attachments: codexAttachments } : {}),
       })
       .pipe(Effect.mapError((cause) => mapCodexRuntimeError(input.threadId, "turn/start", cause)));
+    yield* Effect.logInfo("codex.turn.started", {
+      threadId: input.threadId,
+      turnId: startedTurn.turnId,
+      hasResumeCursor: startedTurn.resumeCursor !== undefined,
+    });
+    return startedTurn;
   });
 
   const requireSession = Effect.fn("requireSession")(function* (threadId: ThreadId) {
