@@ -65,11 +65,20 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   activeProviderIconClassName?: string;
   compact?: boolean;
   disabled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
   onProviderModelChange: (provider: ProviderKind, model: string) => void;
 }) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [uncontrolledMenuOpen, setUncontrolledMenuOpen] = useState(false);
+  const isMenuOpen = props.open ?? uncontrolledMenuOpen;
+  const setIsMenuOpen = (open: boolean) => {
+    props.onOpenChange?.(open);
+    if (props.open === undefined) {
+      setUncontrolledMenuOpen(open);
+    }
+  };
   const activeProvider = props.lockedProvider ?? props.provider;
   const selectedProviderOptions = getProviderModelOptions(
     props.modelOptionsByProvider,

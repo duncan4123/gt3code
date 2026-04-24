@@ -2251,7 +2251,10 @@ export default function ChatView(props: ChatViewProps) {
       const shortcutContext = {
         terminalFocus: isTerminalFocused(),
         terminalOpen: Boolean(terminalState.terminalOpen),
-        modelPickerOpen: composerRef.current?.isModelPickerOpen() ?? false,
+        modelPickerOpen:
+          typeof composerRef.current?.isModelPickerOpen === "function"
+            ? composerRef.current.isModelPickerOpen()
+            : false,
       };
 
       const command = resolveShortcutCommand(event, keybindings, {
@@ -2304,7 +2307,9 @@ export default function ChatView(props: ChatViewProps) {
       if (command === "modelPicker.toggle") {
         event.preventDefault();
         event.stopPropagation();
-        composerRef.current?.toggleModelPicker();
+        if (typeof composerRef.current?.toggleModelPicker === "function") {
+          composerRef.current.toggleModelPicker();
+        }
         return;
       }
 

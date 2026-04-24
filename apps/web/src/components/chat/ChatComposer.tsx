@@ -317,6 +317,8 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
 export interface ChatComposerHandle {
   focusAtEnd: () => void;
   focusAt: (cursor: number) => void;
+  isModelPickerOpen: () => boolean;
+  toggleModelPicker: () => void;
   readSnapshot: () => {
     value: string;
     cursor: number;
@@ -530,6 +532,7 @@ export const ChatComposer = memo(
     const composerImages = composerDraft.images;
     const composerTerminalContexts = composerDraft.terminalContexts;
     const nonPersistedComposerImageIds = composerDraft.nonPersistedImageIds;
+    const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
 
     const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
     const addComposerDraftImage = useComposerDraftStore((store) => store.addImage);
@@ -1640,6 +1643,10 @@ export const ChatComposer = memo(
         focusAt: (cursor: number) => {
           composerEditorRef.current?.focusAt(cursor);
         },
+        isModelPickerOpen: () => isModelPickerOpen,
+        toggleModelPicker: () => {
+          setIsModelPickerOpen((current) => !current);
+        },
         readSnapshot: () => {
           return readComposerSnapshot();
         },
@@ -1724,6 +1731,7 @@ export const ChatComposer = memo(
         selectedPromptEffort,
         selectedProvider,
         selectedProviderModels,
+        isModelPickerOpen,
       ],
     );
 
@@ -1933,6 +1941,8 @@ export const ChatComposer = memo(
                     lockedProvider={lockedProvider}
                     providers={providerStatuses}
                     modelOptionsByProvider={modelOptionsByProvider}
+                    open={isModelPickerOpen}
+                    onOpenChange={setIsModelPickerOpen}
                     {...(composerProviderState.modelPickerIconClassName
                       ? {
                           activeProviderIconClassName:
