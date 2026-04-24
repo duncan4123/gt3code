@@ -105,6 +105,24 @@ function parseCount(value: string | undefined): number | null {
   return Math.floor(parsed);
 }
 
+function metadataValue(
+  metadata: Record<string, string> | undefined,
+  keys: ReadonlyArray<string>,
+): string | undefined {
+  if (!metadata) return undefined;
+  for (const key of keys) {
+    const value = metadata[key]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function compactList(values: ReadonlyArray<string> | undefined, limit = 4): string | undefined {
+  if (!values || values.length === 0) return undefined;
+  const visible = values.slice(0, limit).join(", ");
+  return values.length > limit ? `${visible}, +${values.length - limit}` : visible;
+}
+
 const RUNTIME_ENV_KEY_ORDER = [
   "GC_AGENT",
   "GC_ALIAS",
@@ -244,6 +262,38 @@ const GcContextSidebar = memo(function GcContextSidebar({
   const hookFormula = formula?.name ?? gcMeta.formula ?? bead?.ref;
   const hookMolecule = gcMeta.molecule ?? bead?.metadata?.molecule_id;
   const runtimeEnvRows = useMemo(() => getRuntimeEnvRows(gcMeta.sessionEnv), [gcMeta.sessionEnv]);
+  const beadMetadata = bead?.metadata;
+  const worktreePath = metadataValue(beadMetadata, ["work_dir", "worktree", "worktree_path"]);
+  const sourceBranch = metadataValue(beadMetadata, ["branch", "source_branch", "git_branch"]);
+  const targetBranch = metadataValue(beadMetadata, [
+    "target",
+    "target_branch",
+    "base_branch",
+    "merged_target",
+  ]);
+  const routedTo = metadataValue(beadMetadata, ["gc.routed_to", "routed_to"]);
+  const rejectionReason = metadataValue(beadMetadata, ["rejection_reason"]);
+  const mergeStrategy = metadataValue(beadMetadata, ["merge_strategy"]);
+  const mergeResult = metadataValue(beadMetadata, ["merge_result"]);
+  const prUrl = metadataValue(beadMetadata, ["pr_url"]);
+  const prNumber = metadataValue(beadMetadata, ["pr_number"]);
+  const recovered = metadataValue(beadMetadata, ["recovered"]);
+  const sessionWorkDir = gcMeta.startupWorkDir ?? gcMeta.sessionEnv?.GC_DIR;
+  const rigRoot = gcMeta.rigPath ?? gcMeta.sessionEnv?.GC_RIG_ROOT;
+  const hasBranchContext = Boolean(
+    worktreePath ||
+    sourceBranch ||
+    targetBranch ||
+    routedTo ||
+    rejectionReason ||
+    mergeStrategy ||
+    mergeResult ||
+    prUrl ||
+    prNumber ||
+    recovered ||
+    sessionWorkDir ||
+    rigRoot,
+  );
 
   if (!gcMeta.isGcManaged) {
     return (
@@ -285,8 +335,11 @@ const GcContextSidebar = memo(function GcContextSidebar({
         <SectionCard title="Agent">
           <ContextRow label="Agent" value={gcMeta.agent} showEmpty />
           <ContextRow label="Rig" value={gcMeta.rig} />
+          <ContextRow label="Rig Root" value={rigRoot} mono />
           <ContextRow label="Provider" value={gcMeta.runtimeProvider ?? gcMeta.provider} />
           <ContextRow label="Session" value={gcMeta.sessionName} mono />
+          <ContextRow label="Template" value={gcMeta.startupTemplate} />
+          <ContextRow label="Model" value={gcMeta.startupModel} />
           <ContextRow label="City" value={gcMeta.city} />
         </SectionCard>
 
@@ -305,9 +358,28 @@ const GcContextSidebar = memo(function GcContextSidebar({
               showEmpty
             />
             <ContextRow label="Bead ID" value={hookBeadId} mono />
+            <ContextRow label="Parent" value={bead?.parentId} mono />
             <ContextRow label="Assignee" value={bead?.assignee} />
             <ContextRow label="Formula Ref" value={bead?.ref ?? hookFormula} mono />
+            <ContextRow label="Labels" value={compactList(bead?.labels)} />
+            <ContextRow label="Created" value={bead?.createdAt} mono />
+            <ContextRow label="Updated" value={bead?.updatedAt} mono />
             {bead?.description && <ContextRow label="Description" value={bead.description} />}
+          </SectionCard>
+        )}
+
+        {hasBranchContext && (
+          <SectionCard title="Branch / Worktree">
+            <ContextRow label="Worktree" value={worktreePath} mono />
+            <ContextRow label="Session Dir" value={sessionWorkDir} mono />
+            <ContextRow label="Branch" value={sourceBranch} mono />
+            <ContextRow label="Target" value={targetBranch} mono />
+            <ContextRow label="Routed To" value={routedTo} />
+            <ContextRow label="Merge Mode" value={mergeStrategy} />
+            <ContextRow label="Merge Result" value={mergeResult} />
+            <ContextRow label="PR" value={prUrl ?? prNumber} mono />
+            <ContextRow label="Recovered" value={recovered} />
+            <ContextRow label="Rejected" value={rejectionReason} />
           </SectionCard>
         )}
 

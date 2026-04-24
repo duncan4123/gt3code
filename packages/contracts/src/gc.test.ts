@@ -8,6 +8,8 @@ describe("parseGcMeta", () => {
     expect(
       parseGcMeta({
         "gc.agent": "t3code/polecat",
+        "gc.rigPath": "/data/projects/t3code",
+        "gc.startupWorkDir": "/data/projects/t3code/worktrees/gc-123",
         "gc.sessionEnv": JSON.stringify({
           GC_AGENT: "t3code/polecat",
           GC_SESSION_NAME: "t3code--polecat",
@@ -18,6 +20,8 @@ describe("parseGcMeta", () => {
     ).toMatchObject({
       isGcManaged: true,
       sessionName: "t3code--polecat",
+      rigPath: "/data/projects/t3code",
+      startupWorkDir: "/data/projects/t3code/worktrees/gc-123",
       sessionEnv: {
         GC_AGENT: "t3code/polecat",
         GC_SESSION_NAME: "t3code--polecat",
@@ -61,6 +65,9 @@ describe("GcThreadContextResult", () => {
         issueType: "task",
         ref: "mol-polecat-work",
         metadata: {
+          branch: "polecat/gc-123",
+          target: "integration/gc-sa2y",
+          work_dir: "/data/projects/t3code/worktrees/gc-123",
           molecule_id: "gc-123.1",
         },
         createdAt: "2026-04-24T00:00:00.000Z",
@@ -71,6 +78,9 @@ describe("GcThreadContextResult", () => {
     });
 
     expect(decoded.bead?.ref).toBe("mol-polecat-work");
+    expect(decoded.bead?.metadata?.branch).toBe("polecat/gc-123");
+    expect(decoded.bead?.metadata?.target).toBe("integration/gc-sa2y");
+    expect(decoded.bead?.metadata?.work_dir).toBe("/data/projects/t3code/worktrees/gc-123");
     expect(decoded.bead?.metadata?.molecule_id).toBe("gc-123.1");
   });
 });

@@ -26,6 +26,8 @@ export const GcThreadMeta = Schema.Struct({
   sessionName: Schema.optional(Schema.String),
   /** Rig name. */
   rig: Schema.optional(Schema.String),
+  /** Rig repository path. */
+  rigPath: Schema.optional(Schema.String),
   /** City name. */
   city: Schema.optional(Schema.String),
   /** Current bead ID. */
@@ -48,6 +50,12 @@ export const GcThreadMeta = Schema.Struct({
   runtimeProvider: Schema.optional(Schema.String),
   /** Session state (active/archived). */
   state: Schema.optional(Schema.String),
+  /** Session startup template from GC. */
+  startupTemplate: Schema.optional(Schema.String),
+  /** Provider model requested by GC at startup. */
+  startupModel: Schema.optional(Schema.String),
+  /** Working directory requested by GC at startup. */
+  startupWorkDir: Schema.optional(Schema.String),
   /** Session startup env forwarded from Gas City into the provider process. */
   sessionEnv: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   /** Molecule ID (formula instance). */
@@ -100,6 +108,7 @@ export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMe
       agent: undefined,
       sessionName: undefined,
       rig: undefined,
+      rigPath: undefined,
       city: undefined,
       bead: undefined,
       beadTitle: undefined,
@@ -111,6 +120,9 @@ export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMe
       provider: undefined,
       runtimeProvider: undefined,
       state: undefined,
+      startupTemplate: undefined,
+      startupModel: undefined,
+      startupWorkDir: undefined,
       sessionEnv: undefined,
       molecule: undefined,
       formula: undefined,
@@ -127,6 +139,7 @@ export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMe
     agent: customMetadata["gc.agent"],
     sessionName: parseGcSessionName(customMetadata, sessionEnv),
     rig: customMetadata["gc.rig"],
+    rigPath: customMetadata["gc.rigPath"],
     city: customMetadata["gc.city"],
     bead: customMetadata["gc.bead"],
     beadTitle: customMetadata["gc.beadTitle"],
@@ -138,6 +151,9 @@ export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMe
     provider: customMetadata["gc.provider"],
     runtimeProvider: customMetadata["gc.runtimeProvider"],
     state: customMetadata["gc.state"],
+    startupTemplate: customMetadata["gc.startupTemplate"],
+    startupModel: customMetadata["gc.startupModel"],
+    startupWorkDir: customMetadata["gc.startupWorkDir"],
     sessionEnv,
     molecule: customMetadata["gc.molecule"],
     formula: customMetadata["gc.formula"],

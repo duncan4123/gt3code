@@ -32,16 +32,21 @@ const GcPanel = memo(function GcPanel({ environmentId, threadId, thread }: GcPan
     const api = readLocalApi();
     if (!api) return;
     let cancelled = false;
-    api.gc
-      ?.getThreadContext({ threadId })
-      .then((result) => {
-        if (!cancelled) setThreadContext(result);
-      })
-      .catch(() => {
-        // GC API unavailable — sidebar falls back to metadata-only display
-      });
+    const refreshThreadContext = () => {
+      api.gc
+        ?.getThreadContext({ threadId })
+        .then((result) => {
+          if (!cancelled) setThreadContext(result);
+        })
+        .catch(() => {
+          // GC API unavailable — sidebar falls back to metadata-only display
+        });
+    };
+    refreshThreadContext();
+    const refreshInterval = window.setInterval(refreshThreadContext, 10_000);
     return () => {
       cancelled = true;
+      window.clearInterval(refreshInterval);
     };
   }, [environmentId, threadId, gcMeta.isGcManaged, gcContextSignature]);
 
