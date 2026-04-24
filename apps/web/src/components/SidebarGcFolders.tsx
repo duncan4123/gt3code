@@ -13,7 +13,20 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { SidebarMenuSubItem } from "./ui/sidebar";
 import { Badge } from "./ui/badge";
 import type { ThreadId } from "@t3tools/contracts";
-import { type GcAgentActionState, summarizeGcRuntimeStates } from "./sidebar/gcSidebarControls";
+import {
+  type GcAgentActionState,
+  type GcWakeMode,
+  summarizeGcRuntimeStates,
+} from "./sidebar/gcSidebarControls";
+
+export interface SidebarGcThreadGroup {
+  id: string;
+  label: string;
+  kind: "convoy" | "formula";
+  status?: string;
+  progressLabel?: string;
+  threadIds: readonly ThreadId[];
+}
 
 export interface SidebarGcAgentGroup {
   id: string;
@@ -21,13 +34,16 @@ export interface SidebarGcAgentGroup {
   qualifiedName: string;
   isSuspended: boolean;
   isPool: boolean;
+  minActiveSessions?: number;
   maxActiveSessions?: number;
+  wakeMode?: GcWakeMode;
   namedSessionMode?: "always" | "on_demand";
   runtimeState: {
     label: string;
     tone: "info" | "muted" | "success" | "warning";
   };
   threadIds: readonly ThreadId[];
+  threadGroups?: readonly SidebarGcThreadGroup[];
 }
 
 export interface SidebarGcRigGroup {
@@ -65,7 +81,9 @@ interface SidebarGcFoldersProps {
     suspended: boolean,
     agentGroup: SidebarGcAgentGroup,
   ) => void;
+  onAdjustAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onToggleAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
   renderThreadRows: (threadIds: readonly ThreadId[], indentClassName?: string) => ReactNode;
 }
@@ -106,6 +124,9 @@ function gcConfigToggleLabel(
 export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   const [collapsedRigIds, setCollapsedRigIds] = useState<Set<string>>(() => new Set());
   const [collapsedAgentIds, setCollapsedAgentIds] = useState<Set<string>>(() => new Set());
+  const [collapsedThreadGroupIds, setCollapsedThreadGroupIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const workspaceSuspensionHint =
     "Workspace is suspended. Gas City will not start or reconcile agents until GC is resumed.";
 
@@ -128,6 +149,18 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
         next.delete(agentId);
       } else {
         next.add(agentId);
+      }
+      return next;
+    });
+  };
+
+  const toggleThreadGroup = (groupId: string) => {
+    setCollapsedThreadGroupIds((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
       }
       return next;
     });
@@ -299,6 +332,14 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                   : null;
             const canAdjustPoolSize =
               agentGroup.isPool && typeof agentGroup.maxActiveSessions === "number";
+            const canAdjustPoolMinimum =
+              agentGroup.isPool && typeof agentGroup.minActiveSessions === "number";
+            const nextWakeMode =
+              agentGroup.wakeMode === "resume"
+                ? "fresh"
+                : agentGroup.wakeMode === "fresh"
+                  ? "resume"
+                  : null;
             return (
               <Fragment key={`agent-${rigGroup.id}-${agentGroup.id}`}>
                 <SidebarMenuSubItem
@@ -333,6 +374,80 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                       <TooltipTrigger
                         render={
                           <div className="ml-auto flex items-center gap-1">
+                            {nextWakeMode ? (
+                              <button
+                                type="button"
+                                data-thread-selection-safe
+                                data-testid={`gc-agent-wake-mode-${testIdSuffix}`}
+                                data-gc-agent-wake-mode={agentGroup.qualifiedName}
+                                aria-label={`Set ${agentGroup.qualifiedName} wake mode to ${nextWakeMode}`}
+                                disabled={isMutating}
+                                className="inline-flex h-5 cursor-pointer items-center justify-center rounded-md px-1.5 font-semibold tracking-wide text-muted-foreground/70 text-xs uppercase transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60 sm:text-[.625rem]"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  props.onToggleAgentWakeMode(
+                                    agentGroup.qualifiedName,
+                                    nextWakeMode,
+                                  );
+                                }}
+                              >
+                                {agentGroup.wakeMode}
+                              </button>
+                            ) : null}
+                            {canAdjustPoolMinimum ? (
+                              <>
+                                <button
+                                  type="button"
+                                  data-thread-selection-safe
+                                  data-testid={`gc-agent-pool-min-decrement-${testIdSuffix}`}
+                                  aria-label={`Decrease ${agentGroup.qualifiedName} minimum sessions`}
+                                  disabled={isMutating || (agentGroup.minActiveSessions ?? 0) <= 0}
+                                  className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    props.onAdjustAgentMinActiveSessions(
+                                      agentGroup.qualifiedName,
+                                      Math.max(0, (agentGroup.minActiveSessions ?? 0) - 1),
+                                    );
+                                  }}
+                                >
+                                  <MinusIcon className="size-3.5 shrink-0" />
+                                </button>
+                                <Badge
+                                  size="sm"
+                                  variant="outline"
+                                  data-testid={`gc-agent-pool-min-${testIdSuffix}`}
+                                  className="rounded-full px-1.5 tracking-wide uppercase"
+                                >
+                                  min {agentGroup.minActiveSessions}
+                                </Badge>
+                                <button
+                                  type="button"
+                                  data-thread-selection-safe
+                                  data-testid={`gc-agent-pool-min-increment-${testIdSuffix}`}
+                                  aria-label={`Increase ${agentGroup.qualifiedName} minimum sessions`}
+                                  disabled={
+                                    isMutating ||
+                                    (typeof agentGroup.maxActiveSessions === "number" &&
+                                      (agentGroup.minActiveSessions ?? 0) >=
+                                        agentGroup.maxActiveSessions)
+                                  }
+                                  className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    props.onAdjustAgentMinActiveSessions(
+                                      agentGroup.qualifiedName,
+                                      (agentGroup.minActiveSessions ?? 0) + 1,
+                                    );
+                                  }}
+                                >
+                                  <PlusIcon className="size-3.5 shrink-0" />
+                                </button>
+                              </>
+                            ) : null}
                             {canAdjustPoolSize ? (
                               <>
                                 <button
@@ -340,14 +455,21 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                                   data-thread-selection-safe
                                   data-testid={`gc-agent-pool-decrement-${testIdSuffix}`}
                                   aria-label={`Decrease ${agentGroup.qualifiedName} max sessions`}
-                                  disabled={isMutating || (agentGroup.maxActiveSessions ?? 0) <= 0}
+                                  disabled={
+                                    isMutating ||
+                                    (agentGroup.maxActiveSessions ?? 0) <=
+                                      Math.max(0, agentGroup.minActiveSessions ?? 0)
+                                  }
                                   className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                   onClick={(event) => {
                                     event.preventDefault();
                                     event.stopPropagation();
                                     props.onAdjustAgentMaxActiveSessions(
                                       agentGroup.qualifiedName,
-                                      Math.max(0, (agentGroup.maxActiveSessions ?? 0) - 1),
+                                      Math.max(
+                                        Math.max(0, agentGroup.minActiveSessions ?? 0),
+                                        (agentGroup.maxActiveSessions ?? 0) - 1,
+                                      ),
                                     );
                                   }}
                                 >
@@ -450,20 +572,24 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           <div className="text-[10px] text-muted-foreground">
                             {actionState?.kind === "pool-size"
                               ? `Updating pool size to max ${actionState.maxActiveSessions}.`
-                              : actionState?.kind === "session-mode"
-                                ? actionState.targetMode === "always"
-                                  ? "Switching named session mode to auto-start."
-                                  : "Switching named session mode to on-demand."
-                                : `${agentGroup.runtimeState.label}. ${
-                                    agentGroup.namedSessionMode === "always"
-                                      ? "Named session auto-start is enabled."
-                                      : agentGroup.namedSessionMode === "on_demand"
-                                        ? "Named session starts on demand."
-                                        : agentGroup.isPool &&
-                                            typeof agentGroup.maxActiveSessions === "number"
-                                          ? `Pool capacity is ${agentGroup.maxActiveSessions}.`
-                                          : "No named session mode configured."
-                                  }`}
+                              : actionState?.kind === "pool-min"
+                                ? `Updating pool minimum to ${actionState.minActiveSessions}.`
+                                : actionState?.kind === "wake-mode"
+                                  ? `Switching wake mode to ${actionState.wakeMode}.`
+                                  : actionState?.kind === "session-mode"
+                                    ? actionState.targetMode === "always"
+                                      ? "Switching named session mode to auto-start."
+                                      : "Switching named session mode to on-demand."
+                                    : `${agentGroup.runtimeState.label}. ${
+                                        agentGroup.namedSessionMode === "always"
+                                          ? "Named session auto-start is enabled."
+                                          : agentGroup.namedSessionMode === "on_demand"
+                                            ? "Named session starts on demand."
+                                            : agentGroup.isPool &&
+                                                typeof agentGroup.maxActiveSessions === "number"
+                                              ? `Pool capacity is ${agentGroup.maxActiveSessions}.`
+                                              : "No named session mode configured."
+                                      }`}
                           </div>
                         </div>
                       </TooltipPopup>
@@ -471,7 +597,69 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                   </div>
                 </SidebarMenuSubItem>
                 {!collapsedAgentIds.has(agentGroup.qualifiedName) &&
-                  props.renderThreadRows(agentGroup.threadIds, "pl-6")}
+                  (agentGroup.threadGroups && agentGroup.threadGroups.length > 0 ? (
+                    <>
+                      {agentGroup.threadGroups.map((threadGroup) => {
+                        const groupKey = `${agentGroup.qualifiedName}:${threadGroup.id}`;
+                        const groupCollapsed = collapsedThreadGroupIds.has(groupKey);
+                        return (
+                          <Fragment key={groupKey}>
+                            <SidebarMenuSubItem
+                              className="w-full"
+                              data-thread-selection-safe
+                              data-testid={`gc-thread-group-${gcControlTestIdSuffix(groupKey)}`}
+                            >
+                              <div className="flex items-center gap-1.5 px-6 py-0.5 text-muted-foreground/60">
+                                <button
+                                  type="button"
+                                  data-thread-selection-safe
+                                  data-testid={`gc-thread-group-toggle-${gcControlTestIdSuffix(groupKey)}`}
+                                  aria-expanded={!groupCollapsed}
+                                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md py-0.5 pr-1 transition-colors hover:bg-accent hover:text-foreground"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    toggleThreadGroup(groupKey);
+                                  }}
+                                >
+                                  <ChevronRightIcon
+                                    className={`size-3 shrink-0 transition-transform ${
+                                      groupCollapsed ? "" : "rotate-90"
+                                    }`}
+                                  />
+                                  <FolderIcon className="size-3 shrink-0" />
+                                  <span className="truncate text-[11px] font-medium leading-none">
+                                    {threadGroup.label}
+                                  </span>
+                                  <Badge
+                                    size="sm"
+                                    variant="outline"
+                                    className="rounded-full px-1.5 text-[.55rem] tracking-wide uppercase"
+                                  >
+                                    {threadGroup.kind}
+                                  </Badge>
+                                  {threadGroup.progressLabel ? (
+                                    <span className="text-[.625rem] text-muted-foreground/55">
+                                      {threadGroup.progressLabel}
+                                    </span>
+                                  ) : null}
+                                  {threadGroup.status ? (
+                                    <span className="text-[.625rem] text-muted-foreground/55">
+                                      {threadGroup.status}
+                                    </span>
+                                  ) : null}
+                                </button>
+                              </div>
+                            </SidebarMenuSubItem>
+                            {!groupCollapsed &&
+                              props.renderThreadRows(threadGroup.threadIds, "pl-8")}
+                          </Fragment>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    props.renderThreadRows(agentGroup.threadIds, "pl-6")
+                  ))}
               </Fragment>
             );
           })}

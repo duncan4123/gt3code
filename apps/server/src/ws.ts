@@ -23,8 +23,10 @@ import {
   GcFindThreadBindingError,
   GcGetThreadContextError,
   GcSetAgentMaxActiveSessionsError,
+  GcSetAgentMinActiveSessionsError,
   GcSetAgentSessionModeError,
   GcSetAgentSuspendedError,
+  GcSetAgentWakeModeError,
   GcSetCitySuspendedError,
   GcSetRigSuspendedError,
   ThreadId,
@@ -1275,6 +1277,58 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                       error instanceof Error
                         ? error.message
                         : "Failed to update GC agent pool size",
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "gc" },
+          ),
+        [WS_METHODS.gcSetAgentMinActiveSessions]: ({ agent, minActiveSessions }) =>
+          observeRpcEffect(
+            WS_METHODS.gcSetAgentMinActiveSessions,
+            Effect.gen(function* () {
+              const gcApi = yield* GcApiClient;
+              yield* gcApi.setAgentMinActiveSessions(agent, minActiveSessions);
+              const config = yield* gcApi.getConfig();
+              if (!config) {
+                return yield* Effect.fail(
+                  new Error("GC config unavailable after agent min-session update"),
+                );
+              }
+              return config;
+            }).pipe(
+              Effect.mapError(
+                (error) =>
+                  new GcSetAgentMinActiveSessionsError({
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to update GC agent minimum sessions",
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "gc" },
+          ),
+        [WS_METHODS.gcSetAgentWakeMode]: ({ agent, wakeMode }) =>
+          observeRpcEffect(
+            WS_METHODS.gcSetAgentWakeMode,
+            Effect.gen(function* () {
+              const gcApi = yield* GcApiClient;
+              yield* gcApi.setAgentWakeMode(agent, wakeMode);
+              const config = yield* gcApi.getConfig();
+              if (!config) {
+                return yield* Effect.fail(
+                  new Error("GC config unavailable after agent wake-mode update"),
+                );
+              }
+              return config;
+            }).pipe(
+              Effect.mapError(
+                (error) =>
+                  new GcSetAgentWakeModeError({
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to update GC agent wake mode",
                   }),
               ),
             ),

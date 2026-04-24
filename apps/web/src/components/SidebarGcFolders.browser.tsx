@@ -76,7 +76,9 @@ async function renderSidebarGcFolders(options?: {
   onToggleCitySuspended?: (suspended: boolean) => void;
   onToggleRigSuspended?: (rig: string, suspended: boolean) => void;
   onToggleAgentSuspended?: (agent: string, suspended: boolean) => void;
+  onAdjustAgentMinActiveSessions?: (agent: string, minActiveSessions: number) => void;
   onAdjustAgentMaxActiveSessions?: (agent: string, maxActiveSessions: number) => void;
+  onToggleAgentWakeMode?: (agent: string, wakeMode: "resume" | "fresh") => void;
 }) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -94,7 +96,9 @@ async function renderSidebarGcFolders(options?: {
         onToggleCitySuspended={options?.onToggleCitySuspended ?? vi.fn()}
         onToggleRigSuspended={options?.onToggleRigSuspended ?? vi.fn()}
         onToggleAgentSuspended={options?.onToggleAgentSuspended ?? vi.fn()}
+        onAdjustAgentMinActiveSessions={options?.onAdjustAgentMinActiveSessions ?? vi.fn()}
         onAdjustAgentMaxActiveSessions={options?.onAdjustAgentMaxActiveSessions ?? vi.fn()}
+        onToggleAgentWakeMode={options?.onToggleAgentWakeMode ?? vi.fn()}
         onToggleAgentSessionMode={vi.fn()}
         renderThreadRows={(threadIds, indentClassName) => (
           <>
@@ -279,6 +283,8 @@ describe("SidebarGcFolders", () => {
 
   it("shows pool max controls for pool agents and adjusts the target max", async () => {
     const adjustCalls: Array<[string, number]> = [];
+    const minAdjustCalls: Array<[string, number]> = [];
+    const wakeCalls: Array<[string, "resume" | "fresh"]> = [];
     const { host, screen } = await renderSidebarGcFolders({
       rigGroups: [
         {
@@ -293,7 +299,9 @@ describe("SidebarGcFolders", () => {
               qualifiedName: "t3code/polecat",
               isSuspended: false,
               isPool: true,
+              minActiveSessions: 1,
               maxActiveSessions: 5,
+              wakeMode: "fresh",
               threadIds: [],
               runtimeState: { label: "Pool", tone: "muted" },
             },
@@ -303,12 +311,24 @@ describe("SidebarGcFolders", () => {
       onAdjustAgentMaxActiveSessions: (agent, maxActiveSessions) => {
         adjustCalls.push([agent, maxActiveSessions]);
       },
+      onAdjustAgentMinActiveSessions: (agent, minActiveSessions) => {
+        minAdjustCalls.push([agent, minActiveSessions]);
+      },
+      onToggleAgentWakeMode: (agent, wakeMode) => {
+        wakeCalls.push([agent, wakeMode]);
+      },
     });
 
     try {
       await expect
+        .element(page.getByTestId("gc-agent-pool-min-t3code--polecat"))
+        .toHaveTextContent("min 1");
+      await expect
         .element(page.getByTestId("gc-agent-pool-max-t3code--polecat"))
         .toHaveTextContent("max 5");
+      await expect
+        .element(page.getByTestId("gc-agent-wake-mode-t3code--polecat"))
+        .toHaveTextContent("fresh");
       await expect
         .element(page.getByTestId("gc-agent-session-mode-t3code--polecat"))
         .not.toBeInTheDocument();
@@ -318,6 +338,73 @@ describe("SidebarGcFolders", () => {
 
       await page.getByTestId("gc-agent-pool-decrement-t3code--polecat").click();
       expect(adjustCalls).toContainEqual(["t3code/polecat", 4]);
+
+      await page.getByTestId("gc-agent-pool-min-increment-t3code--polecat").click();
+      expect(minAdjustCalls).toContainEqual(["t3code/polecat", 2]);
+
+      await page.getByTestId("gc-agent-pool-min-decrement-t3code--polecat").click();
+      expect(minAdjustCalls).toContainEqual(["t3code/polecat", 0]);
+
+      await page.getByTestId("gc-agent-wake-mode-t3code--polecat").click();
+      expect(wakeCalls).toContainEqual(["t3code/polecat", "resume"]);
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+
+  it("renders convoy and formula virtual folders under an agent", async () => {
+    const { host, screen } = await renderSidebarGcFolders({
+      rigGroups: [
+        {
+          id: "t3code",
+          label: "t3code",
+          kind: "rig",
+          isSuspended: false,
+          agentGroups: [
+            {
+              id: "t3code/crew",
+              label: "crew",
+              qualifiedName: "t3code/crew",
+              isSuspended: false,
+              isPool: false,
+              runtimeState: { label: "Running", tone: "success" },
+              threadIds: [threadId("thread-convoy-1"), threadId("thread-formula-1")],
+              threadGroups: [
+                {
+                  id: "convoy:convoy-1",
+                  label: "Sidebar polish",
+                  kind: "convoy",
+                  status: "open",
+                  progressLabel: "1/3",
+                  threadIds: [threadId("thread-convoy-1")],
+                },
+                {
+                  id: "formula:mol-sidebar:",
+                  label: "mol-sidebar",
+                  kind: "formula",
+                  threadIds: [threadId("thread-formula-1")],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    try {
+      await expect
+        .element(page.getByTestId("gc-thread-group-t3code--crew:convoy:convoy-1"))
+        .toBeInTheDocument();
+      await expect
+        .element(page.getByTestId("gc-thread-group-t3code--crew:formula:mol-sidebar:"))
+        .toBeInTheDocument();
+      await expect.element(page.getByTestId("gc-thread-row-thread-convoy-1")).toBeInTheDocument();
+      await page.getByTestId("gc-thread-group-toggle-t3code--crew:convoy:convoy-1").click();
+      await expect
+        .element(page.getByTestId("gc-thread-row-thread-convoy-1"))
+        .not.toBeInTheDocument();
+      await expect.element(page.getByTestId("gc-thread-row-thread-formula-1")).toBeInTheDocument();
     } finally {
       await screen.unmount();
       host.remove();

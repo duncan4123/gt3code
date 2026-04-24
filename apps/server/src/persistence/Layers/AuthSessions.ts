@@ -254,14 +254,16 @@ const makeAuthSessionRepository = Effect.gen(function* () {
     );
 
   const setLastConnectedAt: AuthSessionRepositoryShape["setLastConnectedAt"] = (input) =>
-    sql.withTransaction(setLastConnectedAtRow(input)).pipe(
-      Effect.mapError(
-        toPersistenceSqlOrDecodeError(
-          "AuthSessionRepository.setLastConnectedAt:query",
-          "AuthSessionRepository.setLastConnectedAt:encodeRequest",
+    sql
+      .withTransaction(setLastConnectedAtRow(input))
+      .pipe(
+        Effect.mapError(
+          toPersistenceSqlOrDecodeError(
+            "AuthSessionRepository.setLastConnectedAt:query",
+            "AuthSessionRepository.setLastConnectedAt:encodeRequest",
+          ),
         ),
-      ),
-    );
+      );
 
   return {
     create,

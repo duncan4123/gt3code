@@ -3,6 +3,7 @@ import type { GcFindThreadBindingResult, OrchestrationLatestTurn } from "@t3tool
 import { isSessionActivelyRunning } from "../../session-logic";
 
 export type GcNamedSessionMode = "always" | "on_demand";
+export type GcWakeMode = "resume" | "fresh";
 
 export type GcAgentActionState =
   | {
@@ -14,6 +15,14 @@ export type GcAgentActionState =
   | {
       kind: "pool-size";
       maxActiveSessions: number;
+    }
+  | {
+      kind: "pool-min";
+      minActiveSessions: number;
+    }
+  | {
+      kind: "wake-mode";
+      wakeMode: GcWakeMode;
     }
   | {
       kind: "session-mode";
@@ -128,6 +137,18 @@ export function resolveGcAgentRuntimeState(input: {
   if (actionState?.kind === "pool-size") {
     return {
       label: `Scaling to ${actionState.maxActiveSessions}`,
+      tone: "info",
+    };
+  }
+  if (actionState?.kind === "pool-min") {
+    return {
+      label: `Min ${actionState.minActiveSessions}`,
+      tone: "info",
+    };
+  }
+  if (actionState?.kind === "wake-mode") {
+    return {
+      label: actionState.wakeMode === "resume" ? "Wake resume" : "Wake fresh",
       tone: "info",
     };
   }

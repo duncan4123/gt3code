@@ -432,7 +432,10 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
         events.map((event) => event.type),
         ["turn.started", "task.started", "item.completed", "task.completed", "turn.completed"],
       );
-      assert.equal(events.every((event) => event.turnId === "turn-1"), true);
+      assert.equal(
+        events.every((event) => event.turnId === "turn-1"),
+        true,
+      );
       const assistantEvent = events[2];
       assert.equal(assistantEvent?.type, "item.completed");
       if (assistantEvent?.type === "item.completed") {
@@ -505,9 +508,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
             type: "message",
             role: "assistant",
             id: "raw_1",
-            content: [
-              { type: "output_text", text: "hello from raw response" },
-            ],
+            content: [{ type: "output_text", text: "hello from raw response" }],
           },
         },
       } satisfies ProviderEvent);

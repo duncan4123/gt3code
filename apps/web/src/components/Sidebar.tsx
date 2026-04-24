@@ -43,6 +43,7 @@ import {
   type GcFindThreadBindingResult,
   ProjectId,
   type GcConfigResult,
+  parseGcMeta,
   type ScopedThreadRef,
   type SidebarProjectGroupingMode,
   type ThreadEnvMode,
@@ -165,10 +166,11 @@ import {
   ThreadStatusPill,
 } from "./Sidebar.logic";
 import { sortThreads } from "../lib/threadSort";
-import { SidebarGcFolders } from "./SidebarGcFolders";
+import { SidebarGcFolders, type SidebarGcThreadGroup } from "./SidebarGcFolders";
 import {
   resolveGcAgentRuntimeState,
   type GcAgentActionState,
+  type GcWakeMode,
   waitForGcAgentBinding,
 } from "./sidebar/gcSidebarControls";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
@@ -221,6 +223,73 @@ function findGcConfigAgent(config: GcConfigResult, qualifiedName: string) {
   return (
     config.agents.find((agent) => gcConfiguredAgentQualifiedName(agent) === qualifiedName) ?? null
   );
+}
+
+function formatGcConvoyProgress(meta: ReturnType<typeof parseGcMeta>): string | undefined {
+  const closed = meta.convoyClosedCount ? Number(meta.convoyClosedCount) : null;
+  const total = meta.convoyTotalCount ? Number(meta.convoyTotalCount) : null;
+  if (!Number.isFinite(closed) || !Number.isFinite(total) || total === null || total <= 0) {
+    return undefined;
+  }
+  return `${closed}/${total}`;
+}
+
+function buildGcThreadGroups(
+  threads: readonly SidebarThreadSummary[],
+): readonly SidebarGcThreadGroup[] {
+  const groups = new Map<string, SidebarGcThreadGroup>();
+
+  for (const thread of threads) {
+    const meta = parseGcMeta(thread.customMetadata);
+    const convoyId = meta.convoy?.trim();
+    const formulaName = meta.formula?.trim();
+    const molecule = meta.molecule?.trim();
+    const groupId = convoyId
+      ? `convoy:${convoyId}`
+      : formulaName
+        ? `formula:${formulaName}:${molecule ?? ""}`
+        : null;
+    if (!groupId) {
+      continue;
+    }
+
+    const existing = groups.get(groupId);
+    if (existing) {
+      groups.set(groupId, {
+        ...existing,
+        threadIds: [...existing.threadIds, thread.id],
+      });
+      continue;
+    }
+
+    if (convoyId) {
+      const convoyStatus = meta.convoyStatus?.trim();
+      const convoyProgressLabel = formatGcConvoyProgress(meta);
+      groups.set(groupId, {
+        id: groupId,
+        label: meta.convoyTitle?.trim() || convoyId,
+        kind: "convoy",
+        ...(convoyStatus ? { status: convoyStatus } : {}),
+        ...(convoyProgressLabel ? { progressLabel: convoyProgressLabel } : {}),
+        threadIds: [thread.id],
+      });
+      continue;
+    }
+
+    groups.set(groupId, {
+      id: groupId,
+      label: molecule ? `${formulaName} · ${molecule}` : (formulaName ?? "formula"),
+      kind: "formula",
+      threadIds: [thread.id],
+    });
+  }
+
+  return [...groups.values()].toSorted((left, right) => {
+    if (left.kind !== right.kind) {
+      return left.kind === "convoy" ? -1 : 1;
+    }
+    return left.label.localeCompare(right.label);
+  });
 }
 
 function describeGcSuspendedState(suspended: boolean): string {
@@ -763,13 +832,16 @@ interface SidebarProjectThreadListProps {
       qualifiedName: string;
       isSuspended: boolean;
       isPool: boolean;
+      minActiveSessions?: number;
       maxActiveSessions?: number;
+      wakeMode?: GcWakeMode;
       namedSessionMode?: "always" | "on_demand";
       runtimeState: {
         label: string;
         tone: "info" | "muted" | "success" | "warning";
       };
       threadIds: readonly ThreadId[];
+      threadGroups?: readonly SidebarGcThreadGroup[];
     }>;
   }>;
   showEmptyThreadState: boolean;
@@ -840,11 +912,15 @@ interface SidebarProjectThreadListProps {
     agentGroup: {
       qualifiedName: string;
       isPool: boolean;
+      minActiveSessions?: number;
       maxActiveSessions?: number;
+      wakeMode?: GcWakeMode;
       namedSessionMode?: "always" | "on_demand";
     },
   ) => void;
+  onAdjustGcAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustGcAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onToggleGcAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleGcAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
 
@@ -897,7 +973,9 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     onToggleGcRigSuspended,
     onToggleGcCitySuspended,
     onToggleGcAgentSuspended,
+    onAdjustGcAgentMinActiveSessions,
     onAdjustGcAgentMaxActiveSessions,
+    onToggleGcAgentWakeMode,
     onToggleGcAgentSessionMode,
   } = props;
   const showMoreButtonRender = useMemo(() => <button type="button" />, []);
@@ -934,7 +1012,9 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
           onToggleCitySuspended={onToggleGcCitySuspended}
           onToggleRigSuspended={onToggleGcRigSuspended}
           onToggleAgentSuspended={onToggleGcAgentSuspended}
+          onAdjustAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
           onAdjustAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+          onToggleAgentWakeMode={onToggleGcAgentWakeMode}
           onToggleAgentSessionMode={onToggleGcAgentSessionMode}
           renderThreadRows={(threadIds, indentClassName) =>
             threadIds.flatMap((threadId) => {
@@ -1094,11 +1174,15 @@ interface SidebarProjectItemProps {
     agentGroup: {
       qualifiedName: string;
       isPool: boolean;
+      minActiveSessions?: number;
       maxActiveSessions?: number;
+      wakeMode?: GcWakeMode;
       namedSessionMode?: "always" | "on_demand";
     },
   ) => void;
+  onAdjustGcAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustGcAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onToggleGcAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleGcAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
 
@@ -1131,7 +1215,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     onToggleGcRigSuspended,
     onToggleGcCitySuspended,
     onToggleGcAgentSuspended,
+    onAdjustGcAgentMinActiveSessions,
     onAdjustGcAgentMaxActiveSessions,
+    onToggleGcAgentWakeMode,
     onToggleGcAgentSessionMode,
   } = props;
   const threadSortOrder = useSettings<SidebarThreadSortOrder>(
@@ -1404,9 +1490,13 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           qualifiedName: agentGroup.qualifiedName,
           isSuspended: agentGroup.isSuspended,
           isPool: agentGroup.isPool,
+          ...(typeof agentGroup.minActiveSessions === "number"
+            ? { minActiveSessions: agentGroup.minActiveSessions }
+            : {}),
           ...(typeof agentGroup.maxActiveSessions === "number"
             ? { maxActiveSessions: agentGroup.maxActiveSessions }
             : {}),
+          ...(agentGroup.wakeMode ? { wakeMode: agentGroup.wakeMode } : {}),
           ...(agentGroup.namedSessionMode ? { namedSessionMode: agentGroup.namedSessionMode } : {}),
           runtimeState: resolveGcAgentRuntimeState({
             isPool: agentGroup.isPool,
@@ -1424,6 +1514,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             })),
           }),
           threadIds: agentGroup.threads.map((thread) => thread.id),
+          threadGroups: buildGcThreadGroups(agentGroup.threads),
         })),
       })),
       showEmptyThreadState:
@@ -2329,7 +2420,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         onToggleGcCitySuspended={onToggleGcCitySuspended}
         onToggleGcRigSuspended={onToggleGcRigSuspended}
         onToggleGcAgentSuspended={onToggleGcAgentSuspended}
+        onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
         onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+        onToggleGcAgentWakeMode={onToggleGcAgentWakeMode}
         onToggleGcAgentSessionMode={onToggleGcAgentSessionMode}
       />
 
@@ -2749,11 +2842,15 @@ interface SidebarProjectsContentProps {
     agentGroup: {
       qualifiedName: string;
       isPool: boolean;
+      minActiveSessions?: number;
       maxActiveSessions?: number;
+      wakeMode?: GcWakeMode;
       namedSessionMode?: "always" | "on_demand";
     },
   ) => void;
+  onAdjustGcAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustGcAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onToggleGcAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleGcAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
 
@@ -2807,7 +2904,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     onToggleGcRigSuspended,
     onToggleGcCitySuspended,
     onToggleGcAgentSuspended,
+    onAdjustGcAgentMinActiveSessions,
     onAdjustGcAgentMaxActiveSessions,
+    onToggleGcAgentWakeMode,
     onToggleGcAgentSessionMode,
   } = props;
 
@@ -2960,7 +3059,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                         onToggleGcCitySuspended={onToggleGcCitySuspended}
                         onToggleGcRigSuspended={onToggleGcRigSuspended}
                         onToggleGcAgentSuspended={onToggleGcAgentSuspended}
+                        onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
                         onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+                        onToggleGcAgentWakeMode={onToggleGcAgentWakeMode}
                         onToggleGcAgentSessionMode={onToggleGcAgentSessionMode}
                       />
                     )}
@@ -3003,7 +3104,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 onToggleGcCitySuspended={onToggleGcCitySuspended}
                 onToggleGcRigSuspended={onToggleGcRigSuspended}
                 onToggleGcAgentSuspended={onToggleGcAgentSuspended}
+                onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
                 onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+                onToggleGcAgentWakeMode={onToggleGcAgentWakeMode}
                 onToggleGcAgentSessionMode={onToggleGcAgentSessionMode}
               />
             ))}
@@ -3718,6 +3821,16 @@ export default function Sidebar() {
         });
         return;
       }
+      if (typeof freshAgent.min_active_sessions === "number") {
+        if (maxActiveSessions < freshAgent.min_active_sessions) {
+          toastManager.add({
+            type: "warning",
+            title: `Cannot set ${agent} maximum`,
+            description: `Maximum sessions cannot be lower than min ${freshAgent.min_active_sessions}.`,
+          });
+          return;
+        }
+      }
       if (freshAgent.max_active_sessions === maxActiveSessions) {
         setGcConfig(freshConfig);
         toastManager.add({
@@ -3754,6 +3867,155 @@ export default function Sidebar() {
         toastManager.update(toastId, {
           type: "error",
           title: `Failed to scale ${agent}`,
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        clearGcAgentActionState(agent);
+      }
+    },
+    [clearGcAgentActionState, refreshGcConfig, setGcAgentActionState],
+  );
+
+  const handleGcAgentMinActiveSessionsChange = useCallback(
+    async (agent: string, minActiveSessions: number) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setAgentMinActiveSessions) {
+        return;
+      }
+      const freshConfig = await refreshGcConfig();
+      if (!freshConfig) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to refresh ${agent}`,
+          description:
+            "Gas City config is unavailable, so the sidebar could not verify the latest state.",
+        });
+        return;
+      }
+      const freshAgent = findGcConfigAgent(freshConfig, agent);
+      if (!freshAgent) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to scale ${agent}`,
+          description: "The agent was not present in the latest Gas City config snapshot.",
+        });
+        return;
+      }
+      if (typeof freshAgent.max_active_sessions === "number") {
+        if (minActiveSessions > freshAgent.max_active_sessions) {
+          toastManager.add({
+            type: "warning",
+            title: `Cannot set ${agent} minimum`,
+            description: `Minimum sessions cannot exceed max ${freshAgent.max_active_sessions}.`,
+          });
+          return;
+        }
+      }
+      if (freshAgent.min_active_sessions === minActiveSessions) {
+        setGcConfig(freshConfig);
+        toastManager.add({
+          type: "warning",
+          title: `${agent} already at min ${minActiveSessions}`,
+          description: `The sidebar was out of sync. Gas City already reports min active sessions = ${minActiveSessions}.`,
+        });
+        return;
+      }
+      const toastId = toastManager.add({
+        type: "loading",
+        title: `Scaling ${agent}`,
+        description: `Updating minimum active sessions to ${minActiveSessions}.`,
+        timeout: 0,
+      });
+      setGcAgentActionState(agent, { kind: "pool-min", minActiveSessions });
+
+      try {
+        const nextConfig = await api.gc.setAgentMinActiveSessions({
+          agent,
+          minActiveSessions,
+        });
+        setGcConfig(nextConfig);
+        toastManager.update(toastId, {
+          type: "success",
+          title: `${agent} updated`,
+          description: `Minimum active sessions is now ${minActiveSessions}.`,
+          timeout: 0,
+          data: {
+            dismissAfterVisibleMs: 6_000,
+          },
+        });
+      } catch (error) {
+        toastManager.update(toastId, {
+          type: "error",
+          title: `Failed to scale ${agent}`,
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        clearGcAgentActionState(agent);
+      }
+    },
+    [clearGcAgentActionState, refreshGcConfig, setGcAgentActionState],
+  );
+
+  const handleGcAgentWakeModeChange = useCallback(
+    async (agent: string, wakeMode: GcWakeMode) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setAgentWakeMode) {
+        return;
+      }
+      const freshConfig = await refreshGcConfig();
+      if (!freshConfig) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to refresh ${agent}`,
+          description:
+            "Gas City config is unavailable, so the sidebar could not verify the latest state.",
+        });
+        return;
+      }
+      const freshAgent = findGcConfigAgent(freshConfig, agent);
+      if (!freshAgent) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to update ${agent}`,
+          description: "The agent was not present in the latest Gas City config snapshot.",
+        });
+        return;
+      }
+      if (freshAgent.wake_mode === wakeMode) {
+        setGcConfig(freshConfig);
+        toastManager.add({
+          type: "warning",
+          title: `${agent} already uses ${wakeMode}`,
+          description: `The sidebar was out of sync. Gas City already reports wake_mode = ${wakeMode}.`,
+        });
+        return;
+      }
+      const toastId = toastManager.add({
+        type: "loading",
+        title: `Updating ${agent}`,
+        description: `Switching wake mode to ${wakeMode}.`,
+        timeout: 0,
+      });
+      setGcAgentActionState(agent, { kind: "wake-mode", wakeMode });
+
+      try {
+        const nextConfig = await api.gc.setAgentWakeMode({ agent, wakeMode });
+        setGcConfig(nextConfig);
+        toastManager.update(toastId, {
+          type: "success",
+          title: `${agent} updated`,
+          description: `Wake mode is now ${wakeMode}.`,
+          timeout: 0,
+          data: {
+            dismissAfterVisibleMs: 6_000,
+          },
+        });
+      } catch (error) {
+        toastManager.update(toastId, {
+          type: "error",
+          title: `Failed to update ${agent}`,
           description: error instanceof Error ? error.message : "An error occurred.",
         });
         void refreshGcConfig().catch(() => undefined);
@@ -4510,7 +4772,9 @@ export default function Sidebar() {
             onToggleGcCitySuspended={handleGcCitySuspendedChange}
             onToggleGcRigSuspended={handleGcRigSuspendedChange}
             onToggleGcAgentSuspended={handleGcAgentSuspendedChange}
+            onAdjustGcAgentMinActiveSessions={handleGcAgentMinActiveSessionsChange}
             onAdjustGcAgentMaxActiveSessions={handleGcAgentMaxActiveSessionsChange}
+            onToggleGcAgentWakeMode={handleGcAgentWakeModeChange}
             onToggleGcAgentSessionMode={handleGcAgentSessionModeChange}
           />
 

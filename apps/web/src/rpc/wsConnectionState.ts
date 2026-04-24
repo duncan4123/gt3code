@@ -13,6 +13,7 @@ export const WS_RECONNECT_MAX_RETRIES = 7;
 export const WS_RECONNECT_MAX_ATTEMPTS = WS_RECONNECT_MAX_RETRIES + 1;
 
 export interface WsConnectionStatus {
+  readonly activeConnectionId: number | null;
   readonly attemptCount: number;
   readonly closeCode: number | null;
   readonly closeReason: string | null;
@@ -31,6 +32,7 @@ export interface WsConnectionStatus {
 }
 
 const INITIAL_WS_CONNECTION_STATUS = Object.freeze<WsConnectionStatus>({
+  activeConnectionId: null,
   attemptCount: 0,
   closeCode: null,
   closeReason: null,
@@ -85,9 +87,21 @@ export function getWsConnectionUiState(status: WsConnectionStatus): WsConnection
   return "reconnecting";
 }
 
-export function recordWsConnectionAttempt(socketUrl: string): WsConnectionStatus {
+function isStaleConnection(current: WsConnectionStatus, connectionId: number | undefined): boolean {
+  return (
+    connectionId !== undefined &&
+    current.activeConnectionId !== null &&
+    current.activeConnectionId !== connectionId
+  );
+}
+
+export function recordWsConnectionAttempt(
+  socketUrl: string,
+  connectionId?: number,
+): WsConnectionStatus {
   return updateWsConnectionStatus((current) => ({
     ...current,
+    activeConnectionId: connectionId ?? current.activeConnectionId,
     attemptCount: current.attemptCount + 1,
     nextRetryAt: null,
     phase: "connecting",
@@ -97,40 +111,55 @@ export function recordWsConnectionAttempt(socketUrl: string): WsConnectionStatus
   }));
 }
 
-export function recordWsConnectionOpened(): WsConnectionStatus {
-  return updateWsConnectionStatus((current) => ({
-    ...current,
-    closeCode: null,
-    closeReason: null,
-    connectedAt: isoNow(),
-    disconnectedAt: null,
-    hasConnected: true,
-    nextRetryAt: null,
-    phase: "connected",
-    reconnectAttemptCount: 0,
-    reconnectPhase: "idle",
-  }));
+export function recordWsConnectionOpened(connectionId?: number): WsConnectionStatus {
+  return updateWsConnectionStatus((current) => {
+    if (isStaleConnection(current, connectionId)) {
+      return current;
+    }
+    return {
+      ...current,
+      closeCode: null,
+      closeReason: null,
+      connectedAt: isoNow(),
+      disconnectedAt: null,
+      hasConnected: true,
+      nextRetryAt: null,
+      phase: "connected",
+      reconnectAttemptCount: 0,
+      reconnectPhase: "idle",
+    };
+  });
 }
 
-export function recordWsConnectionErrored(message?: string | null): WsConnectionStatus {
-  return updateWsConnectionStatus((current) =>
-    applyDisconnectState(current, {
+export function recordWsConnectionErrored(
+  message?: string | null,
+  connectionId?: number,
+): WsConnectionStatus {
+  return updateWsConnectionStatus((current) => {
+    if (isStaleConnection(current, connectionId)) {
+      return current;
+    }
+    return applyDisconnectState(current, {
       lastError: message?.trim() ? message : current.lastError,
       lastErrorAt: isoNow(),
-    }),
-  );
+    });
+  });
 }
 
 export function recordWsConnectionClosed(details?: {
   readonly code?: number;
+  readonly connectionId?: number;
   readonly reason?: string;
 }): WsConnectionStatus {
-  return updateWsConnectionStatus((current) =>
-    applyDisconnectState(current, {
+  return updateWsConnectionStatus((current) => {
+    if (isStaleConnection(current, details?.connectionId)) {
+      return current;
+    }
+    return applyDisconnectState(current, {
       closeCode: details?.code ?? current.closeCode,
       closeReason: details?.reason?.trim() ? details.reason : current.closeReason,
-    }),
-  );
+    });
+  });
 }
 
 export function setBrowserOnlineStatus(online: boolean): WsConnectionStatus {

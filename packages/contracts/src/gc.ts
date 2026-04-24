@@ -214,6 +214,7 @@ export const GcConfigAgent = Schema.Struct({
   name: Schema.String,
   dir: Schema.optional(Schema.String),
   provider: Schema.optional(Schema.String),
+  session_template: Schema.optional(Schema.String),
   is_pool: Schema.optional(Schema.Boolean),
   min_active_sessions: Schema.optional(Schema.Number),
   max_active_sessions: Schema.optional(Schema.Number),

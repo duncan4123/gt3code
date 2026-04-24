@@ -18,10 +18,13 @@ import {
 } from "./wsConnectionState";
 
 export interface WsProtocolLifecycleHandlers {
-  readonly onAttempt?: (socketUrl: string) => void;
-  readonly onOpen?: () => void;
-  readonly onError?: (message: string) => void;
-  readonly onClose?: (details: { readonly code: number; readonly reason: string }) => void;
+  readonly onAttempt?: (socketUrl: string, connectionId?: number) => void;
+  readonly onOpen?: (connectionId?: number) => void;
+  readonly onError?: (message: string, connectionId?: number) => void;
+  readonly onClose?: (
+    details: { readonly code: number; readonly reason: string },
+    connectionId?: number,
+  ) => void;
 }
 
 export const makeWsRpcProtocolClient = RpcClient.make(WsRpcGroup);
@@ -37,6 +40,8 @@ function formatSocketErrorMessage(error: unknown): string {
   return String(error);
 }
 
+let nextWsConnectionId = 0;
+
 function resolveWsRpcSocketUrl(rawUrl: string): string {
   const resolved = new URL(rawUrl);
   if (resolved.protocol !== "ws:" && resolved.protocol !== "wss:") {
@@ -51,13 +56,13 @@ function defaultLifecycleHandlers(): Required<WsProtocolLifecycleHandlers> {
   return {
     onAttempt: recordWsConnectionAttempt,
     onOpen: recordWsConnectionOpened,
-    onError: (message) => {
+    onError: (message, connectionId) => {
       clearAllTrackedRpcRequests();
-      recordWsConnectionErrored(message);
+      recordWsConnectionErrored(message, connectionId);
     },
-    onClose: (details) => {
+    onClose: (details, connectionId) => {
       clearAllTrackedRpcRequests();
-      recordWsConnectionClosed(details);
+      recordWsConnectionClosed({ ...details, connectionId });
     },
   };
 }
@@ -68,21 +73,21 @@ function composeLifecycleHandlers(
   const defaults = defaultLifecycleHandlers();
 
   return {
-    onAttempt: (socketUrl) => {
-      defaults.onAttempt(socketUrl);
-      handlers?.onAttempt?.(socketUrl);
+    onAttempt: (socketUrl, connectionId) => {
+      defaults.onAttempt(socketUrl, connectionId);
+      handlers?.onAttempt?.(socketUrl, connectionId);
     },
-    onOpen: () => {
-      defaults.onOpen();
-      handlers?.onOpen?.();
+    onOpen: (connectionId) => {
+      defaults.onOpen(connectionId);
+      handlers?.onOpen?.(connectionId);
     },
-    onError: (message) => {
-      defaults.onError(message);
-      handlers?.onError?.(message);
+    onError: (message, connectionId) => {
+      defaults.onError(message, connectionId);
+      handlers?.onError?.(message, connectionId);
     },
-    onClose: (details) => {
-      defaults.onClose(details);
-      handlers?.onClose?.(details);
+    onClose: (details, connectionId) => {
+      defaults.onClose(details, connectionId);
+      handlers?.onClose?.(details, connectionId);
     },
   };
 }
@@ -108,30 +113,34 @@ export function createWsRpcProtocolLayer(
   const trackingWebSocketConstructorLayer = Layer.succeed(
     Socket.WebSocketConstructor,
     (socketUrl, protocols) => {
-      lifecycle.onAttempt(socketUrl);
+      const connectionId = (nextWsConnectionId += 1);
+      lifecycle.onAttempt(socketUrl, connectionId);
       const socket = new globalThis.WebSocket(socketUrl, protocols);
 
       socket.addEventListener(
         "open",
         () => {
-          lifecycle.onOpen();
+          lifecycle.onOpen(connectionId);
         },
         { once: true },
       );
       socket.addEventListener(
         "error",
         () => {
-          lifecycle.onError("Unable to connect to the T3 server WebSocket.");
+          lifecycle.onError("Unable to connect to the T3 server WebSocket.", connectionId);
         },
         { once: true },
       );
       socket.addEventListener(
         "close",
         (event) => {
-          lifecycle.onClose({
-            code: event.code,
-            reason: event.reason,
-          });
+          lifecycle.onClose(
+            {
+              code: event.code,
+              reason: event.reason,
+            },
+            connectionId,
+          );
         },
         { once: true },
       );

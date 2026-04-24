@@ -91,6 +91,116 @@ function parseJsonSafe<T>(text: string): T | null {
   }
 }
 
+function parseGcTomlValue(rawValue: string): unknown {
+  const value = rawValue.trim();
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (/^-?\d+(?:\.\d+)?$/.test(value)) return Number(value);
+  if (value.startsWith('"') && value.endsWith('"')) {
+    try {
+      return JSON.parse(value) as string;
+    } catch {
+      return value.slice(1, -1);
+    }
+  }
+  if (value.startsWith("[") && value.endsWith("]")) {
+    return value
+      .slice(1, -1)
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map(parseGcTomlValue);
+  }
+  return value;
+}
+
+function parseGcConfigShowToml(content: string): unknown {
+  if (typeof Bun !== "undefined") {
+    return Bun.TOML.parse(content);
+  }
+
+  const root: {
+    workspace?: Record<string, unknown>;
+    providers?: Record<string, Record<string, unknown>>;
+    agent?: Record<string, unknown>[];
+    rig?: Record<string, unknown>[];
+  } = {};
+  let target: Record<string, unknown> | null = null;
+  let currentAgent: Record<string, unknown> | null = null;
+  let currentProvider: Record<string, unknown> | null = null;
+
+  for (const rawLine of content.split("\n")) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+    if (trimmed === "[workspace]") {
+      root.workspace ??= {};
+      target = root.workspace;
+      continue;
+    }
+    if (trimmed === "[providers]") {
+      root.providers ??= {};
+      target = null;
+      continue;
+    }
+    const providerMatch = trimmed.match(/^\[providers\.([^\].]+)\]$/);
+    if (providerMatch) {
+      root.providers ??= {};
+      currentProvider = {};
+      root.providers[providerMatch[1]!] = currentProvider;
+      target = currentProvider;
+      continue;
+    }
+    const providerEnvMatch = trimmed.match(/^\[providers\.([^\].]+)\.env\]$/);
+    if (providerEnvMatch) {
+      root.providers ??= {};
+      currentProvider = root.providers[providerEnvMatch[1]!] ?? {};
+      root.providers[providerEnvMatch[1]!] = currentProvider;
+      const env: Record<string, unknown> = {};
+      currentProvider.env = env;
+      target = env;
+      continue;
+    }
+    if (trimmed === "[[agent]]") {
+      root.agent ??= [];
+      currentAgent = {};
+      root.agent.push(currentAgent);
+      target = currentAgent;
+      continue;
+    }
+    if (trimmed === "[agent.env]") {
+      if (currentAgent) {
+        const env: Record<string, unknown> = {};
+        currentAgent.env = env;
+        target = env;
+      }
+      continue;
+    }
+    if (trimmed === "[[rig]]") {
+      root.rig ??= [];
+      const rig: Record<string, unknown> = {};
+      root.rig.push(rig);
+      target = rig;
+      continue;
+    }
+    if (trimmed.startsWith("[")) {
+      target = null;
+      continue;
+    }
+    if (!target) {
+      continue;
+    }
+    const assignment = trimmed.match(/^([A-Za-z0-9_-]+)\s*=\s*(.+)$/);
+    if (!assignment) {
+      continue;
+    }
+    target[assignment[1]!] = parseGcTomlValue(assignment[2]!);
+  }
+
+  return root;
+}
+
 function escapePathSegments(value: string): string {
   return value
     .split("/")
@@ -165,10 +275,13 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
           ? `${agent.dir}/${String(agent.name)}`
           : String(agent.name);
     const derivedNamedSessionMode = namedSessionModes.get(qualifiedName);
-    const effectiveNamedSessionMode =
-      typeof agent.is_pool === "boolean" && agent.is_pool
-        ? undefined
-        : (namedSessionMode ?? derivedNamedSessionMode ?? "always");
+    const hasMinActiveSessions = typeof agent.min_active_sessions === "number";
+    const isPool = typeof agent.is_pool === "boolean" ? agent.is_pool : hasMinActiveSessions;
+    const effectiveNamedSessionMode = isPool
+      ? undefined
+      : (namedSessionMode ?? derivedNamedSessionMode ?? "always");
+    const wakeMode =
+      agent.wake_mode === "resume" || agent.wake_mode === "fresh" ? agent.wake_mode : undefined;
     return [
       {
         name: agent.name,
@@ -177,13 +290,12 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
         ...(typeof agent.session_template === "string"
           ? { session_template: agent.session_template }
           : {}),
-        ...(typeof agent.is_pool === "boolean" ? { is_pool: agent.is_pool } : {}),
-        ...(typeof agent.min_active_sessions === "number"
-          ? { min_active_sessions: agent.min_active_sessions }
-          : {}),
+        ...(isPool ? { is_pool: true } : {}),
+        ...(hasMinActiveSessions ? { min_active_sessions: agent.min_active_sessions } : {}),
         ...(typeof agent.max_active_sessions === "number"
           ? { max_active_sessions: agent.max_active_sessions }
           : {}),
+        ...(wakeMode ? { wake_mode: wakeMode } : {}),
         ...(typeof agent.scope === "string" ? { scope: agent.scope } : {}),
         suspended: Boolean(agent.suspended),
         ...(effectiveNamedSessionMode ? { named_session_mode: effectiveNamedSessionMode } : {}),
@@ -376,6 +488,48 @@ function updateCachedAgentMaxActiveSessions(
   };
 }
 
+function updateCachedAgentMinActiveSessions(
+  config: GcConfigResult | null,
+  name: string,
+  minActiveSessions: number,
+): GcConfigResult | null {
+  if (!config) {
+    return null;
+  }
+  return {
+    ...config,
+    agents: config.agents.map((agent) =>
+      resolveAgentConfigKey(agent) === name
+        ? {
+            ...agent,
+            min_active_sessions: minActiveSessions,
+          }
+        : agent,
+    ),
+  };
+}
+
+function updateCachedAgentWakeMode(
+  config: GcConfigResult | null,
+  name: string,
+  wakeMode: "resume" | "fresh",
+): GcConfigResult | null {
+  if (!config) {
+    return null;
+  }
+  return {
+    ...config,
+    agents: config.agents.map((agent) =>
+      resolveAgentConfigKey(agent) === name
+        ? {
+            ...agent,
+            wake_mode: wakeMode,
+          }
+        : agent,
+    ),
+  };
+}
+
 function isPoolAgent(config: GcConfigResult | null, name: string): boolean {
   if (!config) {
     return false;
@@ -396,10 +550,19 @@ function resolveNamedSessionTemplate(
   if (typeof agent.session_template === "string" && agent.session_template.trim().length > 0) {
     return agent.session_template.trim();
   }
-  if (agent.named_session_mode && agent.name.includes(".")) {
+  if (agent.name.includes(".")) {
     return agent.name.slice(agent.name.lastIndexOf(".") + 1);
   }
   return agent.name;
+}
+
+function gcConfigAgentMergeKeys(agent: Pick<GcConfigAgent, "dir" | "name">): readonly string[] {
+  const keys = new Set<string>([resolveAgentConfigKey(agent)]);
+  if (agent.name.includes(".")) {
+    const shortName = agent.name.slice(agent.name.lastIndexOf(".") + 1);
+    keys.add(resolveAgentConfigKey({ ...agent, name: shortName }));
+  }
+  return [...keys];
 }
 
 function findConfiguredAgentIdentity(
@@ -875,7 +1038,11 @@ function replaceOrInsertNumberLine(
 function updateAgentPatchInCityToml(
   cityTomlContent: string,
   identity: { readonly dir: string; readonly template: string },
-  patch: { readonly maxActiveSessions: number },
+  patch: {
+    readonly maxActiveSessions?: number;
+    readonly minActiveSessions?: number;
+    readonly wakeMode?: "resume" | "fresh";
+  },
 ): string {
   const lines = cityTomlContent.split("\n");
 
@@ -893,13 +1060,27 @@ function updateAgentPatchInCityToml(
       blockEnd += 1;
     }
     if ((foundDir ?? "") === identity.dir && foundName === identity.template) {
-      replaceOrInsertNumberLine(
-        lines,
-        index + 1,
-        blockEnd,
-        "max_active_sessions",
-        patch.maxActiveSessions,
-      );
+      if (typeof patch.maxActiveSessions === "number") {
+        replaceOrInsertNumberLine(
+          lines,
+          index + 1,
+          blockEnd,
+          "max_active_sessions",
+          patch.maxActiveSessions,
+        );
+      }
+      if (typeof patch.minActiveSessions === "number") {
+        replaceOrInsertNumberLine(
+          lines,
+          index + 1,
+          blockEnd,
+          "min_active_sessions",
+          patch.minActiveSessions,
+        );
+      }
+      if (patch.wakeMode) {
+        replaceOrInsertStringLine(lines, index + 1, blockEnd, "wake_mode", patch.wakeMode);
+      }
       return lines.join("\n");
     }
     index = blockEnd - 1;
@@ -911,7 +1092,13 @@ function updateAgentPatchInCityToml(
     "[[patches.agent]]",
     ...(identity.dir ? [`dir = "${identity.dir}"`] : []),
     `name = "${identity.template}"`,
-    `max_active_sessions = ${patch.maxActiveSessions}`,
+    ...(typeof patch.maxActiveSessions === "number"
+      ? [`max_active_sessions = ${patch.maxActiveSessions}`]
+      : []),
+    ...(typeof patch.minActiveSessions === "number"
+      ? [`min_active_sessions = ${patch.minActiveSessions}`]
+      : []),
+    ...(patch.wakeMode ? [`wake_mode = "${patch.wakeMode}"`] : []),
   ];
   lines.push(...blockLines);
   return lines.join("\n");
@@ -929,6 +1116,47 @@ function writeAgentMaxActiveSessionsToCityToml(
   writeFileSync(cityTomlPath, nextContent, "utf8");
 }
 
+function replaceOrInsertStringLine(
+  lines: string[],
+  start: number,
+  end: number,
+  key: "wake_mode",
+  value: string,
+): void {
+  const nextLine = `${key} = "${value}"`;
+  for (let index = start; index < end; index += 1) {
+    if (lines[index]?.trim().startsWith(`${key} =`)) {
+      lines[index] = nextLine;
+      return;
+    }
+  }
+  lines.splice(end, 0, nextLine);
+}
+
+function writeAgentMinActiveSessionsToCityToml(
+  cityPath: string,
+  identity: { readonly dir: string; readonly template: string },
+  minActiveSessions: number,
+): void {
+  const cityTomlPath = path.join(cityPath, "city.toml");
+  const nextContent = updateAgentPatchInCityToml(readFileSync(cityTomlPath, "utf8"), identity, {
+    minActiveSessions,
+  });
+  writeFileSync(cityTomlPath, nextContent, "utf8");
+}
+
+function writeAgentWakeModeToCityToml(
+  cityPath: string,
+  identity: { readonly dir: string; readonly template: string },
+  wakeMode: "resume" | "fresh",
+): void {
+  const cityTomlPath = path.join(cityPath, "city.toml");
+  const nextContent = updateAgentPatchInCityToml(readFileSync(cityTomlPath, "utf8"), identity, {
+    wakeMode,
+  });
+  writeFileSync(cityTomlPath, nextContent, "utf8");
+}
+
 function mergeCliExpandedConfig(
   primary: GcConfigResult,
   expanded: GcConfigResult | null,
@@ -937,17 +1165,22 @@ function mergeCliExpandedConfig(
     return primary;
   }
   const expandedByQualifiedName = new Map(
-    expanded.agents.map((agent) => [resolveAgentConfigKey(agent), agent] as const),
+    expanded.agents.flatMap((agent) =>
+      gcConfigAgentMergeKeys(agent).map((key) => [key, agent] as const),
+    ),
   );
   return {
     ...primary,
     agents: primary.agents.map((agent) => {
-      const expandedAgent = expandedByQualifiedName.get(resolveAgentConfigKey(agent));
+      const expandedAgent = gcConfigAgentMergeKeys(agent)
+        .map((key) => expandedByQualifiedName.get(key))
+        .find((value): value is GcConfigAgent => Boolean(value));
       if (!expandedAgent) {
         return agent;
       }
       return {
         ...agent,
+        ...(expandedAgent.is_pool === true ? { is_pool: true } : {}),
         ...(typeof expandedAgent.min_active_sessions === "number"
           ? { min_active_sessions: expandedAgent.min_active_sessions }
           : {}),
@@ -957,6 +1190,7 @@ function mergeCliExpandedConfig(
         ...(typeof expandedAgent.max_active_sessions === "number"
           ? { max_active_sessions: expandedAgent.max_active_sessions }
           : {}),
+        ...(expandedAgent.wake_mode ? { wake_mode: expandedAgent.wake_mode } : {}),
       };
     }),
   };
@@ -979,6 +1213,25 @@ function discoverGcApiBaseUrl(startCwd: string): string | null {
     "127.0.0.1";
 
   return `http://${host}:${port}`;
+}
+
+function normalizeGcApiBaseUrl(value: string | undefined): {
+  readonly baseUrl: string | null;
+  readonly cityName: string | null;
+} {
+  const trimmed = value?.trim().replace(/\/+$/, "");
+  if (!trimmed) {
+    return { baseUrl: null, cityName: null };
+  }
+  const cityMatch = trimmed.match(/^(.*)\/v0\/city\/([^/]+)$/);
+  if (!cityMatch) {
+    return { baseUrl: trimmed, cityName: null };
+  }
+  const baseUrl = cityMatch[1]?.replace(/\/+$/, "") ?? "";
+  return {
+    baseUrl: baseUrl.length > 0 ? baseUrl : null,
+    cityName: decodeURIComponent(cityMatch[2] ?? "").trim() || null,
+  };
 }
 
 function resolveGcCliBinary(): string {
@@ -1004,11 +1257,17 @@ const makeGcApiClient = Effect.gen(function* () {
   const configuredBaseUrl = yield* Config.string("GC_API_URL").pipe(Config.option);
   const configuredCityName = yield* Config.string("GC_CITY_NAME").pipe(Config.option);
   const cityPath = discoverGcCityRoot(process.cwd());
+  const normalizedConfiguredBaseUrl = normalizeGcApiBaseUrl(
+    Option.getOrUndefined(configuredBaseUrl),
+  );
   const baseUrl =
-    Option.getOrUndefined(configuredBaseUrl) ??
+    normalizedConfiguredBaseUrl.baseUrl ??
     discoverGcApiBaseUrl(process.cwd()) ??
     GC_API_DEFAULT_URL;
-  let cachedCityName = Option.getOrUndefined(configuredCityName)?.trim() || null;
+  let cachedCityName =
+    Option.getOrUndefined(configuredCityName)?.trim() ||
+    normalizedConfiguredBaseUrl.cityName ||
+    null;
   const useCityScopedRoutes =
     Option.isSome(configuredCityName) || (cityPath !== null && cityPath.trim().length > 0);
   const routeMode = useCityScopedRoutes ? "city-scoped" : "legacy";
@@ -1374,9 +1633,6 @@ const makeGcApiClient = Effect.gen(function* () {
           if (!cityPath) {
             return null;
           }
-          if (typeof Bun === "undefined") {
-            return null;
-          }
           const cli = runGcCli(cityPath, ["config", "show"]);
           if (cli.exitCode !== 0) {
             logGcWarning("gc config show fallback failed", {
@@ -1386,7 +1642,7 @@ const makeGcApiClient = Effect.gen(function* () {
             });
             return null;
           }
-          return normalizeGcConfig(Bun.TOML.parse(cli.stdout), cityPath);
+          return normalizeGcConfig(parseGcConfigShowToml(cli.stdout), cityPath);
         };
 
         const cityName = await resolveGcCityName();
@@ -1544,6 +1800,17 @@ const makeGcApiClient = Effect.gen(function* () {
           if (maxActiveSessions < 0) {
             throw new Error("GC pool size must be greater than or equal to 0");
           }
+          const currentAgent =
+            lastKnownConfig?.agents.find(
+              (agent) => resolveAgentConfigKey(agent) === normalizedName,
+            ) ?? null;
+          if (typeof currentAgent?.min_active_sessions === "number") {
+            if (maxActiveSessions < currentAgent.min_active_sessions) {
+              throw new Error(
+                `GC pool max ${maxActiveSessions} cannot be lower than min ${currentAgent.min_active_sessions}`,
+              );
+            }
+          }
           if (!isPoolAgent(lastKnownConfig, normalizedName)) {
             throw new Error(
               `pool-size control for non-pool agent ${normalizedName} is not supported`,
@@ -1571,6 +1838,89 @@ const makeGcApiClient = Effect.gen(function* () {
           return { result: undefined, path: "city.toml" };
         },
       ),
+    );
+
+  const setAgentMinActiveSessions: GcApiClientShape["setAgentMinActiveSessions"] = (
+    name,
+    minActiveSessions,
+  ) =>
+    Effect.promise(async () =>
+      runLoggedGcMutation(
+        "agent-min-active-sessions",
+        sanitizeKey(name),
+        { minActiveSessions },
+        async () => {
+          const normalizedName = sanitizeKey(name);
+          if (!Number.isInteger(minActiveSessions)) {
+            throw new Error("GC pool minimum must be an integer");
+          }
+          if (minActiveSessions < 0) {
+            throw new Error("GC pool minimum must be greater than or equal to 0");
+          }
+          const currentAgent =
+            lastKnownConfig?.agents.find(
+              (agent) => resolveAgentConfigKey(agent) === normalizedName,
+            ) ?? null;
+          if (typeof currentAgent?.max_active_sessions === "number") {
+            if (minActiveSessions > currentAgent.max_active_sessions) {
+              throw new Error(
+                `GC pool minimum ${minActiveSessions} cannot exceed max ${currentAgent.max_active_sessions}`,
+              );
+            }
+          }
+          if (!isPoolAgent(lastKnownConfig, normalizedName)) {
+            throw new Error(
+              `min-session control for non-pool agent ${normalizedName} is not supported`,
+            );
+          }
+          if (!cityPath) {
+            throw new Error("GC city path unavailable for min-session mutation");
+          }
+          const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+          if (!identity) {
+            throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
+          }
+          logGcWarning("routing min-session mutation via city.toml", {
+            baseUrl,
+            cityPath,
+            agent: normalizedName,
+            minActiveSessions,
+          });
+          writeAgentMinActiveSessionsToCityToml(cityPath, identity, minActiveSessions);
+          lastKnownConfig = updateCachedAgentMinActiveSessions(
+            lastKnownConfig,
+            normalizedName,
+            minActiveSessions,
+          );
+          return { result: undefined, path: "city.toml" };
+        },
+      ),
+    );
+
+  const setAgentWakeMode: GcApiClientShape["setAgentWakeMode"] = (name, wakeMode) =>
+    Effect.promise(async () =>
+      runLoggedGcMutation("agent-wake-mode", sanitizeKey(name), { wakeMode }, async () => {
+        const normalizedName = sanitizeKey(name);
+        if (wakeMode !== "resume" && wakeMode !== "fresh") {
+          throw new Error("GC wake mode must be resume or fresh");
+        }
+        if (!cityPath) {
+          throw new Error("GC city path unavailable for wake-mode mutation");
+        }
+        const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+        if (!identity) {
+          throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
+        }
+        logGcWarning("routing wake-mode mutation via city.toml", {
+          baseUrl,
+          cityPath,
+          agent: normalizedName,
+          wakeMode,
+        });
+        writeAgentWakeModeToCityToml(cityPath, identity, wakeMode);
+        lastKnownConfig = updateCachedAgentWakeMode(lastKnownConfig, normalizedName, wakeMode);
+        return { result: undefined, path: "city.toml" };
+      }),
     );
 
   const setAgentSessionMode: GcApiClientShape["setAgentSessionMode"] = (name, mode) =>
@@ -1698,6 +2048,8 @@ const makeGcApiClient = Effect.gen(function* () {
     respondToPending,
     setAgentSuspended,
     setAgentMaxActiveSessions,
+    setAgentMinActiveSessions,
+    setAgentWakeMode,
     setAgentSessionMode,
     setCitySuspended,
     setRigSuspended,
