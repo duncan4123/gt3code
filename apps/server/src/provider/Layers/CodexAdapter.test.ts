@@ -265,7 +265,7 @@ validationLayer("CodexAdapterLive validation", (it) => {
 
   it.effect("forwards provider env when starting a session", () =>
     Effect.gen(function* () {
-      validationManager.startSessionImpl.mockClear();
+      validationRuntimeFactory.factory.mockClear();
       const adapter = yield* CodexAdapter;
 
       yield* adapter.startSession({
@@ -280,16 +280,16 @@ validationLayer("CodexAdapterLive validation", (it) => {
         runtimeMode: "full-access",
       });
 
-      assert.deepStrictEqual(validationManager.startSessionImpl.mock.calls[0]?.[0], {
-        provider: "codex",
-        threadId: asThreadId("thread-env"),
+      assert.deepStrictEqual(validationRuntimeFactory.factory.mock.calls[0]?.[0], {
+        binaryPath: "codex",
+        cwd: process.cwd(),
         env: {
           GC_AGENT: "t3code/gastown.polecat",
           GC_ALIAS: "t3code/gastown.polecat",
           GC_TEMPLATE: "polecat",
           GC_SESSION_NAME: "gastown__polecat-gc-test",
         },
-        binaryPath: "codex",
+        threadId: asThreadId("thread-env"),
         runtimeMode: "full-access",
       });
     }),
@@ -388,6 +388,60 @@ function startLifecycleRuntime() {
 }
 
 lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
+  it.effect("maps Codex event_msg task lifecycle into turn and assistant events", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const eventsFiber = yield* Stream.runCollect(Stream.take(adapter.streamEvents, 5)).pipe(
+        Effect.forkChild,
+      );
+
+      yield* runtime.emit({
+        id: asEventId("evt-task-started"),
+        kind: "notification",
+        provider: "codex",
+        threadId: asThreadId("thread-1"),
+        createdAt: new Date().toISOString(),
+        method: "codex/event/task_started",
+        payload: {
+          msg: {
+            type: "task_started",
+            turn_id: "turn-1",
+            collaboration_mode_kind: "default",
+          },
+        },
+      });
+      yield* runtime.emit({
+        id: asEventId("evt-task-complete"),
+        kind: "notification",
+        provider: "codex",
+        threadId: asThreadId("thread-1"),
+        createdAt: new Date().toISOString(),
+        method: "codex/event/task_complete",
+        payload: {
+          msg: {
+            type: "task_complete",
+            turn_id: "turn-1",
+            last_agent_message: "Hi.",
+          },
+        },
+      });
+
+      const events = Array.from(yield* Fiber.join(eventsFiber));
+
+      assert.deepEqual(
+        events.map((event) => event.type),
+        ["turn.started", "task.started", "item.completed", "task.completed", "turn.completed"],
+      );
+      assert.equal(events.every((event) => event.turnId === "turn-1"), true);
+      const assistantEvent = events[2];
+      assert.equal(assistantEvent?.type, "item.completed");
+      if (assistantEvent?.type === "item.completed") {
+        assert.equal(assistantEvent.payload.itemType, "assistant_message");
+        assert.equal(assistantEvent.payload.detail, "Hi.");
+      }
+    }),
+  );
+
   it.effect("maps completed agent message items to canonical item.completed events", () =>
     Effect.gen(function* () {
       const { adapter, runtime } = yield* startLifecycleRuntime();
@@ -427,6 +481,51 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
       assert.equal(firstEvent.value.itemId, "msg_1");
       assert.equal(firstEvent.value.turnId, "turn-1");
       assert.equal(firstEvent.value.payload.itemType, "assistant_message");
+    }),
+  );
+
+  it.effect("maps raw response item completions to canonical item.completed events", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      yield* runtime.emit({
+        id: asEventId("evt-raw-response-complete"),
+        kind: "notification",
+        provider: "codex",
+        createdAt: new Date().toISOString(),
+        method: "rawResponseItem/completed",
+        threadId: asThreadId("thread-1"),
+        turnId: asTurnId("turn-1"),
+        itemId: asItemId("raw_1"),
+        payload: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "message",
+            role: "assistant",
+            id: "raw_1",
+            content: [
+              { type: "output_text", text: "hello from raw response" },
+            ],
+          },
+        },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+
+      assert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some") {
+        return;
+      }
+      assert.equal(firstEvent.value.type, "item.completed");
+      if (firstEvent.value.type !== "item.completed") {
+        return;
+      }
+      assert.equal(firstEvent.value.itemId, "raw_1");
+      assert.equal(firstEvent.value.turnId, "turn-1");
+      assert.equal(firstEvent.value.payload.itemType, "assistant_message");
+      assert.equal(firstEvent.value.payload.detail, "hello from raw response");
     }),
   );
 
@@ -536,6 +635,41 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
       }
       assert.equal(firstEvent.value.threadId, "thread-1");
       assert.equal(firstEvent.value.payload.reason, "Session stopped");
+    }),
+  );
+
+  it.effect("maps structured thread status payloads to canonical thread.state.changed events", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      yield* runtime.emit({
+        id: asEventId("evt-thread-status-idle"),
+        kind: "notification",
+        provider: "codex",
+        threadId: asThreadId("thread-1"),
+        createdAt: new Date().toISOString(),
+        method: "thread/status/changed",
+        payload: {
+          threadId: "thread-1",
+          status: {
+            type: "idle",
+            activeFlags: [],
+          },
+        },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+
+      assert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some") {
+        return;
+      }
+      assert.equal(firstEvent.value.type, "thread.state.changed");
+      if (firstEvent.value.type !== "thread.state.changed") {
+        return;
+      }
+      assert.equal(firstEvent.value.payload.state, "idle");
     }),
   );
 

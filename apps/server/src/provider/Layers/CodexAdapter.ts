@@ -17,11 +17,14 @@ import {
   type ProviderUserInputAnswers,
   RuntimeItemId,
   RuntimeRequestId,
+  RuntimeTaskId,
   ProviderApprovalDecision,
+  ProviderItemId,
   ThreadId,
   ProviderSendTurnInput,
+  TurnId,
 } from "@t3tools/contracts";
-import { Effect, Exit, Fiber, FileSystem, Layer, Queue, Schema, Scope, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, FileSystem, Layer, Queue, Schema, Scope, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import * as EffectCodexSchema from "effect-codex-app-server/schema";
@@ -126,6 +129,24 @@ function trimText(value: string | undefined | null): string | undefined {
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
 }
 
+function asObject(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function asArray(value: unknown): ReadonlyArray<unknown> | undefined {
+  return Array.isArray(value) ? value : undefined;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? trimText(value) : undefined;
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 const FATAL_CODEX_STDERR_SNIPPETS = ["failed to connect to websocket"];
 
 function isFatalCodexProcessStderrMessage(message: string): boolean {
@@ -215,6 +236,23 @@ function toCanonicalItemType(raw: string | undefined | null): CanonicalItemType 
   return "unknown";
 }
 
+function toCanonicalItemTypeFromRawResponseItem(
+  rawType: string | undefined | null,
+  role: string | undefined | null,
+): CanonicalItemType {
+  const type = normalizeItemType(rawType);
+  if (type === "message") {
+    const normalizedRole = normalizeItemType(role);
+    if (normalizedRole.includes("user")) return "user_message";
+    if (normalizedRole.includes("assistant") || normalizedRole.includes("agent")) {
+      return "assistant_message";
+    }
+    return "unknown";
+  }
+
+  return toCanonicalItemType(rawType);
+}
+
 function itemTitle(itemType: CanonicalItemType): string | undefined {
   switch (itemType) {
     case "assistant_message":
@@ -249,7 +287,16 @@ function itemDetail(
   payload: Record<string, unknown>,
 ): string | undefined {
   const nestedResult = asObject(item.result);
+  const contentText = asArray(item.content)
+    ?.map((entry) => {
+      const content = asObject(entry);
+      const text = asString(content?.text)?.trim();
+      return text && text.length > 0 ? text : undefined;
+    })
+    .filter((text): text is string => typeof text === "string")
+    .join("\n");
   const candidates = [
+    contentText,
     asString(item.command),
     asString(item.title),
     asString(item.summary),
@@ -467,6 +514,14 @@ function asRuntimeTaskId(taskId: string): RuntimeTaskId {
   return RuntimeTaskId.make(taskId);
 }
 
+function toTurnId(turnId: string | undefined): TurnId | undefined {
+  return turnId ? TurnId.make(turnId) : undefined;
+}
+
+function toProviderItemId(itemId: string | undefined): ProviderItemId | undefined {
+  return itemId ? ProviderItemId.make(itemId) : undefined;
+}
+
 function codexEventMessage(
   payload: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
@@ -554,7 +609,10 @@ function mapItemLifecycle(
     return undefined;
   }
 
-  const itemType = toCanonicalItemType(source.type ?? source.kind);
+  const itemType =
+    event.method === "rawResponseItem/completed"
+      ? toCanonicalItemTypeFromRawResponseItem(source.type ?? source.kind, asString(source.role))
+      : toCanonicalItemType(source.type ?? source.kind);
   if (itemType === "unknown" && lifecycle !== "item.updated") {
     return undefined;
   }
@@ -743,7 +801,11 @@ function mapToRuntimeEvents(
                 ? "closed"
                 : event.method === "thread/compacted"
                   ? "compacted"
-                  : toThreadState(asObject(payload?.thread)?.state ?? payload?.state),
+                  : toThreadState(
+                      asObject(payload?.status)?.type ??
+                        asObject(payload?.thread)?.state ??
+                        payload?.state,
+                    ),
           ...(event.payload !== undefined ? { detail: event.payload } : {}),
         },
       },
@@ -874,6 +936,11 @@ function mapToRuntimeEvents(
   if (event.method === "item/started") {
     const started = mapItemLifecycle(event, canonicalThreadId, "item.started");
     return started ? [started] : [];
+  }
+
+  if (event.method === "rawResponseItem/completed") {
+    const completed = mapItemLifecycle(event, canonicalThreadId, "item.completed");
+    return completed ? [completed] : [];
   }
 
   if (event.method === "item/completed") {
@@ -1025,31 +1092,41 @@ function mapToRuntimeEvents(
     if (!taskId) {
       return [];
     }
-    return [
-      {
-        ...codexEventBase(event, canonicalThreadId),
-        type: "task.started",
-        payload: {
-          taskId: asRuntimeTaskId(taskId),
-          ...(asString(msg?.collaboration_mode_kind)
-            ? { taskType: asString(msg?.collaboration_mode_kind) }
-            : {}),
-        },
+    const base = codexEventBase(event, canonicalThreadId);
+    const events: ProviderRuntimeEvent[] = [];
+    if (base.turnId) {
+      events.push({
+        ...base,
+        type: "turn.started",
+        payload: {},
+      });
+    }
+    events.push({
+      ...base,
+      type: "task.started",
+      payload: {
+        taskId: asRuntimeTaskId(taskId),
+        ...(asString(msg?.collaboration_mode_kind)
+          ? { taskType: asString(msg?.collaboration_mode_kind) }
+          : {}),
       },
-    ];
+    });
+    return events;
   }
 
   if (event.method === "codex/event/task_complete") {
     const msg = codexEventMessage(payload);
     const taskId = asString(payload?.id) ?? asString(msg?.turn_id);
-    const proposedPlanMarkdown = extractProposedPlanMarkdown(asString(msg?.last_agent_message));
+    const lastAgentMessage = asString(msg?.last_agent_message);
+    const proposedPlanMarkdown = extractProposedPlanMarkdown(lastAgentMessage);
+    const base = codexEventBase(event, canonicalThreadId);
     if (!taskId) {
       if (!proposedPlanMarkdown) {
         return [];
       }
       return [
         {
-          ...codexEventBase(event, canonicalThreadId),
+          ...base,
           type: "turn.proposed.completed",
           payload: {
             planMarkdown: proposedPlanMarkdown,
@@ -1057,25 +1134,46 @@ function mapToRuntimeEvents(
         },
       ];
     }
-    const events: ProviderRuntimeEvent[] = [
+    const events: ProviderRuntimeEvent[] = [];
+    if (lastAgentMessage) {
+      events.push({
+        ...base,
+        type: "item.completed",
+        payload: {
+          itemType: "assistant_message",
+          status: "completed",
+          title: "Assistant message",
+          detail: lastAgentMessage,
+          ...(event.payload !== undefined ? { data: event.payload } : {}),
+        },
+      });
+    }
+    events.push(
       {
-        ...codexEventBase(event, canonicalThreadId),
+        ...base,
         type: "task.completed",
         payload: {
           taskId: asRuntimeTaskId(taskId),
           status: "completed",
-          ...(asString(msg?.last_agent_message)
-            ? { summary: asString(msg?.last_agent_message) }
-            : {}),
+          ...(lastAgentMessage ? { summary: lastAgentMessage } : {}),
         },
       },
-    ];
+    );
     if (proposedPlanMarkdown) {
       events.push({
-        ...codexEventBase(event, canonicalThreadId),
+        ...base,
         type: "turn.proposed.completed",
         payload: {
           planMarkdown: proposedPlanMarkdown,
+        },
+      });
+    }
+    if (base.turnId) {
+      events.push({
+        ...base,
+        type: "turn.completed",
+        payload: {
+          state: "completed",
         },
       });
     }
@@ -1120,6 +1218,27 @@ function mapToRuntimeEvents(
           ...(asNumber(msg?.summary_index) !== undefined
             ? { summaryIndex: asNumber(msg?.summary_index) }
             : {}),
+        },
+      },
+    ];
+  }
+
+  if (event.method === "codex/event/agent_message") {
+    const msg = codexEventMessage(payload);
+    const message = asString(msg?.message) ?? asString(msg?.text);
+    if (!message) {
+      return [];
+    }
+    return [
+      {
+        ...codexEventBase(event, canonicalThreadId),
+        type: "item.completed",
+        payload: {
+          itemType: "assistant_message",
+          status: "completed",
+          title: "Assistant message",
+          detail: message,
+          ...(event.payload !== undefined ? { data: event.payload } : {}),
         },
       },
     ];
@@ -1368,6 +1487,8 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           stream: "native",
         })
       : undefined);
+  const managedNativeEventLogger =
+    options?.nativeEventLogger === undefined ? nativeEventLogger : undefined;
 
   const serverSettingsService = yield* ServerSettingsService;
   const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -1376,8 +1497,9 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   const firstMappedRuntimeEventLogged = new Set<ThreadId>();
   const unhandledEventCounts = new Map<string, number>();
 
-  const startSession: CodexAdapterShape["startSession"] = Effect.fn("startSession")(
-    function* (input) {
+  const startSession: CodexAdapterShape["startSession"] = (input) =>
+    Effect.scoped(
+      Effect.gen(function* () {
       if (input.provider !== undefined && input.provider !== PROVIDER) {
         return yield* new ProviderAdapterValidationError({
           provider: PROVIDER,
@@ -1487,8 +1609,18 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             });
           }
           yield* Queue.offerAll(runtimeEventQueue, runtimeEvents);
-        }),
-      ).pipe(Effect.forkChild);
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logError("codex.session.event-map.failed", {
+              method: event.method,
+              threadId: event.threadId,
+              turnId: event.turnId,
+              itemId: event.itemId,
+              cause: Cause.pretty(cause),
+            }),
+          ),
+        ),
+      ).pipe(Effect.forkIn(sessionScope));
 
       const started = yield* runtime.start().pipe(
         Effect.mapError(
@@ -1526,9 +1658,9 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         model: started.model,
       });
 
-      return started;
-    },
-  );
+        return started;
+      }),
+    );
 
   const resolveAttachment = Effect.fn("resolveAttachment")(function* (
     input: ProviderSendTurnInput,
@@ -1743,7 +1875,13 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       discard: true,
     }).pipe(Effect.asVoid);
 
-  yield* Effect.addFinalizer(() => Queue.shutdown(runtimeEventQueue).pipe(Effect.ignore));
+  yield* Effect.addFinalizer(() =>
+    stopAll().pipe(
+      Effect.andThen(Queue.shutdown(runtimeEventQueue)),
+      Effect.andThen(managedNativeEventLogger?.close() ?? Effect.void),
+      Effect.ignore,
+    ),
+  );
 
   return {
     provider: PROVIDER,

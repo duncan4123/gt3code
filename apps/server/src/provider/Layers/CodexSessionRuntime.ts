@@ -209,6 +209,38 @@ type CodexServerNotification = {
   };
 }[CodexRpc.ServerNotificationMethod];
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeUnknownCodexNotification(
+  method: string,
+  params: unknown,
+): { readonly method: string; readonly payload: unknown } {
+  if (method !== "codex/event" || !isRecord(params)) {
+    return { method, payload: params };
+  }
+
+  const event =
+    params.type === "event_msg" && isRecord(params.payload)
+      ? params.payload
+      : typeof params.type === "string"
+        ? params
+        : undefined;
+  if (!event || typeof event.type !== "string") {
+    return { method, payload: params };
+  }
+
+  const nestedPayload = event.payload;
+  return {
+    method: `codex/event/${event.type}`,
+    payload: {
+      msg: isRecord(nestedPayload) ? nestedPayload : event,
+      raw: params,
+    },
+  };
+}
+
 function makeCodexServerNotification<M extends CodexRpc.ServerNotificationMethod>(
   method: M,
   params: CodexRpc.ServerNotificationParamsByMethod[M],
@@ -471,6 +503,7 @@ function readNotificationThreadId(notification: CodexServerNotification): string
     case "item/commandExecution/terminalInteraction":
     case "item/fileChange/outputDelta":
     case "item/fileChange/patchUpdated":
+    case "rawResponseItem/completed":
     case "serverRequest/resolved":
     case "item/mcpToolCall/progress":
     case "item/reasoning/summaryTextDelta":
@@ -528,6 +561,14 @@ function readRouteFields(notification: CodexServerNotification): {
       return {
         turnId: TurnId.make(notification.params.turnId),
         itemId: ProviderItemId.make(notification.params.item.id),
+      };
+    case "rawResponseItem/completed":
+      return {
+        turnId: TurnId.make(notification.params.turnId),
+        itemId:
+          typeof notification.params.item.id === "string"
+            ? ProviderItemId.make(notification.params.item.id)
+            : undefined,
       };
     case "item/agentMessage/delta":
     case "item/plan/delta":
@@ -1056,6 +1097,17 @@ export const makeCodexSessionRuntime = (
 
     yield* client.handleUnknownServerRequest((method) =>
       Effect.fail(CodexErrors.CodexAppServerRequestError.methodNotFound(method)),
+    );
+    yield* client.handleUnknownServerNotification((method, params) =>
+      Effect.gen(function* () {
+        const normalized = normalizeUnknownCodexNotification(method, params);
+        yield* emitEvent({
+          kind: "notification",
+          threadId: options.threadId,
+          method: normalized.method,
+          payload: normalized.payload,
+        });
+      }),
     );
 
     const registerServerNotification = <M extends CodexRpc.ServerNotificationMethod>(method: M) =>
