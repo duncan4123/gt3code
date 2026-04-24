@@ -31,13 +31,13 @@ function ContextRow({
   const display = typeof value === "number" ? String(value) : value?.trim();
   if (!display && !showEmpty) return null;
   return (
-    <div className="space-y-1">
-      <div className="text-[10px] font-semibold tracking-widest text-muted-foreground/45 uppercase">
+    <div className="grid grid-cols-[76px_minmax(0,1fr)] items-baseline gap-2">
+      <div className="text-[9px] font-semibold tracking-widest text-muted-foreground/45 uppercase">
         {label}
       </div>
       <div
         className={[
-          "break-words text-[13px] leading-snug text-foreground/85",
+          "min-w-0 break-words text-[12px] leading-snug text-foreground/85",
           mono ? "font-mono text-[12px]" : "",
         ].join(" ")}
       >
@@ -49,7 +49,7 @@ function ContextRow({
 
 function SectionHeader({ children }: { children: ReactNode }) {
   return (
-    <SidebarGroupLabel className="h-auto px-0 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
+    <SidebarGroupLabel className="h-auto px-0 text-[9px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
       {children}
     </SidebarGroupLabel>
   );
@@ -57,10 +57,10 @@ function SectionHeader({ children }: { children: ReactNode }) {
 
 function SectionCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <SidebarGroup className="px-3 py-2">
-      <div className="rounded-xl border border-sidebar-border/70 bg-sidebar-accent/20 p-3 shadow-sm">
+    <SidebarGroup className="px-3 py-1.5">
+      <div className="rounded-xl border border-sidebar-border/70 bg-sidebar-accent/20 p-2.5 shadow-sm">
         <SectionHeader>{title}</SectionHeader>
-        <SidebarGroupContent className="space-y-3 pt-2">{children}</SidebarGroupContent>
+        <SidebarGroupContent className="space-y-2 pt-1.5">{children}</SidebarGroupContent>
       </div>
     </SidebarGroup>
   );
@@ -82,13 +82,13 @@ function ProgressBar({ closed, total }: { closed: number; total: number }) {
   const percent = total > 0 ? Math.min(100, Math.max(0, Math.round((closed / total) * 100))) : 0;
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
         <span>
           {closed}/{total} completed
         </span>
         <span>{percent}%</span>
       </div>
-      <div className="h-1.5 rounded-full bg-muted">
+      <div className="h-1 rounded-full bg-muted">
         <div
           className="h-full rounded-full bg-primary transition-all"
           style={{ width: `${percent}%` }}
@@ -105,6 +105,91 @@ function parseCount(value: string | undefined): number | null {
   return Math.floor(parsed);
 }
 
+const RUNTIME_ENV_KEY_ORDER = [
+  "GC_AGENT",
+  "GC_ALIAS",
+  "GC_TEMPLATE",
+  "GC_SESSION_NAME",
+  "GC_SESSION_ID",
+  "GC_SESSION_ORIGIN",
+  "GC_RUNTIME_EPOCH",
+  "GC_CONTINUATION_EPOCH",
+  "GC_PROVIDER",
+  "GC_RIG",
+  "GC_RIG_ROOT",
+  "GC_CITY",
+  "GC_CITY_PATH",
+  "GC_CITY_ROOT",
+  "GC_DIR",
+  "GC_BEAD",
+  "GC_BEAD_ID",
+  "GC_CONVOY",
+  "GC_FORMULA",
+  "GC_MOLECULE",
+  "GC_API_URL",
+  "GC_DOLT_HOST",
+  "GC_DOLT_PORT",
+] as const;
+
+const RUNTIME_ENV_PREFIXES = ["GC_", "GT_", "BEADS_"] as const;
+const SENSITIVE_RUNTIME_ENV_KEY_PATTERN =
+  /(?:TOKEN|SECRET|PASSWORD|PASS|PRIVATE|CREDENTIAL|COOKIE|API_KEY|ACCESS_KEY|AUTH)/i;
+
+function getRuntimeEnvRows(sessionEnv: Record<string, string> | undefined) {
+  if (!sessionEnv) return [];
+  const order: ReadonlyMap<string, number> = new Map(
+    RUNTIME_ENV_KEY_ORDER.map((key, index) => [key, index]),
+  );
+  return Object.entries(sessionEnv)
+    .filter(([key, value]) => {
+      if (!value.trim()) return false;
+      return RUNTIME_ENV_PREFIXES.some((prefix) => key.startsWith(prefix));
+    })
+    .map(([key, value]) => ({
+      key,
+      value: SENSITIVE_RUNTIME_ENV_KEY_PATTERN.test(key) ? "redacted" : value,
+      redacted: SENSITIVE_RUNTIME_ENV_KEY_PATTERN.test(key),
+    }))
+    .sort((left, right) => {
+      const leftOrder = order.get(left.key) ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = order.get(right.key) ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return left.key.localeCompare(right.key);
+    });
+}
+
+function RuntimeEnvRows({ rows }: { rows: ReturnType<typeof getRuntimeEnvRows> }) {
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-lg bg-background/60 px-2 py-1.5 text-[12px] leading-snug text-muted-foreground">
+        No GC runtime env snapshot has been published for this thread.
+      </div>
+    );
+  }
+  return (
+    <div className="max-h-56 space-y-1 overflow-auto pr-1">
+      {rows.map((row) => (
+        <div
+          key={row.key}
+          className="grid grid-cols-[116px_minmax(0,1fr)] gap-2 rounded-lg bg-background/60 px-2 py-1.5"
+        >
+          <div className="font-mono text-[10px] tracking-tight text-muted-foreground">
+            {row.key}
+          </div>
+          <div
+            className={[
+              "min-w-0 break-words font-mono text-[11px] leading-snug text-foreground/85",
+              row.redacted ? "text-muted-foreground/70 italic" : "",
+            ].join(" ")}
+          >
+            {row.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FormulaSteps({
   steps,
 }: {
@@ -112,26 +197,26 @@ function FormulaSteps({
 }) {
   if (!steps || steps.length === 0) return null;
   return (
-    <div className="space-y-2">
-      <div className="text-[10px] font-semibold tracking-widest text-muted-foreground/45 uppercase">
+    <div className="space-y-1.5">
+      <div className="text-[9px] font-semibold tracking-widest text-muted-foreground/45 uppercase">
         Steps
       </div>
       <div className="space-y-1">
         {steps.slice(0, 5).map((step, index) => (
-          <div key={step.id} className="rounded-lg bg-background/60 px-2.5 py-2">
+          <div key={step.id} className="rounded-lg bg-background/60 px-2 py-1.5">
             <div className="flex gap-2 text-[12px] leading-snug text-foreground/85">
               <span className="font-mono text-muted-foreground">{index + 1}</span>
               <span className="min-w-0 flex-1 truncate">{step.title}</span>
             </div>
             {step.needs && step.needs.length > 0 && (
-              <div className="mt-1 truncate pl-5 text-[11px] text-muted-foreground">
+              <div className="mt-0.5 truncate pl-5 text-[10px] text-muted-foreground">
                 needs {step.needs.join(", ")}
               </div>
             )}
           </div>
         ))}
         {steps.length > 5 && (
-          <div className="text-[11px] text-muted-foreground">+{steps.length - 5} more steps</div>
+          <div className="text-[10px] text-muted-foreground">+{steps.length - 5} more steps</div>
         )}
       </div>
     </div>
@@ -158,6 +243,7 @@ const GcContextSidebar = memo(function GcContextSidebar({
   const hookBeadId = bead?.id ?? gcMeta.bead;
   const hookFormula = formula?.name ?? gcMeta.formula ?? bead?.ref;
   const hookMolecule = gcMeta.molecule ?? bead?.metadata?.molecule_id;
+  const runtimeEnvRows = useMemo(() => getRuntimeEnvRows(gcMeta.sessionEnv), [gcMeta.sessionEnv]);
 
   if (!gcMeta.isGcManaged) {
     return (
@@ -204,23 +290,9 @@ const GcContextSidebar = memo(function GcContextSidebar({
           <ContextRow label="City" value={gcMeta.city} />
         </SectionCard>
 
-        {(gcMeta.groupKind ||
-          gcMeta.groupId ||
-          gcMeta.groupLabel ||
-          gcMeta.agentQualified ||
-          gcMeta.agentLabel) && (
-          <SectionCard title="Folder">
-            <ContextRow label="Kind" value={gcMeta.groupKind} />
-            <ContextRow label="Group ID" value={gcMeta.groupId} mono />
-            <ContextRow label="Label" value={gcMeta.groupLabel} />
-            <ContextRow label="Qualified Agent" value={gcMeta.agentQualified} />
-            <ContextRow label="Agent Label" value={gcMeta.agentLabel} />
-          </SectionCard>
-        )}
-
         {(hookBeadId || bead) && (
           <SectionCard title="Hooked Work">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <StatusBadge status={bead?.status} />
               {bead?.issueType && <Badge variant="outline">{bead.issueType}</Badge>}
               {typeof bead?.priority === "number" && (
@@ -236,6 +308,27 @@ const GcContextSidebar = memo(function GcContextSidebar({
             <ContextRow label="Assignee" value={bead?.assignee} />
             <ContextRow label="Formula Ref" value={bead?.ref ?? hookFormula} mono />
             {bead?.description && <ContextRow label="Description" value={bead.description} />}
+          </SectionCard>
+        )}
+
+        <SectionCard title="Runtime Env">
+          <div className="text-[11px] leading-snug text-muted-foreground">
+            GC env forwarded to the provider process. Sensitive values are redacted.
+          </div>
+          <RuntimeEnvRows rows={runtimeEnvRows} />
+        </SectionCard>
+
+        {(gcMeta.groupKind ||
+          gcMeta.groupId ||
+          gcMeta.groupLabel ||
+          gcMeta.agentQualified ||
+          gcMeta.agentLabel) && (
+          <SectionCard title="Folder">
+            <ContextRow label="Kind" value={gcMeta.groupKind} />
+            <ContextRow label="Group ID" value={gcMeta.groupId} mono />
+            <ContextRow label="Label" value={gcMeta.groupLabel} />
+            <ContextRow label="Qualified Agent" value={gcMeta.agentQualified} />
+            <ContextRow label="Agent Label" value={gcMeta.agentLabel} />
           </SectionCard>
         )}
 
@@ -259,7 +352,7 @@ const GcContextSidebar = memo(function GcContextSidebar({
                   <button
                     key={child.id}
                     type="button"
-                    className="flex items-center justify-between rounded-lg px-2.5 py-2 text-left text-[12px] hover:bg-background/70"
+                    className="flex items-center justify-between rounded-lg px-2 py-1.5 text-left text-[12px] hover:bg-background/70"
                     onClick={() => onSelectWorkedBead?.(child.id)}
                   >
                     <span className="min-w-0 truncate">{child.title}</span>
