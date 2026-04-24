@@ -6,6 +6,7 @@ import type {
   ProviderApprovalDecision,
   ProviderInteractionMode,
   ProviderKind,
+  ResolvedKeybindingsConfig,
   RuntimeMode,
   ScopedThreadRef,
   ServerProvider,
@@ -412,7 +413,9 @@ export interface ChatComposerProps {
   // Misc
   resolvedTheme: "light" | "dark";
   settings: UnifiedSettings;
+  keybindings: ResolvedKeybindingsConfig;
   gitCwd: string | null;
+  terminalOpen: boolean;
 
   // Refs the parent needs kept in sync
   promptRef: React.MutableRefObject<string>;
@@ -616,6 +619,7 @@ export const ChatComposer = memo(
         opencode:
           providerStatuses.find((provider) => provider.provider === "opencode")?.models ?? [],
         cursor: providerStatuses.find((provider) => provider.provider === "cursor")?.models ?? [],
+        gc: [],
       }),
       [providerStatuses],
     );

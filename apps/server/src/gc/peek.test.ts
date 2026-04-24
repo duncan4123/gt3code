@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { OrchestrationReadModel } from "@t3tools/contracts";
 
-import { mergeGcPeekHits, previewGcPeekTargets, resolveGcPeekTargets } from "./peek";
+import { mergeGcPeekHits, previewGcPeekTargets, resolveGcPeekTargets } from "./peek.ts";
 
 const modelSelection = {
   provider: "claudeAgent" as const,

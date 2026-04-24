@@ -79,6 +79,7 @@ export type OpenCodeModelSelection = typeof OpenCodeModelSelection.Type;
 export const GcModelSelection = Schema.Struct({
   provider: Schema.Literal("gc"),
   model: TrimmedNonEmptyString,
+  options: Schema.optionalKey(Schema.Undefined),
 });
 export type GcModelSelection = typeof GcModelSelection.Type;
 

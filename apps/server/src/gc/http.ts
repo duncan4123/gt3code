@@ -1,5 +1,5 @@
 import { type GcSidebarLayoutResult, groupThreadsByRigAndAgent } from "@t3tools/contracts";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
 import { ServerAuth } from "../auth/Services/ServerAuth.ts";
@@ -22,7 +22,8 @@ function isLoopbackAddress(value: string): boolean {
 
 const authenticateOwnerSession = Effect.gen(function* () {
   const request = yield* HttpServerRequest.HttpServerRequest;
-  if (request.remoteAddress && isLoopbackAddress(request.remoteAddress.value)) {
+  const remoteAddress = Option.getOrUndefined(request.remoteAddress);
+  if (remoteAddress && isLoopbackAddress(remoteAddress)) {
     return {
       sessionId: "local-gc-sidebar-layout",
       subject: "local-gc-sidebar-layout",

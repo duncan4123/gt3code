@@ -132,8 +132,12 @@ export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
     },
     gc: {
       getConfig: rpcClient.gc.getConfig,
+      start: rpcClient.gc.start,
       findThreadBinding: rpcClient.gc.findThreadBinding,
       getThreadContext: rpcClient.gc.getThreadContext,
+      submitSession: rpcClient.gc.submitSession,
+      stopSession: rpcClient.gc.stopSession,
+      respondToPending: rpcClient.gc.respondToPending,
       setAgentSuspended: rpcClient.gc.setAgentSuspended,
       setAgentMaxActiveSessions: rpcClient.gc.setAgentMaxActiveSessions,
       setAgentMinActiveSessions: rpcClient.gc.setAgentMinActiveSessions,
@@ -141,6 +145,7 @@ export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
       setAgentSessionMode: rpcClient.gc.setAgentSessionMode,
       setCitySuspended: rpcClient.gc.setCitySuspended,
       setRigSuspended: rpcClient.gc.setRigSuspended,
+      addRig: rpcClient.gc.addRig,
     },
   };
 }

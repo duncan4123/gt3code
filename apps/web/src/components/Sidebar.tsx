@@ -4,6 +4,8 @@ import {
   ChevronRightIcon,
   CloudIcon,
   GitPullRequestIcon,
+  LoaderCircleIcon,
+  PlayIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
@@ -2803,6 +2805,7 @@ interface SidebarProjectsContentProps {
   commandPaletteShortcutLabel: string | null;
   threadJumpLabelByKey: ReadonlyMap<string, string>;
   gcConfig: GcConfigResult | null;
+  gcStartInFlight: boolean;
   gcAgentMutationsInFlight: ReadonlySet<string>;
   gcAgentStartsInFlight: ReadonlySet<string>;
   gcRigMutationsInFlight: ReadonlySet<string>;
@@ -2819,6 +2822,7 @@ interface SidebarProjectsContentProps {
   attachProjectListAutoAnimateRef: (node: HTMLElement | null) => void;
   projectsLength: number;
   navigateToThread: (threadRef: ScopedThreadRef) => void;
+  onStartGc: () => void;
   onToggleGcRigSuspended: (
     rig: string,
     suspended: boolean,
@@ -2885,6 +2889,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     commandPaletteShortcutLabel,
     threadJumpLabelByKey,
     gcConfig,
+    gcStartInFlight,
     gcAgentMutationsInFlight,
     gcAgentStartsInFlight,
     gcRigMutationsInFlight,
@@ -2901,6 +2906,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     attachProjectListAutoAnimateRef,
     projectsLength,
     navigateToThread,
+    onStartGc,
     onToggleGcRigSuspended,
     onToggleGcCitySuspended,
     onToggleGcAgentSuspended,
@@ -2991,6 +2997,30 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               onThreadSortOrderChange={handleThreadSortOrderChange}
               onProjectGroupingModeChange={handleProjectGroupingModeChange}
             />
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Start Gas City"
+                    data-testid="sidebar-start-gc-trigger"
+                    disabled={gcStartInFlight}
+                    className="inline-flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 hover:text-emerald-800 disabled:cursor-wait disabled:opacity-60 dark:text-emerald-300"
+                    onClick={onStartGc}
+                  />
+                }
+              >
+                {gcStartInFlight ? (
+                  <LoaderCircleIcon className="size-3 animate-spin" />
+                ) : (
+                  <PlayIcon className="size-3" />
+                )}
+                <span>GC</span>
+              </TooltipTrigger>
+              <TooltipPopup side="right">
+                {gcConfig ? "Ensure bundled Gas City is running" : "Start bundled Gas City"}
+              </TooltipPopup>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -3162,6 +3192,7 @@ export default function Sidebar() {
   const suppressProjectClickForContextMenuRef = useRef(false);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
   const [gcConfig, setGcConfig] = useState<GcConfigResult | null>(null);
+  const [gcStartInFlight, setGcStartInFlight] = useState(false);
   const [gcAgentActionStateByAgent, setGcAgentActionStateByAgent] = useState<
     ReadonlyMap<string, GcAgentActionState>
   >(() => new Map());
@@ -3248,6 +3279,42 @@ export default function Sidebar() {
     setGcConfig(config);
     return config;
   }, []);
+
+  const handleStartGc = useCallback(async () => {
+    const api = readLocalApi();
+    if (!api?.gc?.start) {
+      return;
+    }
+    const toastId = toastManager.add({
+      type: "loading",
+      title: "Starting Gas City",
+      description: "Starting the bundled supervisor and loading the packaged city.",
+      timeout: 0,
+    });
+    setGcStartInFlight(true);
+    try {
+      const config = await api.gc.start({});
+      setGcConfig(config);
+      toastManager.update(toastId, {
+        type: "success",
+        title: "Gas City started",
+        description: "The bundled city is running and ready for project rigs.",
+        timeout: 0,
+        data: {
+          dismissAfterVisibleMs: 8_000,
+        },
+      });
+    } catch (error) {
+      toastManager.update(toastId, {
+        type: "error",
+        title: "Failed to start Gas City",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
+      void refreshGcConfig().catch(() => undefined);
+    } finally {
+      setGcStartInFlight(false);
+    }
+  }, [refreshGcConfig]);
 
   const waitForAgentStart = useCallback(
     async (
@@ -4753,6 +4820,7 @@ export default function Sidebar() {
             commandPaletteShortcutLabel={commandPaletteShortcutLabel}
             threadJumpLabelByKey={visibleThreadJumpLabelByKey}
             gcConfig={gcConfig}
+            gcStartInFlight={gcStartInFlight}
             gcAgentMutationsInFlight={gcAgentMutationsInFlight}
             gcAgentStartsInFlight={gcAgentStartsInFlight}
             gcRigMutationsInFlight={gcRigMutationsInFlight}
@@ -4769,6 +4837,7 @@ export default function Sidebar() {
             attachProjectListAutoAnimateRef={attachProjectListAutoAnimateRef}
             projectsLength={projects.length}
             navigateToThread={navigateToThread}
+            onStartGc={handleStartGc}
             onToggleGcCitySuspended={handleGcCitySuspendedChange}
             onToggleGcRigSuspended={handleGcRigSuspendedChange}
             onToggleGcAgentSuspended={handleGcAgentSuspendedChange}

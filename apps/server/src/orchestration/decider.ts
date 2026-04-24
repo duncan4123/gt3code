@@ -317,8 +317,8 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         threadId: command.threadId,
       });
       const customMetadata = buildStampedGcMetadataUpdate({
-        existingMetadata: thread.customMetadata,
-        incomingMetadata: command.customMetadata,
+        ...(thread.customMetadata ? { existingMetadata: thread.customMetadata } : {}),
+        ...(command.customMetadata ? { incomingMetadata: command.customMetadata } : {}),
       });
       const occurredAt = nowIso();
       return {

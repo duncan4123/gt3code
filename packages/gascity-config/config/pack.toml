@@ -1,0 +1,49 @@
+[pack]
+name = "gc"
+schema = 2
+
+[imports.gastown]
+source = "packs/gastown"
+
+[providers.codex]
+base = "builtin:codex"
+command = "codex"
+ready_delay_ms = 0
+
+[providers.codex.env]
+GC_MODEL = "gpt-5.4"
+
+[agent_defaults]
+model = "gpt-5.4"
+
+[patches]
+
+[[patches.agent]]
+dir = ""
+name = "deacon"
+suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = ""
+name = "boot"
+suspended = false
+provider = "codex"
+env = { GC_MODEL = "gpt-5.4-mini" }
+
+[[patches.agent]]
+dir = ""
+name = "dog"
+suspended = false
+provider = "codex"
+env = { GC_MODEL = "gpt-5.4-mini" }
+
+[[patches.agent]]
+dir = ""
+name = "mayor"
+suspended = false
+provider = "codex"
+
+[[patches.named_session]]
+template = "mayor"
+mode = "always"

@@ -11,6 +11,7 @@ import type {
   OrchestrationProject,
   OrchestrationProjectShell,
   OrchestrationReadModel,
+  OrchestrationSearchThreadMessagesResult,
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadShell,
@@ -114,9 +115,14 @@ export interface ProjectionSnapshotQueryShape {
   /**
    * Read the newest active thread binding for a GC session name.
    */
-  readonly getActiveThreadBindingByGcSessionName: (
+  readonly getActiveThreadBindingByGcSessionName?: (
     sessionName: string,
   ) => Effect.Effect<Option.Option<ProjectionGcThreadBinding>, ProjectionRepositoryError>;
+
+  readonly searchThreadMessages?: (
+    query: string,
+    limit: number,
+  ) => Effect.Effect<OrchestrationSearchThreadMessagesResult, ProjectionRepositoryError>;
 }
 
 /**

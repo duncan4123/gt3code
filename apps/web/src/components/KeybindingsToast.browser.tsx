@@ -107,6 +107,7 @@ function createBaseServerConfig(): ServerConfig {
           serverPassword: "",
           customModels: [],
         },
+        gc: DEFAULT_SERVER_SETTINGS.providers.gc,
       },
     },
   };

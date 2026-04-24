@@ -33,7 +33,7 @@ export const PROVIDER_OPTIONS: Array<{
   { value: "claudeAgent", label: "Claude", available: true },
   { value: "opencode", label: "OpenCode", available: true },
   { value: "cursor", label: "Cursor", available: true },
-  { value: "gc", label: "Gas City", available: true },
+  { value: "gc", label: "Gas City", available: false },
 ];
 
 export interface WorkLogEntry {

@@ -108,6 +108,7 @@ import type { ChatComposerHandle } from "./chat/ChatComposer";
 
 const EMPTY_BROWSE_ENTRIES: FilesystemBrowseResult["entries"] = [];
 const BROWSE_STALE_TIME_MS = 30_000;
+type AddProjectTargetKind = "project" | "rig";
 
 function getLocalFileManagerName(platform: string): string {
   if (isMacPlatform(platform)) {
@@ -225,6 +226,7 @@ function OpenCommandPaletteDialog() {
   const [addProjectEnvironmentId, setAddProjectEnvironmentId] = useState<EnvironmentId | null>(
     null,
   );
+  const [addProjectTargetKind, setAddProjectTargetKind] = useState<AddProjectTargetKind>("project");
   const [isPickingProjectFolder, setIsPickingProjectFolder] = useState(false);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const primaryEnvironmentLabel = readPrimaryEnvironmentDescriptor()?.label ?? null;
@@ -557,7 +559,8 @@ function OpenCommandPaletteDialog() {
   }
 
   const startAddProjectBrowse = useCallback(
-    (environmentId: EnvironmentId): void => {
+    (environmentId: EnvironmentId, targetKind: AddProjectTargetKind = "project"): void => {
+      setAddProjectTargetKind(targetKind);
       setAddProjectEnvironmentId(environmentId);
       pushPaletteView({
         addonIcon: <FolderPlusIcon className={ADDON_ICON_CLASS} />,
@@ -578,7 +581,7 @@ function OpenCommandPaletteDialog() {
       icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
       keepOpen: true,
       run: async () => {
-        startAddProjectBrowse(option.environmentId);
+        startAddProjectBrowse(option.environmentId, "project");
       },
     }),
   );
@@ -595,6 +598,52 @@ function OpenCommandPaletteDialog() {
   );
 
   const openAddProjectFlow = useCallback(() => {
+    if (readLocalApi()?.gc?.addRig && defaultAddProjectEnvironmentId) {
+      pushPaletteView({
+        addonIcon: <FolderPlusIcon className={ADDON_ICON_CLASS} />,
+        groups: [
+          {
+            value: "add-target",
+            label: "Add",
+            items: [
+              {
+                kind: "action",
+                value: "action:add-project-target:project",
+                searchTerms: ["project", "t3code", "thread", "workspace"],
+                title: "Add T3 project",
+                description: "Add the folder to T3Code projects.",
+                icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
+                keepOpen: true,
+                run: async () => {
+                  if (addProjectEnvironmentOptions.length > 1) {
+                    pushPaletteView({
+                      addonIcon: <FolderPlusIcon className={ADDON_ICON_CLASS} />,
+                      groups: addProjectEnvironmentGroups,
+                    });
+                    return;
+                  }
+                  startAddProjectBrowse(defaultAddProjectEnvironmentId, "project");
+                },
+              },
+              {
+                kind: "action",
+                value: "action:add-project-target:rig",
+                searchTerms: ["rig", "gascity", "gc", "gastown"],
+                title: "Add Gas City rig",
+                description: "Register the folder as a suspended Gastown rig.",
+                icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
+                keepOpen: true,
+                run: async () => {
+                  startAddProjectBrowse(defaultAddProjectEnvironmentId, "rig");
+                },
+              },
+            ],
+          },
+        ],
+      });
+      return;
+    }
+
     if (addProjectEnvironmentOptions.length > 1) {
       pushPaletteView({
         addonIcon: <FolderPlusIcon className={ADDON_ICON_CLASS} />,
@@ -615,10 +664,11 @@ function OpenCommandPaletteDialog() {
       return;
     }
 
-    startAddProjectBrowse(environmentId);
+    startAddProjectBrowse(environmentId, "project");
   }, [
     addProjectEnvironmentGroups,
     addProjectEnvironmentOptions.length,
+    addProjectEnvironmentOptions,
     defaultAddProjectEnvironmentId,
     startAddProjectBrowse,
   ]);
@@ -750,6 +800,44 @@ function OpenCommandPaletteDialog() {
       const cwd = resolveProjectPathForDispatch(rawCwd, currentProjectCwdForBrowse);
       if (cwd.length === 0) return;
 
+      if (addProjectTargetKind === "rig") {
+        const localApi = readLocalApi();
+        if (!localApi?.gc?.addRig) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to add rig",
+              description: "Gas City controls are not available.",
+            }),
+          );
+          return;
+        }
+        try {
+          await localApi.gc.addRig({
+            path: cwd,
+            startSuspended: true,
+            includeGastown: true,
+          });
+          toastManager.add(
+            stackedThreadToast({
+              type: "success",
+              title: "Rig added",
+              description: `${cwd} was added as a suspended Gastown rig.`,
+            }),
+          );
+          setOpen(false);
+        } catch (error) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to add rig",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+        }
+        return;
+      }
+
       const existing = findProjectByPath(
         projects.filter((project) => project.environmentId === browseEnvironmentId),
         cwd,
@@ -808,6 +896,7 @@ function OpenCommandPaletteDialog() {
     [
       browseEnvironmentId,
       browseEnvironmentPlatform,
+      addProjectTargetKind,
       currentProjectCwdForBrowse,
       handleNewThread,
       navigate,

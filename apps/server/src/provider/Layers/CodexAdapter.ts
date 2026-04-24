@@ -622,8 +622,11 @@ function mapItemLifecycle(
 
   const itemType =
     event.method === "rawResponseItem/completed"
-      ? toCanonicalItemTypeFromRawResponseItem(source.type ?? source.kind, asString(source.role))
-      : toCanonicalItemType(source.type ?? source.kind);
+      ? toCanonicalItemTypeFromRawResponseItem(
+          asString(source.type) ?? asString(source.kind),
+          asString(source.role),
+        )
+      : toCanonicalItemType(asString(source.type) ?? asString(source.kind));
   if (itemType === "unknown" && lifecycle !== "item.updated") {
     return undefined;
   }
@@ -838,7 +841,11 @@ function mapToRuntimeEvents(
 
   if (event.method === "thread/tokenUsage/updated") {
     const tokenUsage = asObject(payload?.tokenUsage);
-    const normalizedUsage = normalizeCodexTokenUsage(tokenUsage ?? event.payload);
+    const normalizedUsage = tokenUsage
+      ? normalizeCodexTokenUsage(
+          tokenUsage as EffectCodexSchema.V2ThreadTokenUsageUpdatedNotification["tokenUsage"],
+        )
+      : undefined;
     if (!normalizedUsage) {
       return [];
     }
@@ -878,7 +885,9 @@ function mapToRuntimeEvents(
         ...runtimeEventBase(event, canonicalThreadId),
         type: "turn.completed",
         payload: {
-          state: toTurnStatus(turn?.status),
+          state: toTurnStatus(
+            turn?.status as EffectCodexSchema.V2TurnCompletedNotification["turn"]["status"],
+          ),
           ...(asString(turn?.stopReason) ? { stopReason: asString(turn?.stopReason) } : {}),
           ...(turn?.usage !== undefined ? { usage: turn.usage } : {}),
           ...(asObject(turn?.modelUsage) ? { modelUsage: asObject(turn?.modelUsage) } : {}),
@@ -961,7 +970,9 @@ function mapToRuntimeEvents(
     if (!source) {
       return [];
     }
-    const itemType = source ? toCanonicalItemType(source.type ?? source.kind) : "unknown";
+    const itemType = source
+      ? toCanonicalItemType(asString(source.type) ?? asString(source.kind))
+      : "unknown";
     if (itemType === "plan") {
       const detail = itemDetail(source, payload ?? {});
       if (!detail) {
@@ -1680,11 +1691,11 @@ const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       attachment,
     });
     if (!attachmentPath) {
-      return yield* toRequestError(
-        input.threadId,
-        "turn/start",
-        new Error(`Invalid attachment id '${attachment.id}'.`),
-      );
+      return yield* new ProviderAdapterRequestError({
+        provider: PROVIDER,
+        method: "turn/start",
+        detail: `Invalid attachment id '${attachment.id}'.`,
+      });
     }
     const bytes = yield* fileSystem.readFile(attachmentPath).pipe(
       Effect.mapError(

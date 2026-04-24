@@ -63,6 +63,7 @@ import {
   GitStatusBroadcaster,
   type GitStatusBroadcasterShape,
 } from "./git/Services/GitStatusBroadcaster.ts";
+import { GcApiClient, type GcApiClientShape } from "./gc/Services/GcApiClient.ts";
 import { Keybindings, type KeybindingsShape } from "./keybindings.ts";
 import { Open, type OpenShape } from "./open.ts";
 import {
@@ -335,6 +336,7 @@ const buildAppUnderTest = (options?: {
     serverRuntimeStartup?: Partial<ServerRuntimeStartupShape>;
     serverEnvironment?: Partial<ServerEnvironmentShape>;
     repositoryIdentityResolver?: Partial<RepositoryIdentityResolverShape>;
+    gcApiClient?: Partial<GcApiClientShape>;
   };
 }) =>
   Effect.gen(function* () {
@@ -537,6 +539,35 @@ const buildAppUnderTest = (options?: {
         Layer.mock(RepositoryIdentityResolver)({
           resolve: () => Effect.succeed(null),
           ...options?.layers?.repositoryIdentityResolver,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(GcApiClient)({
+          getBead: () => Effect.succeed(null),
+          getConvoy: () => Effect.succeed(null),
+          getFormula: () => Effect.succeed(null),
+          getConfig: () => Effect.succeed(null),
+          start: Effect.void,
+          submitSession: () =>
+            Effect.succeed({
+              id: "test-session",
+              status: "ready",
+              queued: false,
+              intent: "submit",
+            }),
+          stopSession: () => Effect.succeed({ id: "test-session", status: "stopped" }),
+          respondToPending: () => Effect.succeed({ id: "test-session", status: "ready" }),
+          setAgentSuspended: () => Effect.void,
+          setAgentMaxActiveSessions: () => Effect.void,
+          setAgentMinActiveSessions: () => Effect.void,
+          setAgentWakeMode: () => Effect.void,
+          setAgentSessionMode: () => Effect.void,
+          setCitySuspended: () => Effect.void,
+          setRigSuspended: () => Effect.void,
+          addRig: () => Effect.void,
+          streamEvents: Stream.empty,
+          isAvailable: Effect.succeed(false),
+          ...options?.layers?.gcApiClient,
         }),
       ),
       Layer.provideMerge(authTestLayer),

@@ -19,6 +19,7 @@ import { ProviderRegistry, type ProviderRegistryShape } from "../Services/Provid
 import { OpenCodeRuntimeLive } from "../opencodeRuntime.ts";
 import {
   hydrateCachedProvider,
+  isProviderStatusCacheId,
   PROVIDER_CACHE_IDS,
   orderProviderSnapshots,
   readProviderStatusCache,
@@ -174,15 +175,24 @@ const ProviderRegistryLiveBase = Layer.effect(
     const providersRef = yield* Ref.make<ReadonlyArray<ServerProvider>>(cachedProviders);
 
     const persistProvider = (provider: ServerProvider) =>
-      writeProviderStatusCache({
-        filePath: cachePathByProvider.get(provider.provider)!,
-        provider,
-      }).pipe(
-        Effect.provideService(FileSystem.FileSystem, fileSystem),
-        Effect.provideService(Path.Path, path),
-        Effect.tapError(Effect.logError),
-        Effect.ignore,
-      );
+      Effect.gen(function* () {
+        if (!isProviderStatusCacheId(provider.provider)) {
+          return;
+        }
+        const filePath = cachePathByProvider.get(provider.provider);
+        if (!filePath) {
+          return;
+        }
+        yield* writeProviderStatusCache({
+          filePath,
+          provider,
+        }).pipe(
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, path),
+          Effect.tapError(Effect.logError),
+          Effect.ignore,
+        );
+      });
 
     const upsertProviders = Effect.fn("upsertProviders")(function* (
       nextProviders: ReadonlyArray<ServerProvider>,

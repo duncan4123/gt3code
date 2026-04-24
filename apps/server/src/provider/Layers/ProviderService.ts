@@ -659,9 +659,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           upsertSessionBinding(session, session.threadId, {
             lastRuntimeEvent: "provider.listSessions",
             lastRuntimeEventAt: listedAt,
-          }),
+          }).pipe(Effect.ignore),
         { discard: true },
-      ).pipe(Effect.asVoid);
+      );
       const persistedBindings = yield* directory.listThreadIds().pipe(
         Effect.flatMap((threadIds) =>
           Effect.forEach(

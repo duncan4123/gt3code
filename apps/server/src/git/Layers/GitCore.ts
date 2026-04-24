@@ -2185,6 +2185,7 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     pullCurrentBranch,
     readRangeContext,
     readConfigValue,
+    refreshStatusUpstreamIfStale,
     isInsideWorkTree,
     listWorkspaceFiles,
     filterIgnoredPaths,

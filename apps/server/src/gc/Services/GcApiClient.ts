@@ -76,6 +76,7 @@ export interface GcApiClientShape {
   readonly getConvoy: (id: string) => Effect.Effect<GcConvoy | null>;
   readonly getFormula: (name: string) => Effect.Effect<GcFormula | null>;
   readonly getConfig: () => Effect.Effect<GcConfigResult | null>;
+  readonly start: Effect.Effect<void, Error>;
   readonly submitSession: (
     sessionName: string,
     message: string,
@@ -109,6 +110,12 @@ export interface GcApiClientShape {
   ) => Effect.Effect<void, Error>;
   readonly setCitySuspended: (suspended: boolean) => Effect.Effect<void, Error>;
   readonly setRigSuspended: (name: string, suspended: boolean) => Effect.Effect<void, Error>;
+  readonly addRig: (input: {
+    readonly path: string;
+    readonly name?: string;
+    readonly startSuspended?: boolean;
+    readonly includeGastown?: boolean;
+  }) => Effect.Effect<void, Error>;
   readonly streamEvents: Stream.Stream<GcEvent>;
   readonly isAvailable: Effect.Effect<boolean>;
 }

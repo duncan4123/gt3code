@@ -82,10 +82,14 @@ import {
   GcFindThreadBindingError,
   GcFindThreadBindingInput,
   GcFindThreadBindingResult,
+  GcAddRigError,
+  GcAddRigInput,
   GcGetConfigError,
   GcGetConfigInput,
   GcGetThreadContextError,
   GcGetThreadContextInput,
+  GcStartError,
+  GcStartInput,
   GcRespondToPendingError,
   GcRespondToPendingInput,
   GcSessionActionResult,
@@ -155,6 +159,7 @@ export const WS_METHODS = {
 
   // Gas City
   gcGetConfig: "gc.getConfig",
+  gcStart: "gc.start",
   gcFindThreadBinding: "gc.findThreadBinding",
   gcGetThreadContext: "gc.getThreadContext",
   gcSubmitSession: "gc.submitSession",
@@ -167,6 +172,7 @@ export const WS_METHODS = {
   gcSetAgentSessionMode: "gc.setAgentSessionMode",
   gcSetCitySuspended: "gc.setCitySuspended",
   gcSetRigSuspended: "gc.setRigSuspended",
+  gcAddRig: "gc.addRig",
 
   // Streaming subscriptions
   subscribeGitStatus: "subscribeGitStatus",
@@ -425,6 +431,12 @@ export const WsGcGetConfigRpc = Rpc.make(WS_METHODS.gcGetConfig, {
   error: GcGetConfigError,
 });
 
+export const WsGcStartRpc = Rpc.make(WS_METHODS.gcStart, {
+  payload: GcStartInput,
+  success: GcConfigResult,
+  error: GcStartError,
+});
+
 export const WsGcFindThreadBindingRpc = Rpc.make(WS_METHODS.gcFindThreadBinding, {
   payload: GcFindThreadBindingInput,
   success: GcFindThreadBindingResult,
@@ -485,6 +497,12 @@ export const WsGcSetRigSuspendedRpc = Rpc.make(WS_METHODS.gcSetRigSuspended, {
   error: GcSetRigSuspendedError,
 });
 
+export const WsGcAddRigRpc = Rpc.make(WS_METHODS.gcAddRig, {
+  payload: GcAddRigInput,
+  success: GcConfigResult,
+  error: GcAddRigError,
+});
+
 export const WsGcSetCitySuspendedRpc = Rpc.make(WS_METHODS.gcSetCitySuspended, {
   payload: GcSetCitySuspendedInput,
   success: GcConfigResult,
@@ -538,6 +556,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
   WsGcGetConfigRpc,
+  WsGcStartRpc,
   WsGcFindThreadBindingRpc,
   WsGcGetThreadContextRpc,
   WsGcSubmitSessionRpc,
@@ -550,4 +569,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsGcSetAgentSessionModeRpc,
   WsGcSetCitySuspendedRpc,
   WsGcSetRigSuspendedRpc,
+  WsGcAddRigRpc,
 );

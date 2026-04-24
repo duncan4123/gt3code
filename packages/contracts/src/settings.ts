@@ -112,8 +112,24 @@ export const OpenCodeSettings = Schema.Struct({
   customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
 });
 export type OpenCodeSettings = typeof OpenCodeSettings.Type;
+
+export const DEFAULT_GC_RUNTIME_HOME = "~/.local/state/t3code/gascity/current";
+export const DEFAULT_GC_CITY_PATH = `${DEFAULT_GC_RUNTIME_HOME}/city`;
+export const DEFAULT_GC_BINARY_PATH = `${DEFAULT_GC_RUNTIME_HOME}/bin/gc`;
+export const DEFAULT_GC_API_URL = "http://127.0.0.1:8372";
+
 export const GcSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  runtimeHome: TrimmedString.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_GC_RUNTIME_HOME)),
+  ),
+  cityPath: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_GC_CITY_PATH))),
+  binaryPath: TrimmedString.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_GC_BINARY_PATH)),
+  ),
+  apiUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_GC_API_URL))),
+  cityName: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
 });
 export type GcSettings = typeof GcSettings.Type;
 
@@ -257,6 +273,12 @@ const OpenCodeSettingsPatch = Schema.Struct({
 
 const GcSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
+  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+  runtimeHome: Schema.optionalKey(Schema.String),
+  cityPath: Schema.optionalKey(Schema.String),
+  binaryPath: Schema.optionalKey(Schema.String),
+  apiUrl: Schema.optionalKey(Schema.String),
+  cityName: Schema.optionalKey(Schema.String),
 });
 
 export const ServerSettingsPatch = Schema.Struct({

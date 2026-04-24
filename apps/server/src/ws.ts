@@ -19,9 +19,13 @@ import {
   ProjectWriteFileError,
   OrchestrationReplayEventsError,
   FilesystemBrowseError,
+  ProjectId,
   GcGetConfigError,
   GcFindThreadBindingError,
   GcGetThreadContextError,
+  GcAddRigError,
+  GcStartError,
+  GcRespondToPendingError,
   GcSetAgentMaxActiveSessionsError,
   GcSetAgentMinActiveSessionsError,
   GcSetAgentSessionModeError,
@@ -29,6 +33,9 @@ import {
   GcSetAgentWakeModeError,
   GcSetCitySuspendedError,
   GcSetRigSuspendedError,
+  GcStopSessionError,
+  GcSubmitSessionError,
+  parseGcMeta,
   ThreadId,
   type TerminalEvent,
   WS_METHODS,
@@ -56,7 +63,7 @@ import {
 import { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents.ts";
 import { ServerRuntimeStartup } from "./serverRuntimeStartup.ts";
-import { ServerSettingsService } from "./serverSettings.ts";
+import { ServerSettingsLive, ServerSettingsService } from "./serverSettings.ts";
 import { TerminalManager } from "./terminal/Services/Manager.ts";
 import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem.ts";
@@ -226,7 +233,8 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const rewriteAliasedProjectIds = (command: OrchestrationCommand) =>
         Effect.gen(function* () {
           const aliases = yield* Ref.get(projectAliasMap);
-          const resolveProjectId = (projectId: string) => aliases.get(projectId) ?? projectId;
+          const resolveProjectId = (projectId: ProjectId): ProjectId =>
+            ProjectId.make(aliases.get(projectId) ?? projectId);
 
           switch (command.type) {
             case "project.create":
@@ -574,15 +582,14 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           }
 
           const effectiveCommand = yield* rewriteAliasedProjectIds(normalizedCommand);
-          return yield* effectiveCommand.type === "thread.turn.start" && effectiveCommand.bootstrap
-            ? dispatchBootstrapTurnStart(effectiveCommand)
-            : orchestrationEngine
-                .dispatch(effectiveCommand)
-                .pipe(
-                  Effect.mapError((cause) =>
-                    toDispatchCommandError(cause, "Failed to dispatch orchestration command"),
-                  ),
-                );
+          if (effectiveCommand.type === "thread.turn.start" && effectiveCommand.bootstrap) {
+            return yield* dispatchBootstrapTurnStart(effectiveCommand);
+          }
+          return yield* orchestrationEngine.dispatch(effectiveCommand).pipe(
+            Effect.mapError((cause) =>
+              toDispatchCommandError(cause, "Failed to dispatch orchestration command"),
+            ),
+          );
         });
 
         return startup
@@ -764,7 +771,10 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         [ORCHESTRATION_WS_METHODS.searchThreadMessages]: (input) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.searchThreadMessages,
-            projectionSnapshotQuery.searchThreadMessages(input.query, input.limit).pipe(
+            (projectionSnapshotQuery.searchThreadMessages
+              ? projectionSnapshotQuery.searchThreadMessages(input.query, input.limit)
+              : Effect.succeed({ results: [] })
+            ).pipe(
               Effect.mapError(
                 (cause) =>
                   new OrchestrationSearchThreadMessagesError({
@@ -1187,12 +1197,34 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ),
             { "rpc.aggregate": "gc" },
           ),
+        [WS_METHODS.gcStart]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.gcStart,
+            Effect.gen(function* () {
+              const gcApi = yield* GcApiClient;
+              yield* gcApi.start;
+              const config = yield* gcApi.getConfig();
+              if (!config) {
+                return yield* Effect.fail(new Error("GC started, but config is unavailable"));
+              }
+              return config;
+            }).pipe(
+              Effect.mapError(
+                (error) =>
+                  new GcStartError({
+                    message: error instanceof Error ? error.message : "Failed to start GC",
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "gc" },
+          ),
         [WS_METHODS.gcFindThreadBinding]: ({ sessionName }) =>
           observeRpcEffect(
             WS_METHODS.gcFindThreadBinding,
             Effect.gen(function* () {
-              const binding =
-                yield* projectionSnapshotQuery.getActiveThreadBindingByGcSessionName(sessionName);
+              const binding = projectionSnapshotQuery.getActiveThreadBindingByGcSessionName
+                ? yield* projectionSnapshotQuery.getActiveThreadBindingByGcSessionName(sessionName)
+                : Option.none();
               if (Option.isNone(binding)) {
                 return null;
               }
@@ -1229,6 +1261,79 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 (error) =>
                   new GcGetThreadContextError({
                     message: error instanceof Error ? error.message : "Failed to get GC context",
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "gc" },
+          ),
+        [WS_METHODS.gcSubmitSession]: ({ threadId, message }) =>
+          observeRpcEffect(
+            WS_METHODS.gcSubmitSession,
+            Effect.gen(function* () {
+              const gcApi = yield* GcApiClient;
+              const snapshot = yield* projectionSnapshotQuery.getSnapshot();
+              const thread = snapshot.threads.find((candidate) => candidate.id === threadId);
+              const sessionName = parseGcMeta(thread?.customMetadata).sessionName;
+              if (!sessionName) {
+                return yield* Effect.fail(new Error("GC session binding unavailable"));
+              }
+              return yield* gcApi.submitSession(sessionName, message);
+            }).pipe(
+              Effect.mapError(
+                (error) =>
+                  new GcSubmitSessionError({
+                    message: error instanceof Error ? error.message : "Failed to submit GC session",
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "gc" },
+          ),
+        [WS_METHODS.gcStopSession]: ({ threadId }) =>
+          observeRpcEffect(
+            WS_METHODS.gcStopSession,
+            Effect.gen(function* () {
+              const gcApi = yield* GcApiClient;
+              const snapshot = yield* projectionSnapshotQuery.getSnapshot();
+              const thread = snapshot.threads.find((candidate) => candidate.id === threadId);
+              const sessionName = parseGcMeta(thread?.customMetadata).sessionName;
+              if (!sessionName) {
+                return yield* Effect.fail(new Error("GC session binding unavailable"));
+              }
+              return yield* gcApi.stopSession(sessionName);
+            }).pipe(
+              Effect.mapError(
+                (error) =>
+                  new GcStopSessionError({
+                    message: error instanceof Error ? error.message : "Failed to stop GC session",
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "gc" },
+          ),
+        [WS_METHODS.gcRespondToPending]: ({ threadId, action, requestId, text, metadata }) =>
+          observeRpcEffect(
+            WS_METHODS.gcRespondToPending,
+            Effect.gen(function* () {
+              const gcApi = yield* GcApiClient;
+              const snapshot = yield* projectionSnapshotQuery.getSnapshot();
+              const thread = snapshot.threads.find((candidate) => candidate.id === threadId);
+              const sessionName = parseGcMeta(thread?.customMetadata).sessionName;
+              if (!sessionName) {
+                return yield* Effect.fail(new Error("GC session binding unavailable"));
+              }
+              const response = {
+                action,
+                ...(requestId !== undefined ? { requestId } : {}),
+                ...(text !== undefined ? { text } : {}),
+                ...(metadata !== undefined ? { metadata } : {}),
+              };
+              return yield* gcApi.respondToPending(sessionName, response);
+            }).pipe(
+              Effect.mapError(
+                (error) =>
+                  new GcRespondToPendingError({
+                    message:
+                      error instanceof Error ? error.message : "Failed to respond to GC request",
                   }),
               ),
             ),
@@ -1382,6 +1487,32 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ),
             { "rpc.aggregate": "gc" },
           ),
+        [WS_METHODS.gcAddRig]: ({ path, name, startSuspended, includeGastown }) =>
+          observeRpcEffect(
+            WS_METHODS.gcAddRig,
+            Effect.gen(function* () {
+              const gcApi = yield* GcApiClient;
+              yield* gcApi.addRig({
+                path,
+                ...(name !== undefined ? { name } : {}),
+                ...(startSuspended !== undefined ? { startSuspended } : {}),
+                ...(includeGastown !== undefined ? { includeGastown } : {}),
+              });
+              const config = yield* gcApi.getConfig();
+              if (!config) {
+                return yield* Effect.fail(new Error("GC config unavailable after rig add"));
+              }
+              return config;
+            }).pipe(
+              Effect.mapError(
+                (error) =>
+                  new GcAddRigError({
+                    message: error instanceof Error ? error.message : "Failed to add GC rig",
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "gc" },
+          ),
         [WS_METHODS.gcSetCitySuspended]: ({ suspended }) =>
           observeRpcEffect(
             WS_METHODS.gcSetCitySuspended,
@@ -1428,8 +1559,12 @@ export const websocketRpcRouteLayer = Layer.unwrap(
           Effect.provide(
             makeWsRpcLayer(session.sessionId).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
-              Layer.provideMerge(GcApiClientLive),
-              Layer.provideMerge(GcContextProviderLive.pipe(Layer.provide(GcApiClientLive))),
+              Layer.provideMerge(GcApiClientLive.pipe(Layer.provide(ServerSettingsLive))),
+              Layer.provideMerge(
+                GcContextProviderLive.pipe(
+                  Layer.provide(GcApiClientLive.pipe(Layer.provide(ServerSettingsLive))),
+                ),
+              ),
             ),
           ),
         );

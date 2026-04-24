@@ -59,13 +59,25 @@ const makeRoutingTextGeneration = Effect.gen(function* () {
         : provider === "cursor"
           ? cursor
           : codex;
+  const routeModelSelection = (provider: string | undefined): TextGenerationShape =>
+    route(
+      provider === "claudeAgent" ||
+        provider === "opencode" ||
+        provider === "cursor" ||
+        provider === "codex"
+        ? provider
+        : undefined,
+    );
 
   return {
     generateCommitMessage: (input) =>
-      route(input.modelSelection.provider).generateCommitMessage(input),
-    generatePrContent: (input) => route(input.modelSelection.provider).generatePrContent(input),
-    generateBranchName: (input) => route(input.modelSelection.provider).generateBranchName(input),
-    generateThreadTitle: (input) => route(input.modelSelection.provider).generateThreadTitle(input),
+      routeModelSelection(input.modelSelection.provider).generateCommitMessage(input),
+    generatePrContent: (input) =>
+      routeModelSelection(input.modelSelection.provider).generatePrContent(input),
+    generateBranchName: (input) =>
+      routeModelSelection(input.modelSelection.provider).generateBranchName(input),
+    generateThreadTitle: (input) =>
+      routeModelSelection(input.modelSelection.provider).generateThreadTitle(input),
   } satisfies TextGenerationShape;
 });
 

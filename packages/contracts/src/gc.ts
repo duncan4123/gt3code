@@ -823,6 +823,9 @@ export type GcGetThreadContextInput = typeof GcGetThreadContextInput.Type;
 export const GcGetConfigInput = Schema.Struct({});
 export type GcGetConfigInput = typeof GcGetConfigInput.Type;
 
+export const GcStartInput = Schema.Struct({});
+export type GcStartInput = typeof GcStartInput.Type;
+
 export const GcSetAgentSuspendedInput = Schema.Struct({
   agent: Schema.String,
   suspended: Schema.Boolean,
@@ -834,6 +837,14 @@ export const GcSetRigSuspendedInput = Schema.Struct({
   suspended: Schema.Boolean,
 });
 export type GcSetRigSuspendedInput = typeof GcSetRigSuspendedInput.Type;
+
+export const GcAddRigInput = Schema.Struct({
+  path: Schema.String,
+  name: Schema.optional(Schema.String),
+  startSuspended: Schema.optional(Schema.Boolean),
+  includeGastown: Schema.optional(Schema.Boolean),
+});
+export type GcAddRigInput = typeof GcAddRigInput.Type;
 
 export const GcSetCitySuspendedInput = Schema.Struct({
   suspended: Schema.Boolean,
@@ -1025,6 +1036,10 @@ export class GcGetConfigError extends Schema.TaggedErrorClass<GcGetConfigError>(
   { message: Schema.String },
 ) {}
 
+export class GcStartError extends Schema.TaggedErrorClass<GcStartError>()("GcStartError", {
+  message: Schema.String,
+}) {}
+
 export class GcSetAgentSuspendedError extends Schema.TaggedErrorClass<GcSetAgentSuspendedError>()(
   "GcSetAgentSuspendedError",
   { message: Schema.String },
@@ -1034,6 +1049,10 @@ export class GcSetRigSuspendedError extends Schema.TaggedErrorClass<GcSetRigSusp
   "GcSetRigSuspendedError",
   { message: Schema.String },
 ) {}
+
+export class GcAddRigError extends Schema.TaggedErrorClass<GcAddRigError>()("GcAddRigError", {
+  message: Schema.String,
+}) {}
 
 export class GcSetCitySuspendedError extends Schema.TaggedErrorClass<GcSetCitySuspendedError>()(
   "GcSetCitySuspendedError",

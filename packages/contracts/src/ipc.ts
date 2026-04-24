@@ -56,11 +56,13 @@ import type {
 } from "./orchestration.ts";
 import type {
   GcConfigResult,
+  GcAddRigInput,
   GcGetConfigInput,
   GcFindThreadBindingInput,
   GcFindThreadBindingResult,
   GcRespondToPendingInput,
   GcSessionActionResult,
+  GcStartInput,
   GcSetAgentMaxActiveSessionsInput,
   GcSetAgentMinActiveSessionsInput,
   GcSetAgentSessionModeInput,
@@ -269,6 +271,7 @@ export interface LocalApi {
   };
   gc?: {
     getConfig: (input: GcGetConfigInput) => Promise<GcConfigResult>;
+    start: (input: GcStartInput) => Promise<GcConfigResult>;
     findThreadBinding: (input: GcFindThreadBindingInput) => Promise<GcFindThreadBindingResult>;
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
     submitSession: (input: GcSubmitSessionInput) => Promise<GcSubmitSessionResult>;
@@ -281,6 +284,7 @@ export interface LocalApi {
     setAgentSessionMode: (input: GcSetAgentSessionModeInput) => Promise<GcConfigResult>;
     setCitySuspended: (input: GcSetCitySuspendedInput) => Promise<GcConfigResult>;
     setRigSuspended: (input: GcSetRigSuspendedInput) => Promise<GcConfigResult>;
+    addRig: (input: GcAddRigInput) => Promise<GcConfigResult>;
   };
 }
 
@@ -357,6 +361,7 @@ export interface EnvironmentApi {
   };
   gc?: {
     getConfig: (input: GcGetConfigInput) => Promise<GcConfigResult>;
+    start: (input: GcStartInput) => Promise<GcConfigResult>;
     findThreadBinding: (input: GcFindThreadBindingInput) => Promise<GcFindThreadBindingResult>;
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
     submitSession: (input: GcSubmitSessionInput) => Promise<GcSubmitSessionResult>;
@@ -369,5 +374,6 @@ export interface EnvironmentApi {
     setAgentSessionMode: (input: GcSetAgentSessionModeInput) => Promise<GcConfigResult>;
     setCitySuspended: (input: GcSetCitySuspendedInput) => Promise<GcConfigResult>;
     setRigSuspended: (input: GcSetRigSuspendedInput) => Promise<GcConfigResult>;
+    addRig: (input: GcAddRigInput) => Promise<GcConfigResult>;
   };
 }

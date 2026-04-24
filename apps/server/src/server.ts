@@ -242,7 +242,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(RepositoryIdentityResolverLive),
   Layer.provideMerge(ServerEnvironmentLive),
   Layer.provideMerge(AuthLayerLive),
-  Layer.provideMerge(GcApiClientLive),
+  Layer.provideMerge(GcApiClientLive.pipe(Layer.provide(ServerSettingsLive))),
 
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),

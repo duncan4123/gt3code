@@ -1150,7 +1150,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           )
       `;
 
-      const binding = yield* snapshotQuery.getActiveThreadBindingByGcSessionName("t3code--polecat");
+      const binding = yield* snapshotQuery.getActiveThreadBindingByGcSessionName!(
+        "t3code--polecat",
+      );
 
       assert.equal(binding._tag, "Some");
       if (binding._tag === "Some") {
@@ -1237,7 +1239,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       `;
 
       const binding =
-        yield* snapshotQuery.getActiveThreadBindingByGcSessionName("t3code--polecat-env");
+        yield* snapshotQuery.getActiveThreadBindingByGcSessionName!("t3code--polecat-env");
 
       assert.equal(binding._tag, "Some");
       if (binding._tag === "Some") {
@@ -1326,7 +1328,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       `;
 
         const binding =
-          yield* snapshotQuery.getActiveThreadBindingByGcSessionName("t3code--gastown__crew");
+          yield* snapshotQuery.getActiveThreadBindingByGcSessionName!("t3code--gastown__crew");
 
         assert.equal(binding._tag, "Some");
         if (binding._tag === "Some") {

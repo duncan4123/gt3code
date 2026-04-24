@@ -4,18 +4,28 @@ import { Cause, Effect, FileSystem, Schema } from "effect";
 
 import { writeFileStringAtomically } from "../atomicWrite.ts";
 
+export type ProviderStatusCacheId = Exclude<ServerProvider["provider"], "gc">;
+
 export const PROVIDER_CACHE_IDS = [
   "codex",
   "claudeAgent",
   "opencode",
   "cursor",
-] as const satisfies ReadonlyArray<ServerProvider["provider"]>;
+] as const satisfies ReadonlyArray<ProviderStatusCacheId>;
+
+export const isProviderStatusCacheId = (
+  provider: ServerProvider["provider"],
+): provider is ProviderStatusCacheId =>
+  (PROVIDER_CACHE_IDS as ReadonlyArray<ServerProvider["provider"]>).includes(provider);
 
 const decodeProviderStatusCache = Schema.decodeUnknownEffect(
   Schema.fromJsonString(ServerProviderSchema),
 );
 
 const providerOrderRank = (provider: ServerProvider["provider"]): number => {
+  if (!isProviderStatusCacheId(provider)) {
+    return Number.MAX_SAFE_INTEGER;
+  }
   const rank = PROVIDER_CACHE_IDS.indexOf(provider);
   return rank === -1 ? Number.MAX_SAFE_INTEGER : rank;
 };

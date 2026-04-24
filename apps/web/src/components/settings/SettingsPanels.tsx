@@ -102,7 +102,7 @@ const TIMESTAMP_FORMAT_LABELS = {
 } as const;
 
 type InstallProviderSettings = {
-  provider: ProviderKind;
+  provider: Exclude<ProviderKind, "gc">;
   title: string;
   badgeLabel?: string;
   binaryPlaceholder: string;
@@ -115,6 +115,8 @@ type InstallProviderSettings = {
   homePlaceholder?: string;
   homeDescription?: ReactNode;
 };
+
+type ConfigurableProviderKind = (typeof PROVIDER_SETTINGS)[number]["provider"];
 
 const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
   {
@@ -458,6 +460,10 @@ export function useSettingsRestore(onRestored?: () => void) {
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
+  const isGcRuntimeDirty = !Equal.equals(
+    settings.providers.gc,
+    DEFAULT_UNIFIED_SETTINGS.providers.gc,
+  );
   const areProviderSettingsDirty = PROVIDER_SETTINGS.some((providerSettings) => {
     const currentSettings = settings.providers[providerSettings.provider];
     const defaultSettings = DEFAULT_UNIFIED_SETTINGS.providers[providerSettings.provider];
@@ -489,10 +495,12 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Delete confirmation"]
         : []),
       ...(isGitWritingModelDirty ? ["Git writing model"] : []),
+      ...(isGcRuntimeDirty ? ["Gas City runtime"] : []),
       ...(areProviderSettingsDirty ? ["Providers"] : []),
     ],
     [
       areProviderSettingsDirty,
+      isGcRuntimeDirty,
       isGitWritingModelDirty,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
@@ -537,7 +545,9 @@ export function GeneralSettingsPanel() {
   const [openPathErrorByTarget, setOpenPathErrorByTarget] = useState<
     Partial<Record<"keybindings" | "logsDirectory", string | null>>
   >({});
-  const [openProviderDetails, setOpenProviderDetails] = useState<Record<ProviderKind, boolean>>({
+  const [openProviderDetails, setOpenProviderDetails] = useState<
+    Record<ConfigurableProviderKind, boolean>
+  >({
     codex: Boolean(
       settings.providers.codex.binaryPath !== DEFAULT_UNIFIED_SETTINGS.providers.codex.binaryPath ||
       settings.providers.codex.homePath !== DEFAULT_UNIFIED_SETTINGS.providers.codex.homePath ||
@@ -565,7 +575,7 @@ export function GeneralSettingsPanel() {
     ),
   });
   const [customModelInputByProvider, setCustomModelInputByProvider] = useState<
-    Record<ProviderKind, string>
+    Record<ConfigurableProviderKind, string>
   >({
     codex: "",
     claudeAgent: "",
@@ -573,11 +583,13 @@ export function GeneralSettingsPanel() {
     opencode: "",
   });
   const [customModelErrorByProvider, setCustomModelErrorByProvider] = useState<
-    Partial<Record<ProviderKind, string | null>>
+    Partial<Record<ConfigurableProviderKind, string | null>>
   >({});
   const [isRefreshingProviders, setIsRefreshingProviders] = useState(false);
   const refreshingRef = useRef(false);
-  const modelListRefs = useRef<Partial<Record<ProviderKind, HTMLDivElement | null>>>({});
+  const modelListRefs = useRef<Partial<Record<ConfigurableProviderKind, HTMLDivElement | null>>>(
+    {},
+  );
   const refreshProviders = useCallback(() => {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
@@ -603,6 +615,7 @@ export function GeneralSettingsPanel() {
       serverProviders.some((provider) => provider.provider === "cursor"),
   );
   const codexHomePath = settings.providers.codex.homePath;
+  const gcSettings = settings.providers.gc;
   const logsDirectoryPath = observability?.logsDirectoryPath ?? null;
   const diagnosticsDescription = (() => {
     const exports: string[] = [];
@@ -629,6 +642,20 @@ export function GeneralSettingsPanel() {
   const isGitWritingModelDirty = !Equal.equals(
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
+  );
+  const updateGcSettings = useCallback(
+    (patch: Partial<(typeof settings.providers)["gc"]>) => {
+      updateSettings({
+        providers: {
+          ...settings.providers,
+          gc: {
+            ...settings.providers.gc,
+            ...patch,
+          },
+        },
+      });
+    },
+    [settings.providers, updateSettings],
   );
 
   const openInPreferredEditor = useCallback(
@@ -676,7 +703,7 @@ export function GeneralSettingsPanel() {
   const isOpeningLogsDirectory = openingPathByTarget.logsDirectory;
 
   const addCustomModel = useCallback(
-    (provider: ProviderKind) => {
+    (provider: ConfigurableProviderKind) => {
       const customModelInput = customModelInputByProvider[provider];
       const customModels = settings.providers[provider].customModels;
       const normalized = normalizeModelSlug(customModelInput, provider);
@@ -746,7 +773,7 @@ export function GeneralSettingsPanel() {
   );
 
   const removeCustomModel = useCallback(
-    (provider: ProviderKind, slug: string) => {
+    (provider: ConfigurableProviderKind, slug: string) => {
       updateSettings({
         providers: {
           ...settings.providers,
@@ -1597,6 +1624,141 @@ export function GeneralSettingsPanel() {
       </SettingsSection>
 
       <SettingsSection title="Advanced">
+        <SettingsRow
+          title="Gas City runtime home"
+          description="T3CODE_GASCITY_HOME. Bundled GC config, binary, and city state live under this directory."
+          resetAction={
+            gcSettings.runtimeHome !== DEFAULT_UNIFIED_SETTINGS.providers.gc.runtimeHome ? (
+              <SettingResetButton
+                label="Gas City runtime home"
+                onClick={() =>
+                  updateGcSettings({
+                    runtimeHome: DEFAULT_UNIFIED_SETTINGS.providers.gc.runtimeHome,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Input
+              className="w-full sm:w-96"
+              value={gcSettings.runtimeHome}
+              onChange={(event) => updateGcSettings({ runtimeHome: event.target.value })}
+              placeholder={DEFAULT_UNIFIED_SETTINGS.providers.gc.runtimeHome}
+              spellCheck={false}
+              aria-label="Gas City runtime home"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Gas City city path"
+          description="GC_CITY_PATH. This controls where the bundled city .gc and .beads state are created."
+          resetAction={
+            gcSettings.cityPath !== DEFAULT_UNIFIED_SETTINGS.providers.gc.cityPath ? (
+              <SettingResetButton
+                label="Gas City city path"
+                onClick={() =>
+                  updateGcSettings({
+                    cityPath: DEFAULT_UNIFIED_SETTINGS.providers.gc.cityPath,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Input
+              className="w-full sm:w-96"
+              value={gcSettings.cityPath}
+              onChange={(event) => updateGcSettings({ cityPath: event.target.value })}
+              placeholder={DEFAULT_UNIFIED_SETTINGS.providers.gc.cityPath}
+              spellCheck={false}
+              aria-label="Gas City city path"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Gas City binary"
+          description="GC_BIN. T3 uses this binary for bundled city CLI mutations such as adding rigs."
+          resetAction={
+            gcSettings.binaryPath !== DEFAULT_UNIFIED_SETTINGS.providers.gc.binaryPath ? (
+              <SettingResetButton
+                label="Gas City binary"
+                onClick={() =>
+                  updateGcSettings({
+                    binaryPath: DEFAULT_UNIFIED_SETTINGS.providers.gc.binaryPath,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Input
+              className="w-full sm:w-96"
+              value={gcSettings.binaryPath}
+              onChange={(event) => updateGcSettings({ binaryPath: event.target.value })}
+              placeholder={DEFAULT_UNIFIED_SETTINGS.providers.gc.binaryPath}
+              spellCheck={false}
+              aria-label="Gas City binary"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Gas City API URL"
+          description="GC_API_URL. Use the bundled supervisor API unless you intentionally run another city."
+          resetAction={
+            gcSettings.apiUrl !== DEFAULT_UNIFIED_SETTINGS.providers.gc.apiUrl ? (
+              <SettingResetButton
+                label="Gas City API URL"
+                onClick={() =>
+                  updateGcSettings({
+                    apiUrl: DEFAULT_UNIFIED_SETTINGS.providers.gc.apiUrl,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Input
+              className="w-full sm:w-72"
+              value={gcSettings.apiUrl}
+              onChange={(event) => updateGcSettings({ apiUrl: event.target.value })}
+              placeholder={DEFAULT_UNIFIED_SETTINGS.providers.gc.apiUrl}
+              spellCheck={false}
+              aria-label="Gas City API URL"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Gas City name"
+          description="GC_CITY_NAME. Leave empty to let the API resolve the current bundled city."
+          resetAction={
+            gcSettings.cityName !== DEFAULT_UNIFIED_SETTINGS.providers.gc.cityName ? (
+              <SettingResetButton
+                label="Gas City name"
+                onClick={() =>
+                  updateGcSettings({
+                    cityName: DEFAULT_UNIFIED_SETTINGS.providers.gc.cityName,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Input
+              className="w-full sm:w-48"
+              value={gcSettings.cityName}
+              onChange={(event) => updateGcSettings({ cityName: event.target.value })}
+              placeholder="auto"
+              spellCheck={false}
+              aria-label="Gas City name"
+            />
+          }
+        />
+
         <SettingsRow
           title="Keybindings"
           description="Open the persisted `keybindings.json` file to edit advanced bindings directly."

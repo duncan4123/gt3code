@@ -1,0 +1,40 @@
+[workspace]
+name = "t3code"
+suspended = false
+global_fragments = ["command-glossary", "operational-awareness"]
+
+[session]
+provider = "t3bridge"
+
+[daemon]
+formula_v2 = true
+graph_workflows = true
+patrol_interval = "30s"
+max_restarts = 5
+restart_window = "1h"
+shutdown_timeout = "5s"
+
+[orders]
+skip = [
+  "spawn-storm-detect",
+  "orphan-sweep",
+  "cross-rig-deps",
+  "gate-sweep",
+  "wisp-compact",
+  "prune-branches",
+  "mol-dog-jsonl",
+  "mol-dog-reaper",
+  "doltlite-compact",
+  "digest-generate",
+  "dolt-health",
+  "dolt-remotes-patrol",
+  "mol-dog-stale-db",
+  "mol-dog-phantom-db",
+  "mol-dog-compactor",
+  "mol-dog-backup",
+  "mol-dog-doctor",
+  "beads-health",
+]
+
+[api]
+port = 8372

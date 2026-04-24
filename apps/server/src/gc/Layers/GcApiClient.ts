@@ -7,8 +7,18 @@
  * Source of truth: gascity/internal/api/ handlers
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
+import { findBundledGcBinaryPath, materializeGascityRuntime } from "@t3tools/gascity-config";
 import { Effect, Layer, Stream, PubSub, Config, Option } from "effect";
 import type {
   GcConfigAgent,
@@ -16,6 +26,7 @@ import type {
   GcSessionActionResult,
   GcSubmitSessionResult,
 } from "@t3tools/contracts";
+import { DEFAULT_GC_BINARY_PATH, DEFAULT_GC_CITY_PATH } from "@t3tools/contracts";
 import {
   GcApiClient,
   type GcApiClientShape,
@@ -32,10 +43,16 @@ import {
   resolveGcCityNameFromSupervisorCities,
 } from "../apiPaths.ts";
 import { createResourceCache } from "../resourceCache.ts";
+import { ServerSettingsService } from "../../serverSettings.ts";
 
 const GC_API_DEFAULT_URL = "http://localhost:9443";
 const GC_API_REQUEST_TIMEOUT_MS = 30_000;
 const GC_CLI_REQUEST_TIMEOUT_MS = 8_000;
+const GC_START_TIMEOUT_MS = 180_000;
+
+class GcApiClientStartError extends Error {
+  override readonly name = "GcApiClientStartError";
+}
 
 function logGcWarning(message: string, context: Record<string, unknown>): void {
   console.warn("[gc-api]", message, context);
@@ -275,12 +292,14 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
           ? `${agent.dir}/${String(agent.name)}`
           : String(agent.name);
     const derivedNamedSessionMode = namedSessionModes.get(qualifiedName);
-    const hasMinActiveSessions = typeof agent.min_active_sessions === "number";
+    const minActiveSessions =
+      typeof agent.min_active_sessions === "number" ? agent.min_active_sessions : undefined;
+    const hasMinActiveSessions = minActiveSessions !== undefined;
     const isPool = typeof agent.is_pool === "boolean" ? agent.is_pool : hasMinActiveSessions;
     const effectiveNamedSessionMode = isPool
       ? undefined
       : (namedSessionMode ?? derivedNamedSessionMode ?? "always");
-    const wakeMode =
+    const wakeMode: "resume" | "fresh" | undefined =
       agent.wake_mode === "resume" || agent.wake_mode === "fresh" ? agent.wake_mode : undefined;
     return [
       {
@@ -291,7 +310,7 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
           ? { session_template: agent.session_template }
           : {}),
         ...(isPool ? { is_pool: true } : {}),
-        ...(hasMinActiveSessions ? { min_active_sessions: agent.min_active_sessions } : {}),
+        ...(hasMinActiveSessions ? { min_active_sessions: minActiveSessions } : {}),
         ...(typeof agent.max_active_sessions === "number"
           ? { max_active_sessions: agent.max_active_sessions }
           : {}),
@@ -732,6 +751,64 @@ function findSiblingGcCityRoot(startCwd: string): string | null {
   }
 }
 
+function findT3CodePackagedGcCityRoot(): string | null {
+  const configured = process.env.T3CODE_GASCITY_HOME?.trim();
+  const runtimeHome =
+    configured && configured.length > 0
+      ? configured
+      : path.join(process.env.HOME ?? "/home/ubuntu", ".local", "state", "t3code", "gascity", "current");
+  const cityPath = path.join(runtimeHome, "city");
+  return isGcCityRoot(cityPath) ? cityPath : null;
+}
+
+function ensureDefaultGcSiteToml(cityPath: string): void {
+  const gcDir = path.join(cityPath, ".gc");
+  const siteTomlPath = path.join(gcDir, "site.toml");
+  if (existsSync(siteTomlPath)) {
+    return;
+  }
+  mkdirSync(gcDir, { recursive: true });
+  writeFileSync(
+    siteTomlPath,
+    "# T3Code packaged city starts with no rig bindings. Add rigs explicitly from the app.\n",
+  );
+}
+
+function copyBundledGcBinary(binaryPath: string): void {
+  const sourceBinaryPath = findBundledGcBinaryPath();
+  if (!sourceBinaryPath) {
+    throw new Error("No bundled Gas City binary is available for this platform.");
+  }
+  mkdirSync(path.dirname(binaryPath), { recursive: true });
+  copyFileSync(sourceBinaryPath, binaryPath);
+  if (process.platform !== "win32") {
+    chmodSync(binaryPath, 0o755);
+  }
+}
+
+function ensurePackagedGcRuntime(input: {
+  readonly runtimeHome: string;
+  readonly cityPath: string | null;
+  readonly binaryPath: string;
+}): { readonly cityPath: string; readonly binaryPath: string } {
+  let cityPath = input.cityPath ?? path.join(input.runtimeHome, "city");
+  if (!isGcCityRoot(cityPath)) {
+    const defaultCityPath = path.join(input.runtimeHome, "city");
+    if (path.resolve(cityPath) !== path.resolve(defaultCityPath)) {
+      throw new Error(`Gas City city is not installed at ${cityPath}.`);
+    }
+    cityPath = materializeGascityRuntime({
+      targetDir: input.runtimeHome,
+      overwriteConfig: false,
+    }).city.rootDir;
+  }
+  ensureDefaultGcSiteToml(cityPath);
+  if (!existsSync(input.binaryPath) || !statSync(input.binaryPath).isFile()) {
+    copyBundledGcBinary(input.binaryPath);
+  }
+  return { cityPath, binaryPath: input.binaryPath };
+}
+
 function findRegisteredGcCityRoot(startCwd: string): string | null {
   const registryPath = path.join(process.env.HOME ?? "/home/ubuntu", ".gc", "cities.toml");
   if (!existsSync(registryPath)) {
@@ -814,9 +891,31 @@ function discoverGcCityRoot(startCwd: string): string | null {
 
   return (
     findGcCityRootUpward(startCwd) ??
-    findSiblingGcCityRoot(startCwd) ??
-    findRegisteredGcCityRoot(startCwd)
+    findT3CodePackagedGcCityRoot() ??
+    findRegisteredGcCityRoot(startCwd) ??
+    findSiblingGcCityRoot(startCwd)
   );
+}
+
+function expandHomePath(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed === "~") {
+    return process.env.HOME ?? trimmed;
+  }
+  if (trimmed.startsWith("~/")) {
+    return path.join(process.env.HOME ?? "~", trimmed.slice(2));
+  }
+  return trimmed;
+}
+
+function resolveConfiguredGcCityPath(value: string, runtimeHome: string): string | null {
+  const effectiveValue =
+    value.trim() === DEFAULT_GC_CITY_PATH ? path.join(runtimeHome, "city") : value;
+  const expanded = expandHomePath(effectiveValue);
+  if (!expanded) {
+    return null;
+  }
+  return path.resolve(expanded);
 }
 
 function readGcCityTomlValue(
@@ -1234,15 +1333,20 @@ function normalizeGcApiBaseUrl(value: string | undefined): {
   };
 }
 
-function resolveGcCliBinary(): string {
-  return process.env.GC_BIN?.trim() || "/home/ubuntu/go/bin/gc";
+function resolveGcCliBinary(value: string, runtimeHome: string): string {
+  const effectiveValue =
+    value.trim() === DEFAULT_GC_BINARY_PATH
+      ? path.join(runtimeHome, "bin", process.platform === "win32" ? "gc.exe" : "gc")
+      : value;
+  return expandHomePath(effectiveValue) || process.env.GC_BIN?.trim() || "/home/ubuntu/go/bin/gc";
 }
 
 function runGcCli(
+  binaryPath: string,
   cityPath: string,
   args: string[],
 ): { readonly stdout: string; readonly stderr: string; readonly exitCode: number } {
-  const result = spawnSync(resolveGcCliBinary(), ["--city", cityPath, ...args], {
+  const result = spawnSync(binaryPath, ["--city", cityPath, ...args], {
     encoding: "utf8",
     timeout: GC_CLI_REQUEST_TIMEOUT_MS,
   });
@@ -1254,20 +1358,30 @@ function runGcCli(
 }
 
 const makeGcApiClient = Effect.gen(function* () {
+  const serverSettings = yield* ServerSettingsService;
+  const runtimeContext = yield* Effect.context<never>();
+  const runFork = Effect.runForkWith(runtimeContext);
+  const settings = yield* serverSettings.getSettings;
+  const gcSettings = settings.providers.gc;
   const configuredBaseUrl = yield* Config.string("GC_API_URL").pipe(Config.option);
   const configuredCityName = yield* Config.string("GC_CITY_NAME").pipe(Config.option);
-  const cityPath = discoverGcCityRoot(process.cwd());
+  const runtimeHome = expandHomePath(gcSettings.runtimeHome);
+  const cityPath =
+    resolveConfiguredGcCityPath(gcSettings.cityPath, runtimeHome) ??
+    discoverGcCityRoot(process.cwd());
   const normalizedConfiguredBaseUrl = normalizeGcApiBaseUrl(
-    Option.getOrUndefined(configuredBaseUrl),
+    gcSettings.apiUrl || Option.getOrUndefined(configuredBaseUrl),
   );
   const baseUrl =
     normalizedConfiguredBaseUrl.baseUrl ??
     discoverGcApiBaseUrl(process.cwd()) ??
     GC_API_DEFAULT_URL;
   let cachedCityName =
+    gcSettings.cityName.trim() ||
     Option.getOrUndefined(configuredCityName)?.trim() ||
     normalizedConfiguredBaseUrl.cityName ||
     null;
+  const gcCliBinary = resolveGcCliBinary(gcSettings.binaryPath, runtimeHome);
   const useCityScopedRoutes =
     Option.isSome(configuredCityName) || (cityPath !== null && cityPath.trim().length > 0);
   const routeMode = useCityScopedRoutes ? "city-scoped" : "legacy";
@@ -1275,6 +1389,7 @@ const makeGcApiClient = Effect.gen(function* () {
   yield* Effect.logInfo("gc api client configured", {
     baseUrl,
     cityPath,
+    gcCliBinary,
     cityName: cachedCityName,
     cwd: process.cwd(),
     routeMode,
@@ -1330,7 +1445,7 @@ const makeGcApiClient = Effect.gen(function* () {
     const publishEvent = (data: string) => {
       const event = parseJsonSafe<GcEvent>(data);
       if (event) {
-        Effect.runFork(PubSub.publish(eventPubSub, event));
+        runFork(PubSub.publish(eventPubSub, event));
       }
     };
 
@@ -1430,24 +1545,18 @@ const makeGcApiClient = Effect.gen(function* () {
       return cachedCityName;
     }
 
-    const workspaceName = lastKnownConfig?.workspace.name?.trim();
-    if (workspaceName) {
-      cachedCityName = workspaceName;
-      return cachedCityName;
-    }
-
-    const cityPathName = cityPath ? path.basename(cityPath).trim() : "";
-    if (cityPathName) {
-      cachedCityName = cityPathName;
-      return cachedCityName;
-    }
-
     const cities = await fetchJson<unknown>("/v0/cities");
     cachedCityName = resolveGcCityNameFromSupervisorCities({
       raw: cities,
       cityPath,
-      preferredName: workspaceName ?? null,
+      preferredName: lastKnownConfig?.workspace.name?.trim() ?? null,
     });
+    if (cachedCityName) {
+      return cachedCityName;
+    }
+
+    const cityPathName = cityPath ? path.basename(cityPath).trim() : "";
+    cachedCityName = cityPathName || null;
     return cachedCityName;
   };
 
@@ -1633,7 +1742,7 @@ const makeGcApiClient = Effect.gen(function* () {
           if (!cityPath) {
             return null;
           }
-          const cli = runGcCli(cityPath, ["config", "show"]);
+          const cli = runGcCli(gcCliBinary, cityPath, ["config", "show"]);
           if (cli.exitCode !== 0) {
             logGcWarning("gc config show fallback failed", {
               cityPath,
@@ -1726,6 +1835,39 @@ const makeGcApiClient = Effect.gen(function* () {
       );
     });
 
+  const start: GcApiClientShape["start"] = Effect.try({
+    try: () => {
+      const runtime = ensurePackagedGcRuntime({
+        runtimeHome,
+        cityPath,
+        binaryPath: gcCliBinary,
+      });
+      const result = spawnSync(runtime.binaryPath, ["--city", runtime.cityPath, "start"], {
+        cwd: path.dirname(runtime.cityPath),
+        env: {
+          ...process.env,
+          GC_HOME: runtimeHome,
+          T3CODE_GASCITY_HOME: runtimeHome,
+          GC_CITY_PATH: runtime.cityPath,
+          GC_BIN: runtime.binaryPath,
+          GC_API_URL: baseUrl,
+        },
+        encoding: "utf8",
+        timeout: GC_START_TIMEOUT_MS,
+      });
+      if (result.error) {
+        throw result.error;
+      }
+      if ((result.status ?? 0) !== 0) {
+        throw new Error(result.stderr.trim() || result.stdout.trim() || "Gas City start failed.");
+      }
+      lastKnownConfig = null;
+      cachedCityName = null;
+    },
+    catch: (error) =>
+      new GcApiClientStartError(error instanceof Error ? error.message : String(error)),
+  });
+
   const setAgentSuspended: GcApiClientShape["setAgentSuspended"] = (name, suspended) =>
     Effect.promise(async () =>
       runLoggedGcMutation("agent-suspended", sanitizeKey(name), { suspended }, async () => {
@@ -1767,7 +1909,7 @@ const makeGcApiClient = Effect.gen(function* () {
           if (!cityPath) {
             throw error;
           }
-          const cli = runGcCli(cityPath, ["agent", action, normalizedName]);
+          const cli = runGcCli(gcCliBinary, cityPath, ["agent", action, normalizedName]);
           if (cli.exitCode === 0) {
             lastKnownConfig = updateCachedAgentSuspended(
               lastKnownConfig,
@@ -1973,7 +2115,7 @@ const makeGcApiClient = Effect.gen(function* () {
           if (!cityPath) {
             throw error;
           }
-          const cli = runGcCli(cityPath, [suspended ? "suspend" : "resume"]);
+          const cli = runGcCli(gcCliBinary, cityPath, [suspended ? "suspend" : "resume"]);
           if (cli.exitCode === 0) {
             if (lastKnownConfig) {
               lastKnownConfig = {
@@ -2016,7 +2158,7 @@ const makeGcApiClient = Effect.gen(function* () {
           if (!cityPath) {
             throw error;
           }
-          const cli = runGcCli(cityPath, ["rig", action, normalizedName]);
+          const cli = runGcCli(gcCliBinary, cityPath, ["rig", action, normalizedName]);
           if (cli.exitCode === 0) {
             lastKnownConfig = updateCachedRigSuspended(lastKnownConfig, normalizedName, suspended);
             return { result: undefined, path: "gc-cli" };
@@ -2025,6 +2167,36 @@ const makeGcApiClient = Effect.gen(function* () {
             cause: error,
           });
         }
+      }),
+    );
+
+  const addRig: GcApiClientShape["addRig"] = (input) =>
+    Effect.promise(async () =>
+      runLoggedGcMutation("rig-add", input.name ?? input.path, input, async () => {
+        if (!cityPath) {
+          throw new Error("GC city path unavailable for rig add");
+        }
+        const rigPath = input.path.trim();
+        if (!rigPath) {
+          throw new Error("Rig path is required");
+        }
+        const args = ["rig", "add", rigPath];
+        const name = input.name?.trim();
+        if (name) {
+          args.push("--name", sanitizeKey(name));
+        }
+        if (input.includeGastown ?? true) {
+          args.push("--include", "packs/gastown");
+        }
+        if (input.startSuspended ?? true) {
+          args.push("--start-suspended");
+        }
+        const cli = runGcCli(gcCliBinary, cityPath, args);
+        if (cli.exitCode !== 0) {
+          throw new Error(cli.stderr.trim() || cli.stdout.trim() || "Failed to add GC rig");
+        }
+        lastKnownConfig = null;
+        return { result: undefined, path: "gc-cli" };
       }),
     );
 
@@ -2043,6 +2215,7 @@ const makeGcApiClient = Effect.gen(function* () {
     getConvoy,
     getFormula,
     getConfig,
+    start,
     submitSession,
     stopSession,
     respondToPending,
@@ -2053,6 +2226,7 @@ const makeGcApiClient = Effect.gen(function* () {
     setAgentSessionMode,
     setCitySuspended,
     setRigSuspended,
+    addRig,
     streamEvents: Stream.fromPubSub(eventPubSub),
     isAvailable,
   } satisfies GcApiClientShape;

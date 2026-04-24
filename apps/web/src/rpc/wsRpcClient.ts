@@ -125,8 +125,12 @@ export interface WsRpcClient {
   };
   readonly gc: {
     readonly getConfig: RpcUnaryMethod<typeof WS_METHODS.gcGetConfig>;
+    readonly start: RpcUnaryMethod<typeof WS_METHODS.gcStart>;
     readonly findThreadBinding: RpcUnaryMethod<typeof WS_METHODS.gcFindThreadBinding>;
     readonly getThreadContext: RpcUnaryMethod<typeof WS_METHODS.gcGetThreadContext>;
+    readonly submitSession: RpcUnaryMethod<typeof WS_METHODS.gcSubmitSession>;
+    readonly stopSession: RpcUnaryMethod<typeof WS_METHODS.gcStopSession>;
+    readonly respondToPending: RpcUnaryMethod<typeof WS_METHODS.gcRespondToPending>;
     readonly setAgentSuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetAgentSuspended>;
     readonly setAgentMaxActiveSessions: RpcUnaryMethod<
       typeof WS_METHODS.gcSetAgentMaxActiveSessions
@@ -138,6 +142,7 @@ export interface WsRpcClient {
     readonly setAgentSessionMode: RpcUnaryMethod<typeof WS_METHODS.gcSetAgentSessionMode>;
     readonly setCitySuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetCitySuspended>;
     readonly setRigSuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetRigSuspended>;
+    readonly addRig: RpcUnaryMethod<typeof WS_METHODS.gcAddRig>;
   };
 }
 
@@ -280,10 +285,17 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
     },
     gc: {
       getConfig: (input) => transport.request((client) => client[WS_METHODS.gcGetConfig](input)),
+      start: (input) => transport.request((client) => client[WS_METHODS.gcStart](input)),
       findThreadBinding: (input) =>
         transport.request((client) => client[WS_METHODS.gcFindThreadBinding](input)),
       getThreadContext: (input) =>
         transport.request((client) => client[WS_METHODS.gcGetThreadContext](input)),
+      submitSession: (input) =>
+        transport.request((client) => client[WS_METHODS.gcSubmitSession](input)),
+      stopSession: (input) =>
+        transport.request((client) => client[WS_METHODS.gcStopSession](input)),
+      respondToPending: (input) =>
+        transport.request((client) => client[WS_METHODS.gcRespondToPending](input)),
       setAgentSuspended: (input) =>
         transport.request((client) => client[WS_METHODS.gcSetAgentSuspended](input)),
       setAgentMaxActiveSessions: (input) =>
@@ -298,6 +310,7 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.gcSetCitySuspended](input)),
       setRigSuspended: (input) =>
         transport.request((client) => client[WS_METHODS.gcSetRigSuspended](input)),
+      addRig: (input) => transport.request((client) => client[WS_METHODS.gcAddRig](input)),
     },
   };
 }

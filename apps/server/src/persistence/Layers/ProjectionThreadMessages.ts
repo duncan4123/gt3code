@@ -192,19 +192,18 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
     });
 
   const deleteProjectionThreadMessageFtsByThreadId = (threadId: string) =>
-    Effect.gen(function* () {
-      yield* sql
-        .unsafe(
-          `
+    sql
+      .unsafe(
+        `
             INSERT INTO messages_fts(messages_fts, rowid, text)
             SELECT 'delete', row_id, text
             FROM projection_thread_messages
             WHERE thread_id = ?
           `,
-          [threadId],
-        )
-        .pipe(Effect.catchTag("SqlError", () => Effect.void));
-    }).pipe(
+        [threadId],
+      )
+      .pipe(
+        Effect.catchTag("SqlError", () => Effect.void),
       Effect.mapError(
         toPersistenceSqlError(
           "ProjectionThreadMessageRepository.deleteProjectionThreadMessageFtsByThreadId",

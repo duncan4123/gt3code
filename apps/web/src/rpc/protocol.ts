@@ -62,7 +62,10 @@ function defaultLifecycleHandlers(): Required<WsProtocolLifecycleHandlers> {
     },
     onClose: (details, connectionId) => {
       clearAllTrackedRpcRequests();
-      recordWsConnectionClosed({ ...details, connectionId });
+      recordWsConnectionClosed({
+        ...details,
+        ...(connectionId !== undefined ? { connectionId } : {}),
+      });
     },
   };
 }

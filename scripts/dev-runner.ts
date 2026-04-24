@@ -15,6 +15,8 @@ const MAX_HASH_OFFSET = 3000;
 const MAX_PORT = 65535;
 const DESKTOP_DEV_LOOPBACK_HOST = "127.0.0.1";
 const DEV_PORT_PROBE_HOSTS = ["127.0.0.1", "0.0.0.0", "::1", "::"] as const;
+const DEFAULT_GASCITY_API_URL = "http://127.0.0.1:8372";
+const DEFAULT_T3CODE_GASCITY_HOME = NodeOS.homedir() + "/.local/state/t3code/gascity/current";
 
 export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) =>
   path.join(NodeOS.homedir(), ".t3"),
@@ -147,7 +149,9 @@ export function createDevRunnerEnv({
     const serverPort = port ?? BASE_SERVER_PORT + serverOffset;
     const webPort = BASE_WEB_PORT + webOffset;
     const resolvedBaseDir = yield* resolveBaseDir(t3Home);
+    const path = yield* Path.Path;
     const isDesktopMode = mode === "dev:desktop";
+    const gascityHome = baseEnv.T3CODE_GASCITY_HOME?.trim() || DEFAULT_T3CODE_GASCITY_HOME;
 
     const output: NodeJS.ProcessEnv = {
       ...baseEnv,
@@ -156,6 +160,12 @@ export function createDevRunnerEnv({
         devUrl?.toString() ??
         `http://${isDesktopMode ? DESKTOP_DEV_LOOPBACK_HOST : "localhost"}:${webPort}`,
       T3CODE_HOME: resolvedBaseDir,
+      T3CODE_GASCITY_HOME: gascityHome,
+      GC_API_URL: baseEnv.GC_API_URL ?? DEFAULT_GASCITY_API_URL,
+      GC_BIN:
+        baseEnv.GC_BIN ??
+        path.join(gascityHome, "bin", process.platform === "win32" ? "gc.exe" : "gc"),
+      GC_CITY_PATH: baseEnv.GC_CITY_PATH ?? baseEnv.GC_CITY ?? path.join(gascityHome, "city"),
     };
 
     if (!isDesktopMode) {
@@ -360,6 +370,10 @@ interface DevRunnerCliInput {
   readonly turboArgs: ReadonlyArray<string>;
 }
 
+type MutableDevRunnerCliInput = {
+  -readonly [K in keyof DevRunnerCliInput]: DevRunnerCliInput[K];
+};
+
 function parseBooleanFlagValue(raw: string | undefined, flagName: string): boolean {
   if (raw === undefined || raw === "true" || raw === "1") {
     return true;
@@ -376,7 +390,7 @@ function parseDirectDevRunnerArgs(argv: ReadonlyArray<string>): DevRunnerCliInpu
     throw new Error(`Expected mode: ${DEV_RUNNER_MODES.join(", ")}`);
   }
 
-  const parsed: DevRunnerCliInput = {
+  const parsed: MutableDevRunnerCliInput = {
     mode: modeRaw as DevMode,
     t3Home: undefined,
     noBrowser: undefined,
@@ -392,6 +406,9 @@ function parseDirectDevRunnerArgs(argv: ReadonlyArray<string>): DevRunnerCliInpu
   const turboArgs: Array<string> = [];
   for (let index = 0; index < rest.length; index += 1) {
     const arg = rest[index];
+    if (arg === undefined) {
+      continue;
+    }
     if (arg === "--") {
       turboArgs.push(...rest.slice(index + 1));
       break;
@@ -401,7 +418,7 @@ function parseDirectDevRunnerArgs(argv: ReadonlyArray<string>): DevRunnerCliInpu
       continue;
     }
 
-    const [flagName, inlineValue] = arg.slice(2).split("=", 2);
+    const [flagName = "", inlineValue] = arg.slice(2).split("=", 2);
     const nextValue = () => {
       if (inlineValue !== undefined) {
         return inlineValue;
@@ -502,7 +519,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
         : "";
 
     yield* Effect.logInfo(
-      `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.T3CODE_PORT)} webPort=${String(env.PORT)} baseDir=${String(env.T3CODE_HOME)}`,
+      `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.T3CODE_PORT)} webPort=${String(env.PORT)} baseDir=${String(env.T3CODE_HOME)} gcCity=${String(env.GC_CITY_PATH)}`,
     );
 
     if (input.dryRun) {

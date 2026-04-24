@@ -1464,6 +1464,36 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       );
     });
 
+  const searchThreadMessages: ProjectionSnapshotQueryShape["searchThreadMessages"] = (
+    query,
+    limit,
+  ) =>
+    getSnapshot().pipe(
+      Effect.map((snapshot) => {
+        const normalizedQuery = query.trim().toLowerCase();
+        if (!normalizedQuery) {
+          return { results: [] };
+        }
+        const results = snapshot.threads
+          .flatMap((thread) =>
+            thread.messages.flatMap((message) => {
+              const text = message.text.trim();
+              if (!text.toLowerCase().includes(normalizedQuery)) {
+                return [];
+              }
+              return [
+                {
+                  threadId: thread.id,
+                  snippet: text.length > 240 ? `${text.slice(0, 237)}...` : text,
+                },
+              ];
+            }),
+          )
+          .slice(0, Math.max(0, limit));
+        return { results };
+      }),
+    );
+
   return {
     getSnapshot,
     getShellSnapshot,
@@ -1475,6 +1505,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getThreadShellById,
     getActiveThreadBindingByGcSessionName,
     getThreadDetailById,
+    searchThreadMessages,
   } satisfies ProjectionSnapshotQueryShape;
 });
 

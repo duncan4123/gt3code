@@ -4,6 +4,7 @@ import {
   AuthCreatePairingCredentialInput,
   AuthRevokeClientSessionInput,
   AuthRevokePairingLinkInput,
+  AuthSessionId,
   type AuthWebSocketTokenResult,
 } from "@t3tools/contracts";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
@@ -14,7 +15,7 @@ import { SessionCredentialService } from "./Services/SessionCredentialService.ts
 import { deriveAuthClientMetadata } from "./utils.ts";
 
 type CachedBridgeSession = {
-  readonly sessionId: string;
+  readonly sessionId: AuthSessionId;
   readonly expiresAtEpochMs: number;
 };
 
