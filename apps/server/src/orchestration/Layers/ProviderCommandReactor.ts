@@ -76,6 +76,15 @@ function toNonEmptyEnv(
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
+function stableEnvSignature(env: Record<string, string> | undefined): string | undefined {
+  if (!env) {
+    return undefined;
+  }
+  return JSON.stringify(
+    Object.entries(env).toSorted(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
 function mapProviderSessionStatusToOrchestrationStatus(
   status: "connecting" | "ready" | "running" | "error" | "closed",
 ): OrchestrationSession["status"] {
@@ -199,6 +208,7 @@ const make = Effect.gen(function* () {
     );
 
   const threadModelSelections = new Map<string, ModelSelection>();
+  const threadGcSessionEnvSignatures = new Map<string, string>();
 
   const appendProviderFailureActivity = (input: {
     readonly threadId: ThreadId;
@@ -307,6 +317,7 @@ const make = Effect.gen(function* () {
     const gcMeta = parseGcMeta(thread.customMetadata);
     const gcRuntimeProvider = gcRuntimeProviderToProviderKind(gcMeta.runtimeProvider);
     const gcSessionEnv = toNonEmptyEnv(gcMeta.sessionEnv);
+    const gcSessionEnvSignature = stableEnvSignature(gcSessionEnv);
     const requestedModelSelection = options?.modelSelection;
     const threadProvider: ProviderKind =
       currentProvider ?? gcRuntimeProvider ?? thread.modelSelection.provider;
@@ -336,15 +347,27 @@ const make = Effect.gen(function* () {
       readonly resumeCursor?: unknown;
       readonly provider?: ProviderKind;
     }) =>
-      providerService.startSession(threadId, {
-        threadId,
-        ...(preferredProvider ? { provider: preferredProvider } : {}),
-        ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
-        ...(gcSessionEnv ? { env: gcSessionEnv } : {}),
-        modelSelection: desiredModelSelection,
-        ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
-        runtimeMode: desiredRuntimeMode,
-      });
+      providerService
+        .startSession(threadId, {
+          threadId,
+          ...(preferredProvider ? { provider: preferredProvider } : {}),
+          ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
+          ...(gcSessionEnv ? { env: gcSessionEnv } : {}),
+          modelSelection: desiredModelSelection,
+          ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
+          runtimeMode: desiredRuntimeMode,
+        })
+        .pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              if (gcSessionEnvSignature !== undefined) {
+                threadGcSessionEnvSignatures.set(threadId, gcSessionEnvSignature);
+              } else {
+                threadGcSessionEnvSignatures.delete(threadId);
+              }
+            }),
+          ),
+        );
 
     const bindSessionToThread = (session: ProviderSession) =>
       setThreadSession({
@@ -380,11 +403,16 @@ const make = Effect.gen(function* () {
         currentProvider === "claudeAgent" &&
         requestedModelSelection !== undefined &&
         !Equal.equals(previousModelSelection, requestedModelSelection);
+      const previousGcSessionEnvSignature = threadGcSessionEnvSignatures.get(threadId);
+      const shouldRestartForGcSessionEnvChange =
+        (gcSessionEnvSignature !== undefined || previousGcSessionEnvSignature !== undefined) &&
+        previousGcSessionEnvSignature !== gcSessionEnvSignature;
 
       if (
         !runtimeModeChanged &&
         !shouldRestartForModelChange &&
-        !shouldRestartForModelSelectionChange
+        !shouldRestartForModelSelectionChange &&
+        !shouldRestartForGcSessionEnvChange
       ) {
         return existingSessionThreadId;
       }
@@ -403,6 +431,7 @@ const make = Effect.gen(function* () {
         modelChanged,
         shouldRestartForModelChange,
         shouldRestartForModelSelectionChange,
+        shouldRestartForGcSessionEnvChange,
         hasResumeCursor: resumeCursor !== undefined,
       });
       const restartedSession = yield* startProviderSession(
@@ -697,20 +726,18 @@ const make = Effect.gen(function* () {
       modelSelection: sendTurnRequest.value.modelSelection?.model,
     });
 
-    yield* providerService
-      .sendTurn(sendTurnRequest.value)
-      .pipe(
-        Effect.tap((result) =>
-          Effect.logInfo("provider command reactor provider turn started", {
-            threadId: event.payload.threadId,
-            messageId: event.payload.messageId,
-            turnId: result.turnId,
-            hasResumeCursor: result.resumeCursor !== undefined,
-          }),
-        ),
-        Effect.catchCause(recoverTurnStartFailure),
-        Effect.forkScoped,
-      );
+    yield* providerService.sendTurn(sendTurnRequest.value).pipe(
+      Effect.tap((result) =>
+        Effect.logInfo("provider command reactor provider turn started", {
+          threadId: event.payload.threadId,
+          messageId: event.payload.messageId,
+          turnId: result.turnId,
+          hasResumeCursor: result.resumeCursor !== undefined,
+        }),
+      ),
+      Effect.catchCause(recoverTurnStartFailure),
+      Effect.forkScoped,
+    );
   });
 
   const processTurnInterruptRequested = Effect.fn("processTurnInterruptRequested")(function* (
@@ -840,6 +867,7 @@ const make = Effect.gen(function* () {
     if (thread.session && thread.session.status !== "stopped") {
       yield* providerService.stopSession({ threadId: thread.id });
     }
+    threadGcSessionEnvSignatures.delete(thread.id);
 
     yield* setThreadSession({
       threadId: thread.id,

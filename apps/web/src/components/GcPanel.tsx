@@ -17,6 +17,12 @@ interface GcPanelProps {
 
 const GcPanel = memo(function GcPanel({ environmentId, threadId, thread }: GcPanelProps) {
   const gcMeta = useMemo(() => parseGcMeta(thread?.customMetadata), [thread?.customMetadata]);
+  const gcContextSignature = [
+    gcMeta.bead ?? "",
+    gcMeta.convoy ?? "",
+    gcMeta.formula ?? "",
+    gcMeta.molecule ?? "",
+  ].join("|");
 
   const [threadContext, setThreadContext] = useState<GcThreadContextResult | null>(null);
 
@@ -37,7 +43,7 @@ const GcPanel = memo(function GcPanel({ environmentId, threadId, thread }: GcPan
     return () => {
       cancelled = true;
     };
-  }, [environmentId, threadId, gcMeta.isGcManaged]);
+  }, [environmentId, threadId, gcMeta.isGcManaged, gcContextSignature]);
 
   if (!thread?.customMetadata || !gcMeta.isGcManaged) {
     return null;

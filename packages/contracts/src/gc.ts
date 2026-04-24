@@ -887,8 +887,13 @@ const GcBeadSchema = Schema.Struct({
   status: Schema.String,
   priority: Schema.Number,
   issueType: Schema.String,
+  type: Schema.optional(Schema.String),
   assignee: Schema.optional(Schema.String),
   parentId: Schema.optional(Schema.String),
+  ref: Schema.optional(Schema.String),
+  labels: Schema.optional(Schema.Array(Schema.String)),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  ephemeral: Schema.optional(Schema.Boolean),
   createdAt: Schema.String,
   updatedAt: Schema.String,
 });

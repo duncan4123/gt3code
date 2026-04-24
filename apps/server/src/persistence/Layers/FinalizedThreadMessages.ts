@@ -90,8 +90,10 @@ const makeFinalizedThreadMessageRepository = Effect.gen(function* () {
       `,
   });
 
+  // ProjectionPipeline wraps projector application in a transaction. Keep this
+  // leaf write transaction-free so finalized-message upserts compose safely.
   const upsert: FinalizedThreadMessageRepositoryShape["upsert"] = (row) =>
-    sql.withTransaction(upsertFinalizedThreadMessageRow(row)).pipe(
+    upsertFinalizedThreadMessageRow(row).pipe(
       Effect.mapError(toPersistenceSqlError("FinalizedThreadMessageRepository.upsert:query")),
     );
 

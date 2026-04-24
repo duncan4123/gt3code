@@ -1011,6 +1011,27 @@ const makeGcApiClient = Effect.gen(function* () {
   let cachedCityName = Option.getOrUndefined(configuredCityName)?.trim() || null;
   const useCityScopedRoutes =
     Option.isSome(configuredCityName) || (cityPath !== null && cityPath.trim().length > 0);
+  const routeMode = useCityScopedRoutes ? "city-scoped" : "legacy";
+
+  yield* Effect.logInfo("gc api client configured", {
+    baseUrl,
+    cityPath,
+    cityName: cachedCityName,
+    cwd: process.cwd(),
+    routeMode,
+    hasConfiguredBaseUrl: Option.isSome(configuredBaseUrl),
+    hasConfiguredCityName: Option.isSome(configuredCityName),
+  });
+  if (!cityPath && !Option.isSome(configuredBaseUrl)) {
+    yield* Effect.logWarning(
+      "gc api client using default URL because no GC city root or GC_API_URL was found",
+      {
+        baseUrl,
+        cwd: process.cwd(),
+        routeMode,
+      },
+    );
+  }
 
   const eventPubSub = yield* PubSub.unbounded<GcEvent>();
   const beadCache = createResourceCache<string, GcBead | null>({
@@ -1125,6 +1146,8 @@ const makeGcApiClient = Effect.gen(function* () {
           method: "GET",
           baseUrl,
           path,
+          cityPath,
+          routeMode,
           status: response.status,
         });
         return null;
@@ -1135,6 +1158,8 @@ const makeGcApiClient = Effect.gen(function* () {
         method: "GET",
         baseUrl,
         path,
+        cityPath,
+        routeMode,
         error: error instanceof Error ? error.message : String(error),
       });
       return null;
@@ -1205,40 +1230,23 @@ const makeGcApiClient = Effect.gen(function* () {
   };
 
   const postMutation = async (path: string): Promise<void> => {
+    let response: Response;
     try {
-      const response = await fetch(`${baseUrl}${path}`, {
+      response = await fetch(`${baseUrl}${path}`, {
         method: "POST",
         headers: {
           "X-GC-Request": "t3code",
         },
         signal: AbortSignal.timeout(GC_API_REQUEST_TIMEOUT_MS),
       });
-      if (response.ok) {
-        return;
-      }
-
-      let body: string | null = null;
-      try {
-        body = await response.text();
-      } catch {
-        // Ignore malformed or empty error bodies and fall back to the status code.
-      }
-      const message = extractGcProblemMessage(response.status, body);
-
-      logGcError("mutation failed", {
-        method: "POST",
-        baseUrl,
-        path,
-        status: response.status,
-        body,
-      });
-      throw new Error(message);
     } catch (error) {
       if (error instanceof Error) {
         logGcError("mutation threw", {
           method: "POST",
           baseUrl,
           path,
+          cityPath,
+          routeMode,
           error: error.message,
         });
         throw error;
@@ -1247,10 +1255,35 @@ const makeGcApiClient = Effect.gen(function* () {
         method: "POST",
         baseUrl,
         path,
+        cityPath,
+        routeMode,
         error: String(error),
       });
       throw new Error("GC mutation failed", { cause: error });
     }
+
+    if (response.ok) {
+      return;
+    }
+
+    let body: string | null = null;
+    try {
+      body = await response.text();
+    } catch {
+      // Ignore malformed or empty error bodies and fall back to the status code.
+    }
+    const message = extractGcProblemMessage(response.status, body);
+
+    logGcError("mutation failed", {
+      method: "POST",
+      baseUrl,
+      path,
+      cityPath,
+      routeMode,
+      status: response.status,
+      body,
+    });
+    throw new Error(message);
   };
 
   const patchJson = async <T>(path: string, body: unknown): Promise<T> => {

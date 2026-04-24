@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { Schema } from "effect";
 
-import { groupThreadsByRigAndAgent, parseGcMeta } from "./gc.ts";
+import { GcThreadContextResult, groupThreadsByRigAndAgent, parseGcMeta } from "./gc.ts";
 
 describe("parseGcMeta", () => {
   it("decodes serialized GC session env metadata", () => {
@@ -45,6 +46,32 @@ describe("parseGcMeta", () => {
         "gc.sessionEnv": "{invalid-json",
       }).sessionEnv,
     ).toBeUndefined();
+  });
+});
+
+describe("GcThreadContextResult", () => {
+  it("preserves bead ref and metadata needed for GC hook display", () => {
+    const decoded = Schema.decodeUnknownSync(GcThreadContextResult)({
+      bead: {
+        id: "gc-123",
+        title: "Hooked bead",
+        description: "Current work",
+        status: "in_progress",
+        priority: 1,
+        issueType: "task",
+        ref: "mol-polecat-work",
+        metadata: {
+          molecule_id: "gc-123.1",
+        },
+        createdAt: "2026-04-24T00:00:00.000Z",
+        updatedAt: "2026-04-24T00:00:00.000Z",
+      },
+      convoy: null,
+      formula: null,
+    });
+
+    expect(decoded.bead?.ref).toBe("mol-polecat-work");
+    expect(decoded.bead?.metadata?.molecule_id).toBe("gc-123.1");
   });
 });
 
