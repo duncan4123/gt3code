@@ -190,7 +190,7 @@ export function createDevRunnerEnv({
     if (logWebSocketEvents !== undefined) {
       output.T3CODE_LOG_WS_EVENTS = logWebSocketEvents ? "1" : "0";
     } else {
-      output.T3CODE_LOG_WS_EVENTS = "0";
+      output.T3CODE_LOG_WS_EVENTS = mode === "dev" ? "1" : "0";
     }
 
     output.T3CODE_TELEMETRY_ENABLED = baseEnv.T3CODE_TELEMETRY_ENABLED ?? "0";

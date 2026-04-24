@@ -96,7 +96,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
       }),
     );
 
-    it.effect("defaults websocket logging and telemetry off in dev mode when unset", () =>
+    it.effect("defaults websocket logging on in dev mode when unset", () =>
       Effect.gen(function* () {
         const env = yield* createDevRunnerEnv({
           mode: "dev",
@@ -115,7 +115,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         });
 
         assert.equal(env.T3CODE_MODE, "web");
-        assert.equal(env.T3CODE_LOG_WS_EVENTS, "0");
+        assert.equal(env.T3CODE_LOG_WS_EVENTS, "1");
         assert.equal(env.T3CODE_TELEMETRY_ENABLED, "0");
       }),
     );
