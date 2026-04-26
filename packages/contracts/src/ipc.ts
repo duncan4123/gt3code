@@ -69,7 +69,9 @@ import type {
   GcSetAgentSuspendedInput,
   GcSetAgentWakeModeInput,
   GcSetCitySuspendedInput,
+  GcSetControllerRunningInput,
   GcSetRigSuspendedInput,
+  GcSetSupervisorRunningInput,
   GcStopSessionInput,
   GcSubmitSessionInput,
   GcSubmitSessionResult,
@@ -272,6 +274,8 @@ export interface LocalApi {
   gc?: {
     getConfig: (input: GcGetConfigInput) => Promise<GcConfigResult>;
     start: (input: GcStartInput) => Promise<GcConfigResult>;
+    setSupervisorRunning: (input: GcSetSupervisorRunningInput) => Promise<GcConfigResult>;
+    setControllerRunning: (input: GcSetControllerRunningInput) => Promise<GcConfigResult>;
     findThreadBinding: (input: GcFindThreadBindingInput) => Promise<GcFindThreadBindingResult>;
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
     submitSession: (input: GcSubmitSessionInput) => Promise<GcSubmitSessionResult>;
@@ -362,6 +366,8 @@ export interface EnvironmentApi {
   gc?: {
     getConfig: (input: GcGetConfigInput) => Promise<GcConfigResult>;
     start: (input: GcStartInput) => Promise<GcConfigResult>;
+    setSupervisorRunning: (input: GcSetSupervisorRunningInput) => Promise<GcConfigResult>;
+    setControllerRunning: (input: GcSetControllerRunningInput) => Promise<GcConfigResult>;
     findThreadBinding: (input: GcFindThreadBindingInput) => Promise<GcFindThreadBindingResult>;
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
     submitSession: (input: GcSubmitSessionInput) => Promise<GcSubmitSessionResult>;

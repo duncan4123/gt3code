@@ -251,12 +251,19 @@ export const GcConfigPatches = Schema.Struct({
 });
 export type GcConfigPatches = typeof GcConfigPatches.Type;
 
+export const GcLifecycleStatus = Schema.Struct({
+  supervisorRunning: Schema.Boolean,
+  controllerRunning: Schema.Boolean,
+});
+export type GcLifecycleStatus = typeof GcLifecycleStatus.Type;
+
 export const GcConfigResult = Schema.Struct({
   workspace: GcConfigWorkspace,
   agents: Schema.Array(GcConfigAgent),
   rigs: Schema.Array(GcConfigRig),
   providers: Schema.optional(Schema.Record(Schema.String, GcConfigProvider)),
   patches: Schema.optional(GcConfigPatches),
+  lifecycle: Schema.optional(GcLifecycleStatus),
 });
 export type GcConfigResult = typeof GcConfigResult.Type;
 
@@ -826,6 +833,16 @@ export type GcGetConfigInput = typeof GcGetConfigInput.Type;
 export const GcStartInput = Schema.Struct({});
 export type GcStartInput = typeof GcStartInput.Type;
 
+export const GcSetSupervisorRunningInput = Schema.Struct({
+  running: Schema.Boolean,
+});
+export type GcSetSupervisorRunningInput = typeof GcSetSupervisorRunningInput.Type;
+
+export const GcSetControllerRunningInput = Schema.Struct({
+  running: Schema.Boolean,
+});
+export type GcSetControllerRunningInput = typeof GcSetControllerRunningInput.Type;
+
 export const GcSetAgentSuspendedInput = Schema.Struct({
   agent: Schema.String,
   suspended: Schema.Boolean,
@@ -1039,6 +1056,16 @@ export class GcGetConfigError extends Schema.TaggedErrorClass<GcGetConfigError>(
 export class GcStartError extends Schema.TaggedErrorClass<GcStartError>()("GcStartError", {
   message: Schema.String,
 }) {}
+
+export class GcSetSupervisorRunningError extends Schema.TaggedErrorClass<GcSetSupervisorRunningError>()(
+  "GcSetSupervisorRunningError",
+  { message: Schema.String },
+) {}
+
+export class GcSetControllerRunningError extends Schema.TaggedErrorClass<GcSetControllerRunningError>()(
+  "GcSetControllerRunningError",
+  { message: Schema.String },
+) {}
 
 export class GcSetAgentSuspendedError extends Schema.TaggedErrorClass<GcSetAgentSuspendedError>()(
   "GcSetAgentSuspendedError",

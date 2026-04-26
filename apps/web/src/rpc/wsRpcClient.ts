@@ -126,6 +126,8 @@ export interface WsRpcClient {
   readonly gc: {
     readonly getConfig: RpcUnaryMethod<typeof WS_METHODS.gcGetConfig>;
     readonly start: RpcUnaryMethod<typeof WS_METHODS.gcStart>;
+    readonly setSupervisorRunning: RpcUnaryMethod<typeof WS_METHODS.gcSetSupervisorRunning>;
+    readonly setControllerRunning: RpcUnaryMethod<typeof WS_METHODS.gcSetControllerRunning>;
     readonly findThreadBinding: RpcUnaryMethod<typeof WS_METHODS.gcFindThreadBinding>;
     readonly getThreadContext: RpcUnaryMethod<typeof WS_METHODS.gcGetThreadContext>;
     readonly submitSession: RpcUnaryMethod<typeof WS_METHODS.gcSubmitSession>;
@@ -286,6 +288,10 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
     gc: {
       getConfig: (input) => transport.request((client) => client[WS_METHODS.gcGetConfig](input)),
       start: (input) => transport.request((client) => client[WS_METHODS.gcStart](input)),
+      setSupervisorRunning: (input) =>
+        transport.request((client) => client[WS_METHODS.gcSetSupervisorRunning](input)),
+      setControllerRunning: (input) =>
+        transport.request((client) => client[WS_METHODS.gcSetControllerRunning](input)),
       findThreadBinding: (input) =>
         transport.request((client) => client[WS_METHODS.gcFindThreadBinding](input)),
       getThreadContext: (input) =>

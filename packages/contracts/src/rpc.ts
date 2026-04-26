@@ -105,8 +105,12 @@ import {
   GcSetAgentWakeModeInput,
   GcSetCitySuspendedError,
   GcSetCitySuspendedInput,
+  GcSetControllerRunningError,
+  GcSetControllerRunningInput,
   GcSetRigSuspendedInput,
   GcSetRigSuspendedError,
+  GcSetSupervisorRunningError,
+  GcSetSupervisorRunningInput,
   GcStopSessionError,
   GcStopSessionInput,
   GcSubmitSessionError,
@@ -160,6 +164,8 @@ export const WS_METHODS = {
   // Gas City
   gcGetConfig: "gc.getConfig",
   gcStart: "gc.start",
+  gcSetSupervisorRunning: "gc.setSupervisorRunning",
+  gcSetControllerRunning: "gc.setControllerRunning",
   gcFindThreadBinding: "gc.findThreadBinding",
   gcGetThreadContext: "gc.getThreadContext",
   gcSubmitSession: "gc.submitSession",
@@ -437,6 +443,18 @@ export const WsGcStartRpc = Rpc.make(WS_METHODS.gcStart, {
   error: GcStartError,
 });
 
+export const WsGcSetSupervisorRunningRpc = Rpc.make(WS_METHODS.gcSetSupervisorRunning, {
+  payload: GcSetSupervisorRunningInput,
+  success: GcConfigResult,
+  error: GcSetSupervisorRunningError,
+});
+
+export const WsGcSetControllerRunningRpc = Rpc.make(WS_METHODS.gcSetControllerRunning, {
+  payload: GcSetControllerRunningInput,
+  success: GcConfigResult,
+  error: GcSetControllerRunningError,
+});
+
 export const WsGcFindThreadBindingRpc = Rpc.make(WS_METHODS.gcFindThreadBinding, {
   payload: GcFindThreadBindingInput,
   success: GcFindThreadBindingResult,
@@ -557,6 +575,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationSubscribeThreadRpc,
   WsGcGetConfigRpc,
   WsGcStartRpc,
+  WsGcSetSupervisorRunningRpc,
+  WsGcSetControllerRunningRpc,
   WsGcFindThreadBindingRpc,
   WsGcGetThreadContextRpc,
   WsGcSubmitSessionRpc,

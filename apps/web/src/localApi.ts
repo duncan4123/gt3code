@@ -133,6 +133,8 @@ export function createLocalApi(rpcClient: WsRpcClient): LocalApi {
     gc: {
       getConfig: rpcClient.gc.getConfig,
       start: rpcClient.gc.start,
+      setSupervisorRunning: rpcClient.gc.setSupervisorRunning,
+      setControllerRunning: rpcClient.gc.setControllerRunning,
       findThreadBinding: rpcClient.gc.findThreadBinding,
       getThreadContext: rpcClient.gc.getThreadContext,
       submitSession: rpcClient.gc.submitSession,

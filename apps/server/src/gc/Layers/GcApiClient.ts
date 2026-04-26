@@ -28,6 +28,7 @@ import { Effect, Layer, Stream, PubSub, Config, Option } from "effect";
 import type {
   GcConfigAgent,
   GcConfigResult,
+  GcLifecycleStatus,
   GcSessionActionResult,
   GcSubmitSessionResult,
 } from "@t3tools/contracts";
@@ -976,6 +977,8 @@ function updateRigOverrideSuspended(
   const lines = cityTomlContent.split("\n");
   let rigStart = -1;
   let rigEnd = -1;
+  const isRigChildSection = (trimmed: string): boolean =>
+    trimmed === "[[rigs.overrides]]" || trimmed.startsWith("[rigs.");
 
   for (let index = 0; index < lines.length; index += 1) {
     if (lines[index]?.trim() !== "[[rigs]]") continue;
@@ -984,6 +987,7 @@ function updateRigOverrideSuspended(
     while (blockEnd < lines.length) {
       const trimmed = lines[blockEnd]?.trim() ?? "";
       if (trimmed === "[[rigs]]") break;
+      if (trimmed.startsWith("[") && !isRigChildSection(trimmed)) break;
       foundRigName ??= parseQuotedTomlString(lines[blockEnd] ?? "", "name");
       blockEnd += 1;
     }
@@ -1006,6 +1010,7 @@ function updateRigOverrideSuspended(
     while (overrideEnd < rigEnd) {
       const trimmed = lines[overrideEnd]?.trim() ?? "";
       if (trimmed === "[[rigs.overrides]]") break;
+      if (trimmed.startsWith("[") && !isRigChildSection(trimmed)) break;
       foundAgentName ??= parseQuotedTomlString(lines[overrideEnd] ?? "", "agent");
       overrideEnd += 1;
     }
@@ -1046,6 +1051,28 @@ function writeRigAgentSuspendedToCityToml(
     suspended,
   );
   writeFileSync(cityTomlPath, nextContent, "utf8");
+}
+
+function seedRigAgentSuspendedOverrides(
+  binaryPath: string,
+  cityPath: string,
+  rigName: string,
+  suspended: boolean,
+): void {
+  const cli = runGcCli(binaryPath, cityPath, ["config", "show"]);
+  if (cli.exitCode !== 0) {
+    throw new Error(
+      cli.stderr.trim() || cli.stdout.trim() || "Failed to expand GC config for rig patches",
+    );
+  }
+  const config = normalizeGcConfig(parseGcConfigShowToml(cli.stdout), cityPath);
+  if (!config) {
+    throw new Error("Failed to parse expanded GC config for rig patches");
+  }
+  for (const agent of config.agents) {
+    if (agent.dir !== rigName) continue;
+    writeRigAgentSuspendedToCityToml(cityPath, `${rigName}/${agent.name}`, suspended);
+  }
 }
 
 function replaceOrInsertNamedSessionModeLine(
@@ -1347,15 +1374,59 @@ function runGcCli(
   binaryPath: string,
   cityPath: string,
   args: string[],
+  options?: { readonly timeoutMs?: number },
 ): { readonly stdout: string; readonly stderr: string; readonly exitCode: number } {
   const result = spawnSync(binaryPath, ["--city", cityPath, ...args], {
     encoding: "utf8",
-    timeout: GC_CLI_REQUEST_TIMEOUT_MS,
+    timeout: options?.timeoutMs ?? GC_CLI_REQUEST_TIMEOUT_MS,
   });
   return {
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
     exitCode: result.status ?? 1,
+  };
+}
+
+function isProcessMatching(pattern: string): boolean {
+  if (process.platform === "win32") {
+    return false;
+  }
+  const result = spawnSync("pgrep", ["-f", pattern], {
+    encoding: "utf8",
+    timeout: 2_000,
+  });
+  return (result.status ?? 1) === 0 && (result.stdout ?? "").trim().length > 0;
+}
+
+function readGcLifecycleStatus(input: {
+  readonly binaryPath: string;
+  readonly cityPath: string | null;
+}): GcLifecycleStatus {
+  const supervisorRunning = isProcessMatching(`${input.binaryPath} supervisor run`);
+  if (!input.cityPath) {
+    return { supervisorRunning, controllerRunning: false };
+  }
+
+  const status = runGcCli(input.binaryPath, input.cityPath, ["status"], { timeoutMs: 1_500 });
+  const statusText = `${status.stdout}\n${status.stderr}`;
+  const controllerMatch = statusText.match(/^\s*Controller:\s*(.+)$/m);
+  const controllerState = controllerMatch?.[1]?.trim().toLowerCase() ?? "";
+  const controllerRunning =
+    status.exitCode === 0 &&
+    controllerState.length > 0 &&
+    !controllerState.includes("stopped") &&
+    !controllerState.includes("not running") &&
+    !controllerState.includes("none");
+  return { supervisorRunning, controllerRunning };
+}
+
+function withLifecycleStatus(
+  config: GcConfigResult,
+  lifecycle: GcLifecycleStatus,
+): GcConfigResult {
+  return {
+    ...config,
+    lifecycle,
   };
 }
 
@@ -1780,21 +1851,30 @@ const makeGcApiClient = Effect.gen(function* () {
           return null;
         });
         if (remote) {
+          const lifecycle = readGcLifecycleStatus({ binaryPath: gcCliBinary, cityPath });
           const normalizedRemote =
             cityPath && cityPath.trim().length > 0 ? normalizeGcConfig(remote, cityPath) : null;
           lastKnownConfig =
             normalizedRemote && cityPath
-              ? mergeCliExpandedConfig(normalizedRemote, cliConfig)
-              : (normalizedRemote ?? remote);
+              ? withLifecycleStatus(mergeCliExpandedConfig(normalizedRemote, cliConfig), lifecycle)
+              : withLifecycleStatus(normalizedRemote ?? remote, lifecycle);
           cachedCityName = lastKnownConfig.workspace.name?.trim() || cachedCityName;
           return lastKnownConfig;
         }
         if (cliConfig) {
-          lastKnownConfig = cliConfig;
+          lastKnownConfig = withLifecycleStatus(
+            cliConfig,
+            readGcLifecycleStatus({ binaryPath: gcCliBinary, cityPath }),
+          );
           cachedCityName = lastKnownConfig.workspace.name?.trim() || cachedCityName;
-          return cliConfig;
+          return lastKnownConfig;
         }
-        return lastKnownConfig;
+        return lastKnownConfig
+          ? withLifecycleStatus(
+              lastKnownConfig,
+              readGcLifecycleStatus({ binaryPath: gcCliBinary, cityPath }),
+            )
+          : null;
       },
       catch: () => null,
     }).pipe(Effect.orElseSucceed(() => null));
@@ -1886,6 +1966,60 @@ const makeGcApiClient = Effect.gen(function* () {
     catch: (error) =>
       new GcApiClientStartError(error instanceof Error ? error.message : String(error)),
   });
+
+  const runPackagedGcLifecycleCommand = (args: string[]): void => {
+    const runtime = ensurePackagedGcRuntime({
+      runtimeHome,
+      cityPath,
+      binaryPath: gcCliBinary,
+    });
+    const result = spawnSync(runtime.binaryPath, ["--city", runtime.cityPath, ...args], {
+      cwd: path.dirname(runtime.cityPath),
+      env: {
+        ...process.env,
+        GC_HOME: runtimeHome,
+        T3CODE_GASCITY_HOME: runtimeHome,
+        GC_CITY_PATH: runtime.cityPath,
+        GC_BIN: runtime.binaryPath,
+        GC_API_URL: baseUrl,
+      },
+      encoding: "utf8",
+      timeout: GC_START_TIMEOUT_MS,
+    });
+    if (result.error) {
+      throw result.error;
+    }
+    if ((result.status ?? 0) !== 0) {
+      throw new Error(result.stderr.trim() || result.stdout.trim() || "Gas City command failed.");
+    }
+    lastKnownConfig = null;
+    cachedCityName = null;
+  };
+
+  const getLifecycleStatus: GcApiClientShape["getLifecycleStatus"] = () =>
+    Effect.try({
+      try: () => readGcLifecycleStatus({ binaryPath: gcCliBinary, cityPath }),
+      catch: (error) =>
+        new GcApiClientStartError(error instanceof Error ? error.message : String(error)),
+    });
+
+  const setSupervisorRunning: GcApiClientShape["setSupervisorRunning"] = (running) =>
+    Effect.try({
+      try: () => {
+        runPackagedGcLifecycleCommand(["supervisor", running ? "start" : "stop"]);
+      },
+      catch: (error) =>
+        new GcApiClientStartError(error instanceof Error ? error.message : String(error)),
+    });
+
+  const setControllerRunning: GcApiClientShape["setControllerRunning"] = (running) =>
+    Effect.try({
+      try: () => {
+        runPackagedGcLifecycleCommand([running ? "start" : "stop"]);
+      },
+      catch: (error) =>
+        new GcApiClientStartError(error instanceof Error ? error.message : String(error)),
+    });
 
   const setAgentSuspended: GcApiClientShape["setAgentSuspended"] = (name, suspended) =>
     Effect.promise(async () =>
@@ -2169,8 +2303,11 @@ const makeGcApiClient = Effect.gen(function* () {
                 .slice(4)
                 .join("/")}`,
               `/v0/rig/${escapePathSegments(normalizedName)}/${action}`,
-            ),
-          );
+          ),
+        );
+          if (cityPath) {
+            seedRigAgentSuspendedOverrides(gcCliBinary, cityPath, normalizedName, suspended);
+          }
           lastKnownConfig = updateCachedRigSuspended(lastKnownConfig, normalizedName, suspended);
           return { result: undefined, path: "gc-api" };
         } catch (error) {
@@ -2179,6 +2316,7 @@ const makeGcApiClient = Effect.gen(function* () {
           }
           const cli = runGcCli(gcCliBinary, cityPath, ["rig", action, normalizedName]);
           if (cli.exitCode === 0) {
+            seedRigAgentSuspendedOverrides(gcCliBinary, cityPath, normalizedName, suspended);
             lastKnownConfig = updateCachedRigSuspended(lastKnownConfig, normalizedName, suspended);
             return { result: undefined, path: "gc-cli" };
           }
@@ -2201,8 +2339,9 @@ const makeGcApiClient = Effect.gen(function* () {
         }
         const args = ["rig", "add", rigPath];
         const name = input.name?.trim();
+        const rigName = sanitizeKey(name || path.basename(rigPath));
         if (name) {
-          args.push("--name", sanitizeKey(name));
+          args.push("--name", rigName);
         }
         if (input.includeGastown ?? true) {
           args.push("--include", "packs/gastown");
@@ -2213,6 +2352,9 @@ const makeGcApiClient = Effect.gen(function* () {
         const cli = runGcCli(gcCliBinary, cityPath, args);
         if (cli.exitCode !== 0) {
           throw new Error(cli.stderr.trim() || cli.stdout.trim() || "Failed to add GC rig");
+        }
+        if (input.startSuspended ?? true) {
+          seedRigAgentSuspendedOverrides(gcCliBinary, cityPath, rigName, true);
         }
         lastKnownConfig = null;
         return { result: undefined, path: "gc-cli" };
@@ -2234,7 +2376,10 @@ const makeGcApiClient = Effect.gen(function* () {
     getConvoy,
     getFormula,
     getConfig,
+    getLifecycleStatus,
     start,
+    setSupervisorRunning,
+    setControllerRunning,
     submitSession,
     stopSession,
     respondToPending,

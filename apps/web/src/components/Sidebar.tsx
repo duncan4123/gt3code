@@ -9,6 +9,7 @@ import {
   PlusIcon,
   SearchIcon,
   SettingsIcon,
+  SquareIcon,
   SquarePenIcon,
   TerminalIcon,
   TriangleAlertIcon,
@@ -2805,7 +2806,8 @@ interface SidebarProjectsContentProps {
   commandPaletteShortcutLabel: string | null;
   threadJumpLabelByKey: ReadonlyMap<string, string>;
   gcConfig: GcConfigResult | null;
-  gcStartInFlight: boolean;
+  gcSupervisorMutationInFlight: boolean;
+  gcControllerMutationInFlight: boolean;
   gcAgentMutationsInFlight: ReadonlySet<string>;
   gcAgentStartsInFlight: ReadonlySet<string>;
   gcRigMutationsInFlight: ReadonlySet<string>;
@@ -2822,7 +2824,8 @@ interface SidebarProjectsContentProps {
   attachProjectListAutoAnimateRef: (node: HTMLElement | null) => void;
   projectsLength: number;
   navigateToThread: (threadRef: ScopedThreadRef) => void;
-  onStartGc: () => void;
+  onSetGcSupervisorRunning: (running: boolean) => void;
+  onSetGcControllerRunning: (running: boolean) => void;
   onToggleGcRigSuspended: (
     rig: string,
     suspended: boolean,
@@ -2889,7 +2892,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     commandPaletteShortcutLabel,
     threadJumpLabelByKey,
     gcConfig,
-    gcStartInFlight,
+    gcSupervisorMutationInFlight,
+    gcControllerMutationInFlight,
     gcAgentMutationsInFlight,
     gcAgentStartsInFlight,
     gcRigMutationsInFlight,
@@ -2906,7 +2910,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     attachProjectListAutoAnimateRef,
     projectsLength,
     navigateToThread,
-    onStartGc,
+    onSetGcSupervisorRunning,
+    onSetGcControllerRunning,
     onToggleGcRigSuspended,
     onToggleGcCitySuspended,
     onToggleGcAgentSuspended,
@@ -3002,23 +3007,67 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 render={
                   <button
                     type="button"
-                    aria-label="Start Gas City"
+                    aria-label={
+                      gcConfig?.lifecycle?.supervisorRunning
+                        ? "Stop Gas City supervisor"
+                        : "Start Gas City supervisor"
+                    }
                     data-testid="sidebar-start-gc-trigger"
-                    disabled={gcStartInFlight}
+                    disabled={gcSupervisorMutationInFlight}
                     className="inline-flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 hover:text-emerald-800 disabled:cursor-wait disabled:opacity-60 dark:text-emerald-300"
-                    onClick={onStartGc}
+                    onClick={() =>
+                      onSetGcSupervisorRunning(!(gcConfig?.lifecycle?.supervisorRunning ?? false))
+                    }
                   />
                 }
               >
-                {gcStartInFlight ? (
+                {gcSupervisorMutationInFlight ? (
                   <LoaderCircleIcon className="size-3 animate-spin" />
+                ) : gcConfig?.lifecycle?.supervisorRunning ? (
+                  <SquareIcon className="size-3" />
                 ) : (
                   <PlayIcon className="size-3" />
                 )}
-                <span>GC</span>
+                <span>Sup</span>
               </TooltipTrigger>
               <TooltipPopup side="right">
-                {gcConfig ? "Ensure bundled Gas City is running" : "Start bundled Gas City"}
+                {gcConfig?.lifecycle?.supervisorRunning
+                  ? "Stop Gas City supervisor"
+                  : "Start Gas City supervisor"}
+              </TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={
+                      gcConfig?.lifecycle?.controllerRunning
+                        ? "Stop Gas City controller"
+                        : "Start Gas City controller"
+                    }
+                    data-testid="sidebar-gc-controller-trigger"
+                    disabled={gcControllerMutationInFlight}
+                    className="inline-flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-sky-700 transition-colors hover:bg-sky-500/10 hover:text-sky-800 disabled:cursor-wait disabled:opacity-60 dark:text-sky-300"
+                    onClick={() =>
+                      onSetGcControllerRunning(!(gcConfig?.lifecycle?.controllerRunning ?? false))
+                    }
+                  />
+                }
+              >
+                {gcControllerMutationInFlight ? (
+                  <LoaderCircleIcon className="size-3 animate-spin" />
+                ) : gcConfig?.lifecycle?.controllerRunning ? (
+                  <SquareIcon className="size-3" />
+                ) : (
+                  <PlayIcon className="size-3" />
+                )}
+                <span>Ctl</span>
+              </TooltipTrigger>
+              <TooltipPopup side="right">
+                {gcConfig?.lifecycle?.controllerRunning
+                  ? "Stop Gas City controller"
+                  : "Start Gas City controller"}
               </TooltipPopup>
             </Tooltip>
             <Tooltip>
@@ -3192,7 +3241,8 @@ export default function Sidebar() {
   const suppressProjectClickForContextMenuRef = useRef(false);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
   const [gcConfig, setGcConfig] = useState<GcConfigResult | null>(null);
-  const [gcStartInFlight, setGcStartInFlight] = useState(false);
+  const [gcSupervisorMutationInFlight, setGcSupervisorMutationInFlight] = useState(false);
+  const [gcControllerMutationInFlight, setGcControllerMutationInFlight] = useState(false);
   const [gcAgentActionStateByAgent, setGcAgentActionStateByAgent] = useState<
     ReadonlyMap<string, GcAgentActionState>
   >(() => new Map());
@@ -3280,41 +3330,87 @@ export default function Sidebar() {
     return config;
   }, []);
 
-  const handleStartGc = useCallback(async () => {
-    const api = readLocalApi();
-    if (!api?.gc?.start) {
-      return;
-    }
-    const toastId = toastManager.add({
-      type: "loading",
-      title: "Starting Gas City",
-      description: "Starting the bundled supervisor and loading the packaged city.",
-      timeout: 0,
-    });
-    setGcStartInFlight(true);
-    try {
-      const config = await api.gc.start({});
-      setGcConfig(config);
-      toastManager.update(toastId, {
-        type: "success",
-        title: "Gas City started",
-        description: "The bundled city is running and ready for project rigs.",
+  const handleSetGcSupervisorRunning = useCallback(
+    async (running: boolean) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setSupervisorRunning) {
+        return;
+      }
+      const toastId = toastManager.add({
+        type: "loading",
+        title: running ? "Starting Gas City supervisor" : "Stopping Gas City supervisor",
+        description: running
+          ? "Starting the machine-wide supervisor."
+          : "Stopping the machine-wide supervisor.",
         timeout: 0,
-        data: {
-          dismissAfterVisibleMs: 8_000,
-        },
       });
-    } catch (error) {
-      toastManager.update(toastId, {
-        type: "error",
-        title: "Failed to start Gas City",
-        description: error instanceof Error ? error.message : "An error occurred.",
+      setGcSupervisorMutationInFlight(true);
+      try {
+        const config = await api.gc.setSupervisorRunning({ running });
+        setGcConfig(config);
+        toastManager.update(toastId, {
+          type: "success",
+          title: running ? "Supervisor started" : "Supervisor stopped",
+          description: running
+            ? "Gas City supervisor is running."
+            : "Gas City supervisor was stopped.",
+          timeout: 0,
+          data: { dismissAfterVisibleMs: 8_000 },
+        });
+      } catch (error) {
+        toastManager.update(toastId, {
+          type: "error",
+          title: running ? "Failed to start supervisor" : "Failed to stop supervisor",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        setGcSupervisorMutationInFlight(false);
+      }
+    },
+    [refreshGcConfig],
+  );
+
+  const handleSetGcControllerRunning = useCallback(
+    async (running: boolean) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setControllerRunning) {
+        return;
+      }
+      const toastId = toastManager.add({
+        type: "loading",
+        title: running ? "Starting Gas City controller" : "Stopping Gas City controller",
+        description: running
+          ? "Starting the packaged city under the supervisor."
+          : "Stopping the packaged city controller sessions.",
+        timeout: 0,
       });
-      void refreshGcConfig().catch(() => undefined);
-    } finally {
-      setGcStartInFlight(false);
-    }
-  }, [refreshGcConfig]);
+      setGcControllerMutationInFlight(true);
+      try {
+        const config = await api.gc.setControllerRunning({ running });
+        setGcConfig(config);
+        toastManager.update(toastId, {
+          type: "success",
+          title: running ? "Controller started" : "Controller stopped",
+          description: running
+            ? "Gas City controller is running."
+            : "Gas City controller was stopped.",
+          timeout: 0,
+          data: { dismissAfterVisibleMs: 8_000 },
+        });
+      } catch (error) {
+        toastManager.update(toastId, {
+          type: "error",
+          title: running ? "Failed to start controller" : "Failed to stop controller",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        setGcControllerMutationInFlight(false);
+      }
+    },
+    [refreshGcConfig],
+  );
 
   const waitForAgentStart = useCallback(
     async (
@@ -4820,7 +4916,8 @@ export default function Sidebar() {
             commandPaletteShortcutLabel={commandPaletteShortcutLabel}
             threadJumpLabelByKey={visibleThreadJumpLabelByKey}
             gcConfig={gcConfig}
-            gcStartInFlight={gcStartInFlight}
+            gcSupervisorMutationInFlight={gcSupervisorMutationInFlight}
+            gcControllerMutationInFlight={gcControllerMutationInFlight}
             gcAgentMutationsInFlight={gcAgentMutationsInFlight}
             gcAgentStartsInFlight={gcAgentStartsInFlight}
             gcRigMutationsInFlight={gcRigMutationsInFlight}
@@ -4837,7 +4934,8 @@ export default function Sidebar() {
             attachProjectListAutoAnimateRef={attachProjectListAutoAnimateRef}
             projectsLength={projects.length}
             navigateToThread={navigateToThread}
-            onStartGc={handleStartGc}
+            onSetGcSupervisorRunning={handleSetGcSupervisorRunning}
+            onSetGcControllerRunning={handleSetGcControllerRunning}
             onToggleGcCitySuspended={handleGcCitySuspendedChange}
             onToggleGcRigSuspended={handleGcRigSuspendedChange}
             onToggleGcAgentSuspended={handleGcAgentSuspendedChange}

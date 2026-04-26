@@ -32,7 +32,9 @@ import {
   GcSetAgentSuspendedError,
   GcSetAgentWakeModeError,
   GcSetCitySuspendedError,
+  GcSetControllerRunningError,
   GcSetRigSuspendedError,
+  GcSetSupervisorRunningError,
   GcStopSessionError,
   GcSubmitSessionError,
   parseGcMeta,
@@ -1213,6 +1215,54 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 (error) =>
                   new GcStartError({
                     message: error instanceof Error ? error.message : "Failed to start GC",
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "gc" },
+          ),
+        [WS_METHODS.gcSetSupervisorRunning]: ({ running }) =>
+          observeRpcEffect(
+            WS_METHODS.gcSetSupervisorRunning,
+            Effect.gen(function* () {
+              const gcApi = yield* GcApiClient;
+              yield* gcApi.setSupervisorRunning(running);
+              const config = yield* gcApi.getConfig();
+              if (!config) {
+                return yield* Effect.fail(new Error("GC config unavailable"));
+              }
+              return config;
+            }).pipe(
+              Effect.mapError(
+                (error) =>
+                  new GcSetSupervisorRunningError({
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to update GC supervisor state",
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "gc" },
+          ),
+        [WS_METHODS.gcSetControllerRunning]: ({ running }) =>
+          observeRpcEffect(
+            WS_METHODS.gcSetControllerRunning,
+            Effect.gen(function* () {
+              const gcApi = yield* GcApiClient;
+              yield* gcApi.setControllerRunning(running);
+              const config = yield* gcApi.getConfig();
+              if (!config) {
+                return yield* Effect.fail(new Error("GC config unavailable"));
+              }
+              return config;
+            }).pipe(
+              Effect.mapError(
+                (error) =>
+                  new GcSetControllerRunningError({
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to update GC controller state",
                   }),
               ),
             ),

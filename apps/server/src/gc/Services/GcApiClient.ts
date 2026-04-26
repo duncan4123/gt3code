@@ -12,6 +12,7 @@ import { Context } from "effect";
 import type { Effect, Stream } from "effect";
 import type {
   GcConfigResult,
+  GcLifecycleStatus,
   GcSessionActionResult,
   GcSubmitSessionResult,
 } from "@t3tools/contracts";
@@ -76,7 +77,10 @@ export interface GcApiClientShape {
   readonly getConvoy: (id: string) => Effect.Effect<GcConvoy | null>;
   readonly getFormula: (name: string) => Effect.Effect<GcFormula | null>;
   readonly getConfig: () => Effect.Effect<GcConfigResult | null>;
+  readonly getLifecycleStatus: () => Effect.Effect<GcLifecycleStatus, Error>;
   readonly start: Effect.Effect<void, Error>;
+  readonly setSupervisorRunning: (running: boolean) => Effect.Effect<void, Error>;
+  readonly setControllerRunning: (running: boolean) => Effect.Effect<void, Error>;
   readonly submitSession: (
     sessionName: string,
     message: string,
