@@ -199,7 +199,7 @@ function parseGcConfigShowToml(content: string): unknown {
       }
       continue;
     }
-    if (trimmed === "[[rig]]") {
+    if (trimmed === "[[rigs]]") {
       root.rig ??= [];
       const rig: Record<string, unknown> = {};
       root.rig.push(rig);
