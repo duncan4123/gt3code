@@ -15,6 +15,9 @@ binaries/darwin-arm64/gc
 binaries/win32-x64/gc.exe
 ```
 
-The package does not currently commit binary payloads. Runtime code can still
-use `materializeGascityRuntime({ gcBinaryPath })` with an externally supplied
-binary path.
+Desktop release builds require the binary for the target platform. For example,
+Windows NSIS builds require `binaries/win32-x64/gc.exe` or
+`binaries/win32-arm64/gc.exe`, depending on the selected architecture.
+
+Runtime code can still use `materializeGascityRuntime({ gcBinaryPath })` with an
+externally supplied binary path during development.

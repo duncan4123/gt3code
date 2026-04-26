@@ -17,8 +17,13 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { homedir as osHomedir } from "node:os";
 import path from "node:path";
-import { findBundledGcBinaryPath, materializeGascityRuntime } from "@t3tools/gascity-config";
+import {
+  findBundledGcBinaryPath,
+  getDefaultGascityRuntimeRoot,
+  materializeGascityRuntime,
+} from "@t3tools/gascity-config";
 import { Effect, Layer, Stream, PubSub, Config, Option } from "effect";
 import type {
   GcConfigAgent,
@@ -754,9 +759,7 @@ function findSiblingGcCityRoot(startCwd: string): string | null {
 function findT3CodePackagedGcCityRoot(): string | null {
   const configured = process.env.T3CODE_GASCITY_HOME?.trim();
   const runtimeHome =
-    configured && configured.length > 0
-      ? configured
-      : path.join(process.env.HOME ?? "/home/ubuntu", ".local", "state", "t3code", "gascity", "current");
+    configured && configured.length > 0 ? configured : getDefaultGascityRuntimeRoot();
   const cityPath = path.join(runtimeHome, "city");
   return isGcCityRoot(cityPath) ? cityPath : null;
 }
@@ -810,7 +813,7 @@ function ensurePackagedGcRuntime(input: {
 }
 
 function findRegisteredGcCityRoot(startCwd: string): string | null {
-  const registryPath = path.join(process.env.HOME ?? "/home/ubuntu", ".gc", "cities.toml");
+  const registryPath = path.join(osHomedir(), ".gc", "cities.toml");
   if (!existsSync(registryPath)) {
     return null;
   }
@@ -1337,7 +1340,7 @@ function resolveGcCliBinary(value: string, runtimeHome: string): string {
     value.trim() === DEFAULT_GC_BINARY_PATH
       ? path.join(runtimeHome, "bin", process.platform === "win32" ? "gc.exe" : "gc")
       : value;
-  return expandHomePath(effectiveValue) || process.env.GC_BIN?.trim() || "/home/ubuntu/go/bin/gc";
+  return expandHomePath(effectiveValue) || process.env.GC_BIN?.trim() || "gc";
 }
 
 function runGcCli(

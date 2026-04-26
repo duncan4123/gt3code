@@ -7,6 +7,7 @@ import {
   assertBundledGascityConfigPresent,
   getBundledGcBinaryPath,
   getBundledGascityConfigLayout,
+  getDefaultGascityRuntimeRoot,
   materializeGascityConfig,
   materializeGascityRuntime,
 } from "./index.ts";
@@ -51,6 +52,18 @@ describe("@t3tools/gascity-config", () => {
     );
     expect(getBundledGcBinaryPath({ platform: "win32", arch: "x64" })).toMatch(
       /binaries\/win32-x64\/gc\.exe$/u,
+    );
+  });
+
+  it("resolves platform-specific default runtime roots", () => {
+    expect(
+      getDefaultGascityRuntimeRoot({
+        platform: "win32",
+        env: { LOCALAPPDATA: "C:\\Users\\Ada\\AppData\\Local" },
+      }),
+    ).toBe(path.join("C:\\Users\\Ada\\AppData\\Local", "T3Code", "GasCity", "current"));
+    expect(getDefaultGascityRuntimeRoot({ platform: "linux", env: {} })).toContain(
+      path.join(".local", "state", "t3code", "gascity", "current"),
     );
   });
 

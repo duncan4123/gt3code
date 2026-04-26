@@ -55,13 +55,15 @@ development. T3Code ships the GC config, Gastown packs, and a platform-specific
 runtime these are materialized into a writable state directory:
 
 ```text
-~/.local/state/t3code/gascity/current
+Linux:   ~/.local/state/t3code/gascity/current
+macOS:   ~/Library/Application Support/T3Code/GasCity/current
+Windows: %LOCALAPPDATA%\T3Code\GasCity\current
 ```
 
 The packaged city lives at:
 
 ```text
-~/.local/state/t3code/gascity/current/city
+<runtime>/city
 ```
 
 Use the repo scripts instead of raw `gc` when you want the bundled T3Code city.
@@ -96,9 +98,9 @@ bun gc -- session list
 `bun dev` also exports the bundled GC environment for the T3 server:
 
 ```text
-T3CODE_GASCITY_HOME=~/.local/state/t3code/gascity/current
-GC_CITY_PATH=~/.local/state/t3code/gascity/current/city
-GC_BIN=~/.local/state/t3code/gascity/current/bin/gc
+T3CODE_GASCITY_HOME=<runtime>
+GC_CITY_PATH=<runtime>/city
+GC_BIN=<runtime>/bin/gc or <runtime>\bin\gc.exe
 GC_API_URL=http://127.0.0.1:8372
 ```
 
@@ -114,6 +116,16 @@ Important storage distinction:
 - Gas City rig/bead state uses Dolt under the packaged city `.beads` directory.
 - Do not delete `.beads/dolt` unless you intentionally want to reset GC bead
   state.
+
+Desktop release builds require a bundled GC binary for the target platform:
+
+```text
+packages/gascity-config/binaries/linux-x64/gc
+packages/gascity-config/binaries/darwin-arm64/gc
+packages/gascity-config/binaries/win32-x64/gc.exe
+```
+
+Windows desktop builds fail fast if the matching `gc.exe` is missing.
 
 ## If you REALLY want to contribute still.... read this first
 

@@ -7,6 +7,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -101,6 +102,25 @@ export function findBundledGcBinaryPath(target: GascityBinaryTarget = {}): strin
   return existsSync(binaryPath) && statSync(binaryPath).isFile() ? binaryPath : undefined;
 }
 
+export function getDefaultGascityRuntimeRoot(
+  target: { readonly platform?: NodeJS.Platform; readonly env?: NodeJS.ProcessEnv } = {},
+): string {
+  const platform = target.platform ?? process.platform;
+  const env = target.env ?? process.env;
+  if (platform === "win32") {
+    return path.join(
+      env.LOCALAPPDATA?.trim() || path.join(homedir(), "AppData", "Local"),
+      "T3Code",
+      "GasCity",
+      "current",
+    );
+  }
+  if (platform === "darwin") {
+    return path.join(homedir(), "Library", "Application Support", "T3Code", "GasCity", "current");
+  }
+  return path.join(homedir(), ".local", "state", "t3code", "gascity", "current");
+}
+
 export function materializeGascityRuntime(
   options: MaterializeGascityRuntimeOptions,
 ): GascityRuntimeLayout {
@@ -123,6 +143,7 @@ export function materializeGascityRuntime(
     binaryTarget.arch = options.arch;
   }
   const sourceBinaryPath = options.gcBinaryPath ?? findBundledGcBinaryPath(binaryTarget);
+  const binaryPlatform = options.platform ?? process.platform;
   if (!sourceBinaryPath) {
     throw new Error(
       `No bundled Gas City binary found for ${options.platform ?? process.platform}-${
@@ -138,7 +159,7 @@ export function materializeGascityRuntime(
   const gcBinaryPath = path.join(binDir, path.basename(getBundledGcBinaryPath(options)));
   mkdirSync(binDir, { recursive: true });
   cpSync(sourceBinaryPath, gcBinaryPath, { force: true });
-  if (process.platform !== "win32") {
+  if (binaryPlatform !== "win32") {
     chmodSync(gcBinaryPath, 0o755);
   }
 
@@ -160,11 +181,7 @@ function seedLocalBeadsConfig(cityDir: string): void {
   mkdirSync(beadsDir, { recursive: true });
   writeFileSync(
     path.join(beadsDir, "config.yaml"),
-    [
-      "issue_prefix: ci",
-      "issue-prefix: ci",
-      "",
-    ].join("\n"),
+    ["issue_prefix: ci", "issue-prefix: ci", ""].join("\n"),
   );
 }
 

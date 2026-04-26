@@ -1,13 +1,15 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { materializeGascityRuntime } from "../packages/gascity-config/src/index.ts";
+import {
+  getDefaultGascityRuntimeRoot,
+  materializeGascityRuntime,
+} from "../packages/gascity-config/src/index.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const defaultRuntimeRoot = join(homedir(), ".local", "state", "t3code", "gascity", "current");
+const defaultRuntimeRoot = getDefaultGascityRuntimeRoot();
 
 const command = process.argv[2] ?? "help";
 const passthroughArgs = process.argv.slice(3);

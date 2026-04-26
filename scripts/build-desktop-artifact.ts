@@ -7,6 +7,7 @@ import serverPackageJson from "../apps/server/package.json" with { type: "json" 
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
+import { findBundledGcBinaryPath } from "../packages/gascity-config/src/index.ts";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -91,6 +92,26 @@ function getDefaultArch(platform: typeof BuildPlatform.Type): typeof BuildArch.T
   }
 
   return getDefaultBuildArch(platform, process.arch, process.env, config);
+}
+
+function toNodePlatform(platform: typeof BuildPlatform.Type): NodeJS.Platform {
+  if (platform === "win") return "win32";
+  if (platform === "mac") return "darwin";
+  return "linux";
+}
+
+function requiredGcBinaryTargets(
+  platform: typeof BuildPlatform.Type,
+  arch: typeof BuildArch.Type,
+): ReadonlyArray<{ readonly platform: NodeJS.Platform; readonly arch: NodeJS.Architecture }> {
+  const nodePlatform = toNodePlatform(platform);
+  if (arch === "universal") {
+    return [
+      { platform: nodePlatform, arch: "arm64" },
+      { platform: nodePlatform, arch: "x64" },
+    ];
+  }
+  return [{ platform: nodePlatform, arch }];
 }
 
 class BuildScriptError extends Data.TaggedError("BuildScriptError")<{
@@ -697,6 +718,9 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         cause,
       }),
   });
+  if (resolvedServerDependencies["@t3tools/gascity-config"] === "workspace:*") {
+    resolvedServerDependencies["@t3tools/gascity-config"] = "file:packages/gascity-config";
+  }
   const resolvedDesktopRuntimeDependencies = yield* Effect.try({
     try: () =>
       resolveDesktopRuntimeDependencies(
@@ -713,6 +737,15 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   const appVersion = options.version ?? serverPackageJson.version;
   const iconAssets = resolveDesktopBuildIconAssets(appVersion);
   const commitHash = yield* resolveGitCommitHash(repoRoot);
+  const missingGcBinaryTarget = requiredGcBinaryTargets(options.platform, options.arch).find(
+    (target) => !findBundledGcBinaryPath(target),
+  );
+  if (missingGcBinaryTarget) {
+    const executable = missingGcBinaryTarget.platform === "win32" ? "gc.exe" : "gc";
+    return yield* new BuildScriptError({
+      message: `Missing bundled Gas City binary for ${missingGcBinaryTarget.platform}-${missingGcBinaryTarget.arch}. Add packages/gascity-config/binaries/${missingGcBinaryTarget.platform}-${missingGcBinaryTarget.arch}/${executable} before building this desktop target.`,
+    });
+  }
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({
     prefix: `t3code-desktop-${options.platform}-stage-`,
@@ -757,11 +790,16 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   yield* fs.makeDirectory(path.join(stageAppDir, "apps/desktop"), { recursive: true });
   yield* fs.makeDirectory(path.join(stageAppDir, "apps/server"), { recursive: true });
+  yield* fs.makeDirectory(path.join(stageAppDir, "packages"), { recursive: true });
 
   yield* Effect.log("[desktop-artifact] Staging release app...");
   yield* fs.copy(distDirs.desktopDist, path.join(stageAppDir, "apps/desktop/dist-electron"));
   yield* fs.copy(distDirs.desktopResources, stageResourcesDir);
   yield* fs.copy(distDirs.serverDist, path.join(stageAppDir, "apps/server/dist"));
+  yield* fs.copy(
+    path.join(repoRoot, "packages/gascity-config"),
+    path.join(stageAppDir, "packages/gascity-config"),
+  );
 
   yield* assertPlatformBuildResources(
     options.platform,
