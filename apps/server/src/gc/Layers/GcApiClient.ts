@@ -1740,8 +1740,13 @@ const makeGcApiClient = Effect.gen(function* () {
   const getConfig: GcApiClientShape["getConfig"] = () =>
     Effect.tryPromise({
       try: async () => {
+        let expandedCliConfig: GcConfigResult | null | undefined;
         const loadExpandedCliConfig = (): GcConfigResult | null => {
+          if (expandedCliConfig !== undefined) {
+            return expandedCliConfig;
+          }
           if (!cityPath) {
+            expandedCliConfig = null;
             return null;
           }
           const cli = runGcCli(gcCliBinary, cityPath, ["config", "show"]);
@@ -1751,31 +1756,43 @@ const makeGcApiClient = Effect.gen(function* () {
               exitCode: cli.exitCode,
               stderr: cli.stderr,
             });
+            expandedCliConfig = null;
             return null;
           }
-          return normalizeGcConfig(parseGcConfigShowToml(cli.stdout), cityPath);
+          expandedCliConfig = normalizeGcConfig(parseGcConfigShowToml(cli.stdout), cityPath);
+          return expandedCliConfig;
         };
 
+        const cliConfig = loadExpandedCliConfig();
+        if (!cachedCityName && cliConfig?.workspace.name?.trim()) {
+          cachedCityName = cliConfig.workspace.name.trim();
+        }
         const cityName = await resolveGcCityName();
         const remote = await fetchJson<GcConfigResult>(
           buildScopedOrLegacyPath(cityName, "/config", "/v0/config"),
-        );
+        ).catch((error: unknown) => {
+          logGcWarning("gc config api fetch failed; using cli fallback", {
+            baseUrl,
+            cityName,
+            cityPath,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return null;
+        });
         if (remote) {
           const normalizedRemote =
             cityPath && cityPath.trim().length > 0 ? normalizeGcConfig(remote, cityPath) : null;
           lastKnownConfig =
             normalizedRemote && cityPath
-              ? mergeCliExpandedConfig(normalizedRemote, loadExpandedCliConfig())
+              ? mergeCliExpandedConfig(normalizedRemote, cliConfig)
               : (normalizedRemote ?? remote);
           cachedCityName = lastKnownConfig.workspace.name?.trim() || cachedCityName;
           return lastKnownConfig;
         }
-        if (cityPath) {
-          const parsed = loadExpandedCliConfig();
-          if (parsed) {
-            lastKnownConfig = parsed;
-            return parsed;
-          }
+        if (cliConfig) {
+          lastKnownConfig = cliConfig;
+          cachedCityName = lastKnownConfig.workspace.name?.trim() || cachedCityName;
+          return cliConfig;
         }
         return lastKnownConfig;
       },
