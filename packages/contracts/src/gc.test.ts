@@ -275,6 +275,60 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(rigGroups[0]?.agentGroups.map((group) => group.isSuspended)).toEqual([true, false]);
   });
 
+  it("does not show implicit provider lanes as agent folders", () => {
+    const { rigGroups } = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "gc",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "t3code",
+            path: "/data/projects/t3code",
+            suspended: false,
+          },
+        ],
+        agents: [
+          {
+            name: "codex",
+            provider: "codex",
+            prompt_template: ".gc/system/packs/core/assets/prompts/pool-worker.md",
+            default_sling_formula: "mol-do-work",
+            suspended: false,
+          },
+          {
+            name: "codex",
+            dir: "t3code",
+            provider: "codex",
+            prompt_template: ".gc/system/packs/core/assets/prompts/pool-worker.md",
+            default_sling_formula: "mol-do-work",
+            suspended: false,
+          },
+          {
+            name: "control-dispatcher",
+            dir: "t3code",
+            description: "Built-in deterministic graph.v2 workflow control worker",
+            start_command: "gc convoy control --serve",
+            max_active_sessions: 1,
+            suspended: false,
+          },
+        ],
+      },
+      projectCwd: "/data/projects/t3code",
+    });
+
+    expect(rigGroups).toHaveLength(1);
+    expect(rigGroups[0]?.agentGroups.map((group) => group.qualifiedName)).toEqual([
+      "t3code/control-dispatcher",
+    ]);
+    expect(rigGroups[0]?.agentGroups[0]).toMatchObject({
+      description: "Built-in deterministic graph.v2 workflow control worker",
+      startCommand: "gc convoy control --serve",
+      maxActiveSessions: 1,
+    });
+  });
+
   it("prefers canonical stamped group metadata over project heuristics", () => {
     const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
       [

@@ -444,6 +444,14 @@ function gcAgentVirtualMetadata(agent: GcConfigAgent | undefined): Partial<Virtu
   };
 }
 
+function isImplicitProviderLane(agent: GcConfigAgent): boolean {
+  return (
+    agent.name === agent.provider &&
+    agent.prompt_template === ".gc/system/packs/core/assets/prompts/pool-worker.md" &&
+    typeof agent.default_sling_formula === "string"
+  );
+}
+
 function findConfiguredAgent(
   config: GcConfigResult | null | undefined,
   qualifiedAgent: string,
@@ -576,6 +584,9 @@ export function groupThreadsByRigAndAgent<
     }
 
     for (const agent of options?.config?.agents ?? []) {
+      if (isImplicitProviderLane(agent)) {
+        continue;
+      }
       const rigName = normalizeMetadataValue(agent.dir);
       if (!rigName || !relevantRigNames.has(rigName)) {
         continue;
@@ -628,6 +639,9 @@ export function groupThreadsByRigAndAgent<
     const cityGroup = rigGroupsById.get(cityScopedRigGroupId);
     if (cityGroup) {
       for (const agent of options?.config?.agents ?? []) {
+        if (isImplicitProviderLane(agent)) {
+          continue;
+        }
         const rigName = normalizeMetadataValue(agent.dir);
         if (rigName) continue;
         const qualifiedName = configuredAgentQualifiedName(agent);
