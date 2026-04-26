@@ -38,3 +38,43 @@ skip = [
 
 [api]
 port = 8372
+
+[patches]
+
+[[patches.agent]]
+dir = ""
+name = "mayor"
+suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = ""
+name = "deacon"
+suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = ""
+name = "boot"
+suspended = false
+provider = "codex"
+env = { GC_MODEL = "gpt-5.4-mini" }
+
+[[patches.agent]]
+dir = ""
+name = "dog"
+suspended = false
+provider = "codex"
+env = { GC_MODEL = "gpt-5.4-mini" }
+
+[[patches.named_session]]
+template = "mayor"
+mode = "always"
+
+[[patches.named_session]]
+template = "deacon"
+mode = "always"
+
+[[patches.named_session]]
+template = "boot"
+mode = "always"

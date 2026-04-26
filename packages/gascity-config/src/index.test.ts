@@ -17,6 +17,8 @@ describe("@t3tools/gascity-config", () => {
     const layout = getBundledGascityConfigLayout();
 
     expect(readFileSync(layout.cityTomlPath, "utf8")).not.toContain("[[rigs]]");
+    expect(readFileSync(layout.cityTomlPath, "utf8")).toContain("[[patches.agent]]");
+    expect(readFileSync(layout.cityTomlPath, "utf8")).toContain("[[patches.named_session]]");
     expect(readFileSync(layout.packTomlPath, "utf8")).toContain("[imports.gastown]");
     expect(readFileSync(path.join(layout.gastownPackDir, "pack.toml"), "utf8")).toContain(
       "../maintenance",

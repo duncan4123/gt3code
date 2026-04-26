@@ -981,7 +981,6 @@ function updateRigOverrideSuspended(
     while (blockEnd < lines.length) {
       const trimmed = lines[blockEnd]?.trim() ?? "";
       if (trimmed === "[[rigs]]") break;
-      if (trimmed.startsWith("[") && trimmed !== "[[rigs.overrides]]") break;
       foundRigName ??= parseQuotedTomlString(lines[blockEnd] ?? "", "name");
       blockEnd += 1;
     }
