@@ -310,10 +310,19 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
     return [
       {
         name: agent.name,
+        ...(typeof agent.description === "string" ? { description: agent.description } : {}),
         ...(typeof agent.dir === "string" ? { dir: agent.dir } : {}),
         ...(typeof agent.provider === "string" ? { provider: agent.provider } : {}),
         ...(typeof agent.session_template === "string"
           ? { session_template: agent.session_template }
+          : {}),
+        ...(typeof agent.work_dir === "string" ? { work_dir: agent.work_dir } : {}),
+        ...(typeof agent.prompt_template === "string"
+          ? { prompt_template: agent.prompt_template }
+          : {}),
+        ...(typeof agent.start_command === "string" ? { start_command: agent.start_command } : {}),
+        ...(typeof agent.default_sling_formula === "string"
+          ? { default_sling_formula: agent.default_sling_formula }
           : {}),
         ...(isPool ? { is_pool: true } : {}),
         ...(hasMinActiveSessions ? { min_active_sessions: minActiveSessions } : {}),
@@ -1404,6 +1413,19 @@ function mergeCliExpandedConfig(
       }
       return {
         ...agent,
+        ...(typeof expandedAgent.description === "string"
+          ? { description: expandedAgent.description }
+          : {}),
+        ...(typeof expandedAgent.work_dir === "string" ? { work_dir: expandedAgent.work_dir } : {}),
+        ...(typeof expandedAgent.prompt_template === "string"
+          ? { prompt_template: expandedAgent.prompt_template }
+          : {}),
+        ...(typeof expandedAgent.start_command === "string"
+          ? { start_command: expandedAgent.start_command }
+          : {}),
+        ...(typeof expandedAgent.default_sling_formula === "string"
+          ? { default_sling_formula: expandedAgent.default_sling_formula }
+          : {}),
         ...(expandedAgent.is_pool === true ? { is_pool: true } : {}),
         ...(typeof expandedAgent.min_active_sessions === "number"
           ? { min_active_sessions: expandedAgent.min_active_sessions }
@@ -2153,6 +2175,16 @@ const makeGcApiClient = Effect.gen(function* () {
     return findConfiguredAgentIdentity(config, normalizedName);
   };
 
+  const isRigPackAgentForMutation = (identity: {
+    readonly dir: string;
+    readonly template: string;
+  }): boolean => {
+    if (!cityPath || !identity.dir) {
+      return false;
+    }
+    return readRigIncludedAgentNames(cityPath, identity.dir).has(identity.template);
+  };
+
   const setAgentSuspended: GcApiClientShape["setAgentSuspended"] = (name, suspended) =>
     Effect.promise(async () =>
       runLoggedGcMutation("agent-suspended", sanitizeKey(name), { suspended }, async () => {
@@ -2173,24 +2205,6 @@ const makeGcApiClient = Effect.gen(function* () {
           lastKnownConfig = updateCachedAgentSuspended(lastKnownConfig, normalizedName, suspended);
           return { result: undefined, path: "gc-api" };
         } catch (error) {
-          if (normalizedName.includes("/")) {
-            if (!cityPath) {
-              throw error;
-            }
-            logGcWarning("routing rig-scoped agent mutation via city.toml", {
-              baseUrl,
-              cityPath,
-              agent: normalizedName,
-              suspended,
-            });
-            writeRigAgentSuspendedToCityToml(cityPath, normalizedName, suspended);
-            lastKnownConfig = updateCachedAgentSuspended(
-              lastKnownConfig,
-              normalizedName,
-              suspended,
-            );
-            return { result: undefined, path: "city.toml" };
-          }
           if (!cityPath) {
             throw error;
           }
@@ -2202,7 +2216,7 @@ const makeGcApiClient = Effect.gen(function* () {
                   template: normalizedName.slice(normalizedName.indexOf("/") + 1),
                 }
               : { dir: "", template: normalizedName });
-          if (identity.dir) {
+          if (isRigPackAgentForMutation(identity)) {
             writeRigAgentSuspendedToCityToml(cityPath, normalizedName, suspended);
           } else {
             writeAgentSuspendedToCityToml(cityPath, identity, suspended);
@@ -2239,11 +2253,6 @@ const makeGcApiClient = Effect.gen(function* () {
                 `GC pool max ${maxActiveSessions} cannot be lower than min ${currentAgent.min_active_sessions}`,
               );
             }
-          }
-          if (!isPoolAgent(config, normalizedName)) {
-            throw new Error(
-              `pool-size control for non-pool agent ${normalizedName} is not supported`,
-            );
           }
           if (!cityPath) {
             throw new Error("GC city path unavailable for pool-size mutation");

@@ -78,4 +78,25 @@ suspended = true`);
     expect(next.indexOf(`agent = "polecat"`)).toBeGreaterThan(next.indexOf(`name = "beta"`));
     expect(next.indexOf(`agent = "polecat"`)).toBeLessThan(next.indexOf(`[patches]`));
   });
+
+  it("writes dir-scoped builtin agents as patches, not rig overrides", () => {
+    const toml = `[workspace]
+name = "t3code"
+
+[patches]
+`;
+
+    const next = __gcCityTomlPatchForTests.updateAgentPatchInCityToml(
+      toml,
+      { dir: "beads-doltlite", template: "control-dispatcher" },
+      { suspended: true, maxActiveSessions: 1 },
+    );
+
+    expect(next).toContain(`[[patches.agent]]
+dir = "beads-doltlite"
+name = "control-dispatcher"
+max_active_sessions = 1
+suspended = true`);
+    expect(next).not.toContain("[[rigs.overrides]]");
+  });
 });

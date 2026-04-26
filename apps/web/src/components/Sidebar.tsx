@@ -839,6 +839,13 @@ interface SidebarProjectThreadListProps {
       maxActiveSessions?: number;
       wakeMode?: GcWakeMode;
       namedSessionMode?: "always" | "on_demand";
+      scope?: string;
+      provider?: string;
+      description?: string;
+      workDir?: string;
+      promptTemplate?: string;
+      startCommand?: string;
+      defaultSlingFormula?: string;
       runtimeState: {
         label: string;
         tone: "info" | "muted" | "success" | "warning";
@@ -1501,6 +1508,15 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             : {}),
           ...(agentGroup.wakeMode ? { wakeMode: agentGroup.wakeMode } : {}),
           ...(agentGroup.namedSessionMode ? { namedSessionMode: agentGroup.namedSessionMode } : {}),
+          ...(agentGroup.scope ? { scope: agentGroup.scope } : {}),
+          ...(agentGroup.provider ? { provider: agentGroup.provider } : {}),
+          ...(agentGroup.description ? { description: agentGroup.description } : {}),
+          ...(agentGroup.workDir ? { workDir: agentGroup.workDir } : {}),
+          ...(agentGroup.promptTemplate ? { promptTemplate: agentGroup.promptTemplate } : {}),
+          ...(agentGroup.startCommand ? { startCommand: agentGroup.startCommand } : {}),
+          ...(agentGroup.defaultSlingFormula
+            ? { defaultSlingFormula: agentGroup.defaultSlingFormula }
+            : {}),
           runtimeState: resolveGcAgentRuntimeState({
             isPool: agentGroup.isPool,
             isSuspended: agentGroup.isSuspended,

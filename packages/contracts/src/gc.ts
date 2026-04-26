@@ -212,9 +212,14 @@ export type GcWakeMode = typeof GcWakeMode.Type;
 
 export const GcConfigAgent = Schema.Struct({
   name: Schema.String,
+  description: Schema.optional(Schema.String),
   dir: Schema.optional(Schema.String),
   provider: Schema.optional(Schema.String),
   session_template: Schema.optional(Schema.String),
+  work_dir: Schema.optional(Schema.String),
+  prompt_template: Schema.optional(Schema.String),
+  start_command: Schema.optional(Schema.String),
+  default_sling_formula: Schema.optional(Schema.String),
   is_pool: Schema.optional(Schema.Boolean),
   min_active_sessions: Schema.optional(Schema.Number),
   max_active_sessions: Schema.optional(Schema.Number),
@@ -317,6 +322,12 @@ export interface VirtualAgentGroup<TThread> {
   wakeMode?: GcWakeMode;
   namedSessionMode?: GcNamedSessionMode;
   scope?: string;
+  provider?: string;
+  description?: string;
+  workDir?: string;
+  promptTemplate?: string;
+  startCommand?: string;
+  defaultSlingFormula?: string;
   threads: TThread[];
 }
 
@@ -417,6 +428,20 @@ function findMatchingAgentGroup<TThread>(
   }
 
   return [...agentGroupsById.values()].find((group) => candidateLabels.has(group.label));
+}
+
+function gcAgentVirtualMetadata(agent: GcConfigAgent | undefined): Partial<VirtualAgentGroup<never>> {
+  if (!agent) {
+    return {};
+  }
+  return {
+    ...(agent.provider ? { provider: agent.provider } : {}),
+    ...(agent.description ? { description: agent.description } : {}),
+    ...(agent.work_dir ? { workDir: agent.work_dir } : {}),
+    ...(agent.prompt_template ? { promptTemplate: agent.prompt_template } : {}),
+    ...(agent.start_command ? { startCommand: agent.start_command } : {}),
+    ...(agent.default_sling_formula ? { defaultSlingFormula: agent.default_sling_formula } : {}),
+  };
 }
 
 function findConfiguredAgent(
@@ -576,6 +601,7 @@ export function groupThreadsByRigAndAgent<
         ...(agent.wake_mode ? { wakeMode: agent.wake_mode } : {}),
         ...(agent.named_session_mode ? { namedSessionMode: agent.named_session_mode } : {}),
         ...(agent.scope ? { scope: agent.scope } : {}),
+        ...gcAgentVirtualMetadata(agent),
         threads: [],
       });
     }
@@ -624,6 +650,7 @@ export function groupThreadsByRigAndAgent<
           ...(agent.wake_mode ? { wakeMode: agent.wake_mode } : {}),
           ...(agent.named_session_mode ? { namedSessionMode: agent.named_session_mode } : {}),
           ...(agent.scope ? { scope: agent.scope } : {}),
+          ...gcAgentVirtualMetadata(agent),
           threads: [],
         });
       }
@@ -718,6 +745,7 @@ export function groupThreadsByRigAndAgent<
         if (configuredAgent.scope) {
           existingAgentGroup.scope = configuredAgent.scope;
         }
+        Object.assign(existingAgentGroup, gcAgentVirtualMetadata(configuredAgent));
       }
       continue;
     }
@@ -741,6 +769,7 @@ export function groupThreadsByRigAndAgent<
         ? { namedSessionMode: configuredAgent.named_session_mode }
         : {}),
       ...(configuredAgent?.scope ? { scope: configuredAgent.scope } : {}),
+      ...gcAgentVirtualMetadata(configuredAgent),
       threads: [thread],
     });
   }

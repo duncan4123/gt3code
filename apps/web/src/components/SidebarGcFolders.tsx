@@ -38,6 +38,13 @@ export interface SidebarGcAgentGroup {
   maxActiveSessions?: number;
   wakeMode?: GcWakeMode;
   namedSessionMode?: "always" | "on_demand";
+  scope?: string;
+  provider?: string;
+  description?: string;
+  workDir?: string;
+  promptTemplate?: string;
+  startCommand?: string;
+  defaultSlingFormula?: string;
   runtimeState: {
     label: string;
     tone: "info" | "muted" | "success" | "warning";
@@ -119,6 +126,19 @@ function gcConfigToggleLabel(
     : kind === "rig"
       ? `Suspend rig ${label} in config`
       : `Suspend ${label} in config`;
+}
+
+function gcAgentSourceLabel(agentGroup: SidebarGcAgentGroup): string {
+  if (agentGroup.promptTemplate?.includes("/.gc/system/")) {
+    return "system";
+  }
+  if (agentGroup.promptTemplate?.includes("/packs/") || agentGroup.promptTemplate?.startsWith("packs/")) {
+    return "pack";
+  }
+  if (agentGroup.startCommand) {
+    return "built-in";
+  }
+  return agentGroup.scope ?? "agent";
 }
 
 export function SidebarGcFolders(props: SidebarGcFoldersProps) {
@@ -330,16 +350,15 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 : agentGroup.namedSessionMode === "on_demand"
                   ? "demand"
                   : null;
-            const canAdjustPoolSize =
-              agentGroup.isPool && typeof agentGroup.maxActiveSessions === "number";
-            const canAdjustPoolMinimum =
-              agentGroup.isPool && typeof agentGroup.minActiveSessions === "number";
+            const canAdjustPoolSize = typeof agentGroup.maxActiveSessions === "number";
+            const canAdjustPoolMinimum = typeof agentGroup.minActiveSessions === "number";
             const nextWakeMode =
               agentGroup.wakeMode === "resume"
                 ? "fresh"
                 : agentGroup.wakeMode === "fresh"
                   ? "resume"
                   : null;
+            const sourceLabel = gcAgentSourceLabel(agentGroup);
             return (
               <Fragment key={`agent-${rigGroup.id}-${agentGroup.id}`}>
                 <SidebarMenuSubItem
@@ -369,6 +388,14 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                       <span className="truncate text-xs font-medium leading-none">
                         {agentGroup.label}
                       </span>
+                      <span className="rounded-full border border-border/60 px-1.5 py-0 text-[.55rem] font-semibold tracking-wide text-muted-foreground/70 uppercase">
+                        {sourceLabel}
+                      </span>
+                      {agentGroup.provider ? (
+                        <span className="rounded-full border border-border/60 px-1.5 py-0 text-[.55rem] font-semibold tracking-wide text-muted-foreground/70 uppercase">
+                          {agentGroup.provider}
+                        </span>
+                      ) : null}
                     </button>
                     <Tooltip>
                       <TooltipTrigger
@@ -569,6 +596,11 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                       <TooltipPopup side="top">
                         <div className="space-y-1">
                           <div>{actionLabel}</div>
+                          {agentGroup.description ? (
+                            <div className="max-w-72 text-[10px] text-muted-foreground">
+                              {agentGroup.description}
+                            </div>
+                          ) : null}
                           <div className="text-[10px] text-muted-foreground">
                             {actionState?.kind === "pool-size"
                               ? `Updating pool size to max ${actionState.maxActiveSessions}.`
@@ -590,6 +622,17 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                                               ? `Pool capacity is ${agentGroup.maxActiveSessions}.`
                                               : "No named session mode configured."
                                       }`}
+                          </div>
+                          <div className="max-w-72 space-y-0.5 text-[10px] text-muted-foreground/80">
+                            <div>
+                              scope {agentGroup.scope ?? "unknown"} · source {sourceLabel}
+                              {agentGroup.provider ? ` · provider ${agentGroup.provider}` : ""}
+                            </div>
+                            {agentGroup.defaultSlingFormula ? (
+                              <div>formula {agentGroup.defaultSlingFormula}</div>
+                            ) : null}
+                            {agentGroup.workDir ? <div>work {agentGroup.workDir}</div> : null}
+                            {agentGroup.startCommand ? <div>starts via command</div> : null}
                           </div>
                         </div>
                       </TooltipPopup>
