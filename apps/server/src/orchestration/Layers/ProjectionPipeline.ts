@@ -12,6 +12,7 @@ import { OrchestrationEventStore } from "../../persistence/Services/Orchestratio
 import { ProjectionPendingApprovalRepository } from "../../persistence/Services/ProjectionPendingApprovals.ts";
 import { ProjectionProjectRepository } from "../../persistence/Services/ProjectionProjects.ts";
 import { ProjectionStateRepository } from "../../persistence/Services/ProjectionState.ts";
+import { FinalizedThreadMessageRepository } from "../../persistence/Services/FinalizedThreadMessages.ts";
 import { ProjectionThreadActivityRepository } from "../../persistence/Services/ProjectionThreadActivities.ts";
 import { type ProjectionThreadActivity } from "../../persistence/Services/ProjectionThreadActivities.ts";
 import {
@@ -31,6 +32,7 @@ import { ProjectionThreadRepository } from "../../persistence/Services/Projectio
 import { ProjectionPendingApprovalRepositoryLive } from "../../persistence/Layers/ProjectionPendingApprovals.ts";
 import { ProjectionProjectRepositoryLive } from "../../persistence/Layers/ProjectionProjects.ts";
 import { ProjectionStateRepositoryLive } from "../../persistence/Layers/ProjectionState.ts";
+import { FinalizedThreadMessageRepositoryLive } from "../../persistence/Layers/FinalizedThreadMessages.ts";
 import { ProjectionThreadActivityRepositoryLive } from "../../persistence/Layers/ProjectionThreadActivities.ts";
 import { ProjectionThreadMessageRepositoryLive } from "../../persistence/Layers/ProjectionThreadMessages.ts";
 import { ProjectionThreadProposedPlanRepositoryLive } from "../../persistence/Layers/ProjectionThreadProposedPlans.ts";
@@ -445,6 +447,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const projectionStateRepository = yield* ProjectionStateRepository;
     const projectionProjectRepository = yield* ProjectionProjectRepository;
     const projectionThreadRepository = yield* ProjectionThreadRepository;
+    const finalizedThreadMessageRepository = yield* FinalizedThreadMessageRepository;
     const projectionThreadMessageRepository = yield* ProjectionThreadMessageRepository;
     const projectionThreadProposedPlanRepository = yield* ProjectionThreadProposedPlanRepository;
     const projectionThreadActivityRepository = yield* ProjectionThreadActivityRepository;
@@ -802,6 +805,18 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             createdAt: previousMessage?.createdAt ?? event.payload.createdAt,
             updatedAt: event.payload.updatedAt,
           });
+          if (!event.payload.streaming) {
+            yield* finalizedThreadMessageRepository.upsert({
+              messageId: event.payload.messageId,
+              threadId: event.payload.threadId,
+              turnId: event.payload.turnId,
+              role: event.payload.role,
+              text: nextText,
+              ...(nextAttachments !== undefined ? { attachments: [...nextAttachments] } : {}),
+              createdAt: previousMessage?.createdAt ?? event.payload.createdAt,
+              updatedAt: event.payload.updatedAt,
+            });
+          }
           return;
         }
 
@@ -1477,6 +1492,7 @@ export const OrchestrationProjectionPipelineLive = Layer.effect(
   makeOrchestrationProjectionPipeline(),
 ).pipe(
   Layer.provideMerge(ProjectionProjectRepositoryLive),
+  Layer.provideMerge(FinalizedThreadMessageRepositoryLive),
   Layer.provideMerge(ProjectionThreadRepositoryLive),
   Layer.provideMerge(ProjectionThreadMessageRepositoryLive),
   Layer.provideMerge(ProjectionThreadProposedPlanRepositoryLive),
