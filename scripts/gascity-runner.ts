@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,16 @@ function main(): void {
     case "dry-run": {
       const runtime = installRuntime({ overwriteConfig: true });
       runGc(runtime, ["start", "--dry-run", ...passthroughArgs]);
+      return;
+    }
+    case "gc": {
+      const runtime = ensureRuntimeInstalled();
+      runGc(runtime, passthroughArgs);
+      return;
+    }
+    case "status": {
+      const runtime = ensureRuntimeInstalled();
+      runGc(runtime, ["status", ...passthroughArgs]);
       return;
     }
     case "start": {
@@ -69,6 +79,14 @@ function installRuntime(options: { readonly overwriteConfig: boolean }): Runtime
     cityDir: runtime.city.rootDir,
     gcBinaryPath: runtime.gcBinaryPath,
   };
+}
+
+function ensureRuntimeInstalled(): RuntimePaths {
+  const runtime = getRuntimePaths();
+  if (existsSync(runtime.cityDir) && existsSync(runtime.gcBinaryPath)) {
+    return runtime;
+  }
+  return installRuntime({ overwriteConfig: true });
 }
 
 function getRuntimePaths(): RuntimePaths {
@@ -118,10 +136,12 @@ function printHelp(): void {
 Commands:
   bun gascity:install   Materialize bundled GC binary and config
   bun gascity:dry-run   Show agents GC would start without side effects
+  bun gascity:status    Show bundled city status
   bun gascity:start     Start GC using the bundled runtime
   bun gascity:stop      Stop GC sessions for the bundled runtime
   bun gascity:config    Show resolved GC config
   bun gascity:path      Print runtime paths
+  bun gc -- <args>      Run bundled gc with the packaged city
 
 Env:
   T3CODE_GASCITY_HOME   Override runtime dir
