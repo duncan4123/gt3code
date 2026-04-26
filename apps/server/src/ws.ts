@@ -1568,6 +1568,9 @@ export const websocketRpcRouteLayer = Layer.unwrap(
             ),
           ),
         );
+        if (session.sessionId === "local-gc-bridge") {
+          return yield* rpcWebSocketHttpEffect;
+        }
         return yield* Effect.acquireUseRelease(
           sessions.markConnected(session.sessionId),
           () => rpcWebSocketHttpEffect,
