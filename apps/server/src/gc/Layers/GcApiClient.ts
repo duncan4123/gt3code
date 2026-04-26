@@ -952,6 +952,72 @@ function parseQuotedTomlString(line: string, key: string): string | null {
   return match?.[1] ?? null;
 }
 
+function parseQuotedTomlArray(line: string, key: string): readonly string[] {
+  const match = line
+    .trim()
+    .match(new RegExp(`^${key}\\s*=\\s*\\[(.*)\\]\\s*$`));
+  if (!match) {
+    return [];
+  }
+  return [...match[1]!.matchAll(/"([^"]+)"/g)].map((entry) => entry[1]!).filter(Boolean);
+}
+
+function findRigIncludesInCityToml(cityTomlContent: string, rigName: string): readonly string[] {
+  const lines = cityTomlContent.split("\n");
+  const isRigChildSection = (trimmed: string): boolean =>
+    trimmed === "[[rigs.overrides]]" || trimmed.startsWith("[rigs.");
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index]?.trim() !== "[[rigs]]") continue;
+    let blockEnd = index + 1;
+    let foundRigName: string | null = null;
+    let includes: readonly string[] = [];
+    while (blockEnd < lines.length) {
+      const line = lines[blockEnd] ?? "";
+      const trimmed = line.trim();
+      if (trimmed === "[[rigs]]") break;
+      if (trimmed.startsWith("[") && !isRigChildSection(trimmed)) break;
+      foundRigName ??= parseQuotedTomlString(line, "name");
+      const parsedIncludes = parseQuotedTomlArray(line, "includes");
+      if (parsedIncludes.length > 0) {
+        includes = parsedIncludes;
+      }
+      blockEnd += 1;
+    }
+    if (foundRigName === rigName) {
+      return includes;
+    }
+    index = blockEnd - 1;
+  }
+  return [];
+}
+
+function readPackAgentNames(cityPath: string, includePath: string): Set<string> {
+  const packPath = path.isAbsolute(includePath) ? includePath : path.join(cityPath, includePath);
+  const agentsPath = path.join(packPath, "agents");
+  if (!existsSync(agentsPath)) {
+    return new Set();
+  }
+  return new Set(
+    readdirSync(agentsPath, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .filter((name) => existsSync(path.join(agentsPath, name, "agent.toml"))),
+  );
+}
+
+function readRigIncludedAgentNames(cityPath: string, rigName: string): Set<string> {
+  const cityTomlPath = path.join(cityPath, "city.toml");
+  const includes = findRigIncludesInCityToml(readFileSync(cityTomlPath, "utf8"), rigName);
+  const agents = new Set<string>();
+  for (const includePath of includes) {
+    for (const agentName of readPackAgentNames(cityPath, includePath)) {
+      agents.add(agentName);
+    }
+  }
+  return agents;
+}
+
 function replaceOrInsertSuspendedLine(
   lines: string[],
   start: number,
@@ -1060,8 +1126,13 @@ function seedRigAgentSuspendedOverrides(
   suspended: boolean,
 ): void {
   const config = loadExpandedGcConfig(binaryPath, cityPath);
+  const includedAgentNames = readRigIncludedAgentNames(cityPath, rigName);
+  if (includedAgentNames.size === 0) {
+    throw new Error(`GC rig "${rigName}" has no readable included pack agents`);
+  }
   for (const agent of config.agents) {
     if (agent.dir !== rigName) continue;
+    if (!includedAgentNames.has(agent.name)) continue;
     writeRigAgentSuspendedToCityToml(cityPath, `${rigName}/${agent.name}`, suspended);
   }
 }
@@ -2462,6 +2533,7 @@ const makeGcApiClient = Effect.gen(function* () {
 export const GcApiClientLive = Layer.effect(GcApiClient)(makeGcApiClient);
 
 export const __gcCityTomlPatchForTests = {
+  findRigIncludesInCityToml,
   updateAgentPatchInCityToml,
   updateRigOverrideSuspended,
 };

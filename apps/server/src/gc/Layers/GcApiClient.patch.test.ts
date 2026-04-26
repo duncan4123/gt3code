@@ -3,6 +3,27 @@ import { describe, expect, it } from "vitest";
 import { __gcCityTomlPatchForTests } from "./GcApiClient.ts";
 
 describe("GC city.toml patch helpers", () => {
+  it("reads rig includes without treating overrides as separate rigs", () => {
+    const toml = `[workspace]
+name = "t3code"
+
+[[rigs]]
+name = "beads-doltlite"
+path = "/tmp/beads"
+includes = ["packs/gastown"]
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = true
+
+[patches]
+`;
+
+    expect(
+      __gcCityTomlPatchForTests.findRigIncludesInCityToml(toml, "beads-doltlite"),
+    ).toEqual(["packs/gastown"]);
+  });
+
   it("writes suspended patches for any city pack agent", () => {
     let toml = `[workspace]
 name = "t3code"
