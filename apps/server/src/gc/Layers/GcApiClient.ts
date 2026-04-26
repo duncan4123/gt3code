@@ -1169,6 +1169,7 @@ function updateAgentPatchInCityToml(
   patch: {
     readonly maxActiveSessions?: number;
     readonly minActiveSessions?: number;
+    readonly suspended?: boolean;
     readonly wakeMode?: "resume" | "fresh";
   },
 ): string {
@@ -1206,6 +1207,9 @@ function updateAgentPatchInCityToml(
           patch.minActiveSessions,
         );
       }
+      if (typeof patch.suspended === "boolean") {
+        replaceOrInsertBooleanLine(lines, index + 1, blockEnd, "suspended", patch.suspended);
+      }
       if (patch.wakeMode) {
         replaceOrInsertStringLine(lines, index + 1, blockEnd, "wake_mode", patch.wakeMode);
       }
@@ -1226,10 +1230,40 @@ function updateAgentPatchInCityToml(
     ...(typeof patch.minActiveSessions === "number"
       ? [`min_active_sessions = ${patch.minActiveSessions}`]
       : []),
+    ...(typeof patch.suspended === "boolean" ? [`suspended = ${patch.suspended}`] : []),
     ...(patch.wakeMode ? [`wake_mode = "${patch.wakeMode}"`] : []),
   ];
   lines.push(...blockLines);
   return lines.join("\n");
+}
+
+function replaceOrInsertBooleanLine(
+  lines: string[],
+  start: number,
+  end: number,
+  key: "suspended",
+  value: boolean,
+): void {
+  const nextLine = `${key} = ${value}`;
+  for (let index = start; index < end; index += 1) {
+    if (lines[index]?.trim().startsWith(`${key} =`)) {
+      lines[index] = nextLine;
+      return;
+    }
+  }
+  lines.splice(end, 0, nextLine);
+}
+
+function writeAgentSuspendedToCityToml(
+  cityPath: string,
+  identity: { readonly dir: string; readonly template: string },
+  suspended: boolean,
+): void {
+  const cityTomlPath = path.join(cityPath, "city.toml");
+  const nextContent = updateAgentPatchInCityToml(readFileSync(cityTomlPath, "utf8"), identity, {
+    suspended,
+  });
+  writeFileSync(cityTomlPath, nextContent, "utf8");
 }
 
 function writeAgentMaxActiveSessionsToCityToml(
@@ -2062,18 +2096,21 @@ const makeGcApiClient = Effect.gen(function* () {
           if (!cityPath) {
             throw error;
           }
-          const cli = runGcCli(gcCliBinary, cityPath, ["agent", action, normalizedName]);
-          if (cli.exitCode === 0) {
-            lastKnownConfig = updateCachedAgentSuspended(
-              lastKnownConfig,
-              normalizedName,
-              suspended,
-            );
-            return { result: undefined, path: "gc-cli" };
+          const identity =
+            findConfiguredAgentIdentity(lastKnownConfig, normalizedName) ??
+            (normalizedName.includes("/")
+              ? {
+                  dir: normalizedName.slice(0, normalizedName.indexOf("/")),
+                  template: normalizedName.slice(normalizedName.indexOf("/") + 1),
+                }
+              : { dir: "", template: normalizedName });
+          if (identity.dir) {
+            writeRigAgentSuspendedToCityToml(cityPath, normalizedName, suspended);
+          } else {
+            writeAgentSuspendedToCityToml(cityPath, identity, suspended);
           }
-          throw new Error(cli.stderr.trim() || cli.stdout.trim() || String(error), {
-            cause: error,
-          });
+          lastKnownConfig = updateCachedAgentSuspended(lastKnownConfig, normalizedName, suspended);
+          return { result: undefined, path: "city.toml" };
         }
       }),
     );
