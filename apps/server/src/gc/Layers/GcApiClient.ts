@@ -1059,16 +1059,7 @@ function seedRigAgentSuspendedOverrides(
   rigName: string,
   suspended: boolean,
 ): void {
-  const cli = runGcCli(binaryPath, cityPath, ["config", "show"]);
-  if (cli.exitCode !== 0) {
-    throw new Error(
-      cli.stderr.trim() || cli.stdout.trim() || "Failed to expand GC config for rig patches",
-    );
-  }
-  const config = normalizeGcConfig(parseGcConfigShowToml(cli.stdout), cityPath);
-  if (!config) {
-    throw new Error("Failed to parse expanded GC config for rig patches");
-  }
+  const config = loadExpandedGcConfig(binaryPath, cityPath);
   for (const agent of config.agents) {
     if (agent.dir !== rigName) continue;
     writeRigAgentSuspendedToCityToml(cityPath, `${rigName}/${agent.name}`, suspended);
@@ -1419,6 +1410,20 @@ function runGcCli(
     stderr: result.stderr ?? "",
     exitCode: result.status ?? 1,
   };
+}
+
+function loadExpandedGcConfig(binaryPath: string, cityPath: string): GcConfigResult {
+  const cli = runGcCli(binaryPath, cityPath, ["config", "show"]);
+  if (cli.exitCode !== 0) {
+    throw new Error(
+      cli.stderr.trim() || cli.stdout.trim() || "Failed to expand GC config for city.toml patches",
+    );
+  }
+  const config = normalizeGcConfig(parseGcConfigShowToml(cli.stdout), cityPath);
+  if (!config) {
+    throw new Error("Failed to parse expanded GC config for city.toml patches");
+  }
+  return config;
 }
 
 function isProcessMatching(pattern: string): boolean {
@@ -2055,6 +2060,28 @@ const makeGcApiClient = Effect.gen(function* () {
         new GcApiClientStartError(error instanceof Error ? error.message : String(error)),
     });
 
+  const getConfigForAgentMutation = (): GcConfigResult | null => {
+    if (lastKnownConfig) {
+      return lastKnownConfig;
+    }
+    if (!cityPath) {
+      return null;
+    }
+    lastKnownConfig = loadExpandedGcConfig(gcCliBinary, cityPath);
+    return lastKnownConfig;
+  };
+
+  const resolveAgentIdentityForMutation = (
+    normalizedName: string,
+  ): { readonly dir: string; readonly template: string } | null => {
+    const cached = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+    if (cached) {
+      return cached;
+    }
+    const config = getConfigForAgentMutation();
+    return findConfiguredAgentIdentity(config, normalizedName);
+  };
+
   const setAgentSuspended: GcApiClientShape["setAgentSuspended"] = (name, suspended) =>
     Effect.promise(async () =>
       runLoggedGcMutation("agent-suspended", sanitizeKey(name), { suspended }, async () => {
@@ -2097,7 +2124,7 @@ const makeGcApiClient = Effect.gen(function* () {
             throw error;
           }
           const identity =
-            findConfiguredAgentIdentity(lastKnownConfig, normalizedName) ??
+            resolveAgentIdentityForMutation(normalizedName) ??
             (normalizedName.includes("/")
               ? {
                   dir: normalizedName.slice(0, normalizedName.indexOf("/")),
@@ -2132,10 +2159,9 @@ const makeGcApiClient = Effect.gen(function* () {
           if (maxActiveSessions < 0) {
             throw new Error("GC pool size must be greater than or equal to 0");
           }
+          const config = getConfigForAgentMutation();
           const currentAgent =
-            lastKnownConfig?.agents.find(
-              (agent) => resolveAgentConfigKey(agent) === normalizedName,
-            ) ?? null;
+            config?.agents.find((agent) => resolveAgentConfigKey(agent) === normalizedName) ?? null;
           if (typeof currentAgent?.min_active_sessions === "number") {
             if (maxActiveSessions < currentAgent.min_active_sessions) {
               throw new Error(
@@ -2143,7 +2169,7 @@ const makeGcApiClient = Effect.gen(function* () {
               );
             }
           }
-          if (!isPoolAgent(lastKnownConfig, normalizedName)) {
+          if (!isPoolAgent(config, normalizedName)) {
             throw new Error(
               `pool-size control for non-pool agent ${normalizedName} is not supported`,
             );
@@ -2151,7 +2177,7 @@ const makeGcApiClient = Effect.gen(function* () {
           if (!cityPath) {
             throw new Error("GC city path unavailable for pool-size mutation");
           }
-          const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+          const identity = resolveAgentIdentityForMutation(normalizedName);
           if (!identity) {
             throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
           }
@@ -2189,10 +2215,9 @@ const makeGcApiClient = Effect.gen(function* () {
           if (minActiveSessions < 0) {
             throw new Error("GC pool minimum must be greater than or equal to 0");
           }
+          const config = getConfigForAgentMutation();
           const currentAgent =
-            lastKnownConfig?.agents.find(
-              (agent) => resolveAgentConfigKey(agent) === normalizedName,
-            ) ?? null;
+            config?.agents.find((agent) => resolveAgentConfigKey(agent) === normalizedName) ?? null;
           if (typeof currentAgent?.max_active_sessions === "number") {
             if (minActiveSessions > currentAgent.max_active_sessions) {
               throw new Error(
@@ -2200,7 +2225,7 @@ const makeGcApiClient = Effect.gen(function* () {
               );
             }
           }
-          if (!isPoolAgent(lastKnownConfig, normalizedName)) {
+          if (!isPoolAgent(config, normalizedName)) {
             throw new Error(
               `min-session control for non-pool agent ${normalizedName} is not supported`,
             );
@@ -2208,7 +2233,7 @@ const makeGcApiClient = Effect.gen(function* () {
           if (!cityPath) {
             throw new Error("GC city path unavailable for min-session mutation");
           }
-          const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+          const identity = resolveAgentIdentityForMutation(normalizedName);
           if (!identity) {
             throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
           }
@@ -2239,7 +2264,7 @@ const makeGcApiClient = Effect.gen(function* () {
         if (!cityPath) {
           throw new Error("GC city path unavailable for wake-mode mutation");
         }
-        const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+        const identity = resolveAgentIdentityForMutation(normalizedName);
         if (!identity) {
           throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
         }
@@ -2262,7 +2287,8 @@ const makeGcApiClient = Effect.gen(function* () {
         if (!cityPath) {
           throw new Error("GC city path unavailable for named-session mode mutation");
         }
-        if (isPoolAgent(lastKnownConfig, normalizedName)) {
+        const config = getConfigForAgentMutation();
+        if (isPoolAgent(config, normalizedName)) {
           throw new Error(
             `session-mode toggle for pool agent ${normalizedName} is not supported yet`,
           );
@@ -2273,7 +2299,7 @@ const makeGcApiClient = Effect.gen(function* () {
           agent: normalizedName,
           mode,
         });
-        const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+        const identity = resolveAgentIdentityForMutation(normalizedName);
         if (!identity) {
           throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
         }
@@ -2434,3 +2460,8 @@ const makeGcApiClient = Effect.gen(function* () {
 });
 
 export const GcApiClientLive = Layer.effect(GcApiClient)(makeGcApiClient);
+
+export const __gcCityTomlPatchForTests = {
+  updateAgentPatchInCityToml,
+  updateRigOverrideSuspended,
+};
