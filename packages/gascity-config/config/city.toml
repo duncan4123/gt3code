@@ -34,6 +34,12 @@ prefix = "bd"
 suspended = false
 includes = ["packs/gastown"]
 
+[[rigs]]
+name = "context-mode"
+prefix = "ccm"
+suspended = false
+includes = ["packs/gastown"]
+
 [patches]
 
 [[patches.agent]]
