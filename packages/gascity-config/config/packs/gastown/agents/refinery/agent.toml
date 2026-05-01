@@ -1,8 +1,8 @@
 scope = "rig"
-provider = "codex"
-option_defaults = { model = "gpt-5.4" }
+provider = "opencode"
+option_defaults = { model = "kimi-for-coding/k2p6" }
 wake_mode = "fresh"
-work_dir = ".gc/worktrees/{{.Rig}}/refinery"
+work_dir = "{{.WorktreesRoot}}/gascity/{{.Rig}}/refinery"
 nudge = "Run 'gc prime' to check merge queue and begin processing."
 pre_start = [
   "{{.ConfigDir}}/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}} --sync",

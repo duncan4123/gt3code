@@ -90,6 +90,22 @@ These built binaries are not committed. `bun gascity:install` copies them into:
 <runtime>/bin/bd
 ```
 
+T3Code and the packaged Gas City use one shared worktree root:
+
+```text
+T3CODE_WORKTREES_DIR=$T3CODE_HOME/worktrees
+```
+
+T3-created thread worktrees live directly under that root by repository and
+branch. Gastown-created worktrees live under the `gascity/` namespace:
+
+```text
+~/.t3/worktrees/t3code/<branch>
+~/.t3/worktrees/gascity/<rig>/refinery
+~/.t3/worktrees/gascity/<rig>/crew/<agent>
+~/.t3/worktrees/gascity/<rig>/polecats/<agent>
+```
+
 Use the repo scripts instead of raw `gc` when you want the T3Code packaged city.
 The global `gc` binary still uses normal GC discovery from the current working
 directory, so running `gc status` from the repo root will look for
@@ -126,6 +142,7 @@ T3CODE_GASCITY_HOME=<runtime>
 GC_CITY_PATH=packages/gascity-config/config
 GC_BIN=<runtime>/bin/gc or <runtime>\bin\gc.exe
 BD_BIN=<runtime>/bin/bd or <runtime>\bin\bd.exe
+T3CODE_WORKTREES_DIR=$T3CODE_HOME/worktrees
 GC_API_URL=http://127.0.0.1:8372
 ```
 

@@ -37,6 +37,7 @@ import {
   DEFAULT_GC_BINARY_PATH,
   DEFAULT_GC_CITY_PATH,
 } from "@t3tools/contracts";
+import { ServerConfig } from "../../config.ts";
 import {
   GcApiClient,
   type GcApiClientShape,
@@ -1750,6 +1751,9 @@ function withLifecycleStatus(config: GcConfigResult, lifecycle: GcLifecycleStatu
 
 const makeGcApiClient = Effect.gen(function* () {
   const serverSettings = yield* ServerSettingsService;
+  const serverConfig = yield* ServerConfig;
+  process.env.T3CODE_WORKTREES_DIR ??= serverConfig.worktreesDir;
+  process.env.GC_WORKTREES_DIR ??= serverConfig.worktreesDir;
   const runtimeContext = yield* Effect.context<never>();
   const runFork = Effect.runForkWith(runtimeContext);
   const settings = yield* serverSettings.getSettings;
@@ -2264,6 +2268,8 @@ const makeGcApiClient = Effect.gen(function* () {
             ...process.env,
             GC_HOME: runtimeHome,
             T3CODE_GASCITY_HOME: runtimeHome,
+            T3CODE_WORKTREES_DIR: serverConfig.worktreesDir,
+            GC_WORKTREES_DIR: serverConfig.worktreesDir,
             GC_CITY_PATH: runtime.cityPath,
             GC_BIN: runtime.binaryPath,
             BD_BIN: runtime.bdBinaryPath,
@@ -2300,6 +2306,8 @@ const makeGcApiClient = Effect.gen(function* () {
           ...process.env,
           GC_HOME: runtimeHome,
           T3CODE_GASCITY_HOME: runtimeHome,
+          T3CODE_WORKTREES_DIR: serverConfig.worktreesDir,
+          GC_WORKTREES_DIR: serverConfig.worktreesDir,
           GC_CITY_PATH: runtime.cityPath,
           GC_BIN: runtime.binaryPath,
           BD_BIN: runtime.bdBinaryPath,

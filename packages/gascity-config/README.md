@@ -22,6 +22,10 @@ T3Code builds GC and beads binaries from the `@t3tools/gascity` and
 binaries into a writable state directory and pass this package's config directory
 to `gc --city`.
 
+T3Code passes `T3CODE_WORKTREES_DIR`/`GC_WORKTREES_DIR` to Gas City so T3-created
+and Gastown-created worktrees share one root. Gastown templates use
+`{{.WorktreesRoot}}/gascity/...` for mutating rig agents.
+
 `materializeGascityRuntime` also seeds `city/.beads/config.yaml` with the local
 beads issue prefix. It does not set Dolt lifecycle or port options; GC owns
 those runtime details.

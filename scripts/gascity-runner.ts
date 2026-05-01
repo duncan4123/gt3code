@@ -9,6 +9,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -35,6 +36,7 @@ interface RuntimePaths {
   readonly cityDir: string;
   readonly gcBinaryPath: string;
   readonly bdBinaryPath: string;
+  readonly worktreesDir: string;
 }
 
 function main(): void {
@@ -108,6 +110,7 @@ function installRuntime(options: { readonly overwriteConfig: boolean }): Runtime
     cityDir: defaultCityRoot,
     gcBinaryPath: runtime.gcBinaryPath,
     bdBinaryPath: runtime.bdBinaryPath,
+    worktreesDir: runtime.worktreesDir,
   };
 }
 
@@ -131,6 +134,9 @@ function getRuntimePaths(): RuntimePaths {
     cityDir: process.env.GC_CITY_PATH ?? process.env.GC_CITY ?? defaultCityRoot,
     gcBinaryPath: join(rootDir, "bin", process.platform === "win32" ? "gc.exe" : "gc"),
     bdBinaryPath: join(rootDir, "bin", process.platform === "win32" ? "bd.exe" : "bd"),
+    worktreesDir:
+      process.env.T3CODE_WORKTREES_DIR ??
+      join(process.env.T3CODE_HOME?.trim() || join(homedir(), ".t3"), "worktrees"),
   };
 }
 
@@ -205,6 +211,8 @@ function runGc(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
     GC_CITY_PATH: runtime.cityDir,
     GC_BIN: runtime.gcBinaryPath,
     BD_BIN: runtime.bdBinaryPath,
+    T3CODE_WORKTREES_DIR: runtime.worktreesDir,
+    GC_WORKTREES_DIR: runtime.worktreesDir,
     GC_API_URL: "http://127.0.0.1:8372",
   };
   prependRuntimeBinToPath(env, dirname(runtime.gcBinaryPath));
@@ -230,6 +238,7 @@ function printRuntime(runtime: RuntimePaths): void {
   console.log(`GC_CITY_PATH=${runtime.cityDir}`);
   console.log(`GC_BIN=${runtime.gcBinaryPath}`);
   console.log(`BD_BIN=${runtime.bdBinaryPath}`);
+  console.log(`T3CODE_WORKTREES_DIR=${runtime.worktreesDir}`);
   console.log("GC_API_URL=http://127.0.0.1:8372");
 }
 
@@ -248,6 +257,7 @@ Commands:
 
 Env:
   T3CODE_GASCITY_HOME   Override runtime dir
+  T3CODE_WORKTREES_DIR  Override shared T3Code/Gas City worktree root
   GC_CITY_PATH          Override active city dir
   GASCITY_BINARY        Override built gc binary
   BD_BINARY             Override built bd binary

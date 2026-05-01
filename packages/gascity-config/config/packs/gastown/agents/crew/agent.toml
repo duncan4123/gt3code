@@ -2,7 +2,7 @@ scope = "rig"
 provider = "codex"
 option_defaults = { model = "gpt-5.4" }
 wake_mode = "fresh"
-work_dir = ".gc/worktrees/{{.Rig}}/crew/{{.AgentBase}}"
+work_dir = "{{.WorktreesRoot}}/gascity/{{.Rig}}/crew/{{.AgentBase}}"
 nudge = "Check mail and hook status, then act accordingly."
 pre_start = [
   "{{.ConfigDir}}/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}} --sync",

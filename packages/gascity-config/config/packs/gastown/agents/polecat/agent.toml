@@ -2,7 +2,7 @@ scope = "rig"
 provider = "codex"
 option_defaults = { model = "gpt-5.4" }
 wake_mode = "fresh"
-work_dir = ".gc/worktrees/{{.Rig}}/polecats/{{.AgentBase}}"
+work_dir = "{{.WorktreesRoot}}/gascity/{{.Rig}}/polecats/{{.AgentBase}}"
 nudge = "Run gc hook; it checks assigned work first, then routed pool work."
 pre_start = [
   "{{.ConfigDir}}/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}} --sync",
