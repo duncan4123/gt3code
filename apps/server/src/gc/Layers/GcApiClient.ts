@@ -786,6 +786,10 @@ function findT3CodePackagedGcCityRoot(): string | null {
   return isGcCityRoot(cityPath) ? cityPath : null;
 }
 
+function isBundledGcCityRoot(cityPath: string): boolean {
+  return path.resolve(cityPath) === path.resolve(getBundledGascityConfigLayout().rootDir);
+}
+
 function ensureDefaultGcSiteToml(cityPath: string): void {
   const gcDir = path.join(cityPath, ".gc");
   const siteTomlPath = path.join(gcDir, "site.toml");
@@ -862,8 +866,10 @@ function ensurePackagedGcRuntime(input: {
     }
     throw new Error(`Bundled Gas City city is missing required config at ${defaultCityPath}.`);
   }
-  ensureDefaultGcSiteToml(cityPath);
-  ensureDefaultGcBeadsConfig(cityPath);
+  if (isBundledGcCityRoot(cityPath)) {
+    ensureDefaultGcSiteToml(cityPath);
+    ensureDefaultGcBeadsConfig(cityPath);
+  }
   if (!existsSync(input.binaryPath) || !statSync(input.binaryPath).isFile()) {
     copyBundledGcBinary(input.binaryPath);
   }
@@ -952,9 +958,9 @@ function discoverGcCityRoot(startCwd: string): string | null {
 
   return (
     findGcCityRootUpward(startCwd) ??
-    findT3CodePackagedGcCityRoot() ??
     findRegisteredGcCityRoot(startCwd) ??
-    findSiblingGcCityRoot(startCwd)
+    findSiblingGcCityRoot(startCwd) ??
+    findT3CodePackagedGcCityRoot()
   );
 }
 
@@ -2686,6 +2692,8 @@ const makeGcApiClient = Effect.gen(function* () {
 export const GcApiClientLive = Layer.effect(GcApiClient)(makeGcApiClient);
 
 export const __gcCityTomlPatchForTests = {
+  discoverGcCityRoot,
+  ensurePackagedGcRuntime,
   findRigIncludesInCityToml,
   updateAgentPatchInCityToml,
   updateRigOverrideSuspended,

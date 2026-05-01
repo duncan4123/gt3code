@@ -1,3 +1,6 @@
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { __gcCityTomlPatchForTests } from "./GcApiClient.ts";
@@ -98,5 +101,40 @@ name = "control-dispatcher"
 max_active_sessions = 1
 suspended = true`);
     expect(next).not.toContain("[[rigs.overrides]]");
+  });
+
+  it("prefers sibling gc cities over the packaged fallback", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "gc-city-discovery-"));
+    const repoRoot = path.join(root, "repo");
+    const nestedProject = path.join(repoRoot, "projects", "alpha");
+    const siblingCity = path.join(repoRoot, "gc");
+
+    mkdirSync(nestedProject, { recursive: true });
+    mkdirSync(siblingCity, { recursive: true });
+    writeFileSync(path.join(siblingCity, "city.toml"), "[workspace]\nname = \"local\"\n");
+    writeFileSync(path.join(siblingCity, "pack.toml"), "[pack]\nname = \"gc\"\n");
+
+    expect(__gcCityTomlPatchForTests.discoverGcCityRoot(nestedProject)).toBe(siblingCity);
+  });
+
+  it("does not inject doltlite beads metadata into non-bundled cities", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "gc-runtime-"));
+    const cityPath = path.join(root, "custom-city");
+    const binPath = path.join(root, "gc");
+
+    mkdirSync(cityPath, { recursive: true });
+    writeFileSync(path.join(cityPath, "city.toml"), "[workspace]\nname = \"legacy\"\n");
+    writeFileSync(path.join(cityPath, "pack.toml"), "[pack]\nname = \"gc\"\n");
+    writeFileSync(binPath, "#!/bin/sh\nexit 0\n");
+    chmodSync(binPath, 0o755);
+
+    const runtime = __gcCityTomlPatchForTests.ensurePackagedGcRuntime({
+      runtimeHome: path.join(root, "runtime"),
+      cityPath,
+      binaryPath: binPath,
+    });
+
+    expect(runtime.cityPath).toBe(cityPath);
+    expect(existsSync(path.join(cityPath, ".beads", "metadata.json"))).toBe(false);
   });
 });
