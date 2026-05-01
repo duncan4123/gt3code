@@ -7,7 +7,8 @@ import serverPackageJson from "../apps/server/package.json" with { type: "json" 
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
-import { findBundledGcBinaryPath } from "../packages/gascity-config/src/index.ts";
+import { findBuiltBdBinaryPath } from "@t3tools/beads-doltlite";
+import { findBuiltGcBinaryPath } from "@t3tools/gascity";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -721,6 +722,12 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   if (resolvedServerDependencies["@t3tools/gascity-config"] === "workspace:*") {
     resolvedServerDependencies["@t3tools/gascity-config"] = "file:packages/gascity-config";
   }
+  if (resolvedServerDependencies["@t3tools/gascity"] === "workspace:*") {
+    resolvedServerDependencies["@t3tools/gascity"] = "file:packages/gascity";
+  }
+  if (resolvedServerDependencies["@t3tools/beads-doltlite"] === "workspace:*") {
+    resolvedServerDependencies["@t3tools/beads-doltlite"] = "file:packages/beads-doltlite";
+  }
   const resolvedDesktopRuntimeDependencies = yield* Effect.try({
     try: () =>
       resolveDesktopRuntimeDependencies(
@@ -738,12 +745,21 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   const iconAssets = resolveDesktopBuildIconAssets(appVersion);
   const commitHash = yield* resolveGitCommitHash(repoRoot);
   const missingGcBinaryTarget = requiredGcBinaryTargets(options.platform, options.arch).find(
-    (target) => !findBundledGcBinaryPath(target),
+    (target) => !findBuiltGcBinaryPath(target),
   );
   if (missingGcBinaryTarget) {
     const executable = missingGcBinaryTarget.platform === "win32" ? "gc.exe" : "gc";
     return yield* new BuildScriptError({
-      message: `Missing bundled Gas City binary for ${missingGcBinaryTarget.platform}-${missingGcBinaryTarget.arch}. Add packages/gascity-config/binaries/${missingGcBinaryTarget.platform}-${missingGcBinaryTarget.arch}/${executable} before building this desktop target.`,
+      message: `Missing built Gas City binary for ${missingGcBinaryTarget.platform}-${missingGcBinaryTarget.arch}. Run bun build:gascity-tools before building this desktop target. Expected packages/gascity/bin/${missingGcBinaryTarget.platform}-${missingGcBinaryTarget.arch}/${executable}.`,
+    });
+  }
+  const missingBdBinaryTarget = requiredGcBinaryTargets(options.platform, options.arch).find(
+    (target) => !findBuiltBdBinaryPath(target),
+  );
+  if (missingBdBinaryTarget) {
+    const executable = missingBdBinaryTarget.platform === "win32" ? "bd.exe" : "bd";
+    return yield* new BuildScriptError({
+      message: `Missing built beads binary for ${missingBdBinaryTarget.platform}-${missingBdBinaryTarget.arch}. Run bun build:gascity-tools before building this desktop target. Expected packages/beads-doltlite/bin/${missingBdBinaryTarget.platform}-${missingBdBinaryTarget.arch}/${executable}.`,
     });
   }
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
@@ -799,6 +815,14 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   yield* fs.copy(
     path.join(repoRoot, "packages/gascity-config"),
     path.join(stageAppDir, "packages/gascity-config"),
+  );
+  yield* fs.copy(
+    path.join(repoRoot, "packages/gascity"),
+    path.join(stageAppDir, "packages/gascity"),
+  );
+  yield* fs.copy(
+    path.join(repoRoot, "packages/beads-doltlite"),
+    path.join(stageAppDir, "packages/beads-doltlite"),
   );
 
   yield* assertPlatformBuildResources(

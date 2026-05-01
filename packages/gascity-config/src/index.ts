@@ -39,6 +39,7 @@ export interface MaterializeGascityRuntimeOptions extends GascityBinaryTarget {
   readonly overwriteConfig?: boolean;
   readonly preserveExistingConfig?: boolean;
   readonly gcBinaryPath?: string;
+  readonly bdBinaryPath?: string;
   readonly seedLocalBeadsConfig?: boolean;
 }
 
@@ -51,6 +52,7 @@ export interface GascityRuntimeLayout {
   readonly city: GascityConfigLayout;
   readonly binDir: string;
   readonly gcBinaryPath: string;
+  readonly bdBinaryPath: string;
 }
 
 const modulePackageRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -136,14 +138,27 @@ export function materializeGascityConfig(
 }
 
 export function getBundledGcBinaryPath(target: GascityBinaryTarget = {}): string {
+  return getBundledBinaryPath("gc", target);
+}
+
+export function getBundledBdBinaryPath(target: GascityBinaryTarget = {}): string {
+  return getBundledBinaryPath("bd", target);
+}
+
+function getBundledBinaryPath(name: "bd" | "gc", target: GascityBinaryTarget = {}): string {
   const platform = target.platform ?? process.platform;
   const arch = target.arch ?? process.arch;
-  const executable = platform === "win32" ? "gc.exe" : "gc";
+  const executable = platform === "win32" ? `${name}.exe` : name;
   return path.join(binariesRoot, `${platform}-${arch}`, executable);
 }
 
 export function findBundledGcBinaryPath(target: GascityBinaryTarget = {}): string | undefined {
   const binaryPath = getBundledGcBinaryPath(target);
+  return existsSync(binaryPath) && statSync(binaryPath).isFile() ? binaryPath : undefined;
+}
+
+export function findBundledBdBinaryPath(target: GascityBinaryTarget = {}): string | undefined {
+  const binaryPath = getBundledBdBinaryPath(target);
   return existsSync(binaryPath) && statSync(binaryPath).isFile() ? binaryPath : undefined;
 }
 
@@ -194,29 +209,43 @@ export function materializeGascityRuntime(
   if (options.arch !== undefined) {
     binaryTarget.arch = options.arch;
   }
-  const sourceBinaryPath = options.gcBinaryPath ?? findBundledGcBinaryPath(binaryTarget);
+  const sourceGcBinaryPath = options.gcBinaryPath ?? findBundledGcBinaryPath(binaryTarget);
+  const sourceBdBinaryPath = options.bdBinaryPath ?? findBundledBdBinaryPath(binaryTarget);
   const binaryPlatform = options.platform ?? process.platform;
-  if (!sourceBinaryPath) {
+  if (!sourceGcBinaryPath) {
     throw new Error(
       `No bundled Gas City binary found for ${options.platform ?? process.platform}-${
         options.arch ?? process.arch
       }. Provide gcBinaryPath or add a binary under ${binariesRoot}.`,
     );
   }
-  if (!existsSync(sourceBinaryPath) || !statSync(sourceBinaryPath).isFile()) {
-    throw new Error(`Gas City binary does not exist or is not a file: ${sourceBinaryPath}`);
+  if (!sourceBdBinaryPath) {
+    throw new Error(
+      `No bundled beads binary found for ${options.platform ?? process.platform}-${
+        options.arch ?? process.arch
+      }. Provide bdBinaryPath or add a binary under ${binariesRoot}.`,
+    );
+  }
+  if (!existsSync(sourceGcBinaryPath) || !statSync(sourceGcBinaryPath).isFile()) {
+    throw new Error(`Gas City binary does not exist or is not a file: ${sourceGcBinaryPath}`);
+  }
+  if (!existsSync(sourceBdBinaryPath) || !statSync(sourceBdBinaryPath).isFile()) {
+    throw new Error(`beads binary does not exist or is not a file: ${sourceBdBinaryPath}`);
   }
 
   const binDir = path.join(rootDir, "bin");
   const gcBinaryPath = path.join(binDir, path.basename(getBundledGcBinaryPath(options)));
+  const bdBinaryPath = path.join(binDir, path.basename(getBundledBdBinaryPath(options)));
   mkdirSync(binDir, { recursive: true });
-  copyGcBinary(sourceBinaryPath, gcBinaryPath, binaryPlatform);
+  copyRuntimeBinary(sourceGcBinaryPath, gcBinaryPath, binaryPlatform);
+  copyRuntimeBinary(sourceBdBinaryPath, bdBinaryPath, binaryPlatform);
 
   return {
     rootDir,
     city,
     binDir,
     gcBinaryPath,
+    bdBinaryPath,
   };
 }
 
@@ -235,18 +264,18 @@ function seedLocalBeadsConfig(cityDir: string): void {
   writeFileSync(configPath, ["issue_prefix: ci", "issue-prefix: ci", ""].join("\n"));
 }
 
-function copyGcBinary(
+function copyRuntimeBinary(
   sourceBinaryPath: string,
-  gcBinaryPath: string,
+  targetBinaryPath: string,
   platform: NodeJS.Platform,
 ): void {
-  const tempBinaryPath = `${gcBinaryPath}.${process.pid}.tmp`;
+  const tempBinaryPath = `${targetBinaryPath}.${process.pid}.tmp`;
   try {
     cpSync(sourceBinaryPath, tempBinaryPath, { force: true });
     if (platform !== "win32") {
       chmodSync(tempBinaryPath, 0o755);
     }
-    renameSync(tempBinaryPath, gcBinaryPath);
+    renameSync(tempBinaryPath, targetBinaryPath);
   } catch (error) {
     rmSync(tempBinaryPath, { force: true });
     throw error;

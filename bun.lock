@@ -58,7 +58,11 @@
         "@effect/sql-sqlite-bun": "catalog:",
         "@opencode-ai/sdk": "^1.3.15",
         "@pierre/diffs": "^1.1.0-beta.16",
+        "@t3tools/beads-doltlite": "workspace:*",
+        "@t3tools/gascity": "workspace:*",
         "@t3tools/gascity-config": "workspace:*",
+        "better-sqlite3": "^12.8.0",
+        "doltlite": "workspace:*",
         "effect": "catalog:",
         "node-pty": "^1.1.0",
         "open": "^10.1.0",
@@ -133,6 +137,14 @@
         "vitest-browser-react": "^2.0.5",
       },
     },
+    "packages/beads-doltlite": {
+      "name": "@t3tools/beads-doltlite",
+      "version": "0.0.0-alpha.1",
+      "devDependencies": {
+        "@types/node": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/client-runtime": {
       "name": "@t3tools/client-runtime",
       "version": "0.0.0-alpha.1",
@@ -196,6 +208,14 @@
         "vitest": "catalog:",
       },
     },
+    "packages/gascity": {
+      "name": "@t3tools/gascity",
+      "version": "0.0.0-alpha.1",
+      "devDependencies": {
+        "@types/node": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/gascity-config": {
       "name": "@t3tools/gascity-config",
       "version": "0.0.0-alpha.1",
@@ -226,7 +246,9 @@
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.2.77",
         "@effect/platform-node": "catalog:",
+        "@t3tools/beads-doltlite": "workspace:*",
         "@t3tools/contracts": "workspace:*",
+        "@t3tools/gascity": "workspace:*",
         "@t3tools/shared": "workspace:*",
         "effect": "catalog:",
       },
@@ -767,11 +789,15 @@
 
     "@szmarczak/http-timer": ["@szmarczak/http-timer@4.0.6", "", { "dependencies": { "defer-to-connect": "^2.0.0" } }, "sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w=="],
 
+    "@t3tools/beads-doltlite": ["@t3tools/beads-doltlite@workspace:packages/beads-doltlite"],
+
     "@t3tools/client-runtime": ["@t3tools/client-runtime@workspace:packages/client-runtime"],
 
     "@t3tools/contracts": ["@t3tools/contracts@workspace:packages/contracts"],
 
     "@t3tools/desktop": ["@t3tools/desktop@workspace:apps/desktop"],
+
+    "@t3tools/gascity": ["@t3tools/gascity@workspace:packages/gascity"],
 
     "@t3tools/gascity-config": ["@t3tools/gascity-config@workspace:packages/gascity-config"],
 

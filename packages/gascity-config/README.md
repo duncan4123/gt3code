@@ -15,25 +15,12 @@ const city = getBundledGascityConfigLayout();
 
 `city.rootDir` is suitable for passing to the `gc` binary.
 
-## Bundled binary layout
+## Runtime layout
 
-T3Code can also ship platform-specific GC binaries next to this config package:
-
-```text
-binaries/linux-x64/gc
-binaries/darwin-arm64/gc
-binaries/win32-x64/gc.exe
-```
-
-At runtime, copy the binary into a writable state directory:
-
-```ts
-import { materializeGascityRuntime } from "@t3tools/gascity-config";
-
-const runtime = materializeGascityRuntime({ targetDir: "/path/to/writable/runtime" });
-```
-
-If the app supplies the binary from elsewhere, pass `gcBinaryPath`.
+T3Code builds GC and beads binaries from the `@t3tools/gascity` and
+`@t3tools/beads-doltlite` workspace packages. Runtime launchers copy those built
+binaries into a writable state directory and pass this package's config directory
+to `gc --city`.
 
 `materializeGascityRuntime` also seeds `city/.beads/config.yaml` with the local
 beads issue prefix. It does not set Dolt lifecycle or port options; GC owns

@@ -21,7 +21,9 @@ import {
 } from "node:fs";
 import { homedir as osHomedir } from "node:os";
 import path from "node:path";
-import { findBundledGcBinaryPath, getBundledGascityConfigLayout } from "@t3tools/gascity-config";
+import { findBuiltBdBinaryPath } from "@t3tools/beads-doltlite";
+import { findBuiltGcBinaryPath } from "@t3tools/gascity";
+import { getBundledGascityConfigLayout } from "@t3tools/gascity-config";
 import { Effect, Layer, Stream, PubSub, Config, Option } from "effect";
 import type {
   GcConfigAgent,
@@ -834,10 +836,13 @@ function ensureDefaultGcBeadsConfig(cityPath: string): void {
   }
 }
 
-function copyBundledGcBinary(binaryPath: string): void {
-  const sourceBinaryPath = findBundledGcBinaryPath();
+function copyBundledRuntimeBinary(
+  binaryPath: string,
+  sourceBinaryPath: string | undefined,
+  label: string,
+): void {
   if (!sourceBinaryPath) {
-    throw new Error("No bundled Gas City binary is available for this platform.");
+    throw new Error(`No bundled ${label} binary is available for this platform.`);
   }
   mkdirSync(path.dirname(binaryPath), { recursive: true });
   const tempBinaryPath = `${binaryPath}.${process.pid}.tmp`;
@@ -857,9 +862,14 @@ function ensurePackagedGcRuntime(input: {
   readonly runtimeHome: string;
   readonly cityPath: string | null;
   readonly binaryPath: string;
-}): { readonly cityPath: string; readonly binaryPath: string } {
+}): { readonly cityPath: string; readonly binaryPath: string; readonly bdBinaryPath: string } {
   const defaultCityPath = getBundledGascityConfigLayout().rootDir;
   const cityPath = input.cityPath ?? defaultCityPath;
+  const bdBinaryPath = path.join(
+    input.runtimeHome,
+    "bin",
+    process.platform === "win32" ? "bd.exe" : "bd",
+  );
   if (!isGcCityRoot(cityPath)) {
     if (path.resolve(cityPath) !== path.resolve(defaultCityPath)) {
       throw new Error(`Gas City city is not installed at ${cityPath}.`);
@@ -871,9 +881,12 @@ function ensurePackagedGcRuntime(input: {
     ensureDefaultGcBeadsConfig(cityPath);
   }
   if (!existsSync(input.binaryPath) || !statSync(input.binaryPath).isFile()) {
-    copyBundledGcBinary(input.binaryPath);
+    copyBundledRuntimeBinary(input.binaryPath, findBuiltGcBinaryPath(), "Gas City");
   }
-  return { cityPath, binaryPath: input.binaryPath };
+  if (!existsSync(bdBinaryPath) || !statSync(bdBinaryPath).isFile()) {
+    copyBundledRuntimeBinary(bdBinaryPath, findBuiltBdBinaryPath(), "beads");
+  }
+  return { cityPath, binaryPath: input.binaryPath, bdBinaryPath };
 }
 
 function findRegisteredGcCityRoot(startCwd: string): string | null {
@@ -1598,14 +1611,36 @@ function runGcCli(
   args: string[],
   options?: { readonly timeoutMs?: number },
 ): { readonly stdout: string; readonly stderr: string; readonly exitCode: number } {
+  const binDir = path.dirname(binaryPath);
   const result = spawnSync(binaryPath, ["--city", cityPath, ...args], {
     encoding: "utf8",
+    env: withRuntimeBinPath(
+      {
+        ...process.env,
+        GC_CITY_PATH: cityPath,
+        GC_BIN: binaryPath,
+        BD_BIN: path.join(binDir, process.platform === "win32" ? "bd.exe" : "bd"),
+      },
+      binDir,
+    ),
     timeout: options?.timeoutMs ?? GC_CLI_REQUEST_TIMEOUT_MS,
   });
   return {
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
     exitCode: result.status ?? 1,
+  };
+}
+
+function withRuntimeBinPath(env: NodeJS.ProcessEnv, binDir: string): NodeJS.ProcessEnv {
+  const key =
+    process.platform === "win32"
+      ? (Object.keys(env).find((name) => name.toLowerCase() === "path") ?? "Path")
+      : "PATH";
+  const separator = process.platform === "win32" ? ";" : ":";
+  return {
+    ...env,
+    [key]: [binDir, env[key]].filter(Boolean).join(separator),
   };
 }
 
@@ -2224,14 +2259,18 @@ const makeGcApiClient = Effect.gen(function* () {
       });
       const result = spawnSync(runtime.binaryPath, ["--city", runtime.cityPath, "start"], {
         cwd: path.dirname(runtime.cityPath),
-        env: {
-          ...process.env,
-          GC_HOME: runtimeHome,
-          T3CODE_GASCITY_HOME: runtimeHome,
-          GC_CITY_PATH: runtime.cityPath,
-          GC_BIN: runtime.binaryPath,
-          GC_API_URL: baseUrl,
-        },
+        env: withRuntimeBinPath(
+          {
+            ...process.env,
+            GC_HOME: runtimeHome,
+            T3CODE_GASCITY_HOME: runtimeHome,
+            GC_CITY_PATH: runtime.cityPath,
+            GC_BIN: runtime.binaryPath,
+            BD_BIN: runtime.bdBinaryPath,
+            GC_API_URL: baseUrl,
+          },
+          path.dirname(runtime.binaryPath),
+        ),
         encoding: "utf8",
         timeout: GC_START_TIMEOUT_MS,
       });
@@ -2256,14 +2295,18 @@ const makeGcApiClient = Effect.gen(function* () {
     });
     const child = spawn(runtime.binaryPath, ["--city", runtime.cityPath, ...args], {
       cwd: path.dirname(runtime.cityPath),
-      env: {
-        ...process.env,
-        GC_HOME: runtimeHome,
-        T3CODE_GASCITY_HOME: runtimeHome,
-        GC_CITY_PATH: runtime.cityPath,
-        GC_BIN: runtime.binaryPath,
-        GC_API_URL: baseUrl,
-      },
+      env: withRuntimeBinPath(
+        {
+          ...process.env,
+          GC_HOME: runtimeHome,
+          T3CODE_GASCITY_HOME: runtimeHome,
+          GC_CITY_PATH: runtime.cityPath,
+          GC_BIN: runtime.binaryPath,
+          BD_BIN: runtime.bdBinaryPath,
+          GC_API_URL: baseUrl,
+        },
+        path.dirname(runtime.binaryPath),
+      ),
       detached: true,
       stdio: "ignore",
     });

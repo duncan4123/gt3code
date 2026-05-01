@@ -50,9 +50,10 @@ Observability guide: [docs/observability.md](./docs/observability.md)
 ## Bundled Gas City on `ship`
 
 The `ship` branch includes a bundled Gas City runtime for local T3Code
-development. T3Code ships the GC config, Gastown packs, and a platform-specific
-`gc` binary under [`packages/gascity-config`](./packages/gascity-config). At
-runtime these are materialized into a writable state directory:
+development. T3Code ships the GC config and Gastown packs under
+[`packages/gascity-config`](./packages/gascity-config). The `gc` and `bd`
+binaries are built from workspace packages and copied into a writable runtime
+state directory:
 
 ```text
 Linux:   ~/.local/state/t3code/gascity/current
@@ -60,19 +61,42 @@ macOS:   ~/Library/Application Support/T3Code/GasCity/current
 Windows: %LOCALAPPDATA%\T3Code\GasCity\current
 ```
 
-The packaged city lives at:
+Source/build package layout:
 
 ```text
-<runtime>/city
+packages/gascity           builds gc from Gas City Go source
+packages/beads-doltlite    builds bd from beads-doltlite Go source
+packages/gascity-config    owns city.toml, pack.toml, packs
 ```
 
-Use the repo scripts instead of raw `gc` when you want the bundled T3Code city.
+Build the tool binaries before installing or running the packaged city:
+
+```bash
+bun build:gascity-tools
+bun gascity:install
+```
+
+`bun build:gascity-tools` writes ignored binaries under:
+
+```text
+packages/gascity/bin/<platform>-<arch>/gc
+packages/beads-doltlite/bin/<platform>-<arch>/bd
+```
+
+These built binaries are not committed. `bun gascity:install` copies them into:
+
+```text
+<runtime>/bin/gc
+<runtime>/bin/bd
+```
+
+Use the repo scripts instead of raw `gc` when you want the T3Code packaged city.
 The global `gc` binary still uses normal GC discovery from the current working
 directory, so running `gc status` from the repo root will look for
 `./city.toml`.
 
 ```bash
-# Install or refresh the bundled config and binary.
+# Install or refresh built runtime binaries and machine-local config.
 bun gascity:install
 
 # Start the bundled city under the GC supervisor.
@@ -101,6 +125,7 @@ bun gc -- session list
 T3CODE_GASCITY_HOME=<runtime>
 GC_CITY_PATH=packages/gascity-config/config
 GC_BIN=<runtime>/bin/gc or <runtime>\bin\gc.exe
+BD_BIN=<runtime>/bin/bd or <runtime>\bin\bd.exe
 GC_API_URL=http://127.0.0.1:8372
 ```
 
@@ -109,7 +134,7 @@ Sidebar controls persist supported GC changes back to the packaged
 `city.toml`, especially city-scoped agents such as `mayor`, `deacon`, `boot`,
 and the `dog` pool. The packaged city now includes the T3Code `gascity` and
 `beads-doltlite` rigs; machine-local rig path bindings still live in
-`<runtime>/city/.gc/site.toml`.
+`packages/gascity-config/config/.gc/site.toml`.
 
 One config tree matters when changing bundled Gas City behavior:
 `packages/gascity-config/config/...`. In development this is the active city
@@ -150,15 +175,17 @@ maps the source trees, materialized runtime tree, `gc`/`bd` binary linkage,
 `GASCITY_BINARY` install flow, and the `gc status` vs `gc session list`
 mismatch checks.
 
-Desktop release builds require a bundled GC binary for the target platform:
+Desktop release builds require built GC and beads binaries for the target
+platform:
 
 ```text
-packages/gascity-config/binaries/linux-x64/gc
-packages/gascity-config/binaries/darwin-arm64/gc
-packages/gascity-config/binaries/win32-x64/gc.exe
+packages/gascity/bin/linux-x64/gc
+packages/beads-doltlite/bin/linux-x64/bd
+packages/gascity/bin/win32-x64/gc.exe
+packages/beads-doltlite/bin/win32-x64/bd.exe
 ```
 
-Windows desktop builds fail fast if the matching `gc.exe` is missing.
+Desktop builds fail fast if the matching `gc` or `bd` binary is missing.
 
 ### Context-Mode Comparison Note
 

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertBundledGascityConfigPresent,
+  getBundledBdBinaryPath,
   getBundledGcBinaryPath,
   getBundledGascityConfigLayout,
   getDefaultGascityRuntimeRoot,
@@ -56,8 +57,14 @@ describe("@t3tools/gascity-config", () => {
     expect(getBundledGcBinaryPath({ platform: "linux", arch: "x64" })).toMatch(
       /binaries\/linux-x64\/gc$/u,
     );
+    expect(getBundledBdBinaryPath({ platform: "linux", arch: "x64" })).toMatch(
+      /binaries\/linux-x64\/bd$/u,
+    );
     expect(getBundledGcBinaryPath({ platform: "win32", arch: "x64" })).toMatch(
       /binaries\/win32-x64\/gc\.exe$/u,
+    );
+    expect(getBundledBdBinaryPath({ platform: "win32", arch: "x64" })).toMatch(
+      /binaries\/win32-x64\/bd\.exe$/u,
     );
   });
 
@@ -77,11 +84,14 @@ describe("@t3tools/gascity-config", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "t3-gascity-runtime-"));
     try {
       const sourceBinary = path.join(tempDir, "source-gc");
+      const sourceBdBinary = path.join(tempDir, "source-bd");
       writeFileSync(sourceBinary, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      writeFileSync(sourceBdBinary, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
 
       const runtime = materializeGascityRuntime({
         targetDir: path.join(tempDir, "runtime"),
         gcBinaryPath: sourceBinary,
+        bdBinaryPath: sourceBdBinary,
       });
 
       expect(readFileSync(runtime.city.cityTomlPath, "utf8")).toContain('name = "beads-doltlite"');
@@ -93,7 +103,9 @@ describe("@t3tools/gascity-config", () => {
       expect(beadsConfig).not.toContain("dolt:");
       expect(beadsConfig).not.toContain("port:");
       expect(readFileSync(runtime.gcBinaryPath, "utf8")).toContain("exit 0");
+      expect(readFileSync(runtime.bdBinaryPath, "utf8")).toContain("exit 0");
       expect(statSync(runtime.gcBinaryPath).mode & 0o111).not.toBe(0);
+      expect(statSync(runtime.bdBinaryPath).mode & 0o111).not.toBe(0);
       expect(existsSync(path.join(runtime.rootDir, ".gc"))).toBe(false);
       expect(existsSync(path.join(runtime.rootDir, ".beads"))).toBe(false);
     } finally {
@@ -105,11 +117,14 @@ describe("@t3tools/gascity-config", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "t3-gascity-runtime-preserve-"));
     try {
       const sourceBinary = path.join(tempDir, "source-gc");
+      const sourceBdBinary = path.join(tempDir, "source-bd");
       writeFileSync(sourceBinary, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      writeFileSync(sourceBdBinary, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
 
       const runtime = materializeGascityRuntime({
         targetDir: path.join(tempDir, "runtime"),
         gcBinaryPath: sourceBinary,
+        bdBinaryPath: sourceBdBinary,
       });
 
       writeFileSync(
@@ -120,17 +135,21 @@ describe("@t3tools/gascity-config", () => {
       writeFileSync(beadsConfigPath, "issue_prefix: keep\n");
 
       const replacementBinary = path.join(tempDir, "replacement-gc");
+      const replacementBdBinary = path.join(tempDir, "replacement-bd");
       writeFileSync(replacementBinary, "#!/bin/sh\nexit 7\n", { mode: 0o755 });
+      writeFileSync(replacementBdBinary, "#!/bin/sh\nexit 7\n", { mode: 0o755 });
 
       const rematerialized = materializeGascityRuntime({
         targetDir: runtime.rootDir,
         gcBinaryPath: replacementBinary,
+        bdBinaryPath: replacementBdBinary,
         preserveExistingConfig: true,
       });
 
       expect(readFileSync(rematerialized.city.cityTomlPath, "utf8")).toContain('name = "kept"');
       expect(readFileSync(beadsConfigPath, "utf8")).toBe("issue_prefix: keep\n");
       expect(readFileSync(rematerialized.gcBinaryPath, "utf8")).toContain("exit 7");
+      expect(readFileSync(rematerialized.bdBinaryPath, "utf8")).toContain("exit 7");
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

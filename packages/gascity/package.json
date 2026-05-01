@@ -1,0 +1,25 @@
+{
+  "name": "@t3tools/gascity",
+  "version": "0.0.0-alpha.1",
+  "private": true,
+  "files": [
+    "bin",
+    "src",
+    "scripts"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -12,8 +12,9 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { findBuiltBdBinaryPath } from "@t3tools/beads-doltlite";
+import { findBuiltGcBinaryPath } from "@t3tools/gascity";
 import {
-  findBundledGcBinaryPath,
   getBundledGascityConfigLayout,
   getDefaultGascityRuntimeRoot,
 } from "../packages/gascity-config/src/index.ts";
@@ -33,6 +34,7 @@ interface RuntimePaths {
   readonly rootDir: string;
   readonly cityDir: string;
   readonly gcBinaryPath: string;
+  readonly bdBinaryPath: string;
 }
 
 function main(): void {
@@ -88,24 +90,34 @@ function installRuntime(options: { readonly overwriteConfig: boolean }): Runtime
     );
   }
   const rootDir = process.env.T3CODE_GASCITY_HOME ?? defaultRuntimeRoot;
-  const binarySource = process.env.GASCITY_BINARY ?? findBundledGcBinaryPath();
-  if (!binarySource) {
-    throw new Error("No bundled Gas City binary is available for this platform.");
+  const gcBinarySource = process.env.GASCITY_BINARY ?? findBuiltGcBinaryPath();
+  const bdBinarySource = process.env.BD_BINARY ?? findBuiltBdBinaryPath();
+  if (!gcBinarySource) {
+    throw new Error("No built Gas City binary is available. Run bun build:gascity-tools.");
   }
-  const gcBinaryPath = getRuntimePaths().gcBinaryPath;
-  mkdirSync(dirname(gcBinaryPath), { recursive: true });
-  copyGcBinary(binarySource, gcBinaryPath);
+  if (!bdBinarySource) {
+    throw new Error("No built beads binary is available. Run bun build:gascity-tools.");
+  }
+  const runtime = getRuntimePaths();
+  mkdirSync(dirname(runtime.gcBinaryPath), { recursive: true });
+  copyRuntimeBinary(gcBinarySource, runtime.gcBinaryPath);
+  copyRuntimeBinary(bdBinarySource, runtime.bdBinaryPath);
   prepareActiveCity(defaultCityRoot);
   return {
     rootDir,
     cityDir: defaultCityRoot,
-    gcBinaryPath,
+    gcBinaryPath: runtime.gcBinaryPath,
+    bdBinaryPath: runtime.bdBinaryPath,
   };
 }
 
 function ensureRuntimeInstalled(): RuntimePaths {
   const runtime = getRuntimePaths();
-  if (existsSync(runtime.cityDir) && existsSync(runtime.gcBinaryPath)) {
+  if (
+    existsSync(runtime.cityDir) &&
+    existsSync(runtime.gcBinaryPath) &&
+    existsSync(runtime.bdBinaryPath)
+  ) {
     prepareActiveCity(runtime.cityDir);
     return runtime;
   }
@@ -118,6 +130,7 @@ function getRuntimePaths(): RuntimePaths {
     rootDir,
     cityDir: process.env.GC_CITY_PATH ?? process.env.GC_CITY ?? defaultCityRoot,
     gcBinaryPath: join(rootDir, "bin", process.platform === "win32" ? "gc.exe" : "gc"),
+    bdBinaryPath: join(rootDir, "bin", process.platform === "win32" ? "bd.exe" : "bd"),
   };
 }
 
@@ -170,7 +183,7 @@ function writeDefaultBeadsConfig(cityDir: string): void {
   }
 }
 
-function copyGcBinary(sourcePath: string, targetPath: string): void {
+function copyRuntimeBinary(sourcePath: string, targetPath: string): void {
   const tempPath = `${targetPath}.${process.pid}.tmp`;
   try {
     copyFileSync(sourcePath, tempPath);
@@ -185,25 +198,38 @@ function copyGcBinary(sourcePath: string, targetPath: string): void {
 }
 
 function runGc(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
+  const env = {
+    ...process.env,
+    GC_HOME: runtime.rootDir,
+    T3CODE_GASCITY_HOME: runtime.rootDir,
+    GC_CITY_PATH: runtime.cityDir,
+    GC_BIN: runtime.gcBinaryPath,
+    BD_BIN: runtime.bdBinaryPath,
+    GC_API_URL: "http://127.0.0.1:8372",
+  };
+  prependRuntimeBinToPath(env, dirname(runtime.gcBinaryPath));
   const result = spawnSync(runtime.gcBinaryPath, ["--city", runtime.cityDir, ...args], {
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      GC_HOME: runtime.rootDir,
-      T3CODE_GASCITY_HOME: runtime.rootDir,
-      GC_CITY_PATH: runtime.cityDir,
-      GC_BIN: runtime.gcBinaryPath,
-      GC_API_URL: "http://127.0.0.1:8372",
-    },
+    env,
     stdio: "inherit",
   });
   process.exit(result.status ?? 1);
+}
+
+function prependRuntimeBinToPath(env: NodeJS.ProcessEnv, binDir: string): void {
+  const key =
+    process.platform === "win32"
+      ? (Object.keys(env).find((name) => name.toLowerCase() === "path") ?? "Path")
+      : "PATH";
+  const separator = process.platform === "win32" ? ";" : ":";
+  env[key] = [binDir, env[key]].filter(Boolean).join(separator);
 }
 
 function printRuntime(runtime: RuntimePaths): void {
   console.log(`T3CODE_GASCITY_HOME=${runtime.rootDir}`);
   console.log(`GC_CITY_PATH=${runtime.cityDir}`);
   console.log(`GC_BIN=${runtime.gcBinaryPath}`);
+  console.log(`BD_BIN=${runtime.bdBinaryPath}`);
   console.log("GC_API_URL=http://127.0.0.1:8372");
 }
 
@@ -211,7 +237,7 @@ function printHelp(): void {
   console.log(`Usage: bun gascity:<command>
 
 Commands:
-  bun gascity:install   Install bundled GC binary; use repo packaged city
+  bun gascity:install   Install built GC and bd binaries; use repo packaged city
   bun gascity:dry-run   Show agents GC would start without side effects
   bun gascity:status    Show bundled city status
   bun gascity:start     Start GC using the bundled runtime
@@ -223,7 +249,8 @@ Commands:
 Env:
   T3CODE_GASCITY_HOME   Override runtime dir
   GC_CITY_PATH          Override active city dir
-  GASCITY_BINARY        Override bundled gc binary
+  GASCITY_BINARY        Override built gc binary
+  BD_BINARY             Override built bd binary
 
 Install flags:
   --overwrite-config    Deprecated no-op; config lives in packages/gascity-config/config
