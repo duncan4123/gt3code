@@ -9,6 +9,7 @@ import {
   readMcpProcessRecord,
   removeMcpProcessRecord,
   removeMcpProcessRecordIfPid,
+  resolveMcpProcessRecordForProject,
   restartRecordedMcpProcess,
   writeMcpProcessRecord,
   type McpProcessRecord,
@@ -68,6 +69,24 @@ describe("mcp-registry", () => {
       ...record,
       pid: 5000,
     });
+  });
+
+  test("resolves nearest parent project record for subdirectory restarts", () => {
+    const home = makeTempHome();
+    const repo = sampleRecord("/data/projects/t3code");
+    const nested = sampleRecord("/data/projects/t3code/apps/server");
+    writeMcpProcessRecord(repo, home);
+
+    assert.deepEqual(
+      resolveMcpProcessRecordForProject("/data/projects/t3code/apps/server", home),
+      repo,
+    );
+
+    writeMcpProcessRecord({ ...nested, pid: 5000 }, home);
+    assert.deepEqual(
+      resolveMcpProcessRecordForProject("/data/projects/t3code/apps/server/src", home),
+      { ...nested, pid: 5000 },
+    );
   });
 
   test("returns null for malformed registry JSON", () => {

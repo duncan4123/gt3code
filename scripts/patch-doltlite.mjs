@@ -12,13 +12,39 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, writeFileSync, readdirSync, mkdirSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, writeFileSync, readdirSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
 const scriptDir = resolve(fileURLToPath(import.meta.url), "..");
 const repoRoot = resolve(scriptDir, "..");
+
+function getGitCommit(root) {
+  try {
+    return execSync(`git -C "${root}" rev-parse --short=10 HEAD`, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function writeDoltliteVersionMarker(addonPath) {
+  try {
+    const markerPath = join(dirname(addonPath), ".doltlite-version");
+    const marker = {
+      commit: getGitCommit(doltliteRoot) ?? undefined,
+      libBuilt: statSync(libPath).mtime.toISOString(),
+      addonBuilt: statSync(addonPath).mtime.toISOString(),
+    };
+    writeFileSync(markerPath, JSON.stringify(marker));
+    console.log(`[patch-doltlite] Wrote ${markerPath}`);
+  } catch (err) {
+    console.warn(`[patch-doltlite] Warning: failed to write build marker: ${err.message}`);
+  }
+}
 
 // ── 1. Locate libdoltlite.a ──────────────────────────────────────────────────
 // Priority: DOLTLITE_BUILD_DIR env → context-mode-build/ (structured) → root (legacy)
@@ -208,6 +234,7 @@ if (existsSync(addonPath)) {
     ).trim();
     if (result === "prolly") {
       console.log("[patch-doltlite] Addon already linked against doltlite — skipping rebuild.");
+      writeDoltliteVersionMarker(addonPath);
       process.exit(0);
     }
   } catch {
@@ -258,6 +285,7 @@ try {
   ).trim();
   if (result === "prolly") {
     console.log("[patch-doltlite] Verified: doltlite_engine() = prolly");
+    writeDoltliteVersionMarker(addonPath);
   } else {
     console.warn("[patch-doltlite] Warning: doltlite_engine() returned:", result);
   }

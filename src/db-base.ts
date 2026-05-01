@@ -8,8 +8,9 @@
 
 import type DatabaseConstructor from "better-sqlite3";
 import type { Database as DatabaseInstance } from "better-sqlite3";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { unlinkSync, existsSync, mkdirSync, copyFileSync, statSync } from "node:fs";
+import { unlinkSync, existsSync, mkdirSync, copyFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -115,6 +116,52 @@ export class BunSQLiteAdapter {
 
 let _Database: typeof DatabaseConstructor | null = null;
 
+type DoltliteVersionMarker = {
+  commit?: string;
+  libBuilt?: string;
+  addonBuilt?: string;
+};
+
+function readDoltliteVersionMarker(binaryPath: string): DoltliteVersionMarker | null {
+  const markerPath = join(dirname(binaryPath), ".doltlite-version");
+  if (!existsSync(markerPath)) return null;
+  try {
+    return JSON.parse(readFileSync(markerPath, "utf8")) as DoltliteVersionMarker;
+  } catch {
+    return null;
+  }
+}
+
+function hashFile(path: string): string {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function markersMatch(
+  left: DoltliteVersionMarker | null,
+  right: DoltliteVersionMarker | null,
+): boolean {
+  if (!left || !right) return false;
+  return (
+    left.commit === right.commit &&
+    left.libBuilt === right.libBuilt &&
+    left.addonBuilt === right.addonBuilt
+  );
+}
+
+export function needsNativePrebuildRefresh(prebuildSrc: string, targetBin: string): boolean {
+  if (!existsSync(prebuildSrc) || !existsSync(targetBin)) return true;
+
+  const sourceMarker = readDoltliteVersionMarker(prebuildSrc);
+  const targetMarker = readDoltliteVersionMarker(targetBin);
+  if (sourceMarker || targetMarker) return !markersMatch(sourceMarker, targetMarker);
+
+  try {
+    return hashFile(prebuildSrc) !== hashFile(targetBin);
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Lazy-load the SQLite driver for the current runtime.
  * Bun → bun:sqlite via BunSQLiteAdapter (issue #45).
@@ -133,19 +180,17 @@ export function loadDatabase(): typeof DatabaseConstructor {
       const baseDir = dirname(fileURLToPath(import.meta.url));
       const abi = process.versions.modules;
       const prebuildSrc = join(baseDir, "prebuilds", `${process.platform}-${process.arch}`, `node.abi${abi}.node`);
+      const prebuildMarker = join(dirname(prebuildSrc), ".doltlite-version");
       const targetDir = join(baseDir, "vendor", "better-sqlite3", "build", "Release");
       const targetBin = join(targetDir, "better_sqlite3.node");
 
       if (existsSync(prebuildSrc)) {
-        let needsCopy = !existsSync(targetBin);
-        if (!needsCopy) {
-          try {
-            if (statSync(prebuildSrc).size !== statSync(targetBin).size) needsCopy = true;
-          } catch { needsCopy = true; }
-        }
-        if (needsCopy) {
+        if (needsNativePrebuildRefresh(prebuildSrc, targetBin)) {
           mkdirSync(targetDir, { recursive: true });
           copyFileSync(prebuildSrc, targetBin);
+          if (existsSync(prebuildMarker)) {
+            copyFileSync(prebuildMarker, join(targetDir, ".doltlite-version"));
+          }
         }
         globalThis.__DOLTLITE_NATIVE_PATH = targetBin;
       }

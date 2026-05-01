@@ -29,8 +29,8 @@ import {
   getAvailableLanguages,
 } from "./runtime.js";
 import {
-  readMcpProcessRecord,
   removeMcpProcessRecord,
+  resolveMcpProcessRecordForProject,
   restartRecordedMcpProcess,
 } from "./mcp-registry.js";
 
@@ -235,18 +235,19 @@ function wait(ms: number): Promise<void> {
 
 async function restartMcp(): Promise<number> {
   const projectDir = getCurrentProjectDir();
-  const record = readMcpProcessRecord(projectDir);
+  const record = resolveMcpProcessRecordForProject(projectDir);
+  const recordProjectDir = record?.projectDir ?? projectDir;
   const result = await restartRecordedMcpProcess(record, {
     describeProcess,
     isProcessAlive,
-    removeRecord: () => removeMcpProcessRecord(projectDir),
+    removeRecord: () => removeMcpProcessRecord(recordProjectDir),
     terminateProcess,
     wait,
   });
 
   switch (result.kind) {
     case "not-found":
-      console.log("No recorded context-mode MCP process for this project. Retry the MCP tool call and the client should start a fresh server.");
+      console.log("No recorded context-mode MCP process for this project or any parent project. Retry the MCP tool call and the client should start a fresh server.");
       return 0;
     case "stale":
       console.log(`Cleared stale context-mode MCP record for PID ${result.pid}. Retry the MCP tool call and the client should start a fresh server.`);

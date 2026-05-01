@@ -3,10 +3,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
-import { existsSync, unlinkSync, readdirSync, readFileSync, rmSync, mkdirSync } from "node:fs";
+import { existsSync, unlinkSync, readdirSync, readFileSync, rmSync, mkdirSync, statSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir, tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
 import { z } from "zod";
 import { PolyglotExecutor } from "./executor.js";
 import { removeMcpProcessRecordIfPid, writeMcpProcessRecord } from "./mcp-registry.js";
@@ -28,6 +29,10 @@ import { classifyNonZeroExit } from "./exit-classify.js";
 import { startLifecycleGuard } from "./lifecycle.js";
 import { getWorktreeSuffix } from "./session/db.js";
 import { loadDatabase } from "./db-base.js";
+import {
+  FULL_TEST_SUITE_OVERRIDE_ENV,
+  shouldBlockFullTestSuiteCommand,
+} from "./resource-policy.js";
 const __pkg_dir = dirname(fileURLToPath(import.meta.url));
 const VERSION: string = (() => {
   for (const rel of ["../package.json", "./package.json"]) {
@@ -160,6 +165,116 @@ function resolveStore(database?: string): ContentStore {
     _namedStores.set(key, store);
   }
   return store;
+}
+
+type FileMetadata = {
+  path: string;
+  size: number;
+  mtime: string;
+  birth?: string;
+};
+
+type DoltliteVersionMarker = {
+  commit?: string;
+  libBuilt?: string;
+  addonBuilt?: string;
+};
+
+function getPluginRoot(): string {
+  return existsSync(resolve(__pkg_dir, "package.json")) ? __pkg_dir : dirname(__pkg_dir);
+}
+
+function readFileMetadata(path: string): FileMetadata | null {
+  if (!existsSync(path)) return null;
+  const stat = statSync(path);
+  return {
+    path,
+    size: stat.size,
+    mtime: stat.mtime.toISOString(),
+    birth: typeof stat.birthtime?.toISOString === "function" ? stat.birthtime.toISOString() : undefined,
+  };
+}
+
+function formatFileMetadata(label: string, meta: FileMetadata | null): string {
+  if (!meta) return `- **${label}**: missing`;
+  const parts = [`\`${meta.path}\``, `${meta.size} bytes`, `mtime ${meta.mtime}`];
+  if (meta.birth) parts.push(`birth ${meta.birth}`);
+  return `- **${label}**: ${parts.join(" | ")}`;
+}
+
+function readDoltliteVersionMarker(dir: string): DoltliteVersionMarker | null {
+  const markerPath = join(dir, ".doltlite-version");
+  if (!existsSync(markerPath)) return null;
+  try {
+    return JSON.parse(readFileSync(markerPath, "utf8")) as DoltliteVersionMarker;
+  } catch {
+    return null;
+  }
+}
+
+function findLoadedAddonPath(): string | null {
+  if (process.platform !== "linux") return null;
+  try {
+    const maps = readFileSync("/proc/self/maps", "utf8");
+    const matches = maps
+      .split("\n")
+      .map((line) => line.match(/\/\S*better_sqlite3\.node\b/)?.[0] ?? null)
+      .filter((path): path is string => Boolean(path));
+    return matches.length ? matches[matches.length - 1] : null;
+  } catch {
+    return null;
+  }
+}
+
+function getDoltliteBuildState(): {
+  root: string;
+  head: string | null;
+  lib: FileMetadata | null;
+  header: FileMetadata | null;
+} {
+  const root = process.env.DOLTLITE_BUILD_DIR ?? "/data/projects/doltlite";
+  const cmBuild = join(root, "context-mode-build");
+
+  const libPath = existsSync(join(cmBuild, "lib", "libdoltlite.a"))
+    ? join(cmBuild, "lib", "libdoltlite.a")
+    : existsSync(join(root, "libdoltlite.a"))
+      ? join(root, "libdoltlite.a")
+      : join(root, "build", "libdoltlite.a");
+
+  const headerPath = existsSync(join(cmBuild, "include", "sqlite3.h"))
+    ? join(cmBuild, "include", "sqlite3.h")
+    : existsSync(join(root, "build", "sqlite3.h"))
+      ? join(root, "build", "sqlite3.h")
+      : join(root, "sqlite3.h");
+
+  let head: string | null = null;
+  try {
+    head = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  } catch {
+    head = null;
+  }
+
+  return {
+    root,
+    head,
+    lib: readFileMetadata(libPath),
+    header: readFileMetadata(headerPath),
+  };
+}
+
+function assessDoltliteLineage(
+  marker: DoltliteVersionMarker | null,
+  head: string | null,
+): string {
+  if (marker?.commit && head) {
+    return head.startsWith(marker.commit)
+      ? `MATCH — addon marker commit \`${marker.commit}\` matches checkout HEAD`
+      : `MISMATCH — addon marker commit \`${marker.commit}\`, checkout HEAD \`${head.slice(0, 12)}\``;
+  }
+  if (marker?.commit) {
+    return `UNKNOWN — addon marker commit \`${marker.commit}\`, but current checkout HEAD is unavailable`;
+  }
+  return "UNKNOWN — no `.doltlite-version` marker next to the loaded addon";
 }
 
 type DoltBranchRow = {
@@ -332,6 +447,25 @@ function checkDenyPolicy(
     // hooks are the primary enforcement layer)
   }
   return null;
+}
+
+function checkResourcePolicy(
+  command: string,
+  toolName: string,
+): ToolResult | null {
+  const blocked = shouldBlockFullTestSuiteCommand(command);
+  if (!blocked) return null;
+
+  return trackResponse(toolName, {
+    content: [{
+      type: "text" as const,
+      text:
+        `Command blocked by resource policy: "${blocked}" appears to run a full test suite inside context-mode.\n\n` +
+        "Run a scoped test command instead, run the full suite outside context-mode, " +
+        `or start context-mode with ${FULL_TEST_SUITE_OVERRIDE_ENV}=1 if this is intentional.`,
+    }],
+    isError: true,
+  });
 }
 
 /**
@@ -608,6 +742,9 @@ server.registerTool(
   async ({ language, code, timeout, background, intent }) => {
     // Security: deny-only firewall
     if (language === "shell") {
+      const blocked = checkResourcePolicy(code, "execute");
+      if (blocked) return blocked;
+
       const denied = checkDenyPolicy(code, "execute");
       if (denied) return denied;
     } else {
@@ -1601,6 +1738,9 @@ server.registerTool(
   async ({ commands, queries, timeout, database }) => {
     // Security: check each command against deny patterns
     for (const cmd of commands) {
+      const blocked = checkResourcePolicy(cmd.command, "batch_execute");
+      if (blocked) return blocked;
+
       const denied = checkDenyPolicy(cmd.command, "batch_execute");
       if (denied) return denied;
     }
@@ -2055,6 +2195,77 @@ server.registerTool(
     lines.push(`- [x] Version: v${VERSION}`);
 
     return trackResponse("ctx_doctor", {
+      content: [{ type: "text" as const, text: lines.join("\n") }],
+    });
+  },
+);
+
+server.registerTool(
+  "ctx_runtime",
+  {
+    title: "Show Runtime Build Info",
+    description:
+      "Fork-specific runtime/build introspection for the live MCP process. " +
+      "Reports the running context-mode version, loaded better-sqlite3 addon, " +
+      "doltlite markers, and current libdoltlite checkout state.",
+    inputSchema: z.object({}),
+  },
+  async () => {
+    const lines: string[] = ["## context-mode runtime", ""];
+    const pluginRoot = getPluginRoot();
+    const abi = process.versions.modules;
+    const expectedAddonPath = resolve(pluginRoot, "vendor", "better-sqlite3", "build", "Release", "better_sqlite3.node");
+    const prebuildPath = resolve(pluginRoot, "prebuilds", `${process.platform}-${process.arch}`, `node.abi${abi}.node`);
+
+    let engine = "unavailable";
+    let loadedAddonPath = findLoadedAddonPath();
+    try {
+      const Database = loadDatabase();
+      const db = new Database(":memory:");
+      try {
+        const row = db.prepare("SELECT doltlite_engine() AS engine").get() as { engine?: string } | undefined;
+        engine = row?.engine ?? "unknown";
+      } finally {
+        db.close();
+      }
+      loadedAddonPath = findLoadedAddonPath() ?? loadedAddonPath;
+    } catch (err: unknown) {
+      engine = `error: ${err instanceof Error ? err.message : String(err)}`;
+    }
+
+    const addonPath = loadedAddonPath ?? expectedAddonPath;
+    const addonMeta = readFileMetadata(addonPath);
+    const prebuildMeta = readFileMetadata(prebuildPath);
+    const marker = readDoltliteVersionMarker(dirname(addonPath));
+    const dolt = getDoltliteBuildState();
+
+    lines.push(`- **Version**: ${VERSION}`);
+    lines.push(`- **PID**: ${process.pid}`);
+    lines.push(`- **Project dir**: \`${getProjectDir()}\``);
+    lines.push(`- **Node**: \`${process.execPath}\` | v${process.version.replace(/^v/, "")} | ABI ${abi}`);
+    lines.push(`- **Default DB path**: \`${getStorePath()}\``);
+    lines.push(`- **Doltlite engine**: ${engine}`);
+    lines.push(`- **Loaded addon path**: \`${loadedAddonPath ?? "not found in process maps"}\``);
+    lines.push(formatFileMetadata("Addon file", addonMeta));
+    lines.push(formatFileMetadata("ABI prebuild", prebuildMeta));
+
+    if (marker) {
+      lines.push(
+        `- **Addon marker**: commit \`${marker.commit ?? "unknown"}\`` +
+        `${marker.libBuilt ? ` | libBuilt ${marker.libBuilt}` : ""}` +
+        `${marker.addonBuilt ? ` | addonBuilt ${marker.addonBuilt}` : ""}`,
+      );
+    } else {
+      lines.push("- **Addon marker**: missing");
+    }
+
+    lines.push(`- **Doltlite checkout**: \`${dolt.root}\``);
+    lines.push(`- **Doltlite HEAD**: ${dolt.head ? `\`${dolt.head.slice(0, 12)}\`` : "unavailable"}`);
+    lines.push(formatFileMetadata("libdoltlite", dolt.lib));
+    lines.push(formatFileMetadata("sqlite3.h", dolt.header));
+    lines.push(`- **Build lineage**: ${assessDoltliteLineage(marker, dolt.head)}`);
+
+    return trackResponse("ctx_runtime", {
       content: [{ type: "text" as const, text: lines.join("\n") }],
     });
   },
@@ -2806,8 +3017,13 @@ server.registerTool(
   async ({ database }) => {
     const store = resolveStore(database);
     try {
-      const result = store.queryOne("SELECT dolt_gc() as result") as Record<string, unknown> | undefined;
-      const text = result ? String(Object.values(result)[0] ?? "") : "Garbage collection completed.";
+      const result = store.garbageCollectIfNeeded("manual ctx_gc", true);
+      if (result.error) throw new Error(result.error);
+      const beforeMB = (result.beforeBytes / 1024 / 1024).toFixed(1);
+      const afterMB = (result.afterBytes / 1024 / 1024).toFixed(1);
+      const text = result.ran
+        ? `${result.result ?? "Garbage collection completed."}\nDB size: ${beforeMB}MB -> ${afterMB}MB\nConnection reopened: ${result.reopened ? "yes" : "no"}`
+        : `Garbage collection skipped; DB below threshold.\nDB size: ${beforeMB}MB`;
       return trackResponse("ctx_gc", {
         content: [{ type: "text" as const, text }],
       });

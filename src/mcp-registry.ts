@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -38,6 +38,15 @@ function getProjectHash(projectDir: string): string {
 
 function getRegistryDir(homeDir = homedir()): string {
   return join(homeDir, ".context-mode", "mcp");
+}
+
+function isSameOrParentProject(parent: string, child: string): boolean {
+  const normalizedParent = normalizeProjectDir(parent).replace(/\/+$/, "");
+  const normalizedChild = normalizeProjectDir(child).replace(/\/+$/, "");
+  return (
+    normalizedChild === normalizedParent ||
+    normalizedChild.startsWith(`${normalizedParent}/`)
+  );
 }
 
 export function getMcpRegistryPath(projectDir: string, homeDir = homedir()): string {
@@ -80,6 +89,47 @@ export function readMcpProcessRecord(
   } catch {
     return null;
   }
+}
+
+export function listMcpProcessRecords(homeDir = homedir()): McpProcessRecord[] {
+  const dir = getRegistryDir(homeDir);
+  if (!existsSync(dir)) return [];
+
+  const records: McpProcessRecord[] = [];
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".json")) continue;
+    try {
+      const parsed = JSON.parse(readFileSync(join(dir, file), "utf-8")) as Partial<McpProcessRecord>;
+      if (
+        typeof parsed.pid === "number" &&
+        typeof parsed.projectDir === "string" &&
+        typeof parsed.startedAt === "string" &&
+        typeof parsed.version === "string"
+      ) {
+        records.push({
+          pid: parsed.pid,
+          projectDir: parsed.projectDir,
+          startedAt: parsed.startedAt,
+          version: parsed.version,
+        });
+      }
+    } catch {
+      // Ignore malformed records; readMcpProcessRecord handles exact lookups.
+    }
+  }
+  return records;
+}
+
+export function resolveMcpProcessRecordForProject(
+  projectDir: string,
+  homeDir = homedir(),
+): McpProcessRecord | null {
+  const exact = readMcpProcessRecord(projectDir, homeDir);
+  if (exact) return exact;
+
+  return listMcpProcessRecords(homeDir)
+    .filter((record) => isSameOrParentProject(record.projectDir, projectDir))
+    .sort((a, b) => normalizeProjectDir(b.projectDir).length - normalizeProjectDir(a.projectDir).length)[0] ?? null;
 }
 
 export function removeMcpProcessRecord(projectDir: string, homeDir = homedir()): void {

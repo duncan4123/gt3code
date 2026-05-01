@@ -12,8 +12,10 @@ import type { Database as DatabaseInstance } from "better-sqlite3";
 import { loadDatabase, applyWALPragmas, closeDB, withRetry } from "./db-base.js";
 import type { PreparedStatement } from "./db-base.js";
 import { readFileSync, readdirSync, unlinkSync, existsSync, statSync, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir, homedir } from "node:os";
-import { join, basename } from "node:path";
+import { join, basename, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -112,6 +114,66 @@ function maxEditDistance(wordLength: number): number {
 // length normalization and produce unwieldy search results. Split at paragraph
 // boundaries when a chunk exceeds this cap.
 const MAX_CHUNK_BYTES = 4096;
+
+// Doltlite reclaims unreachable content-addressed chunks only when dolt_gc()
+// runs. FTS delete/reinsert churn can otherwise leave a huge internal WAL
+// region; doltlite reads that region into anonymous memory on open.
+const DOLTLITE_AUTO_GC_MIN_BYTES = 64 * 1024 * 1024;
+const DOLTLITE_AUTO_GC_MUTATION_INTERVAL = 25;
+const DOLTLITE_GC_TIMEOUT_MS = 60_000;
+
+export type DoltliteGCResult = {
+  ran: boolean;
+  reason: string;
+  beforeBytes: number;
+  afterBytes: number;
+  result?: string;
+  error?: string;
+  reopened?: boolean;
+};
+
+function findVendoredBetterSqlite3(): string | null {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, "vendor", "better-sqlite3"),
+    join(here, "..", "vendor", "better-sqlite3"),
+  ];
+  return candidates.find((p) => existsSync(p)) ?? null;
+}
+
+function compactDoltliteFileBeforeOpen(dbPath: string): void {
+  if (process.env.CONTEXT_MODE_SKIP_PREOPEN_GC === "1") return;
+  if (!existsSync(dbPath)) return;
+  try {
+    if (statSync(dbPath).size < DOLTLITE_AUTO_GC_MIN_BYTES) return;
+  } catch {
+    return;
+  }
+
+  const betterSqlite3Path = findVendoredBetterSqlite3();
+  if (!betterSqlite3Path) return;
+
+  const script = `
+const Database = require(process.argv[1]);
+const dbPath = process.argv[2];
+const db = new Database(dbPath, { timeout: 30000 });
+try {
+  db.prepare("SELECT dolt_gc() AS result").get();
+} finally {
+  db.close();
+}
+`;
+
+  try {
+    execFileSync(process.execPath, ["-e", script, betterSqlite3Path, dbPath], {
+      stdio: "ignore",
+      timeout: DOLTLITE_GC_TIMEOUT_MS,
+      env: { ...process.env, CONTEXT_MODE_SKIP_PREOPEN_GC: "1" },
+    });
+  } catch {
+    // Best effort: if helper compaction fails, normal open still works.
+  }
+}
 
 // ─────────────────────────────────────────────────────────
 // ContentStore
@@ -259,6 +321,7 @@ export class ContentStore {
   #db: DatabaseInstance;
   #dbPath: string;
   #persistent: boolean;
+  #mutationsSinceGC = 0;
 
   // ── Cached Prepared Statements ──
   // Keep read-heavy statements cached. Write statements on the reindex path
@@ -295,6 +358,7 @@ export class ContentStore {
     this.#dbPath =
       dbPath ?? join(tmpdir(), `context-mode-${process.pid}.db`);
     this.#persistent = persistent;
+    compactDoltliteFileBeforeOpen(this.#dbPath);
     this.#db = new Database(this.#dbPath, { timeout: 5000 });
 
     // Auto-upgrade: if the addon supports doltlite but the file is plain
@@ -332,6 +396,7 @@ export class ContentStore {
     applyWALPragmas(this.#db);
     this.#initSchema();
     this.#prepareStatements();
+    this.garbageCollectIfNeeded("open", this.getDBSizeBytes() >= DOLTLITE_AUTO_GC_MIN_BYTES);
   }
 
   /** Whether this store uses a persistent (non-ephemeral) database. */
@@ -869,6 +934,7 @@ export class ContentStore {
     deleteTransaction();
     const sourceId = insertTransaction();
     if (text) this.#extractAndStoreVocabulary(text);
+    this.#recordMutationAndMaybeGC("index");
 
     return {
       sourceId,
@@ -1229,6 +1295,7 @@ export class ContentStore {
       return deleteSources.run(days);
     });
     const info = cleanup(maxAgeDays);
+    if (info.changes > 0) this.#recordMutationAndMaybeGC("cleanup stale sources");
     return info.changes;
   }
 
@@ -1243,6 +1310,58 @@ export class ContentStore {
 
   close(): void {
     closeDB(this.#db); // WAL checkpoint before close — important for persistent DBs
+  }
+
+  #reopen(): void {
+    const Database = loadDatabase();
+    closeDB(this.#db);
+    this.#db = new Database(this.#dbPath, { timeout: 5000 });
+    applyWALPragmas(this.#db);
+    this.#initSchema();
+    this.#prepareStatements();
+  }
+
+  #recordMutationAndMaybeGC(reason: string): void {
+    this.#mutationsSinceGC++;
+    this.garbageCollectIfNeeded(reason, false);
+  }
+
+  garbageCollectIfNeeded(reason: string, force = false): DoltliteGCResult {
+    const beforeBytes = this.getDBSizeBytes();
+    const shouldRun =
+      force ||
+      (beforeBytes >= DOLTLITE_AUTO_GC_MIN_BYTES &&
+        this.#mutationsSinceGC >= DOLTLITE_AUTO_GC_MUTATION_INTERVAL);
+
+    if (!shouldRun) {
+      return { ran: false, reason, beforeBytes, afterBytes: beforeBytes };
+    }
+
+    try {
+      const row = this.#db.prepare("SELECT dolt_gc() AS result").get() as
+        | Record<string, unknown>
+        | undefined;
+      const result = row ? String(Object.values(row)[0] ?? "") : undefined;
+      const afterBytes = this.getDBSizeBytes();
+      this.#mutationsSinceGC = 0;
+      this.#reopen();
+      return {
+        ran: true,
+        reason,
+        beforeBytes,
+        afterBytes: this.getDBSizeBytes() || afterBytes,
+        result,
+        reopened: true,
+      };
+    } catch (err) {
+      return {
+        ran: false,
+        reason,
+        beforeBytes,
+        afterBytes: this.getDBSizeBytes(),
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
 
   // ── Doltlite Version Control ──

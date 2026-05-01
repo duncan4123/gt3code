@@ -16,3 +16,8 @@ context-mode-guidance-*/
 node-compile-cache/
 *.archived
 vendor/better-sqlite3/build/
+
+# Gas City
+.beads/*
+!.beads/config.yaml
+!.beads/metadata.json
