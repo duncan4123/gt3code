@@ -4,6 +4,8 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -35,6 +37,7 @@ export interface GascityBinaryTarget {
 export interface MaterializeGascityRuntimeOptions extends GascityBinaryTarget {
   readonly targetDir: string;
   readonly overwriteConfig?: boolean;
+  readonly preserveExistingConfig?: boolean;
   readonly gcBinaryPath?: string;
   readonly seedLocalBeadsConfig?: boolean;
 }
@@ -50,18 +53,67 @@ export interface GascityRuntimeLayout {
   readonly gcBinaryPath: string;
 }
 
-const packageRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+const modulePackageRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+
+function hasBundledGascityConfigRoot(candidateRoot: string): boolean {
+  return (
+    existsSync(path.join(candidateRoot, "config", "city.toml")) &&
+    existsSync(path.join(candidateRoot, "config", "pack.toml"))
+  );
+}
+
+function findRepoPackageRootFrom(startPath: string): string | undefined {
+  let current = path.resolve(startPath);
+  while (true) {
+    const candidate = path.join(current, "packages", "gascity-config");
+    if (hasBundledGascityConfigRoot(candidate)) {
+      return candidate;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+    current = parent;
+  }
+}
+
+function resolvePackageRoot(): string {
+  const configured = process.env.T3CODE_GASCITY_CONFIG_ROOT?.trim();
+  if (configured && hasBundledGascityConfigRoot(configured)) {
+    return path.resolve(configured);
+  }
+
+  const candidates = [
+    modulePackageRoot,
+    path.resolve(process.cwd(), "packages", "gascity-config"),
+    findRepoPackageRootFrom(process.cwd()),
+    findRepoPackageRootFrom(modulePackageRoot),
+  ];
+  for (const candidate of candidates) {
+    if (candidate && hasBundledGascityConfigRoot(candidate)) {
+      return candidate;
+    }
+  }
+
+  return modulePackageRoot;
+}
+
+const packageRoot = resolvePackageRoot();
 const configRoot = path.join(packageRoot, "config");
 const binariesRoot = path.join(packageRoot, "binaries");
 
 export function getBundledGascityConfigLayout(): GascityConfigLayout {
+  return getGascityConfigLayout(configRoot);
+}
+
+function getGascityConfigLayout(rootDir: string): GascityConfigLayout {
   return {
-    rootDir: configRoot,
-    cityTomlPath: path.join(configRoot, "city.toml"),
-    packTomlPath: path.join(configRoot, "pack.toml"),
-    packsDir: path.join(configRoot, "packs"),
-    gastownPackDir: path.join(configRoot, "packs", "gastown"),
-    maintenancePackDir: path.join(configRoot, "packs", "maintenance"),
+    rootDir,
+    cityTomlPath: path.join(rootDir, "city.toml"),
+    packTomlPath: path.join(rootDir, "pack.toml"),
+    packsDir: path.join(rootDir, "packs"),
+    gastownPackDir: path.join(rootDir, "packs", "gastown"),
+    maintenancePackDir: path.join(rootDir, "packs", "maintenance"),
   };
 }
 
@@ -80,14 +132,7 @@ export function materializeGascityConfig(
     filter: shouldCopyConfigPath,
   });
 
-  return {
-    rootDir: targetDir,
-    cityTomlPath: path.join(targetDir, "city.toml"),
-    packTomlPath: path.join(targetDir, "pack.toml"),
-    packsDir: path.join(targetDir, "packs"),
-    gastownPackDir: path.join(targetDir, "packs", "gastown"),
-    maintenancePackDir: path.join(targetDir, "packs", "maintenance"),
-  };
+  return getGascityConfigLayout(targetDir);
 }
 
 export function getBundledGcBinaryPath(target: GascityBinaryTarget = {}): string {
@@ -125,13 +170,20 @@ export function materializeGascityRuntime(
   options: MaterializeGascityRuntimeOptions,
 ): GascityRuntimeLayout {
   const rootDir = path.resolve(options.targetDir);
+  const cityTargetDir = path.join(rootDir, "city");
   const configOptions: Mutable<MaterializeGascityConfigOptions> = {
-    targetDir: path.join(rootDir, "city"),
+    targetDir: cityTargetDir,
   };
   if (options.overwriteConfig !== undefined) {
     configOptions.overwrite = options.overwriteConfig;
   }
-  const city = materializeGascityConfig(configOptions);
+  const preserveExistingConfig =
+    options.preserveExistingConfig === true &&
+    options.overwriteConfig !== true &&
+    hasMaterializedGascityConfig(cityTargetDir);
+  const city = preserveExistingConfig
+    ? getGascityConfigLayout(cityTargetDir)
+    : materializeGascityConfig(configOptions);
   if (options.seedLocalBeadsConfig ?? true) {
     seedLocalBeadsConfig(city.rootDir);
   }
@@ -158,10 +210,7 @@ export function materializeGascityRuntime(
   const binDir = path.join(rootDir, "bin");
   const gcBinaryPath = path.join(binDir, path.basename(getBundledGcBinaryPath(options)));
   mkdirSync(binDir, { recursive: true });
-  cpSync(sourceBinaryPath, gcBinaryPath, { force: true });
-  if (binaryPlatform !== "win32") {
-    chmodSync(gcBinaryPath, 0o755);
-  }
+  copyGcBinary(sourceBinaryPath, gcBinaryPath, binaryPlatform);
 
   return {
     rootDir,
@@ -178,11 +227,34 @@ function shouldCopyConfigPath(sourcePath: string): boolean {
 
 function seedLocalBeadsConfig(cityDir: string): void {
   const beadsDir = path.join(cityDir, ".beads");
+  const configPath = path.join(beadsDir, "config.yaml");
   mkdirSync(beadsDir, { recursive: true });
-  writeFileSync(
-    path.join(beadsDir, "config.yaml"),
-    ["issue_prefix: ci", "issue-prefix: ci", ""].join("\n"),
-  );
+  if (existsSync(configPath)) {
+    return;
+  }
+  writeFileSync(configPath, ["issue_prefix: ci", "issue-prefix: ci", ""].join("\n"));
+}
+
+function copyGcBinary(
+  sourceBinaryPath: string,
+  gcBinaryPath: string,
+  platform: NodeJS.Platform,
+): void {
+  const tempBinaryPath = `${gcBinaryPath}.${process.pid}.tmp`;
+  try {
+    cpSync(sourceBinaryPath, tempBinaryPath, { force: true });
+    if (platform !== "win32") {
+      chmodSync(tempBinaryPath, 0o755);
+    }
+    renameSync(tempBinaryPath, gcBinaryPath);
+  } catch (error) {
+    rmSync(tempBinaryPath, { force: true });
+    throw error;
+  }
+}
+
+function hasMaterializedGascityConfig(rootDir: string): boolean {
+  return existsSync(path.join(rootDir, "city.toml")) && existsSync(path.join(rootDir, "pack.toml"));
 }
 
 export function assertBundledGascityConfigPresent(): void {

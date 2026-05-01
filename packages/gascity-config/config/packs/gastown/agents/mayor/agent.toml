@@ -1,4 +1,6 @@
 scope = "city"
+provider = "codex"
+option_defaults = { model = "gpt-5.4" }
 wake_mode = "fresh"
 work_dir = ".gc/agents/mayor"
 nudge = "Check mail and hook status, then act accordingly."

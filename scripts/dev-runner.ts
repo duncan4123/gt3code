@@ -4,7 +4,10 @@ import * as NodeOS from "node:os";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { getDefaultGascityRuntimeRoot } from "../packages/gascity-config/src/index.ts";
+import {
+  getBundledGascityConfigLayout,
+  getDefaultGascityRuntimeRoot,
+} from "../packages/gascity-config/src/index.ts";
 import { NetService } from "@t3tools/shared/Net";
 import { Config, Data, Effect, Hash, Layer, Logger, Option, Path, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
@@ -18,6 +21,7 @@ const DESKTOP_DEV_LOOPBACK_HOST = "127.0.0.1";
 const DEV_PORT_PROBE_HOSTS = ["127.0.0.1", "0.0.0.0", "::1", "::"] as const;
 const DEFAULT_GASCITY_API_URL = "http://127.0.0.1:8372";
 const DEFAULT_T3CODE_GASCITY_HOME = getDefaultGascityRuntimeRoot();
+const DEFAULT_GC_CITY_PATH = getBundledGascityConfigLayout().rootDir;
 
 export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) =>
   path.join(NodeOS.homedir(), ".t3"),
@@ -166,7 +170,7 @@ export function createDevRunnerEnv({
       GC_BIN:
         baseEnv.GC_BIN ??
         path.join(gascityHome, "bin", process.platform === "win32" ? "gc.exe" : "gc"),
-      GC_CITY_PATH: baseEnv.GC_CITY_PATH ?? baseEnv.GC_CITY ?? path.join(gascityHome, "city"),
+      GC_CITY_PATH: baseEnv.GC_CITY_PATH ?? baseEnv.GC_CITY ?? DEFAULT_GC_CITY_PATH,
     };
 
     if (!isDesktopMode) {

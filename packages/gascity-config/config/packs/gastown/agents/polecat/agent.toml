@@ -1,4 +1,6 @@
 scope = "rig"
+provider = "codex"
+option_defaults = { model = "gpt-5.4" }
 wake_mode = "fresh"
 work_dir = ".gc/worktrees/{{.Rig}}/polecats/{{.AgentBase}}"
 nudge = "Run gc hook; it checks assigned work first, then routed pool work."

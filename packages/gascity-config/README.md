@@ -2,20 +2,18 @@
 
 Bundled Gas City configuration for T3Code.
 
-This package ships immutable defaults: `city.toml`, root `pack.toml`, the
-Gastown pack, and the maintenance pack it depends on. Runtime state is
-intentionally not part of this package. Launchers should materialize the config
-into a writable city directory and let `.gc` live wherever the launcher chooses.
+This package ships the active T3Code Gas City: `city.toml`, root `pack.toml`,
+the Gastown pack, and the maintenance pack it depends on. In development,
+launchers should pass this package's config directory directly to `gc --city`.
+Runtime-local state may be created next to it, but is ignored by Git.
 
 ```ts
-import { materializeGascityConfig } from "@t3tools/gascity-config";
+import { getBundledGascityConfigLayout } from "@t3tools/gascity-config";
 
-const city = materializeGascityConfig({
-  targetDir: "/path/to/writable/city",
-});
+const city = getBundledGascityConfigLayout();
 ```
 
-The materialized directory is suitable for passing to the `gc` binary.
+`city.rootDir` is suitable for passing to the `gc` binary.
 
 ## Bundled binary layout
 
@@ -27,14 +25,12 @@ binaries/darwin-arm64/gc
 binaries/win32-x64/gc.exe
 ```
 
-At runtime, copy both config and binary into a writable state directory:
+At runtime, copy the binary into a writable state directory:
 
 ```ts
 import { materializeGascityRuntime } from "@t3tools/gascity-config";
 
-const runtime = materializeGascityRuntime({
-  targetDir: "/path/to/writable/runtime",
-});
+const runtime = materializeGascityRuntime({ targetDir: "/path/to/writable/runtime" });
 ```
 
 If the app supplies the binary from elsewhere, pass `gcBinaryPath`.

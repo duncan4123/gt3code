@@ -1,4 +1,6 @@
 scope = "city"
+provider = "codex"
+option_defaults = { model = "gpt-5.4-mini" }
 wake_mode = "fresh"
 work_dir = ".gc/agents/boot"
 max_active_sessions = 1

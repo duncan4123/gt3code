@@ -99,7 +99,7 @@ bun gc -- session list
 
 ```text
 T3CODE_GASCITY_HOME=<runtime>
-GC_CITY_PATH=<runtime>/city
+GC_CITY_PATH=packages/gascity-config/config
 GC_BIN=<runtime>/bin/gc or <runtime>\bin\gc.exe
 GC_API_URL=http://127.0.0.1:8372
 ```
@@ -107,15 +107,48 @@ GC_API_URL=http://127.0.0.1:8372
 The T3 sidebar GC button starts the bundled supervisor through the server API.
 Sidebar controls persist supported GC changes back to the packaged
 `city.toml`, especially city-scoped agents such as `mayor`, `deacon`, `boot`,
-and the `dog` pool. Rigs should be added from the sidebar add-project flow using
-the "rig" target; new bundled installs start with no rigs.
+and the `dog` pool. The packaged city now includes the T3Code `gascity` and
+`beads-doltlite` rigs; machine-local rig path bindings still live in
+`<runtime>/city/.gc/site.toml`.
+
+One config tree matters when changing bundled Gas City behavior:
+`packages/gascity-config/config/...`. In development this is the active city
+passed to `gc --city`, so edits apply to the running T3Code city after the
+supervisor reloads or restarts. Runtime-local files under `.gc`, `.beads`, logs,
+traces, and profiles are ignored.
+
+For agent model selection, update the agent file:
+
+```text
+packages/gascity-config/config/packs/.../agents/<name>/agent.toml
+```
+
+Models are defined with GC-native agent-level `option_defaults.model`, not as
+runtime-only environment truth:
+
+```toml
+provider = "codex"
+option_defaults = { model = "gpt-5.4-mini" }
+```
+
+The bundled `boot` and `dog` agents use `gpt-5.4-mini`; `mayor`, `deacon`, and
+the rig-scoped Gastown agents use `gpt-5.4`.
+`[agent_defaults].model` may still appear in resolved config for display and
+composition, but Gas City docs note that it is not auto-applied at runtime.
+Avoid treating `GC_MODEL` as the source of truth for model selection.
 
 Important storage distinction:
 
 - T3Code app state uses Doltlite/SQLite under `~/.t3`.
-- Gas City rig/bead state uses Dolt under the packaged city `.beads` directory.
-- Do not delete `.beads/dolt` unless you intentionally want to reset GC bead
-  state.
+- Gas City city/rig bead state uses `bd` with the doltlite backend under the
+  packaged city `.beads` directories.
+- Do not delete `.beads/doltlite` unless you intentionally want to reset GC
+  bead state.
+
+Runtime/doltlite debugging note: [docs/gascity-doltlite-runtime-notes.md](./docs/gascity-doltlite-runtime-notes.md)
+maps the source trees, materialized runtime tree, `gc`/`bd` binary linkage,
+`GASCITY_BINARY` install flow, and the `gc status` vs `gc session list`
+mismatch checks.
 
 Desktop release builds require a bundled GC binary for the target platform:
 
@@ -126,6 +159,24 @@ packages/gascity-config/binaries/win32-x64/gc.exe
 ```
 
 Windows desktop builds fail fast if the matching `gc.exe` is missing.
+
+### Context-Mode Comparison Note
+
+The active context-mode database for the sidebar/Gas City comparison is named
+`ship compare`. It has branch-specific indexed context:
+
+- `git-ship`: maps to git branch `ship`. The bundled seed config lives at
+  `/data/projects/t3code/packages/gascity-config/config`, which is also the
+  default live T3 Gas City city in development.
+- `git-codex-sidebar-pool-followup`: maps to git branch
+  `codex/sidebar-pool-followup` and the old external config at
+  `/data/projects/gc`.
+
+Use that database when comparing sidebar controls against the exact TOML/pack
+set each branch was using. For local historical comparison, also note
+`/home/ubuntu/.local/state/t3code/gascity/dev/city`, which mirrors the older
+multi-rig `/data/projects/gc` style more closely than the current packaged
+runtime.
 
 ## If you REALLY want to contribute still.... read this first
 

@@ -1,15 +1,30 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  findBundledGcBinaryPath,
+  getBundledGascityConfigLayout,
   getDefaultGascityRuntimeRoot,
-  materializeGascityRuntime,
 } from "../packages/gascity-config/src/index.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultRuntimeRoot = getDefaultGascityRuntimeRoot();
+const defaultCityRoot = getBundledGascityConfigLayout().rootDir;
+const defaultRigBindings = [
+  { name: "gascity", path: "/data/projects/gascity-t3code" },
+  { name: "beads-doltlite", path: "/data/projects/beads-doltlite" },
+] as const;
 
 const command = process.argv[2] ?? "help";
 const passthroughArgs = process.argv.slice(3);
@@ -23,12 +38,12 @@ interface RuntimePaths {
 function main(): void {
   switch (command) {
     case "install": {
-      const runtime = installRuntime({ overwriteConfig: true });
+      const runtime = installRuntime({ overwriteConfig: shouldOverwriteInstallConfig() });
       printRuntime(runtime);
       return;
     }
     case "dry-run": {
-      const runtime = installRuntime({ overwriteConfig: true });
+      const runtime = ensureRuntimeInstalled();
       runGc(runtime, ["start", "--dry-run", ...passthroughArgs]);
       return;
     }
@@ -43,7 +58,7 @@ function main(): void {
       return;
     }
     case "start": {
-      const runtime = installRuntime({ overwriteConfig: true });
+      const runtime = ensureRuntimeInstalled();
       runGc(runtime, ["start", ...passthroughArgs]);
       return;
     }
@@ -53,7 +68,7 @@ function main(): void {
       return;
     }
     case "config": {
-      const runtime = installRuntime({ overwriteConfig: true });
+      const runtime = ensureRuntimeInstalled();
       runGc(runtime, ["config", "show", ...passthroughArgs]);
       return;
     }
@@ -67,46 +82,106 @@ function main(): void {
 }
 
 function installRuntime(options: { readonly overwriteConfig: boolean }): RuntimePaths {
-  const targetDir = process.env.T3CODE_GASCITY_HOME ?? defaultRuntimeRoot;
-  const runtime = materializeGascityRuntime({
-    targetDir,
-    overwriteConfig: options.overwriteConfig,
-    ...(process.env.GASCITY_BINARY !== undefined
-      ? { gcBinaryPath: process.env.GASCITY_BINARY }
-      : {}),
-  });
-  writeDefaultSiteToml(runtime.city.rootDir);
+  if (options.overwriteConfig) {
+    console.warn(
+      "gascity:install no longer overwrites config; packages/gascity-config/config is the active city.",
+    );
+  }
+  const rootDir = process.env.T3CODE_GASCITY_HOME ?? defaultRuntimeRoot;
+  const binarySource = process.env.GASCITY_BINARY ?? findBundledGcBinaryPath();
+  if (!binarySource) {
+    throw new Error("No bundled Gas City binary is available for this platform.");
+  }
+  const gcBinaryPath = getRuntimePaths().gcBinaryPath;
+  mkdirSync(dirname(gcBinaryPath), { recursive: true });
+  copyGcBinary(binarySource, gcBinaryPath);
+  prepareActiveCity(defaultCityRoot);
   return {
-    rootDir: runtime.rootDir,
-    cityDir: runtime.city.rootDir,
-    gcBinaryPath: runtime.gcBinaryPath,
+    rootDir,
+    cityDir: defaultCityRoot,
+    gcBinaryPath,
   };
 }
 
 function ensureRuntimeInstalled(): RuntimePaths {
   const runtime = getRuntimePaths();
   if (existsSync(runtime.cityDir) && existsSync(runtime.gcBinaryPath)) {
+    prepareActiveCity(runtime.cityDir);
     return runtime;
   }
-  return installRuntime({ overwriteConfig: true });
+  return installRuntime({ overwriteConfig: false });
 }
 
 function getRuntimePaths(): RuntimePaths {
   const rootDir = process.env.T3CODE_GASCITY_HOME ?? defaultRuntimeRoot;
   return {
     rootDir,
-    cityDir: join(rootDir, "city"),
+    cityDir: process.env.GC_CITY_PATH ?? process.env.GC_CITY ?? defaultCityRoot,
     gcBinaryPath: join(rootDir, "bin", process.platform === "win32" ? "gc.exe" : "gc"),
   };
 }
 
+function prepareActiveCity(cityDir: string): void {
+  writeDefaultSiteToml(cityDir);
+  writeDefaultBeadsConfig(cityDir);
+}
+
 function writeDefaultSiteToml(cityDir: string): void {
   const gcDir = join(cityDir, ".gc");
+  const siteTomlPath = join(gcDir, "site.toml");
   mkdirSync(gcDir, { recursive: true });
-  writeFileSync(
-    join(gcDir, "site.toml"),
-    "# T3Code packaged city starts with no rig bindings. Add rigs explicitly from the app.\n",
-  );
+  let content = existsSync(siteTomlPath)
+    ? readFileSync(siteTomlPath, "utf8")
+    : "# T3Code packaged city keeps machine-local rig path bindings here.\n";
+  for (const binding of defaultRigBindings) {
+    if (!existsSync(binding.path) || content.includes(`name = "${binding.name}"`)) {
+      continue;
+    }
+    content += `\n[[rig]]\nname = "${binding.name}"\npath = "${binding.path}"\n`;
+  }
+  writeFileSync(siteTomlPath, content);
+}
+
+function writeDefaultBeadsConfig(cityDir: string): void {
+  const beadsDir = join(cityDir, ".beads");
+  mkdirSync(beadsDir, { recursive: true });
+  const configPath = join(beadsDir, "config.yaml");
+  if (!existsSync(configPath)) {
+    writeFileSync(
+      configPath,
+      ["issue_prefix: t3", "issue-prefix: t3", "dolt.auto-start: false", ""].join("\n"),
+    );
+  }
+  const metadataPath = join(beadsDir, "metadata.json");
+  if (!existsSync(metadataPath)) {
+    writeFileSync(
+      metadataPath,
+      `${JSON.stringify(
+        {
+          backend: "doltlite",
+          database: "doltlite",
+          dolt_database: "hq",
+          dolt_mode: "embedded",
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  }
+}
+
+function copyGcBinary(sourcePath: string, targetPath: string): void {
+  const tempPath = `${targetPath}.${process.pid}.tmp`;
+  try {
+    copyFileSync(sourcePath, tempPath);
+    if (process.platform !== "win32") {
+      chmodSync(tempPath, 0o755);
+    }
+    renameSync(tempPath, targetPath);
+  } catch (error) {
+    rmSync(tempPath, { force: true });
+    throw error;
+  }
 }
 
 function runGc(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
@@ -136,7 +211,7 @@ function printHelp(): void {
   console.log(`Usage: bun gascity:<command>
 
 Commands:
-  bun gascity:install   Materialize bundled GC binary and config
+  bun gascity:install   Install bundled GC binary; use repo packaged city
   bun gascity:dry-run   Show agents GC would start without side effects
   bun gascity:status    Show bundled city status
   bun gascity:start     Start GC using the bundled runtime
@@ -147,7 +222,26 @@ Commands:
 
 Env:
   T3CODE_GASCITY_HOME   Override runtime dir
-  GASCITY_BINARY        Override bundled gc binary`);
+  GC_CITY_PATH          Override active city dir
+  GASCITY_BINARY        Override bundled gc binary
+
+Install flags:
+  --overwrite-config    Deprecated no-op; config lives in packages/gascity-config/config
+  --force               Deprecated alias for --overwrite-config`);
+}
+
+function shouldOverwriteInstallConfig(): boolean {
+  for (const arg of passthroughArgs) {
+    switch (arg) {
+      case "--overwrite-config":
+      case "--force":
+        return true;
+      default:
+        console.error(`Unknown gascity:install flag: ${arg}`);
+        process.exit(1);
+    }
+  }
+  return false;
 }
 
 main();

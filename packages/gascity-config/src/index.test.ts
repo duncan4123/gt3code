@@ -17,9 +17,13 @@ describe("@t3tools/gascity-config", () => {
     assertBundledGascityConfigPresent();
     const layout = getBundledGascityConfigLayout();
 
-    expect(readFileSync(layout.cityTomlPath, "utf8")).not.toContain("[[rigs]]");
-    expect(readFileSync(layout.cityTomlPath, "utf8")).toContain("[[patches.agent]]");
-    expect(readFileSync(layout.cityTomlPath, "utf8")).toContain("[[patches.named_session]]");
+    const cityToml = readFileSync(layout.cityTomlPath, "utf8");
+    expect(cityToml).toContain('name = "t3code"');
+    expect(cityToml).toContain('name = "gascity"');
+    expect(cityToml).toContain('name = "beads-doltlite"');
+    expect(cityToml).toContain("[[patches.agent]]");
+    expect(cityToml).toContain("[[patches.named_session]]");
+    expect(cityToml).toContain("[beads]");
     expect(readFileSync(layout.packTomlPath, "utf8")).toContain("[imports.gastown]");
     expect(readFileSync(path.join(layout.gastownPackDir, "pack.toml"), "utf8")).toContain(
       "../maintenance",
@@ -34,7 +38,9 @@ describe("@t3tools/gascity-config", () => {
     try {
       const layout = materializeGascityConfig({ targetDir: tempDir });
 
-      expect(readFileSync(layout.cityTomlPath, "utf8")).not.toContain("[[rigs]]");
+      const cityToml = readFileSync(layout.cityTomlPath, "utf8");
+      expect(cityToml).toContain('name = "gascity"');
+      expect(cityToml).toContain('name = "beads-doltlite"');
       expect(readFileSync(layout.packTomlPath, "utf8")).toContain("[imports.gastown]");
       expect(readFileSync(path.join(layout.gastownPackDir, "pack.toml"), "utf8")).toContain(
         "../maintenance",
@@ -78,7 +84,7 @@ describe("@t3tools/gascity-config", () => {
         gcBinaryPath: sourceBinary,
       });
 
-      expect(readFileSync(runtime.city.cityTomlPath, "utf8")).not.toContain("[[rigs]]");
+      expect(readFileSync(runtime.city.cityTomlPath, "utf8")).toContain('name = "beads-doltlite"');
       const beadsConfig = readFileSync(
         path.join(runtime.city.rootDir, ".beads", "config.yaml"),
         "utf8",
@@ -90,6 +96,41 @@ describe("@t3tools/gascity-config", () => {
       expect(statSync(runtime.gcBinaryPath).mode & 0o111).not.toBe(0);
       expect(existsSync(path.join(runtime.rootDir, ".gc"))).toBe(false);
       expect(existsSync(path.join(runtime.rootDir, ".beads"))).toBe(false);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves existing runtime city and beads config when requested", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "t3-gascity-runtime-preserve-"));
+    try {
+      const sourceBinary = path.join(tempDir, "source-gc");
+      writeFileSync(sourceBinary, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+
+      const runtime = materializeGascityRuntime({
+        targetDir: path.join(tempDir, "runtime"),
+        gcBinaryPath: sourceBinary,
+      });
+
+      writeFileSync(
+        runtime.city.cityTomlPath,
+        ["[workspace]", 'name = "custom"', "", "[[rigs]]", 'name = "kept"', ""].join("\n"),
+      );
+      const beadsConfigPath = path.join(runtime.city.rootDir, ".beads", "config.yaml");
+      writeFileSync(beadsConfigPath, "issue_prefix: keep\n");
+
+      const replacementBinary = path.join(tempDir, "replacement-gc");
+      writeFileSync(replacementBinary, "#!/bin/sh\nexit 7\n", { mode: 0o755 });
+
+      const rematerialized = materializeGascityRuntime({
+        targetDir: runtime.rootDir,
+        gcBinaryPath: replacementBinary,
+        preserveExistingConfig: true,
+      });
+
+      expect(readFileSync(rematerialized.city.cityTomlPath, "utf8")).toContain('name = "kept"');
+      expect(readFileSync(beadsConfigPath, "utf8")).toBe("issue_prefix: keep\n");
+      expect(readFileSync(rematerialized.gcBinaryPath, "utf8")).toContain("exit 7");
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

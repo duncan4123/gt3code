@@ -1,0 +1,7 @@
+.gc/
+.beads/
+.git/
+audit/
+*.prof
+*.out
+~

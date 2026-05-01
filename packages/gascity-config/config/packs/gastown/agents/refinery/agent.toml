@@ -1,4 +1,6 @@
 scope = "rig"
+provider = "codex"
+option_defaults = { model = "gpt-5.4" }
 wake_mode = "fresh"
 work_dir = ".gc/worktrees/{{.Rig}}/refinery"
 nudge = "Run 'gc prime' to check merge queue and begin processing."

@@ -1626,7 +1626,7 @@ export function GeneralSettingsPanel() {
       <SettingsSection title="Advanced">
         <SettingsRow
           title="Gas City runtime home"
-          description="T3CODE_GASCITY_HOME. Bundled GC config, binary, and city state live under this directory."
+          description="T3CODE_GASCITY_HOME. Bundled GC binary and process-local runtime state live under this directory."
           resetAction={
             gcSettings.runtimeHome !== DEFAULT_UNIFIED_SETTINGS.providers.gc.runtimeHome ? (
               <SettingResetButton
@@ -1653,7 +1653,7 @@ export function GeneralSettingsPanel() {
 
         <SettingsRow
           title="Gas City city path"
-          description="GC_CITY_PATH. This controls where the bundled city .gc and .beads state are created."
+          description="GC_CITY_PATH. Defaults to the repo-owned packaged city under packages/gascity-config/config."
           resetAction={
             gcSettings.cityPath !== DEFAULT_UNIFIED_SETTINGS.providers.gc.cityPath ? (
               <SettingResetButton

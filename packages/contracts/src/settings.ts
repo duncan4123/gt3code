@@ -114,7 +114,7 @@ export const OpenCodeSettings = Schema.Struct({
 export type OpenCodeSettings = typeof OpenCodeSettings.Type;
 
 export const DEFAULT_GC_RUNTIME_HOME = "~/.local/state/t3code/gascity/current";
-export const DEFAULT_GC_CITY_PATH = `${DEFAULT_GC_RUNTIME_HOME}/city`;
+export const DEFAULT_GC_CITY_PATH = "packages/gascity-config/config";
 export const DEFAULT_GC_BINARY_PATH = `${DEFAULT_GC_RUNTIME_HOME}/bin/gc`;
 export const DEFAULT_GC_API_URL = "http://127.0.0.1:8372";
 

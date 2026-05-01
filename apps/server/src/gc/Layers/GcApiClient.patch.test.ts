@@ -19,9 +19,9 @@ suspended = true
 [patches]
 `;
 
-    expect(
-      __gcCityTomlPatchForTests.findRigIncludesInCityToml(toml, "beads-doltlite"),
-    ).toEqual(["packs/gastown"]);
+    expect(__gcCityTomlPatchForTests.findRigIncludesInCityToml(toml, "beads-doltlite")).toEqual([
+      "packs/gastown",
+    ]);
   });
 
   it("writes suspended patches for any city pack agent", () => {

@@ -1,7 +1,84 @@
 [workspace]
 name = "t3code"
 suspended = false
-global_fragments = ["command-glossary", "operational-awareness"]
+global_fragments = ["command-glossary", "operational-awareness-doltlite"]
+
+[[rigs]]
+name = "gascity"
+suspended = false
+includes = ["packs/gastown"]
+
+[[rigs.overrides]]
+agent = "convoymaster"
+suspended = false
+
+[[rigs.overrides]]
+agent = "crew"
+suspended = false
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = false
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = false
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = false
+
+[[rigs]]
+name = "beads-doltlite"
+prefix = "bd"
+suspended = false
+includes = ["packs/gastown"]
+
+[patches]
+
+[[patches.agent]]
+dir = ""
+name = "mayor"
+suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = ""
+name = "deacon"
+suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = ""
+name = "boot"
+suspended = false
+provider = "codex"
+[patches.agent.env]
+GC_MODEL = "gpt-5.4-mini"
+
+[[patches.agent]]
+dir = ""
+name = "dog"
+suspended = false
+provider = "codex"
+[patches.agent.env]
+GC_MODEL = "gpt-5.4-mini"
+
+[[patches.named_session]]
+template = "mayor"
+mode = "always"
+
+[[patches.named_session]]
+template = "deacon"
+mode = "always"
+
+[[patches.named_session]]
+template = "boot"
+mode = "always"
+
+[beads]
+provider = "bd"
+backend = "doltlite"
 
 [session]
 provider = "t3bridge"
@@ -38,43 +115,3 @@ skip = [
 
 [api]
 port = 8372
-
-[patches]
-
-[[patches.agent]]
-dir = ""
-name = "mayor"
-suspended = false
-provider = "codex"
-
-[[patches.agent]]
-dir = ""
-name = "deacon"
-suspended = false
-provider = "codex"
-
-[[patches.agent]]
-dir = ""
-name = "boot"
-suspended = false
-provider = "codex"
-env = { GC_MODEL = "gpt-5.4-mini" }
-
-[[patches.agent]]
-dir = ""
-name = "dog"
-suspended = false
-provider = "codex"
-env = { GC_MODEL = "gpt-5.4-mini" }
-
-[[patches.named_session]]
-template = "mayor"
-mode = "always"
-
-[[patches.named_session]]
-template = "deacon"
-mode = "always"
-
-[[patches.named_session]]
-template = "boot"
-mode = "always"

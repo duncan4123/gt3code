@@ -1,4 +1,6 @@
 scope = "rig"
+provider = "codex"
+option_defaults = { model = "gpt-5.4" }
 wake_mode = "fresh"
 work_dir = ".gc/agents/{{.Rig}}/convoymaster"
 nudge = "Check convoys, mail, and ready work; then coordinate."
