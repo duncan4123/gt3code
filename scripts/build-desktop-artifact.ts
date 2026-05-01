@@ -7,7 +7,7 @@ import serverPackageJson from "../apps/server/package.json" with { type: "json" 
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
-import { findBuiltBdBinaryPath } from "@t3tools/beads-doltlite";
+import { findBuiltBdBinaryPath, findBuiltDoltliteLibraryPath } from "@t3tools/beads-doltlite";
 import { findBuiltGcBinaryPath } from "@t3tools/gascity";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
@@ -760,6 +760,16 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     const executable = missingBdBinaryTarget.platform === "win32" ? "bd.exe" : "bd";
     return yield* new BuildScriptError({
       message: `Missing built beads binary for ${missingBdBinaryTarget.platform}-${missingBdBinaryTarget.arch}. Run bun build:gascity-tools before building this desktop target. Expected packages/beads-doltlite/bin/${missingBdBinaryTarget.platform}-${missingBdBinaryTarget.arch}/${executable}.`,
+    });
+  }
+  const missingDoltliteLibraryTarget = requiredGcBinaryTargets(options.platform, options.arch).find(
+    (target) => target.platform !== "win32" && !findBuiltDoltliteLibraryPath(target),
+  );
+  if (missingDoltliteLibraryTarget) {
+    const library =
+      missingDoltliteLibraryTarget.platform === "darwin" ? "libdoltlite.dylib" : "libdoltlite.so";
+    return yield* new BuildScriptError({
+      message: `Missing built Doltlite library for ${missingDoltliteLibraryTarget.platform}-${missingDoltliteLibraryTarget.arch}. Run bun build:gascity-tools before building this desktop target. Expected packages/beads-doltlite/bin/${missingDoltliteLibraryTarget.platform}-${missingDoltliteLibraryTarget.arch}/${library}.`,
     });
   }
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;

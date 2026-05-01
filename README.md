@@ -81,13 +81,24 @@ bun gascity:install
 ```text
 packages/gascity/bin/<platform>-<arch>/gc
 packages/beads-doltlite/bin/<platform>-<arch>/bd
+packages/beads-doltlite/bin/<platform>-<arch>/libdoltlite.so
 ```
 
-These built binaries are not committed. `bun gascity:install` copies them into:
+On macOS the Doltlite library is `libdoltlite.dylib`; on Windows it is
+`doltlite.dll`. The `bd` build must be linked with Doltlite's SQLite shim
+(`go build -tags libsqlite3` plus `CGO_CFLAGS`/`CGO_LDFLAGS` pointing at a
+Doltlite `build` directory). Do not replace this with a plain `go build`: the
+binary will start, but `bd init --backend doltlite` will fail with missing
+`dolt_*` SQL functions such as `dolt_checkout`.
+
+The package ships the built runtime artifacts from `bin/` when it is staged for
+desktop/release packaging. `bun gascity:install` copies the matching artifacts
+into:
 
 ```text
 <runtime>/bin/gc
 <runtime>/bin/bd
+<runtime>/bin/libdoltlite.so
 ```
 
 T3Code and the packaged Gas City use one shared worktree root:

@@ -47,6 +47,7 @@ dir = ""
 name = "mayor"
 suspended = false
 provider = "codex"
+wake_mode = "resume"
 
 [[patches.agent]]
 dir = ""
@@ -58,9 +59,9 @@ provider = "codex"
 dir = ""
 name = "boot"
 suspended = false
-provider = "codex"
-[patches.agent.env]
-GC_MODEL = "gpt-5.4-mini"
+provider = "opencode"
+[patches.agent.option_defaults]
+model = "kimi-for-coding/k2p6"
 
 [[patches.agent]]
 dir = ""
@@ -69,6 +70,21 @@ suspended = false
 provider = "codex"
 [patches.agent.env]
 GC_MODEL = "gpt-5.4-mini"
+
+[[patches.agent]]
+dir = "gascity"
+name = "crew"
+suspended = false
+
+[[patches.agent]]
+dir = "context-mode"
+name = "witness"
+suspended = true
+
+[[patches.agent]]
+dir = ""
+name = "gastown.mayor"
+suspended = false
 
 [[patches.named_session]]
 template = "mayor"
@@ -80,6 +96,11 @@ mode = "always"
 
 [[patches.named_session]]
 template = "boot"
+mode = "always"
+
+[[patches.named_session]]
+dir = "gascity"
+template = "refinery"
 mode = "always"
 
 [beads]

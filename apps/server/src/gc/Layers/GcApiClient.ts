@@ -21,7 +21,7 @@ import {
 } from "node:fs";
 import { homedir as osHomedir } from "node:os";
 import path from "node:path";
-import { findBuiltBdBinaryPath } from "@t3tools/beads-doltlite";
+import { findBuiltBdBinaryPath, findBuiltDoltliteLibraryPath } from "@t3tools/beads-doltlite";
 import { findBuiltGcBinaryPath } from "@t3tools/gascity";
 import { getBundledGascityConfigLayout } from "@t3tools/gascity-config";
 import { Effect, Layer, Stream, PubSub, Config, Option } from "effect";
@@ -61,8 +61,18 @@ const GC_API_REQUEST_TIMEOUT_MS = 30_000;
 const GC_CLI_REQUEST_TIMEOUT_MS = 8_000;
 const GC_START_TIMEOUT_MS = 180_000;
 const DEFAULT_GC_RIG_BINDINGS = [
-  { name: "gascity", path: "/data/projects/gascity-t3code" },
-  { name: "beads-doltlite", path: "/data/projects/beads-doltlite" },
+  {
+    name: "gascity",
+    path: path.resolve(getBundledGascityConfigLayout().rootDir, "..", "..", "gascity"),
+  },
+  {
+    name: "beads-doltlite",
+    path: path.resolve(getBundledGascityConfigLayout().rootDir, "..", "..", "beads-doltlite"),
+  },
+  {
+    name: "context-mode",
+    path: path.resolve(getBundledGascityConfigLayout().rootDir, "..", "..", "context-mode"),
+  },
 ] as const;
 
 class GcApiClientStartError extends Error {
@@ -801,24 +811,77 @@ function ensureDefaultGcSiteToml(cityPath: string): void {
     ? readFileSync(siteTomlPath, "utf8")
     : "# T3Code packaged city keeps machine-local rig path bindings here.\n";
   for (const binding of DEFAULT_GC_RIG_BINDINGS) {
-    if (!existsSync(binding.path) || content.includes(`name = "${binding.name}"`)) {
+    if (!existsSync(binding.path)) {
       continue;
     }
-    content += `\n[[rig]]\nname = "${binding.name}"\npath = "${binding.path}"\n`;
+    content = replaceOrAppendGcRigBinding(content, binding);
   }
   writeFileSync(siteTomlPath, content);
 }
 
-function ensureDefaultGcBeadsConfig(cityPath: string): void {
+function replaceOrAppendGcRigBinding(
+  content: string,
+  binding: { readonly name: string; readonly path: string },
+): string {
+  const lines = content.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index]?.trim() !== "[[rig]]") continue;
+    let blockEnd = index + 1;
+    let foundName = false;
+    let pathLineIndex = -1;
+    while (blockEnd < lines.length && lines[blockEnd]?.trim() !== "[[rig]]") {
+      const trimmed = lines[blockEnd]?.trim() ?? "";
+      if (trimmed === `name = "${binding.name}"`) {
+        foundName = true;
+      }
+      if (trimmed.startsWith("path =")) {
+        pathLineIndex = blockEnd;
+      }
+      blockEnd += 1;
+    }
+    if (!foundName) {
+      index = blockEnd - 1;
+      continue;
+    }
+    const pathLine = `path = "${binding.path}"`;
+    if (pathLineIndex >= 0) {
+      lines[pathLineIndex] = pathLine;
+    } else {
+      lines.splice(blockEnd, 0, pathLine);
+    }
+    return lines.join("\n");
+  }
+  return `${content.replace(/\s*$/, "")}\n\n[[rig]]\nname = "${binding.name}"\npath = "${binding.path}"\n`;
+}
+
+function gcBeadsPrefixForRig(name: string): string {
+  switch (name) {
+    case "gascity":
+      return "ga";
+    case "beads-doltlite":
+      return "bd";
+    case "context-mode":
+      return "cm";
+    default:
+      return "gc";
+  }
+}
+
+function ensureDefaultGcBeadsConfig(cityPath: string, issuePrefix: string): void {
   const beadsDir = path.join(cityPath, ".beads");
   mkdirSync(beadsDir, { recursive: true });
   const configPath = path.join(beadsDir, "config.yaml");
-  if (!existsSync(configPath)) {
-    writeFileSync(
-      configPath,
-      ["issue_prefix: t3", "issue-prefix: t3", "dolt.auto-start: false", ""].join("\n"),
-    );
-  }
+  const configContent = existsSync(configPath) ? readFileSync(configPath, "utf8") : "";
+  writeFileSync(
+    configPath,
+    ensureYamlScalarLines(configContent, {
+      "issue_prefix": issuePrefix,
+      "issue-prefix": issuePrefix,
+      "dolt.auto-start": "false",
+      "export.auto": "false",
+      "types.custom": "\"session,wait,convoy,molecule,formula\"",
+    }),
+  );
   const metadataPath = path.join(beadsDir, "metadata.json");
   if (!existsSync(metadataPath)) {
     writeFileSync(
@@ -835,6 +898,22 @@ function ensureDefaultGcBeadsConfig(cityPath: string): void {
       )}\n`,
     );
   }
+}
+
+function ensureYamlScalarLines(content: string, values: Record<string, string>): string {
+  const lines = content
+    .split("\n")
+    .filter((line, index, all) => index < all.length - 1 || line !== "");
+  for (const [key, value] of Object.entries(values)) {
+    const nextLine = `${key}: ${value}`;
+    const index = lines.findIndex((line) => line.trimStart().startsWith(`${key}:`));
+    if (index >= 0) {
+      lines[index] = nextLine;
+    } else {
+      lines.push(nextLine);
+    }
+  }
+  return `${lines.join("\n").replace(/\s*$/, "")}\n`;
 }
 
 function copyBundledRuntimeBinary(
@@ -863,13 +942,27 @@ function ensurePackagedGcRuntime(input: {
   readonly runtimeHome: string;
   readonly cityPath: string | null;
   readonly binaryPath: string;
-}): { readonly cityPath: string; readonly binaryPath: string; readonly bdBinaryPath: string } {
+}): {
+  readonly cityPath: string;
+  readonly binaryPath: string;
+  readonly bdBinaryPath: string;
+  readonly doltliteLibraryPath: string;
+} {
   const defaultCityPath = getBundledGascityConfigLayout().rootDir;
   const cityPath = input.cityPath ?? defaultCityPath;
   const bdBinaryPath = path.join(
     input.runtimeHome,
     "bin",
     process.platform === "win32" ? "bd.exe" : "bd",
+  );
+  const doltliteLibraryPath = path.join(
+    input.runtimeHome,
+    "bin",
+    process.platform === "darwin"
+      ? "libdoltlite.dylib"
+      : process.platform === "win32"
+        ? "doltlite.dll"
+        : "libdoltlite.so",
   );
   if (!isGcCityRoot(cityPath)) {
     if (path.resolve(cityPath) !== path.resolve(defaultCityPath)) {
@@ -879,7 +972,12 @@ function ensurePackagedGcRuntime(input: {
   }
   if (isBundledGcCityRoot(cityPath)) {
     ensureDefaultGcSiteToml(cityPath);
-    ensureDefaultGcBeadsConfig(cityPath);
+    ensureDefaultGcBeadsConfig(cityPath, "t3");
+    for (const binding of DEFAULT_GC_RIG_BINDINGS) {
+      if (existsSync(binding.path)) {
+        ensureDefaultGcBeadsConfig(binding.path, gcBeadsPrefixForRig(binding.name));
+      }
+    }
   }
   if (!existsSync(input.binaryPath) || !statSync(input.binaryPath).isFile()) {
     copyBundledRuntimeBinary(input.binaryPath, findBuiltGcBinaryPath(), "Gas City");
@@ -887,7 +985,13 @@ function ensurePackagedGcRuntime(input: {
   if (!existsSync(bdBinaryPath) || !statSync(bdBinaryPath).isFile()) {
     copyBundledRuntimeBinary(bdBinaryPath, findBuiltBdBinaryPath(), "beads");
   }
-  return { cityPath, binaryPath: input.binaryPath, bdBinaryPath };
+  if (
+    process.platform !== "win32" &&
+    (!existsSync(doltliteLibraryPath) || !statSync(doltliteLibraryPath).isFile())
+  ) {
+    copyBundledRuntimeBinary(doltliteLibraryPath, findBuiltDoltliteLibraryPath(), "Doltlite");
+  }
+  return { cityPath, binaryPath: input.binaryPath, bdBinaryPath, doltliteLibraryPath };
 }
 
 function findRegisteredGcCityRoot(startCwd: string): string | null {
@@ -1615,10 +1719,11 @@ function runGcCli(
   const binDir = path.dirname(binaryPath);
   const result = spawnSync(binaryPath, ["--city", cityPath, ...args], {
     encoding: "utf8",
-    env: withRuntimeBinPath(
+    env: withPackagedGcRuntimeEnv(
       {
         ...process.env,
         GC_CITY_PATH: cityPath,
+        GC_BEADS_BACKEND: "doltlite",
         GC_BIN: binaryPath,
         BD_BIN: path.join(binDir, process.platform === "win32" ? "bd.exe" : "bd"),
       },
@@ -1633,16 +1738,44 @@ function runGcCli(
   };
 }
 
-function withRuntimeBinPath(env: NodeJS.ProcessEnv, binDir: string): NodeJS.ProcessEnv {
-  const key =
-    process.platform === "win32"
+function withPackagedGcRuntimeEnv(env: NodeJS.ProcessEnv, binDir: string): NodeJS.ProcessEnv {
+  const next = { ...env };
+  clearDoltServerEnv(next);
+  prependPathEnv(next, "PATH", binDir);
+  if (process.platform === "linux") {
+    prependPathEnv(next, "LD_LIBRARY_PATH", binDir);
+  } else if (process.platform === "darwin") {
+    prependPathEnv(next, "DYLD_LIBRARY_PATH", binDir);
+  }
+  return next;
+}
+
+function prependPathEnv(env: NodeJS.ProcessEnv, key: string, value: string): void {
+  const actualKey =
+    key === "PATH" && process.platform === "win32"
       ? (Object.keys(env).find((name) => name.toLowerCase() === "path") ?? "Path")
-      : "PATH";
+      : key;
   const separator = process.platform === "win32" ? ";" : ":";
-  return {
-    ...env,
-    [key]: [binDir, env[key]].filter(Boolean).join(separator),
-  };
+  env[actualKey] = [value, env[actualKey]].filter(Boolean).join(separator);
+}
+
+function clearDoltServerEnv(env: NodeJS.ProcessEnv): void {
+  for (const key of [
+    "BEADS_DOLT_AUTO_START",
+    "BEADS_DOLT_DATABASE",
+    "BEADS_DOLT_PORT",
+    "BEADS_DOLT_SERVER_DATABASE",
+    "BEADS_DOLT_SERVER_HOST",
+    "BEADS_DOLT_SERVER_MODE",
+    "BEADS_DOLT_SERVER_PORT",
+    "GC_DOLT_DATABASE",
+    "GC_DOLT_HOST",
+    "GC_DOLT_PASSWORD",
+    "GC_DOLT_PORT",
+    "GC_DOLT_USER",
+  ]) {
+    delete env[key];
+  }
 }
 
 function loadExpandedGcConfig(binaryPath: string, cityPath: string): GcConfigResult {
@@ -2263,7 +2396,7 @@ const makeGcApiClient = Effect.gen(function* () {
       });
       const result = spawnSync(runtime.binaryPath, ["--city", runtime.cityPath, "start"], {
         cwd: path.dirname(runtime.cityPath),
-        env: withRuntimeBinPath(
+        env: withPackagedGcRuntimeEnv(
           {
             ...process.env,
             GC_HOME: runtimeHome,
@@ -2271,6 +2404,7 @@ const makeGcApiClient = Effect.gen(function* () {
             T3CODE_WORKTREES_DIR: serverConfig.worktreesDir,
             GC_WORKTREES_DIR: serverConfig.worktreesDir,
             GC_CITY_PATH: runtime.cityPath,
+            GC_BEADS_BACKEND: "doltlite",
             GC_BIN: runtime.binaryPath,
             BD_BIN: runtime.bdBinaryPath,
             GC_API_URL: baseUrl,
@@ -2301,7 +2435,7 @@ const makeGcApiClient = Effect.gen(function* () {
     });
     const child = spawn(runtime.binaryPath, ["--city", runtime.cityPath, ...args], {
       cwd: path.dirname(runtime.cityPath),
-      env: withRuntimeBinPath(
+      env: withPackagedGcRuntimeEnv(
         {
           ...process.env,
           GC_HOME: runtimeHome,
@@ -2309,6 +2443,7 @@ const makeGcApiClient = Effect.gen(function* () {
           T3CODE_WORKTREES_DIR: serverConfig.worktreesDir,
           GC_WORKTREES_DIR: serverConfig.worktreesDir,
           GC_CITY_PATH: runtime.cityPath,
+          GC_BEADS_BACKEND: "doltlite",
           GC_BIN: runtime.binaryPath,
           BD_BIN: runtime.bdBinaryPath,
           GC_API_URL: baseUrl,
