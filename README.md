@@ -76,7 +76,7 @@ bun build:gascity-tools
 bun gascity:install
 ```
 
-`bun build:gascity-tools` writes ignored binaries under:
+`bun build:gascity-tools` writes generated, gitignored binaries under:
 
 ```text
 packages/gascity/bin/<platform>-<arch>/gc
@@ -91,9 +91,10 @@ Doltlite `build` directory). Do not replace this with a plain `go build`: the
 binary will start, but `bd init --backend doltlite` will fail with missing
 `dolt_*` SQL functions such as `dolt_checkout`.
 
-The package ships the built runtime artifacts from `bin/` when it is staged for
-desktop/release packaging. `bun gascity:install` copies the matching artifacts
-into:
+The package includes the built runtime artifacts from `bin/` only when desktop
+or release packaging stages them. These files are not committed to git; rebuild
+them locally with `bun build:gascity-tools` before `bun gascity:install` or
+desktop packaging. `bun gascity:install` copies the matching artifacts into:
 
 ```text
 <runtime>/bin/gc
@@ -160,9 +161,9 @@ GC_API_URL=http://127.0.0.1:8372
 The T3 sidebar GC button starts the bundled supervisor through the server API.
 Sidebar controls persist supported GC changes back to the packaged
 `city.toml`, especially city-scoped agents such as `mayor`, `deacon`, `boot`,
-and the `dog` pool. The packaged city now includes the T3Code `gascity` and
-`beads-doltlite` rigs; machine-local rig path bindings still live in
-`packages/gascity-config/config/.gc/site.toml`.
+and the `dog` pool. The packaged city now includes the T3Code `gascity`,
+`beads-doltlite`, and `context-mode` rigs; machine-local rig path bindings
+still live in `packages/gascity-config/config/.gc/site.toml`.
 
 One config tree matters when changing bundled Gas City behavior:
 `packages/gascity-config/config/...`. In development this is the active city
@@ -204,11 +205,13 @@ maps the source trees, materialized runtime tree, `gc`/`bd` binary linkage,
 mismatch checks.
 
 Desktop release builds require built GC and beads binaries for the target
-platform:
+platform. Non-Windows targets also require the matching Doltlite runtime
+library:
 
 ```text
 packages/gascity/bin/linux-x64/gc
 packages/beads-doltlite/bin/linux-x64/bd
+packages/beads-doltlite/bin/linux-x64/libdoltlite.so
 packages/gascity/bin/win32-x64/gc.exe
 packages/beads-doltlite/bin/win32-x64/bd.exe
 ```
