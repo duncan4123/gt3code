@@ -12,6 +12,7 @@ import * as VcsStatusBroadcaster from "./VcsStatusBroadcaster.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 
 const baseLocalStatus: VcsStatusLocalResult = {
+  kind: "git",
   isRepo: true,
   sourceControlProvider: {
     kind: "github",

@@ -115,6 +115,7 @@ vi.mock("~/lib/gitStatusState", () => ({
   resetGitStatusStateForTests: () => undefined,
   useGitStatus: vi.fn(() => ({
     data: {
+      kind: "git",
       isRepo: true,
       sourceControlProvider: {
         kind: "github",

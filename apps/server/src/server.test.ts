@@ -2424,6 +2424,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             localStatus: () =>
               Effect.succeed({
                 isRepo: true,
+                kind: "git",
                 hasPrimaryRemote: true,
                 isDefaultRef: true,
                 refName: "main",
@@ -2440,6 +2441,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             status: () =>
               Effect.succeed({
                 isRepo: true,
+                kind: "git",
                 hasPrimaryRemote: true,
                 isDefaultRef: true,
                 refName: "main",
@@ -2696,6 +2698,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             localStatus: () =>
               Effect.succeed({
                 isRepo: true,
+                kind: "git",
                 hasPrimaryRemote: true,
                 isDefaultRef: true,
                 refName: "main",
@@ -2717,6 +2720,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                 statusCalls += 1;
                 return {
                   isRepo: true,
+                  kind: "git",
                   hasPrimaryRemote: true,
                   isDefaultRef: true,
                   refName: "main",
@@ -2773,6 +2777,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             localStatus: () =>
               Effect.succeed({
                 isRepo: true,
+                kind: "git",
                 hasPrimaryRemote: true,
                 isDefaultRef: false,
                 refName: "feature/demo",
@@ -2794,6 +2799,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                 statusCalls += 1;
                 return {
                   isRepo: true,
+                  kind: "git",
                   hasPrimaryRemote: true,
                   isDefaultRef: false,
                   refName: "feature/demo",
@@ -2845,6 +2851,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             localStatus: () =>
               Effect.succeed({
                 isRepo: true,
+                kind: "git",
                 hasPrimaryRemote: true,
                 isDefaultRef: true,
                 refName: "main",
@@ -2891,6 +2898,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
               localStatus: () =>
                 Effect.succeed({
                   isRepo: true,
+                  kind: "git",
                   hasPrimaryRemote: true,
                   isDefaultRef: false,
                   refName: "feature/demo",
@@ -2970,6 +2978,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                   Effect.andThen(
                     Effect.succeed({
                       isRepo: true,
+                      kind: "git" as const,
                       hasPrimaryRemote: true,
                       isDefaultRef: false,
                       refName: "feature/demo",
@@ -3664,6 +3673,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         const refreshStatus = vi.fn((_: string) =>
           Effect.succeed({
             isRepo: true,
+            kind: "git" as const,
             hasPrimaryRemote: true,
             isDefaultRef: false,
             refName: "t3code/bootstrap-refName",
