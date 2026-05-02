@@ -1,3 +1,4 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it, describe } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
@@ -71,6 +72,7 @@ describe("VcsDriverRegistry", () => {
             }),
         }),
       ),
+      Layer.provide(NodeServices.layer),
     );
 
     return Effect.gen(function* () {
@@ -112,6 +114,7 @@ describe("VcsDriverRegistry", () => {
             }),
         }),
       ),
+      Layer.provide(NodeServices.layer),
     );
 
     return Effect.gen(function* () {
@@ -148,6 +151,7 @@ describe("VcsDriverRegistry", () => {
             }),
         }),
       ),
+      Layer.provide(NodeServices.layer),
     );
 
     return Effect.gen(function* () {

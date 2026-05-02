@@ -46,29 +46,30 @@ function makeTestLayer(state: {
   localInvalidationCalls: number;
   remoteInvalidationCalls: number;
 }) {
-  return VcsStatusBroadcaster.layer.pipe(
-    Layer.provide(
-      Layer.mock(GitWorkflowService.GitWorkflowService)({
-        localStatus: () =>
-          Effect.sync(() => {
-            state.localStatusCalls += 1;
-            return state.currentLocalStatus;
-          }),
-        remoteStatus: () =>
-          Effect.sync(() => {
-            state.remoteStatusCalls += 1;
-            return state.currentRemoteStatus;
-          }),
-        invalidateLocalStatus: () =>
-          Effect.sync(() => {
-            state.localInvalidationCalls += 1;
-          }),
-        invalidateRemoteStatus: () =>
-          Effect.sync(() => {
-            state.remoteInvalidationCalls += 1;
-          }),
+  const gitWorkflowLayer = Layer.mock(GitWorkflowService.GitWorkflowService)({
+    localStatus: () =>
+      Effect.sync(() => {
+        state.localStatusCalls += 1;
+        return state.currentLocalStatus;
       }),
-    ),
+    remoteStatus: () =>
+      Effect.sync(() => {
+        state.remoteStatusCalls += 1;
+        return state.currentRemoteStatus;
+      }),
+    invalidateLocalStatus: () =>
+      Effect.sync(() => {
+        state.localInvalidationCalls += 1;
+      }),
+    invalidateRemoteStatus: () =>
+      Effect.sync(() => {
+        state.remoteInvalidationCalls += 1;
+      }),
+  } satisfies Partial<GitWorkflowService.GitWorkflowServiceShape>);
+
+  return VcsStatusBroadcaster.layer.pipe(
+    Layer.provideMerge(NodeServices.layer),
+    Layer.provide(gitWorkflowLayer),
   );
 }
 
@@ -185,31 +186,31 @@ describe("VcsStatusBroadcaster", () => {
       localInvalidationCalls: 0,
       remoteInvalidationCalls: 0,
     };
+    const gitWorkflowLayer = Layer.mock(GitWorkflowService.GitWorkflowService)({
+      localStatus: (input) =>
+        Effect.sync(() => {
+          seenCwds.push(input.cwd);
+          state.localStatusCalls += 1;
+          return state.currentLocalStatus;
+        }),
+      remoteStatus: (input) =>
+        Effect.sync(() => {
+          seenCwds.push(input.cwd);
+          state.remoteStatusCalls += 1;
+          return state.currentRemoteStatus;
+        }),
+      invalidateLocalStatus: () =>
+        Effect.sync(() => {
+          state.localInvalidationCalls += 1;
+        }),
+      invalidateRemoteStatus: () =>
+        Effect.sync(() => {
+          state.remoteInvalidationCalls += 1;
+        }),
+    } satisfies Partial<GitWorkflowService.GitWorkflowServiceShape>);
     const testLayer = VcsStatusBroadcaster.layer.pipe(
-      Layer.provide(
-        Layer.mock(GitWorkflowService.GitWorkflowService)({
-          localStatus: (input) =>
-            Effect.sync(() => {
-              seenCwds.push(input.cwd);
-              state.localStatusCalls += 1;
-              return state.currentLocalStatus;
-            }),
-          remoteStatus: (input) =>
-            Effect.sync(() => {
-              seenCwds.push(input.cwd);
-              state.remoteStatusCalls += 1;
-              return state.currentRemoteStatus;
-            }),
-          invalidateLocalStatus: () =>
-            Effect.sync(() => {
-              state.localInvalidationCalls += 1;
-            }),
-          invalidateRemoteStatus: () =>
-            Effect.sync(() => {
-              state.remoteInvalidationCalls += 1;
-            }),
-        } satisfies Partial<GitWorkflowService.GitWorkflowServiceShape>),
-      ),
+      Layer.provideMerge(NodeServices.layer),
+      Layer.provide(gitWorkflowLayer),
     );
 
     return Effect.gen(function* () {
@@ -232,7 +233,7 @@ describe("VcsStatusBroadcaster", () => {
       assert.deepStrictEqual(seenCwds, [realPath, realPath]);
       assert.equal(state.localStatusCalls, 1);
       assert.equal(state.remoteStatusCalls, 1);
-    }).pipe(Effect.provide(Layer.mergeAll(testLayer, NodeServices.layer)));
+    }).pipe(Effect.provide(testLayer));
   });
 
   it.effect("streams a local snapshot first and remote updates later", () => {
@@ -286,40 +287,40 @@ describe("VcsStatusBroadcaster", () => {
     };
     let remoteInterruptedDeferred: Deferred.Deferred<void, never> | null = null;
     let remoteStartedDeferred: Deferred.Deferred<void, never> | null = null;
+    const gitWorkflowLayer = Layer.mock(GitWorkflowService.GitWorkflowService)({
+      localStatus: () =>
+        Effect.sync(() => {
+          state.localStatusCalls += 1;
+          return state.currentLocalStatus;
+        }),
+      remoteStatus: () =>
+        Effect.sync(() => {
+          state.remoteStatusCalls += 1;
+        }).pipe(
+          Effect.andThen(
+            remoteStartedDeferred
+              ? Deferred.succeed(remoteStartedDeferred, undefined).pipe(Effect.ignore)
+              : Effect.void,
+          ),
+          Effect.andThen(Effect.never as Effect.Effect<VcsStatusRemoteResult | null, never>),
+          Effect.onInterrupt(() =>
+            remoteInterruptedDeferred
+              ? Deferred.succeed(remoteInterruptedDeferred, undefined).pipe(Effect.ignore)
+              : Effect.void,
+          ),
+        ),
+      invalidateLocalStatus: () =>
+        Effect.sync(() => {
+          state.localInvalidationCalls += 1;
+        }),
+      invalidateRemoteStatus: () =>
+        Effect.sync(() => {
+          state.remoteInvalidationCalls += 1;
+        }),
+    } satisfies Partial<GitWorkflowService.GitWorkflowServiceShape>);
     const testLayer = VcsStatusBroadcaster.layer.pipe(
-      Layer.provide(
-        Layer.mock(GitWorkflowService.GitWorkflowService)({
-          localStatus: () =>
-            Effect.sync(() => {
-              state.localStatusCalls += 1;
-              return state.currentLocalStatus;
-            }),
-          remoteStatus: () =>
-            Effect.sync(() => {
-              state.remoteStatusCalls += 1;
-            }).pipe(
-              Effect.andThen(
-                remoteStartedDeferred
-                  ? Deferred.succeed(remoteStartedDeferred, undefined).pipe(Effect.ignore)
-                  : Effect.void,
-              ),
-              Effect.andThen(Effect.never as Effect.Effect<VcsStatusRemoteResult | null, never>),
-              Effect.onInterrupt(() =>
-                remoteInterruptedDeferred
-                  ? Deferred.succeed(remoteInterruptedDeferred, undefined).pipe(Effect.ignore)
-                  : Effect.void,
-              ),
-            ),
-          invalidateLocalStatus: () =>
-            Effect.sync(() => {
-              state.localInvalidationCalls += 1;
-            }),
-          invalidateRemoteStatus: () =>
-            Effect.sync(() => {
-              state.remoteInvalidationCalls += 1;
-            }),
-        } satisfies Partial<GitWorkflowService.GitWorkflowServiceShape>),
-      ),
+      Layer.provideMerge(NodeServices.layer),
+      Layer.provide(gitWorkflowLayer),
     );
 
     return Effect.gen(function* () {
