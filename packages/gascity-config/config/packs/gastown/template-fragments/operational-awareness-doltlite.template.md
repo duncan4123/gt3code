@@ -42,6 +42,16 @@ test runs, `go test -c`, and ad hoc compile checks. If a test/build/compile was
 already started, stop it when asked and before handoff confirm no leftover
 `go test`, `bd.test`, or `/tmp/go-build` processes are still running.
 
+Every fix that changes Beads storage, metadata, binary installation, or
+doltlite opening behavior must be manually smoke-tested against the HQ store and
+every configured rig store before handoff. At minimum, verify:
+
+- `bd list --json --limit=1` from the HQ city config directory
+- `bd list --json --limit=1` from each rig root
+- `gc --rig <rig> bd list --json --limit=1` for each rig
+- metadata for each store has the expected `backend`, `database`,
+  `dolt_database`, and `dolt_mode`
+
 If you detect beads or mail trouble (commands hang/timeout, "database not
 found", query latency > 5s, unexpected empty results):
 

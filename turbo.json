@@ -23,7 +23,17 @@
     "T3CODE_OTLP_EXPORT_INTERVAL_MS",
     "T3CODE_OTLP_SERVICE_NAME"
   ],
-  "globalPassThroughEnv": ["PATHEXT"],
+  "globalPassThroughEnv": [
+    "PATHEXT",
+    "T3CODE_DOLTLITE_BUILD_DIR",
+    "DOLTLITE_BUILD_DIR",
+    "T3CODE_DOLTLITE_SOURCE_DIR",
+    "DOLTLITE_SOURCE_DIR",
+    "T3CODE_BEADS_DOLTLITE_SOURCE_DIR",
+    "BEADS_DOLTLITE_SOURCE_DIR",
+    "T3CODE_GASCITY_SOURCE_DIR",
+    "GASCITY_SOURCE_DIR"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

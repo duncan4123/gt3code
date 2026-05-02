@@ -78,10 +78,6 @@ function resolveDoltliteBuildDir() {
       : undefined,
     path.join(packageRoot, "doltlite", "build"),
     path.join(packageRoot, "..", "doltlite", "build"),
-    "/data/projects/doltlite-latest/build",
-    "/data/projects/doltlite-upstream-exact/build",
-    "/data/projects/doltlite/build",
-    "/data/projects/doltlite",
   ].filter(Boolean);
   for (const candidate of candidates) {
     const resolved = path.resolve(candidate);

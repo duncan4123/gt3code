@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
@@ -113,7 +114,7 @@ function installRuntime(options: { readonly overwriteConfig: boolean }): Runtime
   if (doltliteLibrarySource) {
     copyRuntimeFile(doltliteLibrarySource, runtime.doltliteLibraryPath);
   }
-  prepareActiveCity(defaultCityRoot);
+  prepareActiveCity(defaultCityRoot, { bdBinaryPath: runtime.bdBinaryPath, initializeStores: true });
   return {
     rootDir,
     cityDir: defaultCityRoot,
@@ -126,16 +127,48 @@ function installRuntime(options: { readonly overwriteConfig: boolean }): Runtime
 
 function ensureRuntimeInstalled(): RuntimePaths {
   const runtime = getRuntimePaths();
-  if (
-    existsSync(runtime.cityDir) &&
-    existsSync(runtime.gcBinaryPath) &&
-    existsSync(runtime.bdBinaryPath) &&
-    (process.platform === "win32" || existsSync(runtime.doltliteLibraryPath))
-  ) {
-    prepareActiveCity(runtime.cityDir);
+  const gcBinarySource = process.env.GASCITY_BINARY ?? findBuiltGcBinaryPath();
+  const bdBinarySource = process.env.BD_BINARY ?? findBuiltBdBinaryPath();
+  const doltliteLibrarySource = process.env.DOLTLITE_LIBRARY ?? findBuiltDoltliteLibraryPath();
+  if (runtimeMatchesSources(runtime, { gcBinarySource, bdBinarySource, doltliteLibrarySource })) {
+    prepareActiveCity(runtime.cityDir, { initializeStores: false });
     return runtime;
   }
   return installRuntime({ overwriteConfig: false });
+}
+
+function runtimeMatchesSources(
+  runtime: RuntimePaths,
+  sources: {
+    readonly gcBinarySource: string | undefined;
+    readonly bdBinarySource: string | undefined;
+    readonly doltliteLibrarySource: string | undefined;
+  },
+): boolean {
+  if (!existsSync(runtime.cityDir)) return false;
+  if (!sources.gcBinarySource || !sameFileHash(sources.gcBinarySource, runtime.gcBinaryPath)) {
+    return false;
+  }
+  if (!sources.bdBinarySource || !sameFileHash(sources.bdBinarySource, runtime.bdBinaryPath)) {
+    return false;
+  }
+  if (process.platform !== "win32") {
+    if (
+      !sources.doltliteLibrarySource ||
+      !sameFileHash(sources.doltliteLibrarySource, runtime.doltliteLibraryPath)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameFileHash(left: string, right: string): boolean {
+  return existsSync(left) && existsSync(right) && sha256File(left) === sha256File(right);
+}
+
+function sha256File(filePath: string): string {
+  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
 }
 
 function getRuntimePaths(): RuntimePaths {
@@ -160,15 +193,76 @@ function getRuntimePaths(): RuntimePaths {
   };
 }
 
-function prepareActiveCity(cityDir: string): void {
+function prepareActiveCity(
+  cityDir: string,
+  options: { readonly bdBinaryPath?: string; readonly initializeStores: boolean },
+): void {
   writeDefaultSiteToml(cityDir);
   writeDefaultBeadsConfig(cityDir, "t3", "hq");
+  if (options.initializeStores) {
+    if (!options.bdBinaryPath) throw new Error("bd binary path is required to initialize beads stores");
+    initializeDoltliteBeadsStore(options.bdBinaryPath, cityDir, "t3");
+  }
   for (const binding of defaultRigBindings) {
     if (existsSync(binding.path)) {
       const issuePrefix = beadsPrefixForRig(binding.name);
       writeDefaultBeadsConfig(binding.path, issuePrefix, issuePrefix);
+      if (options.initializeStores) {
+        if (!options.bdBinaryPath) throw new Error("bd binary path is required to initialize beads stores");
+        initializeDoltliteBeadsStore(options.bdBinaryPath, binding.path, issuePrefix);
+      }
     }
   }
+}
+
+function initializeDoltliteBeadsStore(bdBinaryPath: string, scopeDir: string, issuePrefix: string): void {
+  const result = spawnSync(
+    bdBinaryPath,
+    [
+      "init",
+      "--backend",
+      "doltlite",
+      "--prefix",
+      issuePrefix,
+      "--skip-agents",
+      "--skip-hooks",
+      "--non-interactive",
+      "--quiet",
+    ],
+    {
+      cwd: scopeDir,
+      encoding: "utf8",
+      env: {
+        ...withoutDoltliteInitServerEnv(process.env),
+        BEADS_DIR: join(scopeDir, ".beads"),
+      },
+    },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `Failed to initialize doltlite beads store at ${scopeDir}: ${result.stderr || result.stdout}`,
+    );
+  }
+}
+
+function withoutDoltliteInitServerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const next = { ...env };
+  for (const key of Object.keys(next)) {
+    if (
+      key === "BEADS_DOLT_SERVER_MODE" ||
+      key === "BEADS_DOLT_SHARED_SERVER" ||
+      key === "BEADS_DOLT_HOST" ||
+      key === "BEADS_DOLT_PORT" ||
+      key === "BEADS_DOLT_SERVER_HOST" ||
+      key === "BEADS_DOLT_SERVER_PORT" ||
+      key === "GC_DOLT_HOST" ||
+      key === "GC_DOLT_PORT" ||
+      key === "GC_DOLT_SERVER_PORT"
+    ) {
+      delete next[key];
+    }
+  }
+  return next;
 }
 
 function writeDefaultSiteToml(cityDir: string): void {
@@ -251,21 +345,23 @@ function writeDefaultBeadsConfig(cityDir: string, issuePrefix: string, doltDatab
     }),
   );
   const metadataPath = join(beadsDir, "metadata.json");
-  if (!existsSync(metadataPath)) {
-    writeFileSync(
-      metadataPath,
-      `${JSON.stringify(
-        {
-          backend: "doltlite",
-          database: "doltlite",
-          dolt_database: doltDatabase,
-          dolt_mode: "embedded",
-        },
-        null,
-        2,
-      )}\n`,
-    );
-  }
+  const metadata = existsSync(metadataPath)
+    ? (JSON.parse(readFileSync(metadataPath, "utf8")) as Record<string, unknown>)
+    : {};
+  writeFileSync(
+    metadataPath,
+    `${JSON.stringify(
+      {
+        ...metadata,
+        backend: "doltlite",
+        database: "doltlite",
+        dolt_database: doltDatabase,
+        dolt_mode: "embedded",
+      },
+      null,
+      2,
+    )}\n`,
+  );
 }
 
 function ensureYamlScalarLines(content: string, values: Record<string, string>): string {

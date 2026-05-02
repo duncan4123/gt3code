@@ -277,7 +277,7 @@ func seedDeferredManagedBeadsBeforeProviderReadiness(cityPath string, cfg *confi
 		return nil
 	}
 	if cityUsesDoltliteBeadsBackend(cityPath) {
-		return nil
+		return seedDoltliteBeadsForConfiguredScopes(cityPath, cfg)
 	}
 	resolveRigPaths(cityPath, cfg.Rigs)
 	if !workspaceUsesManagedBdStoreContract(cityPath, cfg.Rigs) {
@@ -293,6 +293,22 @@ func seedDeferredManagedBeadsBeforeProviderReadiness(cityPath string, cfg *confi
 			continue
 		}
 		if err := seedDeferredManagedBeadsErr(cityPath, rig.Path, rig.EffectivePrefix(), ""); err != nil {
+			return fmt.Errorf("rig %q: %w", rig.Name, err)
+		}
+	}
+	return nil
+}
+
+func seedDoltliteBeadsForConfiguredScopes(cityPath string, cfg *config.City) error {
+	resolveRigPaths(cityPath, cfg.Rigs)
+	if err := ensureDoltliteScopeMetadataForInit(fsys.OSFS{}, cityPath, cityPath, config.EffectiveHQPrefix(cfg), ""); err != nil {
+		return fmt.Errorf("hq: %w", err)
+	}
+	for _, rig := range cfg.Rigs {
+		if strings.TrimSpace(rig.Path) == "" {
+			continue
+		}
+		if err := ensureDoltliteScopeMetadataForInit(fsys.OSFS{}, cityPath, rig.Path, rig.EffectivePrefix(), ""); err != nil {
 			return fmt.Errorf("rig %q: %w", rig.Name, err)
 		}
 	}

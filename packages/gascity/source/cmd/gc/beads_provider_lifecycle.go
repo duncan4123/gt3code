@@ -47,6 +47,7 @@ var (
 	initDirIfReadyEnsureBeadsProvider = ensureBeadsProvider
 	initDirIfReadyInitAndHookDir      = initAndHookDir
 	initDirIfReadyRetryDelay          = time.Second
+	ensureDoltliteStoreConfigForInit  = ensureDoltliteStoreConfigForInitReal
 )
 
 const initDirIfReadyRetryLimit = 2
@@ -288,6 +289,9 @@ func seedDeferredManagedBeads(cityPath, dir, prefix, doltDatabase string) {
 }
 
 func seedDeferredManagedBeadsErr(cityPath, dir, prefix, doltDatabase string) error {
+	if cityUsesDoltliteBeadsBackend(cityPath) {
+		return ensureDoltliteScopeMetadataForInit(fsys.OSFS{}, cityPath, dir, prefix, doltDatabase)
+	}
 	if state, ok, err := desiredScopeDoltConfigStateForInit(cityPath, dir, prefix); err != nil {
 		return err
 	} else if ok {
@@ -322,6 +326,42 @@ func defaultScopeDoltDatabase(cityPath, dir, prefix string) string {
 		return "hq"
 	}
 	return prefix
+}
+
+func ensureDoltliteScopeMetadataForInit(fs fsys.FS, cityPath, scopeRoot, prefix, doltDatabase string) error {
+	if strings.TrimSpace(doltDatabase) == "" {
+		doltDatabase = readDeferredManagedDoltDatabase(filepath.Join(scopeRoot, ".beads", "metadata.json"), defaultScopeDoltDatabase(cityPath, scopeRoot, prefix))
+	}
+	if strings.TrimSpace(doltDatabase) == "" {
+		return fmt.Errorf("missing pinned dolt_database for %s", filepath.Join(scopeRoot, ".beads", "metadata.json"))
+	}
+	metadataPath := filepath.Join(scopeRoot, ".beads", "metadata.json")
+	if err := ensureBeadsDir(fs, filepath.Dir(metadataPath)); err != nil {
+		return err
+	}
+	_, err := contract.EnsureCanonicalMetadata(fs, metadataPath, contract.MetadataState{
+		Database:     "doltlite",
+		Backend:      "doltlite",
+		DoltMode:     "embedded",
+		DoltDatabase: doltDatabase,
+	})
+	if err != nil {
+		return err
+	}
+	return ensureDoltliteStoreConfigForInit(cityPath, scopeRoot, prefix)
+}
+
+func ensureDoltliteStoreConfigForInitReal(cityPath, scopeRoot, prefix string) error {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return fmt.Errorf("missing issue_prefix for %s", filepath.Join(scopeRoot, ".beads", "config"))
+	}
+	runner := bdCommandRunnerForCity(cityPath)
+	_, err := runner(scopeRoot, "bd", "init", "--backend", "doltlite", "--prefix", prefix, "--skip-agents", "--skip-hooks", "--non-interactive", "--quiet")
+	if err != nil {
+		return fmt.Errorf("bd init doltlite: %w", err)
+	}
+	return nil
 }
 
 func isReservedManagedDoltDatabase(name string) bool {
@@ -367,6 +407,11 @@ func initAndHookDir(cityPath, dir, prefix string) error {
 	}
 	if err := initBeadsForDir(cityPath, dir, prefix, doltDatabase); err != nil {
 		return err
+	}
+	if cityUsesDoltliteBeadsBackend(cityPath) {
+		if err := ensureDoltliteScopeMetadataForInit(fsys.OSFS{}, cityPath, dir, prefix, doltDatabase); err != nil {
+			return err
+		}
 	}
 	if !cityUsesDoltliteBeadsBackend(cityPath) {
 		if err := normalizeCanonicalBdScopeFilesForInit(cityPath, dir, prefix, doltDatabase); err != nil {

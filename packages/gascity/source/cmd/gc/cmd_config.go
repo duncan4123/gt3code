@@ -305,6 +305,10 @@ func singletonSessionMigrationWarnings(cfg *config.City) []string {
 		if !ok {
 			continue
 		}
+		if spec.Agent != nil {
+			namedByTemplate[spec.Agent.QualifiedName()] = true
+			continue
+		}
 		namedByTemplate[namedSessionBackingTemplate(spec)] = true
 	}
 	var warnings []string

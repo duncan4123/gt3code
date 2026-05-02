@@ -51,6 +51,31 @@ Expected state:
 
 ## Findings
 
+- 2026-05-02: `scripts/gascity-runner.ts` preserved stale
+  `.beads/metadata.json` when the file already existed, so rigs could remain
+  `backend=doltlite` but `dolt_mode=server` indefinitely even though the
+  operational fragment says doltlite is local/embedded. The runner now rewrites
+  existing metadata to `backend=doltlite`, `database=doltlite`, and
+  `dolt_mode=embedded` while preserving stable fields such as `project_id`.
+- 2026-05-02: `database disk image is malformed` was reproduced as a binary /
+  `libdoltlite.so` mismatch, not necessarily file corruption. A stale
+  `/home/ubuntu/go/bin/bd` with an older libdoltlite could create/read its own
+  CTLD files but failed on files created by the packaged runtime `bd`. Every
+  installed `bd` path must be updated together with the matching `gc` and
+  `libdoltlite.so`; verify with `sha256sum` and direct `bd list` in each rig
+  before deleting stores.
+- 2026-05-02: Gas City `gc rig add` and init-provider readiness now seed
+  canonical doltlite metadata for HQ and every configured rig in `city.toml`
+  when `[beads].backend = "doltlite"`. Regression coverage was added for a new
+  doltlite rig-add path and for TOML-wide rig metadata creation, expecting
+  `backend=database=doltlite`, per-scope `dolt_database`, and
+  `dolt_mode=embedded`.
+- 2026-05-02: `gc convoy create` can still fail after metadata repair if the
+  doltlite store config lacks `issue_prefix`. Fresh `bd init --backend
+  doltlite --prefix <prefix>` writes the prefix into the store config; writing
+  `.beads/config.yaml` is only a compatibility mirror. Gas City and the T3Code
+  runner now use that `bd init` parity operation for HQ and every configured
+  rig store, with `--skip-agents --skip-hooks --non-interactive --quiet`.
 - 2026-05-02: in the T3Code packaged city, plain `gc` discovery from
   `/data/projects/t3code/packages/beads-doltlite` walked to
   `/data/projects/t3code/city.toml` and failed because that file does not
