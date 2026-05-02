@@ -2430,6 +2430,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         layers: {
           vcsDriver: {
             detectRepository: () => Effect.succeed(testGitRepository("/tmp/repo")),
+            isInsideWorkTree: () => Effect.succeed(true),
           },
           gitManager: {
             invalidateLocalStatus: () => Effect.void,
@@ -2568,9 +2569,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             removeWorktree: () => Effect.void,
             createRef: (input) => Effect.succeed({ refName: input.refName }),
             switchRef: (input) => Effect.succeed({ refName: input.refName }),
-          },
-          vcsDriver: {
-            isInsideWorkTree: () => Effect.succeed(true),
           },
         },
       });

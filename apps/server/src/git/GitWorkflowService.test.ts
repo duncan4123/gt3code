@@ -25,6 +25,7 @@ describe("GitWorkflowService", () => {
       const status = yield* workflow.localStatus({ cwd: "/not-a-repo" });
 
       assert.deepStrictEqual(status, {
+        kind: "unknown",
         isRepo: false,
         hasPrimaryRemote: false,
         isDefaultRef: false,
@@ -51,6 +52,7 @@ describe("GitWorkflowService", () => {
       const status = yield* workflow.status({ cwd: "/not-a-repo" });
 
       assert.deepStrictEqual(status, {
+        kind: "unknown",
         isRepo: false,
         hasPrimaryRemote: false,
         isDefaultRef: false,
