@@ -861,13 +861,17 @@ function gcBeadsPrefixForRig(name: string): string {
     case "beads-doltlite":
       return "bd";
     case "context-mode":
-      return "cm";
+      return "ccm";
     default:
       return "gc";
   }
 }
 
-function ensureDefaultGcBeadsConfig(cityPath: string, issuePrefix: string): void {
+function ensureDefaultGcBeadsConfig(
+  cityPath: string,
+  issuePrefix: string,
+  doltDatabase: string,
+): void {
   const beadsDir = path.join(cityPath, ".beads");
   mkdirSync(beadsDir, { recursive: true });
   const configPath = path.join(beadsDir, "config.yaml");
@@ -875,11 +879,11 @@ function ensureDefaultGcBeadsConfig(cityPath: string, issuePrefix: string): void
   writeFileSync(
     configPath,
     ensureYamlScalarLines(configContent, {
-      "issue_prefix": issuePrefix,
+      issue_prefix: issuePrefix,
       "issue-prefix": issuePrefix,
       "dolt.auto-start": "false",
       "export.auto": "false",
-      "types.custom": "\"session,wait,convoy,molecule,formula\"",
+      "types.custom": '"session,wait,convoy,molecule,formula"',
     }),
   );
   const metadataPath = path.join(beadsDir, "metadata.json");
@@ -890,7 +894,7 @@ function ensureDefaultGcBeadsConfig(cityPath: string, issuePrefix: string): void
         {
           backend: "doltlite",
           database: "doltlite",
-          dolt_database: "hq",
+          dolt_database: doltDatabase,
           dolt_mode: "embedded",
         },
         null,
@@ -972,10 +976,11 @@ function ensurePackagedGcRuntime(input: {
   }
   if (isBundledGcCityRoot(cityPath)) {
     ensureDefaultGcSiteToml(cityPath);
-    ensureDefaultGcBeadsConfig(cityPath, "t3");
+    ensureDefaultGcBeadsConfig(cityPath, "t3", "hq");
     for (const binding of DEFAULT_GC_RIG_BINDINGS) {
       if (existsSync(binding.path)) {
-        ensureDefaultGcBeadsConfig(binding.path, gcBeadsPrefixForRig(binding.name));
+        const issuePrefix = gcBeadsPrefixForRig(binding.name);
+        ensureDefaultGcBeadsConfig(binding.path, issuePrefix, issuePrefix);
       }
     }
   }

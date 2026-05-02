@@ -151,8 +151,8 @@ export function resolvePrimaryEnvironmentHttpUrl(
 
 export function readPrimaryEnvironmentTarget(): PrimaryEnvironmentTarget | null {
   return (
-    resolveDesktopPrimaryTarget() ??
     resolveConfiguredPrimaryTarget() ??
+    resolveDesktopPrimaryTarget() ??
     resolveWindowOriginPrimaryTarget()
   );
 }

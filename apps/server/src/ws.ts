@@ -587,11 +587,13 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           if (effectiveCommand.type === "thread.turn.start" && effectiveCommand.bootstrap) {
             return yield* dispatchBootstrapTurnStart(effectiveCommand);
           }
-          return yield* orchestrationEngine.dispatch(effectiveCommand).pipe(
-            Effect.mapError((cause) =>
-              toDispatchCommandError(cause, "Failed to dispatch orchestration command"),
-            ),
-          );
+          return yield* orchestrationEngine
+            .dispatch(effectiveCommand)
+            .pipe(
+              Effect.mapError((cause) =>
+                toDispatchCommandError(cause, "Failed to dispatch orchestration command"),
+              ),
+            );
         });
 
         return startup

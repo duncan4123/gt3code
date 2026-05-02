@@ -10,6 +10,7 @@ import {
   SidebarHeader,
   SidebarSeparator,
 } from "./ui/sidebar";
+import { metadataValue } from "../lib/gcThreadContext";
 
 interface GcContextSidebarProps {
   metadata: Record<string, string>;
@@ -103,18 +104,6 @@ function parseCount(value: string | undefined): number | null {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return null;
   return Math.floor(parsed);
-}
-
-function metadataValue(
-  metadata: Record<string, string> | undefined,
-  keys: ReadonlyArray<string>,
-): string | undefined {
-  if (!metadata) return undefined;
-  for (const key of keys) {
-    const value = metadata[key]?.trim();
-    if (value) return value;
-  }
-  return undefined;
 }
 
 function compactList(values: ReadonlyArray<string> | undefined, limit = 4): string | undefined {

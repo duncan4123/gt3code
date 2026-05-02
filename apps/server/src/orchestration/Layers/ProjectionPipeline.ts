@@ -806,16 +806,26 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             updatedAt: event.payload.updatedAt,
           });
           if (!event.payload.streaming) {
-            yield* finalizedThreadMessageRepository.upsert({
-              messageId: event.payload.messageId,
-              threadId: event.payload.threadId,
-              turnId: event.payload.turnId,
-              role: event.payload.role,
-              text: nextText,
-              ...(nextAttachments !== undefined ? { attachments: [...nextAttachments] } : {}),
-              createdAt: previousMessage?.createdAt ?? event.payload.createdAt,
-              updatedAt: event.payload.updatedAt,
-            });
+            yield* finalizedThreadMessageRepository
+              .upsert({
+                messageId: event.payload.messageId,
+                threadId: event.payload.threadId,
+                turnId: event.payload.turnId,
+                role: event.payload.role,
+                text: nextText,
+                ...(nextAttachments !== undefined ? { attachments: [...nextAttachments] } : {}),
+                createdAt: previousMessage?.createdAt ?? event.payload.createdAt,
+                updatedAt: event.payload.updatedAt,
+              })
+              .pipe(
+                Effect.catch((cause) =>
+                  Effect.logWarning("failed to update finalized message cache", {
+                    messageId: event.payload.messageId,
+                    threadId: event.payload.threadId,
+                    cause,
+                  }),
+                ),
+              );
           }
           return;
         }

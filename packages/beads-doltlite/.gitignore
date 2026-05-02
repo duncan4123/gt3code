@@ -1,1 +1,10 @@
 bin/
+source/*.test
+source/build/
+source/.beads/
+source/.dolt/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

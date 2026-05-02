@@ -110,6 +110,30 @@ describe("environmentBootstrap", () => {
     expect(fetchMock).toHaveBeenCalledWith("https://remote.example.com/.well-known/t3/environment");
   });
 
+  it("prefers configured urls over a desktop bootstrap target", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(BASE_ENVIRONMENT));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("VITE_HTTP_URL", "http://localhost:3773");
+    vi.stubEnv("VITE_WS_URL", "ws://localhost:3773");
+    vi.stubGlobal("window", {
+      location: new URL("http://localhost:5733/"),
+      history: {
+        replaceState: vi.fn(),
+      },
+      desktopBridge: {
+        getLocalEnvironmentBootstrap: () => ({
+          label: "Packaged environment",
+          httpBaseUrl: "https://app.t3.chat",
+          wsBaseUrl: "wss://app.t3.chat",
+          bootstrapToken: "desktop-bootstrap-token",
+        }),
+      },
+    });
+
+    await expect(resolveInitialPrimaryEnvironmentDescriptor()).resolves.toEqual(BASE_ENVIRONMENT);
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:3773/.well-known/t3/environment");
+  });
+
   it("derives the websocket url when only VITE_HTTP_URL is configured", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(BASE_ENVIRONMENT));
     vi.stubGlobal("fetch", fetchMock);

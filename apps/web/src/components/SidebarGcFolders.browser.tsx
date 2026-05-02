@@ -353,6 +353,48 @@ describe("SidebarGcFolders", () => {
     }
   });
 
+  it("does not show pool controls for non-pool named sessions with min and max metadata", async () => {
+    const { host, screen } = await renderSidebarGcFolders({
+      rigGroups: [
+        {
+          id: "t3code",
+          label: "t3code",
+          kind: "rig",
+          isSuspended: false,
+          agentGroups: [
+            {
+              id: "t3code/witness",
+              label: "witness",
+              qualifiedName: "t3code/witness",
+              isSuspended: false,
+              isPool: false,
+              minActiveSessions: 1,
+              maxActiveSessions: 3,
+              namedSessionMode: "always",
+              threadIds: [],
+              runtimeState: { label: "No session", tone: "warning" },
+            },
+          ],
+        },
+      ],
+    });
+
+    try {
+      await expect
+        .element(page.getByTestId("gc-agent-pool-min-t3code--witness"))
+        .not.toBeInTheDocument();
+      await expect
+        .element(page.getByTestId("gc-agent-pool-max-t3code--witness"))
+        .not.toBeInTheDocument();
+      await expect
+        .element(page.getByTestId("gc-agent-session-mode-t3code--witness"))
+        .toHaveTextContent("auto");
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+
   it("renders convoy and formula virtual folders under an agent", async () => {
     const { host, screen } = await renderSidebarGcFolders({
       rigGroups: [

@@ -22,8 +22,17 @@ import {
 } from "./ThreadStatusIndicators";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { autoAnimate } from "@formkit/auto-animate";
-import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  memo,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useShallow } from "zustand/react/shallow";
+import { useQuery } from "@tanstack/react-query";
 import {
   DndContext,
   type DragCancelEvent,
@@ -153,11 +162,13 @@ import { useThreadSelectionStore } from "../threadSelectionStore";
 import { useCommandPaletteStore } from "../commandPaletteStore";
 import {
   getSidebarThreadIdsToPrewarm,
+  normalizeThreadSearchQuery,
   resolveMissingGcRigProjects,
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
   partitionProjectThreadsForSidebar,
   resolveProjectStatusIndicator,
+  resolveSidebarThreadSearch,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
@@ -168,6 +179,7 @@ import {
   useThreadJumpHintVisibility,
   ThreadStatusPill,
 } from "./Sidebar.logic";
+import { orchestrationSearchThreadMessagesQueryOptions } from "../lib/orchestrationReactQuery";
 import { sortThreads } from "../lib/threadSort";
 import { SidebarGcFolders, type SidebarGcThreadGroup } from "./SidebarGcFolders";
 import {
@@ -373,6 +385,7 @@ interface SidebarThreadRowProps {
   thread: SidebarThreadSummary;
   projectCwd: string | null;
   indentClassName?: string;
+  searchSnippet: string | null;
   orderedProjectThreadKeys: readonly string[];
   isActive: boolean;
   jumpLabel: string | null;
@@ -411,6 +424,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   const {
     orderedProjectThreadKeys,
     indentClassName,
+    searchSnippet,
     isActive,
     jumpLabel,
     appSettingsConfirmThreadArchive,
@@ -655,7 +669,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         className={`${resolveThreadRowClassName({
           isActive,
           isSelected,
-        })} relative isolate`}
+        })} relative isolate ${searchSnippet ? "ring-1 ring-border/60" : ""}`}
         onClick={handleRowClick}
         onKeyDown={handleRowKeyDown}
         onContextMenu={handleRowContextMenu}
@@ -812,6 +826,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
           </div>
         </div>
       </SidebarMenuSubButton>
+      {searchSnippet ? (
+        <div className="ml-6 mr-2 -mt-0.5 line-clamp-2 rounded-md px-1.5 pb-1 text-[10px] leading-snug text-muted-foreground/70">
+          {searchSnippet}
+        </div>
+      ) : null}
     </SidebarMenuSubItem>
   );
 });
@@ -824,6 +843,7 @@ interface SidebarProjectThreadListProps {
   orderedProjectThreadKeys: readonly string[];
   folderThreads: readonly SidebarThreadSummary[];
   renderedThreads: readonly SidebarThreadSummary[];
+  searchSnippetByThreadId: ReadonlyMap<string, string>;
   rigGroups: ReadonlyArray<{
     id: string;
     label: string;
@@ -945,6 +965,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     orderedProjectThreadKeys,
     folderThreads,
     renderedThreads,
+    searchSnippetByThreadId,
     rigGroups,
     showEmptyThreadState,
     shouldShowThreadPanel,
@@ -1038,6 +1059,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
                   key={threadKey}
                   thread={thread}
                   projectCwd={projectCwd}
+                  searchSnippet={searchSnippetByThreadId.get(thread.id)?.trim() ?? null}
                   orderedProjectThreadKeys={orderedProjectThreadKeys}
                   isActive={activeRouteThreadKey === threadKey}
                   {...(indentClassName ? { indentClassName } : {})}
@@ -1074,6 +1096,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
               key={threadKey}
               thread={thread}
               projectCwd={projectCwd}
+              searchSnippet={searchSnippetByThreadId.get(thread.id)?.trim() ?? null}
               orderedProjectThreadKeys={orderedProjectThreadKeys}
               isActive={activeRouteThreadKey === threadKey}
               jumpLabel={threadJumpLabelByKey.get(threadKey) ?? null}
@@ -1149,6 +1172,9 @@ interface SidebarProjectItemProps {
   gcAgentActionStateByAgent: ReadonlyMap<string, GcAgentActionState>;
   gcRigActionStateByRig: ReadonlyMap<string, "resume" | "suspend">;
   gcCityActionState: "resume" | "suspend" | null;
+  isThreadSearchActive: boolean;
+  matchingThreadIds: ReadonlySet<string>;
+  searchSnippetByThreadId: ReadonlyMap<string, string>;
   handleNewThread: ReturnType<typeof useNewThreadHandler>["handleNewThread"];
   archiveThread: ReturnType<typeof useThreadActions>["archiveThread"];
   deleteThread: ReturnType<typeof useThreadActions>["deleteThread"];
@@ -1210,6 +1236,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     gcAgentActionStateByAgent,
     gcRigActionStateByRig,
     gcCityActionState,
+    isThreadSearchActive,
+    matchingThreadIds,
+    searchSnippetByThreadId,
     handleNewThread,
     archiveThread,
     deleteThread,
@@ -1337,7 +1366,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   // thread-list change).
   const sidebarThreadByKeyRef = useRef(sidebarThreadByKey);
   sidebarThreadByKeyRef.current = sidebarThreadByKey;
-  const projectThreads = sidebarThreads;
+  const projectThreads = isThreadSearchActive
+    ? sidebarThreads.filter((thread) => matchingThreadIds.has(thread.id))
+    : sidebarThreads;
   const projectExpanded = useUiStateStore(
     (state) => state.projectExpandedById[project.projectKey] ?? true,
   );
@@ -1474,7 +1505,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     } = partitionProjectThreadsForSidebar({
       threads: folderThreads,
       activeThreadId: pinnedCollapsedThread?.id,
-      isThreadListExpanded,
+      isThreadListExpanded: isThreadSearchActive || isThreadListExpanded,
       previewLimit: THREAD_PREVIEW_LIMIT,
       gcConfig,
       projectCwd: project.cwd,
@@ -1537,16 +1568,18 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         })),
       })),
       showEmptyThreadState:
-        projectExpanded &&
+        (isThreadSearchActive || projectExpanded) &&
         visibleProjectThreads.length === 0 &&
         visibleStandaloneThreads.length === 0 &&
         !hasVirtualAgentFolders,
-      shouldShowThreadPanel: projectExpanded || pinnedCollapsedThread !== null,
+      shouldShowThreadPanel:
+        isThreadSearchActive || projectExpanded || pinnedCollapsedThread !== null,
     };
   }, [
     gcConfig,
     gcAgentActionStateByAgent,
     gcAgentStartsInFlight,
+    isThreadSearchActive,
     isThreadListExpanded,
     pinnedCollapsedThread,
     project.cwd,
@@ -2401,6 +2434,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         orderedProjectThreadKeys={orderedProjectThreadKeys}
         folderThreads={folderThreads}
         renderedThreads={renderedThreads}
+        searchSnippetByThreadId={searchSnippetByThreadId}
         rigGroups={rigGroups}
         showEmptyThreadState={showEmptyThreadState}
         shouldShowThreadPanel={shouldShowThreadPanel}
@@ -2815,6 +2849,13 @@ interface SidebarProjectsContentProps {
   archiveThread: ReturnType<typeof useThreadActions>["archiveThread"];
   deleteThread: ReturnType<typeof useThreadActions>["deleteThread"];
   sortedProjects: readonly SidebarProjectSnapshot[];
+  threadSearchQuery: string;
+  setThreadSearchQuery: (query: string) => void;
+  isThreadSearchActive: boolean;
+  isThreadSearchFetching: boolean;
+  matchingThreadCount: number;
+  matchingThreadIds: ReadonlySet<string>;
+  searchSnippetByThreadId: ReadonlyMap<string, string>;
   expandedThreadListsByProject: ReadonlySet<string>;
   activeRouteProjectKey: string | null;
   routeThreadKey: string | null;
@@ -2839,7 +2880,6 @@ interface SidebarProjectsContentProps {
   suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
   attachProjectListAutoAnimateRef: (node: HTMLElement | null) => void;
   projectsLength: number;
-  navigateToThread: (threadRef: ScopedThreadRef) => void;
   onSetGcSupervisorRunning: (running: boolean) => void;
   onSetGcControllerRunning: (running: boolean) => void;
   onToggleGcRigSuspended: (
@@ -2901,6 +2941,13 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     archiveThread,
     deleteThread,
     sortedProjects,
+    threadSearchQuery,
+    setThreadSearchQuery,
+    isThreadSearchActive,
+    isThreadSearchFetching,
+    matchingThreadCount,
+    matchingThreadIds,
+    searchSnippetByThreadId,
     expandedThreadListsByProject,
     activeRouteProjectKey,
     routeThreadKey,
@@ -2925,7 +2972,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     suppressProjectClickForContextMenuRef,
     attachProjectListAutoAnimateRef,
     projectsLength,
-    navigateToThread,
     onSetGcSupervisorRunning,
     onSetGcControllerRunning,
     onToggleGcRigSuspended,
@@ -2936,6 +2982,15 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     onToggleGcAgentWakeMode,
     onToggleGcAgentSessionMode,
   } = props;
+  const supervisorTooltip = gcConfig?.lifecycle?.supervisorRunning
+    ? `Stop Gas City supervisor${
+        typeof gcConfig.lifecycle.supervisorPort === "number"
+          ? ` · port ${gcConfig.lifecycle.supervisorPort}`
+          : gcConfig.lifecycle.supervisorUrl
+            ? ` · ${gcConfig.lifecycle.supervisorUrl}`
+            : ""
+      }`
+    : "Start Gas City supervisor";
 
   const handleProjectSortOrderChange = useCallback(
     (sortOrder: SidebarProjectSortOrder) => {
@@ -3023,11 +3078,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 render={
                   <button
                     type="button"
-                    aria-label={
-                      gcConfig?.lifecycle?.supervisorRunning
-                        ? "Stop Gas City supervisor"
-                        : "Start Gas City supervisor"
-                    }
+                    aria-label={supervisorTooltip}
+                    title={supervisorTooltip}
                     data-testid="sidebar-start-gc-trigger"
                     disabled={gcSupervisorMutationInFlight}
                     className="inline-flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 hover:text-emerald-800 disabled:cursor-wait disabled:opacity-60 dark:text-emerald-300"
@@ -3046,11 +3098,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 )}
                 <span>Sup</span>
               </TooltipTrigger>
-              <TooltipPopup side="right">
-                {gcConfig?.lifecycle?.supervisorRunning
-                  ? "Stop Gas City supervisor"
-                  : "Start Gas City supervisor"}
-              </TooltipPopup>
+              <TooltipPopup side="right">{supervisorTooltip}</TooltipPopup>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
@@ -3105,6 +3153,35 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           </div>
         </div>
 
+        <div className="mb-2 px-1">
+          <Input
+            nativeInput
+            type="search"
+            size="sm"
+            value={threadSearchQuery}
+            placeholder="Search threads..."
+            aria-label="Search threads"
+            onChange={(event) => {
+              setThreadSearchQuery(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && threadSearchQuery.length > 0) {
+                event.preventDefault();
+                setThreadSearchQuery("");
+              }
+            }}
+          />
+          {isThreadSearchActive ? (
+            <div className="mt-1 px-1 text-[10px] text-muted-foreground/60">
+              {isThreadSearchFetching
+                ? "Searching thread messages..."
+                : matchingThreadCount === 0
+                  ? "No matching threads"
+                  : `${matchingThreadCount} matching thread${matchingThreadCount === 1 ? "" : "s"}`}
+            </div>
+          ) : null}
+        </div>
+
         {isManualProjectSorting ? (
           <DndContext
             sensors={projectDnDSensors}
@@ -3137,6 +3214,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                         gcAgentActionStateByAgent={gcAgentActionStateByAgent}
                         gcRigActionStateByRig={gcRigActionStateByRig}
                         gcCityActionState={gcCityActionState}
+                        isThreadSearchActive={isThreadSearchActive}
+                        matchingThreadIds={matchingThreadIds}
+                        searchSnippetByThreadId={searchSnippetByThreadId}
                         handleNewThread={handleNewThread}
                         archiveThread={archiveThread}
                         deleteThread={deleteThread}
@@ -3184,6 +3264,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 gcAgentActionStateByAgent={gcAgentActionStateByAgent}
                 gcRigActionStateByRig={gcRigActionStateByRig}
                 gcCityActionState={gcCityActionState}
+                isThreadSearchActive={isThreadSearchActive}
+                matchingThreadIds={matchingThreadIds}
+                searchSnippetByThreadId={searchSnippetByThreadId}
                 handleNewThread={handleNewThread}
                 archiveThread={archiveThread}
                 deleteThread={deleteThread}
@@ -3251,6 +3334,18 @@ export default function Sidebar() {
   const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
     ReadonlySet<string>
   >(() => new Set());
+  const [threadSearchQuery, setThreadSearchQuery] = useState("");
+  const deferredThreadSearchQuery = useDeferredValue(threadSearchQuery);
+  const normalizedThreadSearchQuery = useMemo(
+    () => normalizeThreadSearchQuery(deferredThreadSearchQuery),
+    [deferredThreadSearchQuery],
+  );
+  const { data: threadSearchResult, isFetching: isThreadSearchFetching } = useQuery(
+    orchestrationSearchThreadMessagesQueryOptions({
+      query: normalizedThreadSearchQuery,
+      enabled: normalizedThreadSearchQuery !== null,
+    }),
+  );
   const { showThreadJumpHints, updateThreadJumpHintsVisibility } = useThreadJumpHintVisibility();
   const dragInProgressRef = useRef(false);
   const suppressProjectClickAfterDragRef = useRef(false);
@@ -3270,6 +3365,7 @@ export default function Sidebar() {
     () => new Set(),
   );
   const gcAgentStartAbortControllersRef = useRef(new Map<string, AbortController>());
+  const gcConfigRefreshPromiseRef = useRef<Promise<GcConfigResult | null> | null>(null);
   const gcAgentMutationsInFlight = useMemo(
     () => new Set(gcAgentActionStateByAgent.keys()),
     [gcAgentActionStateByAgent],
@@ -3337,13 +3433,26 @@ export default function Sidebar() {
     [setAgentStartPending],
   );
   const refreshGcConfig = useCallback(async (): Promise<GcConfigResult | null> => {
+    if (gcConfigRefreshPromiseRef.current) {
+      return gcConfigRefreshPromiseRef.current;
+    }
     const api = readLocalApi();
-    if (!api?.gc?.getConfig) {
+    const gcApi = api?.gc;
+    if (!gcApi?.getConfig) {
       return null;
     }
-    const config = await api.gc.getConfig({});
-    setGcConfig(config);
-    return config;
+    const refreshPromise = (async () => {
+      const config = await gcApi.getConfig({});
+      setGcConfig(config);
+      return config;
+    })();
+    gcConfigRefreshPromiseRef.current = refreshPromise;
+    refreshPromise.finally(() => {
+      if (gcConfigRefreshPromiseRef.current === refreshPromise) {
+        gcConfigRefreshPromiseRef.current = null;
+      }
+    });
+    return refreshPromise;
   }, []);
 
   const handleSetGcSupervisorRunning = useCallback(
@@ -3364,6 +3473,9 @@ export default function Sidebar() {
       try {
         const config = await api.gc.setSupervisorRunning({ running });
         setGcConfig(config);
+        window.setTimeout(() => {
+          void refreshGcConfig().catch(() => undefined);
+        }, 1_500);
         toastManager.update(toastId, {
           type: "success",
           title: running ? "Supervisor started" : "Supervisor stopped",
@@ -3405,6 +3517,9 @@ export default function Sidebar() {
       try {
         const config = await api.gc.setControllerRunning({ running });
         setGcConfig(config);
+        window.setTimeout(() => {
+          void refreshGcConfig().catch(() => undefined);
+        }, 1_500);
         toastManager.update(toastId, {
           type: "success",
           title: running ? "Controller started" : "Controller stopped",
@@ -3491,6 +3606,7 @@ export default function Sidebar() {
   useEffect(() => {
     let cancelled = false;
     let retryTimeout: number | null = null;
+    let refreshInterval: number | null = null;
 
     const fetchConfig = async (): Promise<void> => {
       try {
@@ -3506,10 +3622,16 @@ export default function Sidebar() {
     };
 
     void fetchConfig();
+    refreshInterval = window.setInterval(() => {
+      void refreshGcConfig().catch(() => undefined);
+    }, 3_000);
     return () => {
       cancelled = true;
       if (retryTimeout != null) {
         window.clearTimeout(retryTimeout);
+      }
+      if (refreshInterval != null) {
+        window.clearInterval(refreshInterval);
       }
     };
   }, [refreshGcConfig]);
@@ -4333,12 +4455,23 @@ export default function Sidebar() {
       }
       if (freshConfig.workspace.suspended === suspended) {
         setGcConfig(freshConfig);
+        const autoStartAgents = filterAutoStartAgents(affectedAgents);
+        if (suspended) {
+          for (const agent of affectedAgents) {
+            stopWatchingGcAgentStart(agent.qualifiedName);
+          }
+        } else if (autoStartAgents.length > 0) {
+          for (const agent of autoStartAgents) {
+            void waitForAgentStart(agent.qualifiedName);
+          }
+        }
+        setGcCityActionState(null);
         toastManager.add({
           type: "warning",
           title: `Gas City already ${describeGcSuspendedState(suspended)}`,
           description: `The sidebar was out of sync. Gas City is already ${describeGcSuspendedState(
             suspended,
-          )}, so no change was sent.`,
+          )}; the sidebar has refreshed its local state.`,
         });
         return;
       }
@@ -4466,6 +4599,16 @@ export default function Sidebar() {
     () => sidebarThreads.filter((thread) => thread.archivedAt === null),
     [sidebarThreads],
   );
+  const threadSearchState = useMemo(
+    () =>
+      resolveSidebarThreadSearch({
+        query: deferredThreadSearchQuery,
+        threads: visibleThreads,
+        ftsHits: threadSearchResult?.results ?? [],
+      }),
+    [deferredThreadSearchQuery, threadSearchResult?.results, visibleThreads],
+  );
+  const isThreadSearchActive = threadSearchState.isFiltering;
   const sortedProjects = useMemo(() => {
     const sortableProjects = sidebarProjects.map((project) => ({
       ...project,
@@ -4497,27 +4640,39 @@ export default function Sidebar() {
     sidebarProjects,
     visibleThreads,
   ]);
+  const visibleSortedProjects = useMemo(() => {
+    if (!isThreadSearchActive) {
+      return sortedProjects;
+    }
+    return sortedProjects.filter((project) =>
+      project.memberProjects.some((member) => threadSearchState.matchingProjectIds.has(member.id)),
+    );
+  }, [isThreadSearchActive, sortedProjects, threadSearchState.matchingProjectIds]);
+  const matchingThreadCount = threadSearchState.matchingThreadIds.size;
   const isManualProjectSorting = sidebarProjectSortOrder === "manual";
   const visibleSidebarThreadKeys = useMemo(
     () =>
-      sortedProjects.flatMap((project) => {
+      visibleSortedProjects.flatMap((project) => {
         const projectThreads = sortThreads(
           (threadsByProjectKey.get(project.projectKey) ?? []).filter(
-            (thread) => thread.archivedAt === null,
+            (thread) =>
+              thread.archivedAt === null &&
+              (!isThreadSearchActive || threadSearchState.matchingThreadIds.has(thread.id)),
           ),
           sidebarThreadSortOrder,
         );
         const projectExpanded = projectExpandedById[project.projectKey] ?? true;
         const activeThreadKey = routeThreadKey ?? undefined;
         const pinnedCollapsedThread =
-          !projectExpanded && activeThreadKey
+          !isThreadSearchActive && !projectExpanded && activeThreadKey
             ? (projectThreads.find(
                 (thread) =>
                   scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) ===
                   activeThreadKey,
               ) ?? null)
             : null;
-        const shouldShowThreadPanel = projectExpanded || pinnedCollapsedThread !== null;
+        const shouldShowThreadPanel =
+          isThreadSearchActive || projectExpanded || pinnedCollapsedThread !== null;
         if (!shouldShowThreadPanel) {
           return [];
         }
@@ -4526,7 +4681,7 @@ export default function Sidebar() {
         const { rigGroups, visibleStandaloneThreads } = partitionProjectThreadsForSidebar({
           threads: renderedThreads,
           activeThreadId: pinnedCollapsedThread?.id,
-          isThreadListExpanded,
+          isThreadListExpanded: isThreadSearchActive || isThreadListExpanded,
           previewLimit: THREAD_PREVIEW_LIMIT,
           gcConfig,
           projectCwd: project.cwd,
@@ -4550,10 +4705,12 @@ export default function Sidebar() {
       gcConfig,
       sidebarThreadSortOrder,
       expandedThreadListsByProject,
+      isThreadSearchActive,
       projectExpandedById,
       routeThreadKey,
-      sortedProjects,
+      threadSearchState.matchingThreadIds,
       threadsByProjectKey,
+      visibleSortedProjects,
     ],
   );
   const threadJumpCommandByKey = useMemo(() => {
@@ -4924,7 +5081,14 @@ export default function Sidebar() {
             handleNewThread={handleNewThread}
             archiveThread={archiveThread}
             deleteThread={deleteThread}
-            sortedProjects={sortedProjects}
+            sortedProjects={visibleSortedProjects}
+            threadSearchQuery={threadSearchQuery}
+            setThreadSearchQuery={setThreadSearchQuery}
+            isThreadSearchActive={isThreadSearchActive}
+            isThreadSearchFetching={isThreadSearchFetching}
+            matchingThreadCount={matchingThreadCount}
+            matchingThreadIds={threadSearchState.matchingThreadIds}
+            searchSnippetByThreadId={threadSearchState.snippetByThreadId}
             expandedThreadListsByProject={expandedThreadListsByProject}
             activeRouteProjectKey={activeRouteProjectKey}
             routeThreadKey={routeThreadKey}
@@ -4949,7 +5113,6 @@ export default function Sidebar() {
             suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
             attachProjectListAutoAnimateRef={attachProjectListAutoAnimateRef}
             projectsLength={projects.length}
-            navigateToThread={navigateToThread}
             onSetGcSupervisorRunning={handleSetGcSupervisorRunning}
             onSetGcControllerRunning={handleSetGcControllerRunning}
             onToggleGcCitySuspended={handleGcCitySuspendedChange}

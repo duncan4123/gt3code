@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-export default Effect.gen(function* () {
+export const ensureProjectionFtsSchema = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql.unsafe(`
@@ -10,6 +10,12 @@ export default Effect.gen(function* () {
       content=''
     )
   `);
+});
+
+export default Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+
+  yield* ensureProjectionFtsSchema;
 
   yield* sql`DELETE FROM proj.messages_fts`;
 

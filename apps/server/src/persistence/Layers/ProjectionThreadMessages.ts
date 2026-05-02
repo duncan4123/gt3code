@@ -157,39 +157,52 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
       `,
   });
 
-  const syncProjectionThreadMessageFts = (messageId: MessageId) =>
-    Effect.gen(function* () {
-      const indexedRow = yield* getProjectionThreadMessageIndexRow({ messageId }).pipe(
+  const deleteProjectionThreadMessageFtsRow = (indexedRow: { rowId: number; text: string }) =>
+    sql
+      .unsafe(`INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', ?, ?)`, [
+        indexedRow.rowId,
+        indexedRow.text,
+      ])
+      .pipe(
+        Effect.catchTag("SqlError", () => Effect.void),
         Effect.mapError(
-          toPersistenceSqlError("ProjectionThreadMessageRepository.syncProjectionThreadMessageFts"),
+          toPersistenceSqlError(
+            "ProjectionThreadMessageRepository.deleteProjectionThreadMessageFtsRow",
+          ),
         ),
       );
-      yield* sql
-        .unsafe(`INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', ?, ?)`, [
-          indexedRow.rowId,
-          indexedRow.text,
-        ])
-        .pipe(
-          Effect.catchTag("SqlError", () => Effect.void),
-          Effect.mapError(
-            toPersistenceSqlError(
-              "ProjectionThreadMessageRepository.syncProjectionThreadMessageFts",
-            ),
+
+  const insertProjectionThreadMessageFtsRow = (indexedRow: { rowId: number; text: string }) =>
+    sql
+      .unsafe(`INSERT INTO messages_fts(rowid, text) VALUES (?, ?)`, [
+        indexedRow.rowId,
+        indexedRow.text,
+      ])
+      .pipe(
+        Effect.mapError(
+          toPersistenceSqlError(
+            "ProjectionThreadMessageRepository.insertProjectionThreadMessageFtsRow",
           ),
-        );
-      yield* sql
-        .unsafe(`INSERT INTO messages_fts(rowid, text) VALUES (?, ?)`, [
-          indexedRow.rowId,
-          indexedRow.text,
-        ])
-        .pipe(
-          Effect.mapError(
-            toPersistenceSqlError(
-              "ProjectionThreadMessageRepository.syncProjectionThreadMessageFts",
-            ),
-          ),
-        );
-    });
+        ),
+      );
+
+  const getProjectionThreadMessageIndexRowOrNull = (messageId: MessageId) =>
+    getProjectionThreadMessageIndexRow({ messageId }).pipe(
+      Effect.mapError(
+        toPersistenceSqlError(
+          "ProjectionThreadMessageRepository.getProjectionThreadMessageIndexRow",
+        ),
+      ),
+      Effect.orElseSucceed(() => null),
+    );
+
+  const syncProjectionThreadMessageFts = (messageId: MessageId) =>
+    getProjectionThreadMessageIndexRow({ messageId }).pipe(
+      Effect.mapError(
+        toPersistenceSqlError("ProjectionThreadMessageRepository.syncProjectionThreadMessageFts"),
+      ),
+      Effect.flatMap(insertProjectionThreadMessageFtsRow),
+    );
 
   const deleteProjectionThreadMessageFtsByThreadId = (threadId: string) =>
     sql
@@ -204,16 +217,25 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
       )
       .pipe(
         Effect.catchTag("SqlError", () => Effect.void),
-      Effect.mapError(
-        toPersistenceSqlError(
-          "ProjectionThreadMessageRepository.deleteProjectionThreadMessageFtsByThreadId",
+        Effect.mapError(
+          toPersistenceSqlError(
+            "ProjectionThreadMessageRepository.deleteProjectionThreadMessageFtsByThreadId",
+          ),
         ),
-      ),
-    );
+      );
 
   const upsert: ProjectionThreadMessageRepositoryShape["upsert"] = (row) =>
-    upsertProjectionThreadMessageRow(row).pipe(
-      Effect.mapError(toPersistenceSqlError("ProjectionThreadMessageRepository.upsert:query")),
+    getProjectionThreadMessageIndexRowOrNull(row.messageId).pipe(
+      Effect.flatMap((existingIndexRow) =>
+        existingIndexRow === null
+          ? Effect.void
+          : deleteProjectionThreadMessageFtsRow(existingIndexRow),
+      ),
+      Effect.flatMap(() =>
+        upsertProjectionThreadMessageRow(row).pipe(
+          Effect.mapError(toPersistenceSqlError("ProjectionThreadMessageRepository.upsert:query")),
+        ),
+      ),
       Effect.flatMap(() => syncProjectionThreadMessageFts(row.messageId)),
     );
 

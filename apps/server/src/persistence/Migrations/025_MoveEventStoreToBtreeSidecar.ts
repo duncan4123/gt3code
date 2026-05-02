@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-export default Effect.gen(function* () {
+export const ensureEventStoreSidecarSchema = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql.unsafe(`
@@ -33,6 +33,37 @@ export default Effect.gen(function* () {
       error TEXT
     )
   `);
+
+  yield* sql.unsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS proj.idx_orch_events_stream_version
+    ON orchestration_events(aggregate_kind, stream_id, stream_version)
+  `);
+  yield* sql.unsafe(`
+    CREATE INDEX IF NOT EXISTS proj.idx_orch_events_stream_sequence
+    ON orchestration_events(aggregate_kind, stream_id, sequence)
+  `);
+  yield* sql.unsafe(`
+    CREATE INDEX IF NOT EXISTS proj.idx_orch_events_command_id
+    ON orchestration_events(command_id)
+  `);
+  yield* sql.unsafe(`
+    CREATE INDEX IF NOT EXISTS proj.idx_orch_events_correlation_id
+    ON orchestration_events(correlation_id)
+  `);
+  yield* sql.unsafe(`
+    CREATE INDEX IF NOT EXISTS proj.idx_orch_command_receipts_aggregate
+    ON orchestration_command_receipts(aggregate_kind, aggregate_id)
+  `);
+  yield* sql.unsafe(`
+    CREATE INDEX IF NOT EXISTS proj.idx_orch_command_receipts_sequence
+    ON orchestration_command_receipts(result_sequence)
+  `);
+});
+
+export default Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+
+  yield* ensureEventStoreSidecarSchema;
 
   yield* sql.unsafe(`
     INSERT OR IGNORE INTO proj.orchestration_events (
@@ -97,29 +128,4 @@ export default Effect.gen(function* () {
 
   yield* sql`DROP TABLE IF EXISTS orchestration_events`;
   yield* sql`DROP TABLE IF EXISTS orchestration_command_receipts`;
-
-  yield* sql.unsafe(`
-    CREATE UNIQUE INDEX IF NOT EXISTS proj.idx_orch_events_stream_version
-    ON orchestration_events(aggregate_kind, stream_id, stream_version)
-  `);
-  yield* sql.unsafe(`
-    CREATE INDEX IF NOT EXISTS proj.idx_orch_events_stream_sequence
-    ON orchestration_events(aggregate_kind, stream_id, sequence)
-  `);
-  yield* sql.unsafe(`
-    CREATE INDEX IF NOT EXISTS proj.idx_orch_events_command_id
-    ON orchestration_events(command_id)
-  `);
-  yield* sql.unsafe(`
-    CREATE INDEX IF NOT EXISTS proj.idx_orch_events_correlation_id
-    ON orchestration_events(correlation_id)
-  `);
-  yield* sql.unsafe(`
-    CREATE INDEX IF NOT EXISTS proj.idx_orch_command_receipts_aggregate
-    ON orchestration_command_receipts(aggregate_kind, aggregate_id)
-  `);
-  yield* sql.unsafe(`
-    CREATE INDEX IF NOT EXISTS proj.idx_orch_command_receipts_sequence
-    ON orchestration_command_receipts(result_sequence)
-  `);
 });

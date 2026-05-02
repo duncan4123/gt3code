@@ -259,6 +259,8 @@ export type GcConfigPatches = typeof GcConfigPatches.Type;
 export const GcLifecycleStatus = Schema.Struct({
   supervisorRunning: Schema.Boolean,
   controllerRunning: Schema.Boolean,
+  supervisorPort: Schema.optional(Schema.Number),
+  supervisorUrl: Schema.optional(Schema.String),
 });
 export type GcLifecycleStatus = typeof GcLifecycleStatus.Type;
 
@@ -339,6 +341,15 @@ export interface VirtualRigGroup<TThread> {
   isConfigured: boolean;
   isSuspended: boolean;
   agentGroups: VirtualAgentGroup<TThread>[];
+}
+
+interface MutableVirtualRigGroup<TThread> {
+  id: string;
+  label: string;
+  kind: "workspace" | "rig";
+  isConfigured: boolean;
+  isSuspended: boolean;
+  agentGroupsById: Map<string, VirtualAgentGroup<TThread>>;
 }
 
 function normalizeMetadataValue(value?: string): string | null {
@@ -430,7 +441,9 @@ function findMatchingAgentGroup<TThread>(
   return [...agentGroupsById.values()].find((group) => candidateLabels.has(group.label));
 }
 
-function gcAgentVirtualMetadata(agent: GcConfigAgent | undefined): Partial<VirtualAgentGroup<never>> {
+function gcAgentVirtualMetadata(
+  agent: GcConfigAgent | undefined,
+): Partial<VirtualAgentGroup<never>> {
   if (!agent) {
     return {};
   }
@@ -502,21 +515,12 @@ export function groupThreadsByRigAndAgent<
   rigGroups: VirtualRigGroup<TThread>[];
 } {
   const standaloneThreads: TThread[] = [];
-  const rigGroupsById = new Map<
-    string,
-    {
-      id: string;
-      label: string;
-      kind: "workspace" | "rig";
-      isConfigured: boolean;
-      isSuspended: boolean;
-      agentGroupsById: Map<string, VirtualAgentGroup<TThread>>;
-    }
-  >();
+  const rigGroupsById = new Map<string, MutableVirtualRigGroup<TThread>>();
 
   const projectCwd = normalizeMetadataValue(options?.projectCwd ?? undefined);
   const projectName = normalizeMetadataValue(options?.projectName ?? undefined);
   const workspaceName = normalizeMetadataValue(options?.config?.workspace.name);
+  const workspaceSuspended = options?.config?.workspace.suspended ?? false;
   const projectCwds = new Set<string>();
   const projectLabels = new Set<string>();
 
@@ -545,12 +549,67 @@ export function groupThreadsByRigAndAgent<
   }
   const isGlobalScope =
     projectCwds.size === 0 && projectLabels.size === 0 && options?.config !== undefined;
+  const addConfiguredAgentGroup = (
+    rigGroup: MutableVirtualRigGroup<TThread>,
+    agent: GcConfigResult["agents"][number],
+  ): void => {
+    const qualifiedName = configuredAgentQualifiedName(agent);
+    const existingGroup = findMatchingAgentGroup(rigGroup.agentGroupsById, qualifiedName);
+    if (existingGroup) {
+      existingGroup.isConfigured = true;
+      existingGroup.isPool = agent.is_pool ?? existingGroup.isPool;
+      existingGroup.isSuspended =
+        rigGroup.isSuspended || agent.suspended || existingGroup.isSuspended;
+      if (typeof agent.min_active_sessions === "number") {
+        existingGroup.minActiveSessions = agent.min_active_sessions;
+      }
+      if (typeof agent.max_active_sessions === "number") {
+        existingGroup.maxActiveSessions = agent.max_active_sessions;
+      }
+      if (agent.wake_mode) {
+        existingGroup.wakeMode = agent.wake_mode;
+      }
+      if (agent.named_session_mode) {
+        existingGroup.namedSessionMode = agent.named_session_mode;
+      }
+      if (agent.scope) {
+        existingGroup.scope = agent.scope;
+      }
+      Object.assign(existingGroup, gcAgentVirtualMetadata(agent));
+      return;
+    }
+    rigGroup.agentGroupsById.set(qualifiedName, {
+      id: `${rigGroup.id}/${qualifiedName}`,
+      label: agentFolderLabel(qualifiedName),
+      qualifiedName,
+      isConfigured: true,
+      isPool: agent.is_pool ?? false,
+      isSuspended: rigGroup.isSuspended || agent.suspended,
+      ...(typeof agent.min_active_sessions === "number"
+        ? { minActiveSessions: agent.min_active_sessions }
+        : {}),
+      ...(typeof agent.max_active_sessions === "number"
+        ? { maxActiveSessions: agent.max_active_sessions }
+        : {}),
+      ...(agent.wake_mode ? { wakeMode: agent.wake_mode } : {}),
+      ...(agent.named_session_mode ? { namedSessionMode: agent.named_session_mode } : {}),
+      ...(agent.scope ? { scope: agent.scope } : {}),
+      ...gcAgentVirtualMetadata(agent),
+      threads: [],
+    });
+  };
 
+  const isCityAliasProject = [...projectLabels].some((label) =>
+    ["city", "gc"].some(
+      (alias) => label.localeCompare(alias, undefined, { sensitivity: "accent" }) === 0,
+    ),
+  );
   const isCityProject = Boolean(
     workspaceName &&
-    [...projectLabels].some(
+    ([...projectLabels].some(
       (label) => label.localeCompare(workspaceName, undefined, { sensitivity: "accent" }) === 0,
-    ),
+    ) ||
+      isCityAliasProject),
   );
   let cityScopedRigGroupId: string | null = null;
   const relevantRigs = options?.config?.rigs.filter(
@@ -579,6 +638,7 @@ export function groupThreadsByRigAndAgent<
         if (existingWorkspaceRig) {
           existingWorkspaceRig.kind = "workspace";
           existingWorkspaceRig.label = workspaceName.toUpperCase();
+          existingWorkspaceRig.isSuspended = workspaceSuspended;
         }
       }
     }
@@ -595,26 +655,7 @@ export function groupThreadsByRigAndAgent<
       if (!rigGroup) {
         continue;
       }
-      const qualifiedName = configuredAgentQualifiedName(agent);
-      rigGroup.agentGroupsById.set(qualifiedName, {
-        id: `${rigName}/${qualifiedName}`,
-        label: agentFolderLabel(qualifiedName),
-        qualifiedName,
-        isConfigured: true,
-        isPool: agent.is_pool ?? false,
-        isSuspended: rigGroup.isSuspended || agent.suspended,
-        ...(typeof agent.min_active_sessions === "number"
-          ? { minActiveSessions: agent.min_active_sessions }
-          : {}),
-        ...(typeof agent.max_active_sessions === "number"
-          ? { maxActiveSessions: agent.max_active_sessions }
-          : {}),
-        ...(agent.wake_mode ? { wakeMode: agent.wake_mode } : {}),
-        ...(agent.named_session_mode ? { namedSessionMode: agent.named_session_mode } : {}),
-        ...(agent.scope ? { scope: agent.scope } : {}),
-        ...gcAgentVirtualMetadata(agent),
-        threads: [],
-      });
+      addConfiguredAgentGroup(rigGroup, agent);
     }
   }
 
@@ -627,10 +668,11 @@ export function groupThreadsByRigAndAgent<
     cityScopedRigGroupId = cityGroupId;
     rigGroupsById.set(cityGroupId, {
       id: cityGroupId,
-      label: workspaceName.toUpperCase(),
+      label:
+        isCityAliasProject && projectName ? projectName.toUpperCase() : workspaceName.toUpperCase(),
       kind: "workspace",
       isConfigured: true,
-      isSuspended: options?.config?.workspace.suspended ?? false,
+      isSuspended: workspaceSuspended,
       agentGroupsById: new Map(),
     });
   }
@@ -644,29 +686,7 @@ export function groupThreadsByRigAndAgent<
         }
         const rigName = normalizeMetadataValue(agent.dir);
         if (rigName) continue;
-        const qualifiedName = configuredAgentQualifiedName(agent);
-        if (cityGroup.agentGroupsById.has(qualifiedName)) {
-          continue;
-        }
-        cityGroup.agentGroupsById.set(qualifiedName, {
-          id: `${cityScopedRigGroupId}/${qualifiedName}`,
-          label: agentFolderLabel(qualifiedName),
-          qualifiedName,
-          isConfigured: true,
-          isPool: agent.is_pool ?? false,
-          isSuspended: cityGroup.isSuspended || agent.suspended,
-          ...(typeof agent.min_active_sessions === "number"
-            ? { minActiveSessions: agent.min_active_sessions }
-            : {}),
-          ...(typeof agent.max_active_sessions === "number"
-            ? { maxActiveSessions: agent.max_active_sessions }
-            : {}),
-          ...(agent.wake_mode ? { wakeMode: agent.wake_mode } : {}),
-          ...(agent.named_session_mode ? { namedSessionMode: agent.named_session_mode } : {}),
-          ...(agent.scope ? { scope: agent.scope } : {}),
-          ...gcAgentVirtualMetadata(agent),
-          threads: [],
-        });
+        addConfiguredAgentGroup(cityGroup, agent);
       }
     }
   }
@@ -679,7 +699,10 @@ export function groupThreadsByRigAndAgent<
     const canonicalGroupLabel = normalizeMetadataValue(meta.groupLabel);
     const canonicalAgentQualified = normalizeMetadataValue(meta.agentQualified);
     const canonicalAgentLabel = normalizeMetadataValue(meta.agentLabel);
-    let resolvedRig = canonicalGroupId ?? rig ?? null;
+    let resolvedRig =
+      meta.groupKind === "workspace" && cityScopedRigGroupId
+        ? cityScopedRigGroupId
+        : (canonicalGroupId ?? rig ?? null);
     let resolvedAgent = canonicalAgentQualified ?? agent;
 
     if (!resolvedRig && resolvedAgent && options?.config) {
@@ -705,6 +728,9 @@ export function groupThreadsByRigAndAgent<
     }
 
     let rigGroup = rigGroupsById.get(resolvedRig);
+    if (rigGroup && meta.groupKind === "workspace" && canonicalGroupLabel) {
+      rigGroup.label = canonicalGroupLabel;
+    }
     if (!rigGroup) {
       rigGroup = {
         id: resolvedRig,
@@ -720,7 +746,10 @@ export function groupThreadsByRigAndAgent<
               ? "workspace"
               : "rig",
         isConfigured: false,
-        isSuspended: false,
+        isSuspended:
+          meta.groupKind === "workspace" || resolvedRig === cityScopedRigGroupId
+            ? workspaceSuspended
+            : false,
         agentGroupsById: new Map(),
       };
       rigGroupsById.set(resolvedRig, rigGroup);
@@ -786,6 +815,25 @@ export function groupThreadsByRigAndAgent<
       ...gcAgentVirtualMetadata(configuredAgent),
       threads: [thread],
     });
+  }
+
+  if (options?.config && workspaceName) {
+    for (const cityGroup of rigGroupsById.values()) {
+      if (cityGroup.kind !== "workspace") {
+        continue;
+      }
+      cityGroup.isConfigured = true;
+      cityGroup.isSuspended = cityGroup.isSuspended || workspaceSuspended;
+      for (const agent of options.config.agents) {
+        if (isImplicitProviderLane(agent)) {
+          continue;
+        }
+        if (normalizeMetadataValue(agent.dir)) {
+          continue;
+        }
+        addConfiguredAgentGroup(cityGroup, agent);
+      }
+    }
   }
 
   return {

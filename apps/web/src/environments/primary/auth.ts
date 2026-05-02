@@ -15,7 +15,7 @@ import {
   stripPairingTokenFromUrl as stripPairingTokenUrl,
 } from "../../pairingUrl";
 
-import { resolvePrimaryEnvironmentHttpUrl } from "./target";
+import { readPrimaryEnvironmentTarget, resolvePrimaryEnvironmentHttpUrl } from "./target";
 import { Data, Predicate } from "effect";
 
 export class BootstrapHttpError extends Data.TaggedError("BootstrapHttpError")<{
@@ -84,6 +84,10 @@ export function takePairingTokenFromUrl(): string | null {
 }
 
 function getDesktopBootstrapCredential(): string | null {
+  if (readPrimaryEnvironmentTarget()?.source !== "desktop-managed") {
+    return null;
+  }
+
   const bootstrap = window.desktopBridge?.getLocalEnvironmentBootstrap();
   return typeof bootstrap?.bootstrapToken === "string" && bootstrap.bootstrapToken.length > 0
     ? bootstrap.bootstrapToken

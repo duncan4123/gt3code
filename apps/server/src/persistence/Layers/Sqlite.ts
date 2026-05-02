@@ -1,13 +1,16 @@
 import { Effect, Layer, FileSystem, Path } from "effect";
 import * as Scope from "effect/Scope";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { existsSync } from "node:fs";
-import { DatabaseSync as NodeSqliteDb } from "node:sqlite";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtempSync, rmSync } from "node:fs";
+import { DatabaseSync as NodeSqliteDb } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { runMigrations } from "../Migrations.ts";
+import { ensureProjectionSidecarSchema } from "../Migrations/021_MoveProjectionsToBtreeSidecar.ts";
+import { ensureProjectionFtsSchema } from "../Migrations/023_ProjectionThreadMessagesFts.ts";
+import { ensureEventStoreSidecarSchema } from "../Migrations/025_MoveEventStoreToBtreeSidecar.ts";
 import { ServerConfig } from "../../config.ts";
 import { layer } from "../NodeSqliteClient.ts";
 
@@ -34,7 +37,17 @@ export const projDbPath = (mainDbPath: string): string =>
  * avoiding prolly-tree overhead for high-write projection tables.
  */
 const ensureBtreeFile = (path: string): void => {
-  if (existsSync(path)) return;
+  if (existsSync(path)) {
+    const header = readFileSync(path, { encoding: null, flag: "r" }).subarray(0, 16);
+    if (header.equals(Buffer.from("SQLite format 3\0", "binary"))) {
+      return;
+    }
+
+    // Projection state is fully derived from the event log. If an older build
+    // created this sidecar as a doltlite/prolly file, recreate it as btree so
+    // high-write projection tables stay out of versioned storage.
+    rmSync(path, { force: true });
+  }
   const db = new NodeSqliteDb(path);
   db.exec("CREATE TABLE _init(x); DROP TABLE _init;");
   db.close();
@@ -55,6 +68,11 @@ const makeSetup = (projPath: string | null) =>
       }
 
       yield* runMigrations();
+      if (projPath) {
+        yield* ensureProjectionSidecarSchema;
+        yield* ensureProjectionFtsSchema;
+        yield* ensureEventStoreSidecarSchema;
+      }
     }),
   );
 

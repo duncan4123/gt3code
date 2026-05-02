@@ -1,0 +1,37 @@
+# Notify gasworks-internal to rebuild the gc-runtime image when Go source changes.
+#
+# gascity provides the gc binary embedded in runtime images.
+# When source code changes, images need rebuilding.
+#
+# Required secret: GASCITY_HOSTED_TOKEN — PAT with repo scope for
+# gascity/gasworks-internal (needed for repository_dispatch).
+
+name: Notify Image Rebuilds
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - "scripts/**"
+      - "contrib/**"
+      - ".github/workflows/notify-image-build.yaml"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger runtime image rebuild
+        env:
+          GH_TOKEN: ${{ secrets.GASCITY_HOSTED_TOKEN }}
+        run: |
+          gh api \
+            --method POST \
+            repos/gascity/gasworks-internal/dispatches \
+            -f event_type=runtime-dep-updated

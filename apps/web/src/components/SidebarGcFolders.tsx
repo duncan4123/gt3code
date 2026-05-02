@@ -132,7 +132,10 @@ function gcAgentSourceLabel(agentGroup: SidebarGcAgentGroup): string {
   if (agentGroup.promptTemplate?.includes("/.gc/system/")) {
     return "system";
   }
-  if (agentGroup.promptTemplate?.includes("/packs/") || agentGroup.promptTemplate?.startsWith("packs/")) {
+  if (
+    agentGroup.promptTemplate?.includes("/packs/") ||
+    agentGroup.promptTemplate?.startsWith("packs/")
+  ) {
     return "pack";
   }
   if (agentGroup.startCommand) {
@@ -350,8 +353,10 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 : agentGroup.namedSessionMode === "on_demand"
                   ? "demand"
                   : null;
-            const canAdjustPoolSize = typeof agentGroup.maxActiveSessions === "number";
-            const canAdjustPoolMinimum = typeof agentGroup.minActiveSessions === "number";
+            const canAdjustPoolSize =
+              agentGroup.isPool && typeof agentGroup.maxActiveSessions === "number";
+            const canAdjustPoolMinimum =
+              agentGroup.isPool && typeof agentGroup.minActiveSessions === "number";
             const nextWakeMode =
               agentGroup.wakeMode === "resume"
                 ? "fresh"

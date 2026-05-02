@@ -28,8 +28,8 @@ provider = "codex"
 dir = ""
 name = "boot"
 suspended = false
-provider = "codex"
-env = { GC_MODEL = "gpt-5.4-mini" }
+provider = "opencode"
+option_defaults = { model = "kimi-for-coding/k2p6" }
 
 [[patches.agent]]
 dir = ""

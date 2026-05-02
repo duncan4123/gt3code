@@ -108,8 +108,17 @@ const ProjectionCountsRowSchema = Schema.Struct({
   projectCount: Schema.Number,
   threadCount: Schema.Number,
 });
+const ProjectionThreadMessageSearchRowSchema = Schema.Struct({
+  threadId: ThreadId,
+  text: Schema.String,
+  rank: Schema.Number,
+});
 const WorkspaceRootLookupInput = Schema.Struct({
   workspaceRoot: Schema.String,
+});
+const ThreadMessageSearchInput = Schema.Struct({
+  query: Schema.String,
+  limit: Schema.Number,
 });
 const ProjectIdLookupInput = Schema.Struct({
   projectId: ProjectId,
@@ -137,6 +146,42 @@ const REQUIRED_SNAPSHOT_PROJECTORS = [
   ORCHESTRATION_PROJECTOR_NAMES.threadSessions,
   ORCHESTRATION_PROJECTOR_NAMES.checkpoints,
 ] as const;
+
+const normalizeFtsSearchQuery = (query: string): string | null => {
+  const terms = query
+    .trim()
+    .split(/\s+/)
+    .map((term) => term.replaceAll('"', "").trim())
+    .filter((term) => term.length > 0);
+  if (terms.length === 0) {
+    return null;
+  }
+  return terms.map((term) => `"${term}"`).join(" ");
+};
+
+const buildSearchSnippet = (text: string, query: string): string => {
+  const trimmed = text.trim();
+  if (trimmed.length <= 240) {
+    return trimmed;
+  }
+  const terms = query
+    .replaceAll('"', " ")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((term) => term.length > 0);
+  const lowerText = trimmed.toLowerCase();
+  const firstMatch = terms.reduce<number | null>((best, term) => {
+    const index = lowerText.indexOf(term);
+    if (index < 0) {
+      return best;
+    }
+    return best === null ? index : Math.min(best, index);
+  }, null);
+  const center = firstMatch ?? 0;
+  const start = Math.max(0, center - 80);
+  const end = Math.min(trimmed.length, start + 240);
+  return `${start > 0 ? "..." : ""}${trimmed.slice(start, end)}${end < trimmed.length ? "..." : ""}`;
+};
 
 function maxIso(left: string | null, right: string): string {
   if (left === null) {
@@ -434,6 +479,28 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           (SELECT COUNT(*) FROM projection_projects) AS "projectCount",
           (SELECT COUNT(*) FROM projection_threads) AS "threadCount"
       `,
+  });
+  const searchThreadMessageRows = SqlSchema.findAll({
+    Request: ThreadMessageSearchInput,
+    Result: ProjectionThreadMessageSearchRowSchema,
+    execute: ({ query, limit }) =>
+      sql.unsafe(
+        `
+          SELECT
+            m.thread_id AS "threadId",
+            m.text AS "text",
+            bm25(messages_fts) AS "rank"
+          FROM messages_fts
+          JOIN projection_thread_messages m ON m.row_id = messages_fts.rowid
+          JOIN projection_threads t ON t.thread_id = m.thread_id
+          WHERE messages_fts MATCH ?
+            AND t.deleted_at IS NULL
+            AND t.archived_at IS NULL
+          ORDER BY rank ASC, m.created_at DESC, m.message_id ASC
+          LIMIT ?
+        `,
+        [query, limit],
+      ),
   });
 
   const getActiveProjectRowByWorkspaceRoot = SqlSchema.findOneOption({
@@ -1467,32 +1534,29 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
   const searchThreadMessages: ProjectionSnapshotQueryShape["searchThreadMessages"] = (
     query,
     limit,
-  ) =>
-    getSnapshot().pipe(
-      Effect.map((snapshot) => {
-        const normalizedQuery = query.trim().toLowerCase();
-        if (!normalizedQuery) {
-          return { results: [] };
-        }
-        const results = snapshot.threads
-          .flatMap((thread) =>
-            thread.messages.flatMap((message) => {
-              const text = message.text.trim();
-              if (!text.toLowerCase().includes(normalizedQuery)) {
-                return [];
-              }
-              return [
-                {
-                  threadId: thread.id,
-                  snippet: text.length > 240 ? `${text.slice(0, 237)}...` : text,
-                },
-              ];
-            }),
-          )
-          .slice(0, Math.max(0, limit));
-        return { results };
-      }),
+  ) => {
+    const normalizedQuery = normalizeFtsSearchQuery(query);
+    if (normalizedQuery === null) {
+      return Effect.succeed({ results: [] });
+    }
+    return searchThreadMessageRows({
+      query: normalizedQuery,
+      limit: Math.max(0, limit),
+    }).pipe(
+      Effect.map((rows) => ({
+        results: rows.map((row) => ({
+          threadId: row.threadId,
+          snippet: buildSearchSnippet(row.text, normalizedQuery),
+        })),
+      })),
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "ProjectionSnapshotQuery.searchThreadMessages:query",
+          "ProjectionSnapshotQuery.searchThreadMessages:decode",
+        ),
+      ),
     );
+  };
 
   return {
     getSnapshot,

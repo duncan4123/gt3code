@@ -142,3 +142,9 @@ skip = [
 
 [api]
 port = 8372
+
+
+[[patches.agent]]
+dir = "beads-doltlite"
+name = "polecat"
+wake_mode = "resume"

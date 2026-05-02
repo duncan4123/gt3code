@@ -111,8 +111,8 @@ suspended = true`);
 
     mkdirSync(nestedProject, { recursive: true });
     mkdirSync(siblingCity, { recursive: true });
-    writeFileSync(path.join(siblingCity, "city.toml"), "[workspace]\nname = \"local\"\n");
-    writeFileSync(path.join(siblingCity, "pack.toml"), "[pack]\nname = \"gc\"\n");
+    writeFileSync(path.join(siblingCity, "city.toml"), '[workspace]\nname = "local"\n');
+    writeFileSync(path.join(siblingCity, "pack.toml"), '[pack]\nname = "gc"\n');
 
     expect(__gcCityTomlPatchForTests.discoverGcCityRoot(nestedProject)).toBe(siblingCity);
   });
@@ -123,8 +123,8 @@ suspended = true`);
     const binPath = path.join(root, "gc");
 
     mkdirSync(cityPath, { recursive: true });
-    writeFileSync(path.join(cityPath, "city.toml"), "[workspace]\nname = \"legacy\"\n");
-    writeFileSync(path.join(cityPath, "pack.toml"), "[pack]\nname = \"gc\"\n");
+    writeFileSync(path.join(cityPath, "city.toml"), '[workspace]\nname = "legacy"\n');
+    writeFileSync(path.join(cityPath, "pack.toml"), '[pack]\nname = "gc"\n');
     writeFileSync(binPath, "#!/bin/sh\nexit 0\n");
     chmodSync(binPath, 0o755);
 

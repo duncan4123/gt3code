@@ -7,6 +7,7 @@ import {
   TurnId,
   type OrchestrationEvent,
   type ProviderRuntimeEvent,
+  parseGcMeta,
 } from "@t3tools/contracts";
 import { Cause, Effect, Layer, Option, Stream } from "effect";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
@@ -26,6 +27,7 @@ import type { OrchestrationDispatchError } from "../Errors.ts";
 import { isGitRepository } from "../../git/Utils.ts";
 import { GitStatusBroadcaster } from "../../git/Services/GitStatusBroadcaster.ts";
 import { WorkspaceEntries } from "../../workspace/Services/WorkspaceEntries.ts";
+import { GcApiClient } from "../../gc/Services/GcApiClient.ts";
 
 type ReactorInput =
   | {
@@ -64,6 +66,18 @@ function checkpointStatusFromRuntime(status: string | undefined): "ready" | "mis
 const serverCommandId = (tag: string): CommandId =>
   CommandId.make(`server:${tag}:${crypto.randomUUID()}`);
 
+function metadataValue(
+  metadata: Readonly<Record<string, string>> | undefined,
+  keys: readonly string[],
+): string | undefined {
+  if (!metadata) return undefined;
+  for (const key of keys) {
+    const value = metadata[key]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
 const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const providerService = yield* ProviderService;
@@ -71,6 +85,7 @@ const make = Effect.gen(function* () {
   const receiptBus = yield* RuntimeReceiptBus;
   const workspaceEntries = yield* WorkspaceEntries;
   const gitStatusBroadcaster = yield* GitStatusBroadcaster;
+  const gcApiOption = yield* Effect.serviceOption(GcApiClient);
 
   const appendRevertFailureActivity = (input: {
     readonly threadId: ThreadId;
@@ -151,16 +166,81 @@ const make = Effect.gen(function* () {
 
   const isGitWorkspace = (cwd: string) => isGitRepository(cwd);
 
+  const resolveGcBeadWorkspaceForThread = Effect.fn("resolveGcBeadWorkspaceForThread")(
+    function* (input: {
+      readonly threadId: ThreadId;
+      readonly thread: {
+        readonly branch: string | null;
+        readonly worktreePath: string | null;
+        readonly customMetadata?: Readonly<Record<string, string>> | undefined;
+      };
+    }): Effect.fn.Return<string | undefined> {
+      const gcMeta = parseGcMeta(input.thread.customMetadata);
+      if (!gcMeta.isGcManaged || !gcMeta.bead) {
+        return undefined;
+      }
+      if (Option.isNone(gcApiOption)) {
+        return undefined;
+      }
+
+      const bead = yield* gcApiOption.value
+        .getBead(gcMeta.bead)
+        .pipe(Effect.catchCause(() => Effect.succeed(null)));
+      const worktreePath = metadataValue(bead?.metadata, ["work_dir", "worktree", "worktree_path"]);
+      if (!worktreePath || !isGitWorkspace(worktreePath)) {
+        return undefined;
+      }
+
+      const branch = metadataValue(bead?.metadata, ["branch", "source_branch", "git_branch"]);
+      if (input.thread.worktreePath !== worktreePath || input.thread.branch !== (branch ?? null)) {
+        yield* orchestrationEngine
+          .dispatch({
+            type: "thread.meta.update",
+            commandId: serverCommandId("gc-bead-git-context"),
+            threadId: input.threadId,
+            branch: branch ?? null,
+            worktreePath,
+          })
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("failed to project GC bead git context onto thread", {
+                threadId: input.threadId,
+                beadId: gcMeta.bead,
+                worktreePath,
+                branch,
+                cause: Cause.pretty(cause),
+              }),
+            ),
+          );
+      }
+
+      return worktreePath;
+    },
+  );
+
   // Resolves the workspace CWD for checkpoint operations, preferring the
   // active provider session CWD and falling back to the thread/project config.
   // Returns undefined when no CWD can be determined or the workspace is not
   // a git repository.
   const resolveCheckpointCwd = Effect.fn("resolveCheckpointCwd")(function* (input: {
     readonly threadId: ThreadId;
-    readonly thread: { readonly projectId: ProjectId; readonly worktreePath: string | null };
+    readonly thread: {
+      readonly projectId: ProjectId;
+      readonly branch: string | null;
+      readonly worktreePath: string | null;
+      readonly customMetadata?: Readonly<Record<string, string>> | undefined;
+    };
     readonly projects: ReadonlyArray<{ readonly id: ProjectId; readonly workspaceRoot: string }>;
     readonly preferSessionRuntime: boolean;
   }): Effect.fn.Return<string | undefined> {
+    const fromGcBead = yield* resolveGcBeadWorkspaceForThread({
+      threadId: input.threadId,
+      thread: input.thread,
+    });
+    if (fromGcBead) {
+      return fromGcBead;
+    }
+
     const fromSession = yield* resolveSessionRuntimeForThread(input.threadId);
     const fromThread = resolveThreadWorkspaceCwd({
       thread: input.thread,

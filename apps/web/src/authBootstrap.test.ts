@@ -143,6 +143,50 @@ describe("resolveInitialServerAuthGateState", () => {
     });
   });
 
+  it("does not use a desktop bootstrap token when vite urls are configured", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      sessionResponse({
+        authenticated: false,
+        auth: {
+          policy: "desktop-managed-local",
+          bootstrapMethods: ["desktop-bootstrap"],
+          sessionMethods: ["browser-session-cookie"],
+          sessionCookieName: "t3_session",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("VITE_HTTP_URL", "http://localhost:3773");
+    vi.stubEnv("VITE_WS_URL", "ws://localhost:3773");
+
+    const testWindow = installTestBrowser("http://localhost:5733/");
+    testWindow.desktopBridge = {
+      getLocalEnvironmentBootstrap: () => ({
+        label: "Packaged environment",
+        httpBaseUrl: "https://app.t3.chat",
+        wsBaseUrl: "wss://app.t3.chat",
+        bootstrapToken: "desktop-bootstrap-token",
+      }),
+    } as DesktopBridge;
+
+    const { resolveInitialServerAuthGateState } = await import("./environments/primary");
+
+    await expect(resolveInitialServerAuthGateState()).resolves.toEqual({
+      status: "requires-auth",
+      auth: {
+        policy: "desktop-managed-local",
+        bootstrapMethods: ["desktop-bootstrap"],
+        sessionMethods: ["browser-session-cookie"],
+        sessionCookieName: "t3_session",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:3773/api/auth/session", {
+      credentials: "include",
+    });
+  });
+
   it("uses the current origin as an auth proxy base for local dev environments", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
       sessionResponse({

@@ -31,8 +31,6 @@ function resolveSourceRoot() {
     process.env.T3CODE_GASCITY_SOURCE_DIR,
     process.env.GASCITY_SOURCE_DIR,
     path.join(packageRoot, "source"),
-    "/data/projects/gascity-t3code",
-    "/data/projects/gascity",
   ].filter(Boolean);
   for (const candidate of candidates) {
     const resolved = path.resolve(candidate);

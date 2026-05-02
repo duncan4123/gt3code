@@ -10,7 +10,12 @@ const arch = process.env.T3CODE_BEADS_DOLTLITE_BUILD_ARCH || process.arch;
 const goos = platform === "win32" ? "windows" : platform === "darwin" ? "darwin" : "linux";
 const goarch = arch === "x64" ? "amd64" : arch;
 const executable = platform === "win32" ? "bd.exe" : "bd";
-const doltliteLibrary = platform === "win32" ? "doltlite.dll" : platform === "darwin" ? "libdoltlite.dylib" : "libdoltlite.so";
+const doltliteLibrary =
+  platform === "win32"
+    ? "doltlite.dll"
+    : platform === "darwin"
+      ? "libdoltlite.dylib"
+      : "libdoltlite.so";
 const outputPath = path.join(packageRoot, "bin", `${platform}-${arch}`, executable);
 const outputLibraryPath = path.join(packageRoot, "bin", `${platform}-${arch}`, doltliteLibrary);
 const sourceRoot = resolveSourceRoot();
@@ -19,7 +24,10 @@ const doltliteBuildDir = resolveDoltliteBuildDir();
 mkdirSync(path.dirname(outputPath), { recursive: true });
 const cgoFlags = appendFlag(process.env.CGO_CFLAGS, `-I${doltliteBuildDir}`);
 const rpathFlag = platform === "darwin" ? "-Wl,-rpath,@loader_path" : "-Wl,-rpath,$ORIGIN";
-const cgoLdFlags = appendFlag(process.env.CGO_LDFLAGS, `-L${doltliteBuildDir} ${rpathFlag} -ldoltlite -lz`);
+const cgoLdFlags = appendFlag(
+  process.env.CGO_LDFLAGS,
+  `-L${doltliteBuildDir} ${rpathFlag} -ldoltlite -lz`,
+);
 const result = spawnSync("go", ["build", "-o", outputPath, "./cmd/bd"], {
   cwd: sourceRoot,
   env: {
@@ -46,7 +54,6 @@ function resolveSourceRoot() {
     process.env.T3CODE_BEADS_DOLTLITE_SOURCE_DIR,
     process.env.BEADS_DOLTLITE_SOURCE_DIR,
     path.join(packageRoot, "source"),
-    "/data/projects/beads-doltlite",
   ].filter(Boolean);
   for (const candidate of candidates) {
     const resolved = path.resolve(candidate);
@@ -63,8 +70,12 @@ function resolveDoltliteBuildDir() {
   const candidates = [
     process.env.T3CODE_DOLTLITE_BUILD_DIR,
     process.env.DOLTLITE_BUILD_DIR,
-    process.env.T3CODE_DOLTLITE_SOURCE_DIR ? path.join(process.env.T3CODE_DOLTLITE_SOURCE_DIR, "build") : undefined,
-    process.env.DOLTLITE_SOURCE_DIR ? path.join(process.env.DOLTLITE_SOURCE_DIR, "build") : undefined,
+    process.env.T3CODE_DOLTLITE_SOURCE_DIR
+      ? path.join(process.env.T3CODE_DOLTLITE_SOURCE_DIR, "build")
+      : undefined,
+    process.env.DOLTLITE_SOURCE_DIR
+      ? path.join(process.env.DOLTLITE_SOURCE_DIR, "build")
+      : undefined,
     path.join(packageRoot, "doltlite", "build"),
     path.join(packageRoot, "..", "doltlite", "build"),
     "/data/projects/doltlite-latest/build",

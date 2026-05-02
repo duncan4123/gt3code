@@ -1,0 +1,55 @@
+{
+  "name": "@beads/bd",
+  "version": "1.0.3",
+  "description": "Beads issue tracker - lightweight memory system for coding agents with native binary support",
+  "keywords": [
+    "ai-agent",
+    "claude",
+    "coding-agent",
+    "dependency-tracking",
+    "git",
+    "issue-tracker",
+    "project-management",
+    "sqlite"
+  ],
+  "homepage": "https://github.com/gastownhall/beads#readme",
+  "bugs": {
+    "url": "https://github.com/gastownhall/beads/issues"
+  },
+  "license": "MIT",
+  "author": "Steve Yegge",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gastownhall/beads.git",
+    "directory": "npm-package"
+  },
+  "bin": {
+    "bd": "bin/bd.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "README.md",
+    "LICENSE"
+  ],
+  "os": [
+    "darwin",
+    "linux",
+    "win32",
+    "android"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "main": "bin/bd.js",
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js",
+    "test": "node scripts/test.js",
+    "test:integration": "node test/integration.test.js",
+    "test:all": "npm test && npm run test:integration"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

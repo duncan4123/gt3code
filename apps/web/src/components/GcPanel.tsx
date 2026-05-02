@@ -1,13 +1,8 @@
-import { memo, useEffect, useMemo, useState } from "react";
-import {
-  type EnvironmentId,
-  type GcThreadContextResult,
-  type ThreadId,
-  parseGcMeta,
-} from "@t3tools/contracts";
-import { readLocalApi } from "../localApi";
+import { memo } from "react";
+import { parseGcMeta, type EnvironmentId, type ThreadId } from "@t3tools/contracts";
 import type { Thread, ThreadShell } from "../types";
 import GcContextSidebar from "./GcContextSidebar";
+import { useGcThreadContext } from "../lib/gcThreadContext";
 
 interface GcPanelProps {
   environmentId: EnvironmentId;
@@ -15,40 +10,12 @@ interface GcPanelProps {
   thread: Pick<Thread | ThreadShell, "customMetadata"> | null | undefined;
 }
 
-const GcPanel = memo(function GcPanel({ environmentId, threadId, thread }: GcPanelProps) {
-  const gcMeta = useMemo(() => parseGcMeta(thread?.customMetadata), [thread?.customMetadata]);
-  const gcContextSignature = [
-    gcMeta.bead ?? "",
-    gcMeta.convoy ?? "",
-    gcMeta.formula ?? "",
-    gcMeta.molecule ?? "",
-  ].join("|");
-
-  const [threadContext, setThreadContext] = useState<GcThreadContextResult | null>(null);
-
-  useEffect(() => {
-    setThreadContext(null);
-    if (!gcMeta.isGcManaged) return;
-    const api = readLocalApi();
-    if (!api) return;
-    let cancelled = false;
-    const refreshThreadContext = () => {
-      api.gc
-        ?.getThreadContext({ threadId })
-        .then((result) => {
-          if (!cancelled) setThreadContext(result);
-        })
-        .catch(() => {
-          // GC API unavailable — sidebar falls back to metadata-only display
-        });
-    };
-    refreshThreadContext();
-    const refreshInterval = window.setInterval(refreshThreadContext, 10_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(refreshInterval);
-    };
-  }, [environmentId, threadId, gcMeta.isGcManaged, gcContextSignature]);
+const GcPanel = memo(function GcPanel({ threadId, thread }: GcPanelProps) {
+  const gcMeta = parseGcMeta(thread?.customMetadata);
+  const threadContext = useGcThreadContext({
+    threadId,
+    customMetadata: thread?.customMetadata,
+  });
 
   if (!thread?.customMetadata || !gcMeta.isGcManaged) {
     return null;

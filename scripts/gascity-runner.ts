@@ -148,7 +148,11 @@ function getRuntimePaths(): RuntimePaths {
     doltliteLibraryPath: join(
       rootDir,
       "bin",
-      process.platform === "darwin" ? "libdoltlite.dylib" : process.platform === "win32" ? "doltlite.dll" : "libdoltlite.so",
+      process.platform === "darwin"
+        ? "libdoltlite.dylib"
+        : process.platform === "win32"
+          ? "doltlite.dll"
+          : "libdoltlite.so",
     ),
     worktreesDir:
       process.env.T3CODE_WORKTREES_DIR ??
@@ -158,10 +162,11 @@ function getRuntimePaths(): RuntimePaths {
 
 function prepareActiveCity(cityDir: string): void {
   writeDefaultSiteToml(cityDir);
-  writeDefaultBeadsConfig(cityDir, "t3");
+  writeDefaultBeadsConfig(cityDir, "t3", "hq");
   for (const binding of defaultRigBindings) {
     if (existsSync(binding.path)) {
-      writeDefaultBeadsConfig(binding.path, beadsPrefixForRig(binding.name));
+      const issuePrefix = beadsPrefixForRig(binding.name);
+      writeDefaultBeadsConfig(binding.path, issuePrefix, issuePrefix);
     }
   }
 }
@@ -224,13 +229,13 @@ function beadsPrefixForRig(name: string): string {
     case "beads-doltlite":
       return "bd";
     case "context-mode":
-      return "cm";
+      return "ccm";
     default:
       return "gc";
   }
 }
 
-function writeDefaultBeadsConfig(cityDir: string, issuePrefix: string): void {
+function writeDefaultBeadsConfig(cityDir: string, issuePrefix: string, doltDatabase: string): void {
   const beadsDir = join(cityDir, ".beads");
   mkdirSync(beadsDir, { recursive: true });
   const configPath = join(beadsDir, "config.yaml");
@@ -238,11 +243,11 @@ function writeDefaultBeadsConfig(cityDir: string, issuePrefix: string): void {
   writeFileSync(
     configPath,
     ensureYamlScalarLines(configContent, {
-      "issue_prefix": issuePrefix,
+      issue_prefix: issuePrefix,
       "issue-prefix": issuePrefix,
       "dolt.auto-start": "false",
       "export.auto": "false",
-      "types.custom": "\"session,wait,convoy,molecule,formula\"",
+      "types.custom": '"session,wait,convoy,molecule,formula"',
     }),
   );
   const metadataPath = join(beadsDir, "metadata.json");
@@ -253,7 +258,7 @@ function writeDefaultBeadsConfig(cityDir: string, issuePrefix: string): void {
         {
           backend: "doltlite",
           database: "doltlite",
-          dolt_database: "hq",
+          dolt_database: doltDatabase,
           dolt_mode: "embedded",
         },
         null,
@@ -263,11 +268,10 @@ function writeDefaultBeadsConfig(cityDir: string, issuePrefix: string): void {
   }
 }
 
-function ensureYamlScalarLines(
-  content: string,
-  values: Record<string, string>,
-): string {
-  const lines = content.split("\n").filter((line, index, all) => index < all.length - 1 || line !== "");
+function ensureYamlScalarLines(content: string, values: Record<string, string>): string {
+  const lines = content
+    .split("\n")
+    .filter((line, index, all) => index < all.length - 1 || line !== "");
   for (const [key, value] of Object.entries(values)) {
     const nextLine = `${key}: ${value}`;
     const index = lines.findIndex((line) => line.trimStart().startsWith(`${key}:`));

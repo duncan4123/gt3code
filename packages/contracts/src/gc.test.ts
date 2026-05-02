@@ -275,6 +275,64 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(rigGroups[0]?.agentGroups.map((group) => group.isSuspended)).toEqual([true, false]);
   });
 
+  it("includes configured city-scoped agents under a threadless city project", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "t3code",
+          suspended: false,
+        },
+        rigs: [],
+        agents: [
+          {
+            name: "gastown.boot",
+            suspended: false,
+            scope: "city",
+            named_session_mode: "always",
+          },
+          {
+            name: "gastown.dog",
+            suspended: false,
+            scope: "city",
+            min_active_sessions: 0,
+            max_active_sessions: 3,
+          },
+          {
+            name: "codex",
+            provider: "codex",
+            prompt_template: ".gc/system/packs/core/assets/prompts/pool-worker.md",
+            default_sling_formula: "mol-do-work",
+            suspended: false,
+          },
+        ],
+      },
+      projectName: "city",
+      projectCwd: "/home/ubuntu/.local/state/t3code/gascity/current/city",
+    });
+
+    expect(standaloneThreads).toEqual([]);
+    expect(rigGroups).toHaveLength(1);
+    expect(rigGroups[0]).toMatchObject({
+      id: "t3code",
+      label: "CITY",
+      kind: "workspace",
+      isConfigured: true,
+    });
+    expect(rigGroups[0]?.agentGroups.map((group) => group.qualifiedName)).toEqual([
+      "gastown.boot",
+      "gastown.dog",
+    ]);
+    expect(rigGroups[0]?.agentGroups[0]).toMatchObject({
+      label: "boot",
+      namedSessionMode: "always",
+    });
+    expect(rigGroups[0]?.agentGroups[1]).toMatchObject({
+      label: "dog",
+      minActiveSessions: 0,
+      maxActiveSessions: 3,
+    });
+  });
+
   it("does not show implicit provider lanes as agent folders", () => {
     const { rigGroups } = groupThreadsByRigAndAgent([], {
       config: {
@@ -326,6 +384,74 @@ describe("groupThreadsByRigAndAgent", () => {
       description: "Built-in deterministic graph.v2 workflow control worker",
       startCommand: "gc convoy control --serve",
       maxActiveSessions: 1,
+    });
+  });
+
+  it("backfills configured city agents into metadata-created workspace folders", () => {
+    const { rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          customMetadata: {
+            "gc.agent": "gastown__mayor",
+            "gc.groupKind": "workspace",
+            "gc.groupId": "city",
+            "gc.groupLabel": "CITY",
+            "gc.agentQualified": "gastown.mayor",
+            "gc.agentLabel": "mayor",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "t3code",
+            suspended: false,
+          },
+          rigs: [],
+          agents: [
+            {
+              name: "gastown.dog",
+              provider: "codex",
+              min_active_sessions: 0,
+              max_active_sessions: 3,
+              wake_mode: "fresh",
+              suspended: false,
+            },
+            {
+              name: "gastown.mayor",
+              provider: "codex",
+              named_session_mode: "always",
+              suspended: false,
+            },
+            {
+              name: "codex",
+              provider: "codex",
+              prompt_template: ".gc/system/packs/core/assets/prompts/pool-worker.md",
+              default_sling_formula: "mol-do-work",
+              suspended: false,
+            },
+          ],
+        },
+        projectName: "city",
+      },
+    );
+
+    expect(rigGroups).toHaveLength(1);
+    expect(rigGroups[0]).toMatchObject({
+      id: "t3code",
+      label: "CITY",
+      kind: "workspace",
+    });
+    expect(rigGroups[0]?.agentGroups.map((group) => group.qualifiedName)).toEqual([
+      "gastown.dog",
+      "gastown.mayor",
+    ]);
+    expect(rigGroups[0]?.agentGroups[0]).toMatchObject({
+      label: "dog",
+      isPool: false,
+      minActiveSessions: 0,
+      maxActiveSessions: 3,
     });
   });
 

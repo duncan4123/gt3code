@@ -40,6 +40,7 @@ export interface MaterializeGascityRuntimeOptions extends GascityBinaryTarget {
   readonly preserveExistingConfig?: boolean;
   readonly gcBinaryPath?: string;
   readonly bdBinaryPath?: string;
+  readonly doltliteLibraryPath?: string;
   readonly seedLocalBeadsConfig?: boolean;
 }
 
@@ -53,6 +54,7 @@ export interface GascityRuntimeLayout {
   readonly binDir: string;
   readonly gcBinaryPath: string;
   readonly bdBinaryPath: string;
+  readonly doltliteLibraryPath: string;
 }
 
 const modulePackageRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -145,6 +147,18 @@ export function getBundledBdBinaryPath(target: GascityBinaryTarget = {}): string
   return getBundledBinaryPath("bd", target);
 }
 
+export function getBundledDoltliteLibraryPath(target: GascityBinaryTarget = {}): string {
+  const platform = target.platform ?? process.platform;
+  const arch = target.arch ?? process.arch;
+  const library =
+    platform === "darwin"
+      ? "libdoltlite.dylib"
+      : platform === "win32"
+        ? "doltlite.dll"
+        : "libdoltlite.so";
+  return path.join(binariesRoot, `${platform}-${arch}`, library);
+}
+
 function getBundledBinaryPath(name: "bd" | "gc", target: GascityBinaryTarget = {}): string {
   const platform = target.platform ?? process.platform;
   const arch = target.arch ?? process.arch;
@@ -160,6 +174,13 @@ export function findBundledGcBinaryPath(target: GascityBinaryTarget = {}): strin
 export function findBundledBdBinaryPath(target: GascityBinaryTarget = {}): string | undefined {
   const binaryPath = getBundledBdBinaryPath(target);
   return existsSync(binaryPath) && statSync(binaryPath).isFile() ? binaryPath : undefined;
+}
+
+export function findBundledDoltliteLibraryPath(
+  target: GascityBinaryTarget = {},
+): string | undefined {
+  const libraryPath = getBundledDoltliteLibraryPath(target);
+  return existsSync(libraryPath) && statSync(libraryPath).isFile() ? libraryPath : undefined;
 }
 
 export function getDefaultGascityRuntimeRoot(
@@ -211,6 +232,10 @@ export function materializeGascityRuntime(
   }
   const sourceGcBinaryPath = options.gcBinaryPath ?? findBundledGcBinaryPath(binaryTarget);
   const sourceBdBinaryPath = options.bdBinaryPath ?? findBundledBdBinaryPath(binaryTarget);
+  const sourceDoltliteLibraryPath =
+    options.doltliteLibraryPath ??
+    findSiblingDoltliteLibraryPath(sourceBdBinaryPath, binaryTarget) ??
+    findBundledDoltliteLibraryPath(binaryTarget);
   const binaryPlatform = options.platform ?? process.platform;
   if (!sourceGcBinaryPath) {
     throw new Error(
@@ -236,9 +261,16 @@ export function materializeGascityRuntime(
   const binDir = path.join(rootDir, "bin");
   const gcBinaryPath = path.join(binDir, path.basename(getBundledGcBinaryPath(options)));
   const bdBinaryPath = path.join(binDir, path.basename(getBundledBdBinaryPath(options)));
+  const doltliteLibraryPath = path.join(
+    binDir,
+    path.basename(getBundledDoltliteLibraryPath(options)),
+  );
   mkdirSync(binDir, { recursive: true });
   copyRuntimeBinary(sourceGcBinaryPath, gcBinaryPath, binaryPlatform);
   copyRuntimeBinary(sourceBdBinaryPath, bdBinaryPath, binaryPlatform);
+  if (sourceDoltliteLibraryPath) {
+    copyRuntimeBinary(sourceDoltliteLibraryPath, doltliteLibraryPath, binaryPlatform);
+  }
 
   return {
     rootDir,
@@ -246,7 +278,22 @@ export function materializeGascityRuntime(
     binDir,
     gcBinaryPath,
     bdBinaryPath,
+    doltliteLibraryPath,
   };
+}
+
+function findSiblingDoltliteLibraryPath(
+  binaryPath: string | undefined,
+  target: GascityBinaryTarget,
+): string | undefined {
+  if (!binaryPath) {
+    return undefined;
+  }
+  const libraryPath = path.join(
+    path.dirname(binaryPath),
+    path.basename(getBundledDoltliteLibraryPath(target)),
+  );
+  return existsSync(libraryPath) && statSync(libraryPath).isFile() ? libraryPath : undefined;
 }
 
 function shouldCopyConfigPath(sourcePath: string): boolean {

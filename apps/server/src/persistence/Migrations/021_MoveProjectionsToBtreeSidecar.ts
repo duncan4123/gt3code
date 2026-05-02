@@ -14,43 +14,8 @@
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-export default Effect.gen(function* () {
+export const ensureProjectionSidecarSchema = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-
-  // ── Drop old tables from main (prolly tree) ──────────────────────────
-
-  // Drop indexes first
-  yield* sql`DROP INDEX IF EXISTS idx_projection_projects_updated_at`;
-  yield* sql`DROP INDEX IF EXISTS idx_projection_projects_workspace_root_deleted_at`;
-  yield* sql`DROP INDEX IF EXISTS idx_projection_threads_project_id`;
-  yield* sql`DROP INDEX IF EXISTS idx_projection_threads_project_archived_at`;
-  yield* sql`DROP INDEX IF EXISTS idx_projection_threads_project_deleted_created`;
-  yield* sql`DROP INDEX IF EXISTS idx_projection_thread_messages_thread_created`;
-  yield* sql`DROP INDEX IF EXISTS idx_projection_thread_activities_thread_created`;
-  yield* sql`DROP INDEX IF EXISTS idx_projection_thread_activities_thread_sequence`;
-  yield* sql`DROP INDEX IF EXISTS idx_projection_thread_sessions_provider_session`;
-  yield* sql`DROP INDEX IF EXISTS idx_projection_turns_thread_requested`;
-  yield* sql`DROP INDEX IF EXISTS idx_projection_turns_thread_checkpoint_completed`;
-  yield* sql`DROP INDEX IF EXISTS idx_projection_pending_approvals_thread_status`;
-  yield* sql`DROP INDEX IF EXISTS idx_projection_thread_proposed_plans_thread_created`;
-  yield* sql`DROP INDEX IF EXISTS idx_checkpoint_diff_blobs_thread_to_turn`;
-  yield* sql`DROP INDEX IF EXISTS idx_provider_session_runtime_status`;
-  yield* sql`DROP INDEX IF EXISTS idx_provider_session_runtime_provider`;
-
-  // Drop tables
-  yield* sql`DROP TABLE IF EXISTS projection_thread_proposed_plans`;
-  yield* sql`DROP TABLE IF EXISTS projection_pending_approvals`;
-  yield* sql`DROP TABLE IF EXISTS projection_turns`;
-  yield* sql`DROP TABLE IF EXISTS projection_thread_sessions`;
-  yield* sql`DROP TABLE IF EXISTS projection_thread_activities`;
-  yield* sql`DROP TABLE IF EXISTS projection_thread_messages`;
-  yield* sql`DROP TABLE IF EXISTS projection_threads`;
-  yield* sql`DROP TABLE IF EXISTS projection_projects`;
-  yield* sql`DROP TABLE IF EXISTS projection_state`;
-  yield* sql`DROP TABLE IF EXISTS checkpoint_diff_blobs`;
-  yield* sql`DROP TABLE IF EXISTS provider_session_runtime`;
-
-  // ── Recreate in proj schema (standard SQLite btree) ──────────────────
 
   yield* sql.unsafe(`
     CREATE TABLE IF NOT EXISTS proj.projection_projects (
@@ -80,9 +45,29 @@ export default Effect.gen(function* () {
       interaction_mode TEXT NOT NULL DEFAULT 'default',
       model_selection_json TEXT,
       custom_metadata TEXT NOT NULL DEFAULT '{}',
-      archived_at TEXT
+      archived_at TEXT,
+      latest_user_message_at TEXT,
+      pending_approval_count INTEGER NOT NULL DEFAULT 0,
+      pending_user_input_count INTEGER NOT NULL DEFAULT 0,
+      has_actionable_proposed_plan INTEGER NOT NULL DEFAULT 0
     )
   `);
+
+  yield* sql`ALTER TABLE proj.projection_threads ADD COLUMN latest_user_message_at TEXT`.pipe(
+    Effect.catch(() => Effect.void),
+  );
+  yield* sql`
+    ALTER TABLE proj.projection_threads
+    ADD COLUMN pending_approval_count INTEGER NOT NULL DEFAULT 0
+  `.pipe(Effect.catch(() => Effect.void));
+  yield* sql`
+    ALTER TABLE proj.projection_threads
+    ADD COLUMN pending_user_input_count INTEGER NOT NULL DEFAULT 0
+  `.pipe(Effect.catch(() => Effect.void));
+  yield* sql`
+    ALTER TABLE proj.projection_threads
+    ADD COLUMN has_actionable_proposed_plan INTEGER NOT NULL DEFAULT 0
+  `.pipe(Effect.catch(() => Effect.void));
 
   yield* sql.unsafe(`
     CREATE TABLE IF NOT EXISTS proj.projection_thread_messages (
@@ -256,4 +241,44 @@ export default Effect.gen(function* () {
   yield* sql.unsafe(
     `CREATE INDEX IF NOT EXISTS proj.idx_proj_runtime_provider ON provider_session_runtime(provider_name)`,
   );
+});
+
+export default Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+
+  // ── Drop old tables from main (prolly tree) ──────────────────────────
+
+  // Drop indexes first
+  yield* sql`DROP INDEX IF EXISTS idx_projection_projects_updated_at`;
+  yield* sql`DROP INDEX IF EXISTS idx_projection_projects_workspace_root_deleted_at`;
+  yield* sql`DROP INDEX IF EXISTS idx_projection_threads_project_id`;
+  yield* sql`DROP INDEX IF EXISTS idx_projection_threads_project_archived_at`;
+  yield* sql`DROP INDEX IF EXISTS idx_projection_threads_project_deleted_created`;
+  yield* sql`DROP INDEX IF EXISTS idx_projection_thread_messages_thread_created`;
+  yield* sql`DROP INDEX IF EXISTS idx_projection_thread_activities_thread_created`;
+  yield* sql`DROP INDEX IF EXISTS idx_projection_thread_activities_thread_sequence`;
+  yield* sql`DROP INDEX IF EXISTS idx_projection_thread_sessions_provider_session`;
+  yield* sql`DROP INDEX IF EXISTS idx_projection_turns_thread_requested`;
+  yield* sql`DROP INDEX IF EXISTS idx_projection_turns_thread_checkpoint_completed`;
+  yield* sql`DROP INDEX IF EXISTS idx_projection_pending_approvals_thread_status`;
+  yield* sql`DROP INDEX IF EXISTS idx_projection_thread_proposed_plans_thread_created`;
+  yield* sql`DROP INDEX IF EXISTS idx_checkpoint_diff_blobs_thread_to_turn`;
+  yield* sql`DROP INDEX IF EXISTS idx_provider_session_runtime_status`;
+  yield* sql`DROP INDEX IF EXISTS idx_provider_session_runtime_provider`;
+
+  // Drop tables
+  yield* sql`DROP TABLE IF EXISTS projection_thread_proposed_plans`;
+  yield* sql`DROP TABLE IF EXISTS projection_pending_approvals`;
+  yield* sql`DROP TABLE IF EXISTS projection_turns`;
+  yield* sql`DROP TABLE IF EXISTS projection_thread_sessions`;
+  yield* sql`DROP TABLE IF EXISTS projection_thread_activities`;
+  yield* sql`DROP TABLE IF EXISTS projection_thread_messages`;
+  yield* sql`DROP TABLE IF EXISTS projection_threads`;
+  yield* sql`DROP TABLE IF EXISTS projection_projects`;
+  yield* sql`DROP TABLE IF EXISTS projection_state`;
+  yield* sql`DROP TABLE IF EXISTS checkpoint_diff_blobs`;
+  yield* sql`DROP TABLE IF EXISTS provider_session_runtime`;
+
+  // ── Recreate in proj schema (standard SQLite btree) ──────────────────
+  yield* ensureProjectionSidecarSchema;
 });
