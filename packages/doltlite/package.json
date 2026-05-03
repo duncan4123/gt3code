@@ -7,6 +7,7 @@
     ".": "./index.ts"
   },
   "scripts": {
+    "build": "node scripts/build.mjs",
     "patch": "node ../../apps/server/scripts/patch-doltlite.mjs",
     "postinstall": "node ../../apps/server/scripts/patch-doltlite.mjs || true"
   },

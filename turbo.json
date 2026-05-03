@@ -37,7 +37,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["bin/**", "dist/**", "dist-electron/**"]
+      "outputs": ["bin/**", "build/**", "dist/**", "dist-electron/**"]
     },
     "dev": {
       "dependsOn": ["@t3tools/contracts#build"],

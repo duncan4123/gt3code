@@ -66,6 +66,7 @@ Source/build package layout:
 ```text
 packages/gascity           builds gc from Gas City Go source
 packages/beads-doltlite    builds bd from beads-doltlite Go source
+packages/doltlite          builds libdoltlite.so/dylib/dll + sqlite3.h
 packages/gascity-config    owns city.toml, pack.toml, packs
 ```
 
@@ -80,14 +81,15 @@ bun gascity:install
 
 ```text
 packages/gascity/bin/<platform>-<arch>/gc
+packages/doltlite/build/libdoltlite.so
+packages/doltlite/build/sqlite3.h
 packages/beads-doltlite/bin/<platform>-<arch>/bd
 packages/beads-doltlite/bin/<platform>-<arch>/libdoltlite.so
 ```
 
 On macOS the Doltlite library is `libdoltlite.dylib`; on Windows it is
 `doltlite.dll`. The `bd` build must be linked with Doltlite's SQLite shim
-(`go build -tags libsqlite3` plus `CGO_CFLAGS`/`CGO_LDFLAGS` pointing at a
-Doltlite `build` directory). Do not replace this with a plain `go build`: the
+from `packages/doltlite/build`. Do not replace this with a plain `go build`: the
 binary will start, but `bd init --backend doltlite` will fail with missing
 `dolt_*` SQL functions such as `dolt_checkout`.
 
@@ -171,6 +173,47 @@ passed to `gc --city`, so edits apply to the running T3Code city after the
 supervisor reloads or restarts. Runtime-local files under `.gc`, `.beads`, logs,
 traces, and profiles are ignored.
 
+### Gas City Config Map
+
+When working on the bundled city, keep the config layering straight:
+
+- `packages/gascity-config/config/city.toml` is the live city entrypoint passed
+  to `gc --city`.
+- `packages/gascity-config/config/pack.toml` is the root pack for bundled
+  provider defaults and top-level patches.
+- `packages/gascity-config/config/packs/gastown/pack.toml` defines Gastown
+  agents, formulas, named sessions, and includes the maintenance pack.
+- `packages/gascity-config/config/packs/maintenance/pack.toml` provides shared
+  infrastructure used by Gastown.
+- `packages/gascity-config/config/.gc/site.toml` binds machine-local rig paths.
+  It is runtime-local, not the source of packaged behavior.
+
+Important semantics:
+
+- In `city.toml`, `[[patches.agent]].dir` scopes a patch to the city or a rig.
+  It is not the same thing as a process working directory.
+- In pack agent definitions, `work_dir` controls the agent's working directory.
+- Sidebar GC metadata may show a session startup work dir and `GC_*` session
+  env. That metadata describes the provider session, not every child shell.
+
+### Provider Env vs Tool Shell Env
+
+The T3 sidebar and the shell tools do not always run in the same environment.
+
+- Sidebar GC context is derived from Gas City metadata forwarded into the
+  provider session.
+- Shell/tool invocations may run in a separate child-process environment.
+- `GC_*` values visible in the sidebar are not guaranteed to appear in every
+  shell spawned by tools unless the caller forwards them explicitly.
+
+Practical rule:
+
+- Treat sidebar `GC_*` values as provider-session truth.
+- Treat shell env as a separate boundary.
+- When debugging `gc`/`bd` behavior from tooling, pass `GC_ALIAS`,
+  `GC_SESSION_ID`, `GC_SESSION_NAME`, and `GC_SESSION_ORIGIN` explicitly if
+  inheritance is uncertain.
+
 For agent model selection, update the agent file:
 
 ```text
@@ -231,7 +274,7 @@ The active context-mode database for the sidebar/Gas City comparison is named
   `/data/projects/gc`.
 
 Use that database when comparing sidebar controls against the exact TOML/pack
-set each branch was using. For local historical comparison, also note
+set each branch used. For local historical comparison, also note
 `/home/ubuntu/.local/state/t3code/gascity/dev/city`, which mirrors the older
 multi-rig `/data/projects/gc` style more closely than the current packaged
 runtime.

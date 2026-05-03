@@ -1,0 +1,248 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:  # Manual trigger from Actions tab for testing
+
+permissions:
+  contents: write
+
+jobs:
+  # ── Source artifacts (run once on Linux) ──────────────────
+  source:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y build-essential zlib1g-dev tcl-dev emscripten wabt
+
+    - name: Build amalgamation and wasm artifacts
+      run: |
+        ./configure
+        make sqlite3.c sqlite3.h sqlite3ext.h
+        make -C ext/wasm dist
+        # sqlite3.c/h IS the doltlite amalgamation (built with DOLTLITE_PROLLY=1)
+
+    - name: Package amalgamation
+      run: |
+        VERSION=${GITHUB_REF_NAME#v}
+        mkdir doltlite-amalgamation-${VERSION}
+        cp sqlite3.c doltlite-amalgamation-${VERSION}/doltlite.c
+        cp sqlite3.h doltlite-amalgamation-${VERSION}/doltlite.h
+        zip -r doltlite-amalgamation-${VERSION}.zip doltlite-amalgamation-${VERSION}/
+
+    - name: Package autoconf source
+      run: |
+        VERSION=${GITHUB_REF_NAME#v}
+        tar czf doltlite-autoconf-${VERSION}.tar.gz \
+          --transform "s,^,doltlite-autoconf-${VERSION}/," \
+          configure Makefile.in main.mk src/ ext/ \
+          sqlite3.c sqlite3.h
+
+    - name: Package wasm distribution
+      run: |
+        VERSION=${GITHUB_REF_NAME#v}
+        WASM_ZIP=$(ls ext/wasm/sqlite-wasm-*.zip | head -1)
+        cp "$WASM_ZIP" "doltlite-wasm-${VERSION}.zip"
+
+    - name: Upload source artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: source
+        path: |
+          doltlite-amalgamation-*.zip
+          doltlite-autoconf-*.tar.gz
+          doltlite-wasm-*.zip
+
+  # ── Binary builds (per-platform) ─────────────────────────
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+            ext: ""
+            lib_ext: ".so"
+            static_ext: ".a"
+          - os: macos-latest
+            target: osx-arm64
+            ext: ""
+            lib_ext: ".dylib"
+            static_ext: ".a"
+          - os: windows-latest
+            target: win-x64
+            ext: ".exe"
+            lib_ext: ".dll"
+            static_ext: ".lib"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get update && sudo apt-get install -y build-essential zlib1g-dev
+
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: brew install zlib || true
+
+    - name: Configure and build (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        mkdir -p build && cd build
+        ../configure
+        make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu) doltlite doltlite-remotesrv doltlite-lib
+
+    - name: Build (Windows / MSYS2)
+      if: runner.os == 'Windows'
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        install: mingw-w64-x86_64-gcc mingw-w64-x86_64-zlib make tcl
+
+    - name: Configure and build (Windows)
+      if: runner.os == 'Windows'
+      shell: msys2 {0}
+      run: |
+        mkdir -p build && cd build
+        ../configure
+        make -j$(nproc) doltlite.exe doltlite-lib
+
+    - name: Package CLI tools (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        VERSION=${GITHUB_REF_NAME#v}
+        DIR="doltlite-tools-${{ matrix.target }}-${VERSION}"
+        mkdir -p "${DIR}"
+        cp build/doltlite${{ matrix.ext }} "${DIR}/"
+        cp build/doltlite-remotesrv${{ matrix.ext }} "${DIR}/" 2>/dev/null || true
+        strip "${DIR}/doltlite${{ matrix.ext }}" 2>/dev/null || true
+        strip "${DIR}/doltlite-remotesrv${{ matrix.ext }}" 2>/dev/null || true
+        zip -r "${DIR}.zip" "${DIR}"
+
+    - name: Package CLI tools (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        VERSION=${GITHUB_REF_NAME#v}
+        DIR="doltlite-tools-${{ matrix.target }}-${VERSION}"
+        mkdir -p "${DIR}"
+        cp build/doltlite${{ matrix.ext }} "${DIR}/"
+        strip "${DIR}/doltlite${{ matrix.ext }}" 2>/dev/null || true
+        7z a "${DIR}.zip" "${DIR}"
+
+    - name: Ad-hoc codesign (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        VERSION=${GITHUB_REF_NAME#v}
+        DIR="doltlite-tools-${{ matrix.target }}-${VERSION}"
+        codesign -s - --force "${DIR}/doltlite"
+        codesign -s - --force "${DIR}/doltlite-remotesrv"
+        # Re-zip with signed binaries
+        rm -f "${DIR}.zip"
+        zip -r "${DIR}.zip" "${DIR}"
+
+    - name: Package libraries
+      shell: bash
+      run: |
+        VERSION=${GITHUB_REF_NAME#v}
+        DIR="doltlite-lib-${{ matrix.target }}-${VERSION}"
+        mkdir -p "${DIR}"
+        cp build/sqlite3.h "${DIR}/doltlite.h" 2>/dev/null || true
+        cp build/libdoltlite${{ matrix.static_ext }} "${DIR}/" 2>/dev/null || true
+        cp build/libdoltlite${{ matrix.lib_ext }} "${DIR}/" 2>/dev/null || true
+        if command -v zip >/dev/null 2>&1; then
+          zip -r "${DIR}.zip" "${DIR}"
+        else
+          7z a "${DIR}.zip" "${DIR}"
+        fi
+
+    - name: Upload binary artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: binaries-${{ matrix.target }}
+        path: |
+          doltlite-tools-*.zip
+          doltlite-lib-*.zip
+
+  # ── Run benchmarks ────────────────────────────────────────
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y build-essential zlib1g-dev python3
+
+    - name: Build doltlite and sqlite3
+      run: |
+        mkdir -p build && cd build
+        ../configure
+        make -j$(nproc) doltlite
+        make DOLTLITE_PROLLY=0 sqlite3
+
+    - name: Run benchmark
+      run: |
+        cd build
+        bash ../test/sysbench_compare.sh > /tmp/bench_full.md 2>/dev/null
+        # Extract file-backed section only
+        sed -n '/### File-Backed/,/^_/p' /tmp/bench_full.md > /tmp/bench_file.md
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark
+        path: /tmp/bench_file.md
+
+  # ── Create GitHub release ─────────────────────────────────
+  release:
+    if: github.event_name != 'workflow_dispatch'
+    needs: [source, build, benchmark]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        VERSION=${GITHUB_REF_NAME#v}
+        # Collect all zips and tarballs
+        find artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec mv {} . \;
+        ls -la *.zip *.tar.gz
+
+        # Create release if it doesn't already exist (may have been
+        # created manually with release notes before the workflow ran)
+        if ! gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "Doltlite ${VERSION}" \
+            --generate-notes
+        fi
+
+        # Upload artifacts to the release
+        ASSETS=$(find . -maxdepth 1 \( -name "*.zip" -o -name "*.tar.gz" \) -print)
+        echo "Uploading: ${ASSETS}"
+        gh release upload "${GITHUB_REF_NAME}" ${ASSETS} --clobber
+
+    - name: Append benchmark to release notes
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        BENCH="artifacts/benchmark/bench_file.md"
+        if [ -f "$BENCH" ]; then
+          EXISTING=$(gh release view "${GITHUB_REF_NAME}" --json body --jq .body)
+          APPEND=$(printf '\n## Benchmark (file-backed, 10K rows, Linux x64)\n\n'; cat "$BENCH")
+          printf '%s\n%s' "$EXISTING" "$APPEND" > /tmp/release_body.md
+          gh release edit "${GITHUB_REF_NAME}" --notes-file /tmp/release_body.md
+        fi

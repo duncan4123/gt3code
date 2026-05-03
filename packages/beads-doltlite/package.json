@@ -19,6 +19,9 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "doltlite": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:"

@@ -76,20 +76,23 @@ function resolveDoltliteBuildDir() {
     process.env.DOLTLITE_SOURCE_DIR
       ? path.join(process.env.DOLTLITE_SOURCE_DIR, "build")
       : undefined,
-    path.join(packageRoot, "doltlite", "build"),
     path.join(packageRoot, "..", "doltlite", "build"),
   ].filter(Boolean);
   for (const candidate of candidates) {
     const resolved = path.resolve(candidate);
-    if (
-      existsSync(path.join(resolved, doltliteLibrary)) &&
-      existsSync(path.join(resolved, "sqlite3.h"))
-    ) {
+    if (hasDoltliteBuildArtifacts(resolved)) {
       return resolved;
     }
   }
+
   throw new Error(
     `doltlite build not found. Build doltlite first or set T3CODE_DOLTLITE_BUILD_DIR. Expected ${doltliteLibrary} and sqlite3.h.`,
+  );
+}
+
+function hasDoltliteBuildArtifacts(buildDir) {
+  return (
+    existsSync(path.join(buildDir, doltliteLibrary)) && existsSync(path.join(buildDir, "sqlite3.h"))
   );
 }
 
