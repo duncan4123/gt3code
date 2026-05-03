@@ -22,6 +22,11 @@ function ChunkView() {
   if (loading) return <p className="text-muted-foreground animate-pulse">Loading chunks...</p>;
 
   const sourceLabel = chunks[0]?.label || dbHash;
+  const displayTitle = (chunk: Chunk, index: number) => {
+    const title = chunk.title?.trim();
+    if (title && title.toLowerCase() !== "untitled") return title;
+    return `${sourceLabel} #${index + 1}`;
+  };
 
   // Compute stats
   const totalChunks = chunks.length;
@@ -107,7 +112,7 @@ function ChunkView() {
             <Card>
               <CollapsibleTrigger className="w-full">
                 <CardHeader className="flex flex-row items-center justify-between py-3 cursor-pointer hover:bg-accent/50 transition-colors">
-                  <span className="text-sm font-medium text-left flex-1 truncate">{chunk.title || "(untitled)"}</span>
+                  <span className="text-sm font-medium text-left flex-1 truncate">{displayTitle(chunk, i)}</span>
                   <div className="flex items-center gap-2">
                     <Badge variant={chunk.content_type === "code" ? "default" : "secondary"} className="text-[10px]">
                       {chunk.content_type}
