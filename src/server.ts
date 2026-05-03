@@ -232,6 +232,27 @@ function getStore(): ContentStore {
   return _store;
 }
 
+// Named persistent stores (keyed by database name).
+const _namedStores = new Map<string, ContentStore>();
+
+function resolveStore(database?: string): ContentStore {
+  if (!database) return getStore();
+  const key = database.toLowerCase();
+  let store = _namedStores.get(key);
+  if (!store) {
+    store = ContentStore.openNamed(key);
+    _namedStores.set(key, store);
+  }
+  return store;
+}
+
+type FileMetadata = {
+  path: string;
+  size: number;
+  mtime: string;
+  birth?: string;
+};
+
 // ─────────────────────────────────────────────────────────
 // Session stats — track context consumption per tool
 // ─────────────────────────────────────────────────────────
@@ -3162,7 +3183,16 @@ function formatDoltBranches(store: ContentStore): string {
   const lines = ["## Branches\n"];
   for (const branch of branches) {
     const currentValue = currentColumn ? branch[currentColumn as keyof DoltBranchRow] : undefined;
+    const isCurrent = currentValue === 1 || currentValue === "1" || currentValue === true;
+    const marker = isCurrent ? " **(active)**" : "";
+    const hash = branch.hash ? ` — ${branch.hash.slice(0, 12)}` : "";
+    lines.push(`- \`${branch.name}\`${marker}${hash}`);
+  }
 
+  return lines.join("\n");
+}
+
+server.registerTool(
   "ctx_runtime",
   {
     title: "Show Runtime Build Info",
