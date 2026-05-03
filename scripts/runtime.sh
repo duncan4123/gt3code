@@ -1,1 +1,0 @@
-/data/projects/gascity/examples/dolt/scripts/runtime.sh
