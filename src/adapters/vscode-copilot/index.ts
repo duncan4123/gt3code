@@ -1,70 +1,31 @@
 /**
  * adapters/vscode-copilot — VS Code Copilot platform adapter.
  *
- * Implements HookAdapter for VS Code Copilot's JSON stdin/stdout hook paradigm.
- *
- * VS Code Copilot hook specifics:
- *   - I/O: JSON on stdin, JSON on stdout (same paradigm as Claude Code)
- *   - Hook names: PreToolUse, PostToolUse, PreCompact, SessionStart (PascalCase)
- *   - Additional hooks: Stop, SubagentStart, SubagentStop (unique to VS Code)
- *   - Arg modification: `updatedInput` in hookSpecificOutput wrapper (NOT flat)
- *   - Blocking: `permissionDecision: "deny"` (same as Claude Code)
- *   - Output modification: `additionalContext` in hookSpecificOutput,
- *     `decision: "block"` + reason
- *   - Tool input fields: tool_name, tool_input (snake_case, same as Claude Code)
- *   - But tool input PROPERTY names are camelCase (filePath not file_path)
- *   - Session ID: sessionId (camelCase, NOT session_id)
- *   - MCP tool prefix: f1e_ (not mcp__server__tool)
- *   - CRITICAL: matchers are parsed but IGNORED (all hooks fire on all tools)
- *   - Config: .github/hooks/*.json (primary), also reads .claude/settings.json
- *   - Env detection: VSCODE_PID, TERM_PROGRAM=vscode
- *   - Session dir: ~/.vscode/context-mode/sessions/ (fallback)
- *   - Preview status — API may change
+ * Extends CopilotBaseAdapter with VS Code-specific logic:
+ *   - extractSessionId: VSCODE_PID fallback
+ *   - getProjectDir: CLAUDE_PROJECT_DIR
+ *   - getSessionDir: .github/ detection with ~/.vscode/ fallback
+ *   - checkPluginRegistration: reads .vscode/mcp.json
+ *   - getInstalledVersion: scans VS Code extensions dir
+ *   - validateHooks: preview status + matcher warnings
  */
 
-import { createHash } from "node:crypto";
 import {
   readFileSync,
-  writeFileSync,
   mkdirSync,
-  copyFileSync,
   accessSync,
   existsSync,
-  chmodSync,
   constants,
 } from "node:fs";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 
+import { CopilotBaseAdapter } from "../copilot-base.js";
+import type { CopilotHookInput, CopilotHookModule } from "../copilot-base.js";
+
 import type {
-  HookAdapter,
-  HookParadigm,
-  PlatformCapabilities,
   DiagnosticResult,
-  PreToolUseEvent,
-  PostToolUseEvent,
-  PreCompactEvent,
-  SessionStartEvent,
-  PreToolUseResponse,
-  PostToolUseResponse,
-  PreCompactResponse,
-  SessionStartResponse,
-  HookRegistration,
 } from "../types.js";
-
-// ─────────────────────────────────────────────────────────
-// VS Code Copilot raw input types
-// ─────────────────────────────────────────────────────────
-
-interface VSCodeCopilotHookInput {
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  tool_output?: string;
-  is_error?: boolean;
-  /** VS Code Copilot uses camelCase sessionId (NOT session_id). */
-  sessionId?: string;
-  source?: string;
-}
 
 // ─────────────────────────────────────────────────────────
 // Hook constants (re-exported from hooks.ts)
@@ -74,165 +35,39 @@ import {
   HOOK_TYPES as VSCODE_HOOK_NAMES,
   HOOK_SCRIPTS as VSCODE_HOOK_SCRIPTS,
   buildHookCommand as buildVSCodeHookCommand,
-  type HookType as VSCodeHookType,
 } from "./hooks.js";
 
 // ─────────────────────────────────────────────────────────
 // Adapter implementation
 // ─────────────────────────────────────────────────────────
 
-export class VSCodeCopilotAdapter implements HookAdapter {
-  readonly name = "VS Code Copilot";
-  readonly paradigm: HookParadigm = "json-stdio";
+export class VSCodeCopilotAdapter extends CopilotBaseAdapter {
+  constructor() {
+    // sessionDirSegments unused — vscode-copilot overrides getSessionDir()
+    // with .github directory detection fallback logic
+    super([".vscode"]);
+  }
 
-  readonly capabilities: PlatformCapabilities = {
-    preToolUse: true,
-    postToolUse: true,
-    preCompact: true,
-    sessionStart: true,
-    canModifyArgs: true,
-    canModifyOutput: true,
-    canInjectSessionContext: true,
+  readonly name = "VS Code Copilot";
+
+  protected readonly hookModule: CopilotHookModule = {
+    HOOK_TYPES: VSCODE_HOOK_NAMES,
+    HOOK_SCRIPTS: VSCODE_HOOK_SCRIPTS,
+    buildHookCommand: buildVSCodeHookCommand,
   };
 
-  // ── Input parsing ──────────────────────────────────────
+  protected readonly hookSubdir = "vscode-copilot";
 
-  parsePreToolUseInput(raw: unknown): PreToolUseEvent {
-    const input = raw as VSCodeCopilotHookInput;
-    return {
-      toolName: input.tool_name ?? "",
-      toolInput: input.tool_input ?? {},
-      sessionId: this.extractSessionId(input),
-      projectDir: process.env.CLAUDE_PROJECT_DIR || process.cwd(),
-      raw,
-    };
+  // ── Platform-specific overrides ────────────────────────
+
+  protected extractSessionId(input: CopilotHookInput): string {
+    if (input.sessionId) return input.sessionId;
+    if (process.env.VSCODE_PID) return `vscode-${process.env.VSCODE_PID}`;
+    return `pid-${process.ppid}`;
   }
 
-  parsePostToolUseInput(raw: unknown): PostToolUseEvent {
-    const input = raw as VSCodeCopilotHookInput;
-    return {
-      toolName: input.tool_name ?? "",
-      toolInput: input.tool_input ?? {},
-      toolOutput: input.tool_output,
-      isError: input.is_error,
-      sessionId: this.extractSessionId(input),
-      projectDir: process.env.CLAUDE_PROJECT_DIR || process.cwd(),
-      raw,
-    };
-  }
-
-  parsePreCompactInput(raw: unknown): PreCompactEvent {
-    const input = raw as VSCodeCopilotHookInput;
-    return {
-      sessionId: this.extractSessionId(input),
-      projectDir: process.env.CLAUDE_PROJECT_DIR || process.cwd(),
-      raw,
-    };
-  }
-
-  parseSessionStartInput(raw: unknown): SessionStartEvent {
-    const input = raw as VSCodeCopilotHookInput;
-    const rawSource = input.source ?? "startup";
-
-    let source: SessionStartEvent["source"];
-    switch (rawSource) {
-      case "compact":
-        source = "compact";
-        break;
-      case "resume":
-        source = "resume";
-        break;
-      case "clear":
-        source = "clear";
-        break;
-      default:
-        source = "startup";
-    }
-
-    return {
-      sessionId: this.extractSessionId(input),
-      source,
-      projectDir: process.env.CLAUDE_PROJECT_DIR || process.cwd(),
-      raw,
-    };
-  }
-
-  // ── Response formatting ────────────────────────────────
-
-  formatPreToolUseResponse(response: PreToolUseResponse): unknown {
-    if (response.decision === "deny") {
-      return {
-        permissionDecision: "deny",
-        reason: response.reason ?? "Blocked by context-mode hook",
-      };
-    }
-    if (response.decision === "modify" && response.updatedInput) {
-      // VS Code Copilot: updatedInput is wrapped in hookSpecificOutput
-      return {
-        hookSpecificOutput: {
-          hookEventName: VSCODE_HOOK_NAMES.PRE_TOOL_USE,
-          updatedInput: response.updatedInput,
-        },
-      };
-    }
-    if (response.decision === "context" && response.additionalContext) {
-      // VS Code Copilot: inject additionalContext via hookSpecificOutput
-      return {
-        hookSpecificOutput: {
-          hookEventName: VSCODE_HOOK_NAMES.PRE_TOOL_USE,
-          additionalContext: response.additionalContext,
-        },
-      };
-    }
-    if (response.decision === "ask") {
-      // VS Code Copilot: use deny to force user attention (no native "ask")
-      return {
-        permissionDecision: "deny",
-        reason: response.reason ?? "Action requires user confirmation (security policy)",
-      };
-    }
-    // "allow" — return undefined for passthrough
-    return undefined;
-  }
-
-  formatPostToolUseResponse(response: PostToolUseResponse): unknown {
-    if (response.updatedOutput) {
-      // VS Code Copilot: decision "block" + reason for output replacement
-      return {
-        hookSpecificOutput: {
-          hookEventName: VSCODE_HOOK_NAMES.POST_TOOL_USE,
-          decision: "block",
-          reason: response.updatedOutput,
-        },
-      };
-    }
-    if (response.additionalContext) {
-      return {
-        hookSpecificOutput: {
-          hookEventName: VSCODE_HOOK_NAMES.POST_TOOL_USE,
-          additionalContext: response.additionalContext,
-        },
-      };
-    }
-    return undefined;
-  }
-
-  formatPreCompactResponse(response: PreCompactResponse): unknown {
-    // VS Code Copilot: stdout content on exit 0 is injected as context
-    return response.context ?? "";
-  }
-
-  formatSessionStartResponse(response: SessionStartResponse): unknown {
-    // VS Code Copilot: stdout content is injected as additional context
-    return response.context ?? "";
-  }
-
-  // ── Configuration ──────────────────────────────────────
-
-  getSettingsPath(): string {
-    // VS Code Copilot primarily uses .github/hooks/*.json
-    // but also reads .claude/settings.json
-    return resolve(".github", "hooks", "context-mode.json");
+  protected getProjectDir(): string {
+    return process.env.CLAUDE_PROJECT_DIR || process.cwd();
   }
 
   getSessionDir(): string {
@@ -251,97 +86,16 @@ export class VSCodeCopilotAdapter implements HookAdapter {
     return dir;
   }
 
-  getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
-    return join(this.getSessionDir(), `${hash}.db`);
+  /**
+   * VS Code Copilot honors .github/copilot-instructions.md per project.
+   * Always returned absolute, resolved against `projectDir` (or `cwd`).
+   */
+  getConfigDir(projectDir?: string): string {
+    return resolve(projectDir ?? process.cwd(), ".github");
   }
 
-  getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
-    return join(this.getSessionDir(), `${hash}-events.md`);
-  }
-
-  generateHookConfig(pluginRoot: string): HookRegistration {
-    return {
-      [VSCODE_HOOK_NAMES.PRE_TOOL_USE]: [
-        {
-          matcher: "",
-          hooks: [
-            {
-              type: "command",
-              command: buildVSCodeHookCommand(VSCODE_HOOK_NAMES.PRE_TOOL_USE, pluginRoot),
-            },
-          ],
-        },
-      ],
-      [VSCODE_HOOK_NAMES.POST_TOOL_USE]: [
-        {
-          matcher: "",
-          hooks: [
-            {
-              type: "command",
-              command: buildVSCodeHookCommand(VSCODE_HOOK_NAMES.POST_TOOL_USE, pluginRoot),
-            },
-          ],
-        },
-      ],
-      [VSCODE_HOOK_NAMES.PRE_COMPACT]: [
-        {
-          matcher: "",
-          hooks: [
-            {
-              type: "command",
-              command: buildVSCodeHookCommand(VSCODE_HOOK_NAMES.PRE_COMPACT, pluginRoot),
-            },
-          ],
-        },
-      ],
-      [VSCODE_HOOK_NAMES.SESSION_START]: [
-        {
-          matcher: "",
-          hooks: [
-            {
-              type: "command",
-              command: buildVSCodeHookCommand(VSCODE_HOOK_NAMES.SESSION_START, pluginRoot),
-            },
-          ],
-        },
-      ],
-    };
-  }
-
-  readSettings(): Record<string, unknown> | null {
-    // Try .github/hooks/context-mode.json first, then .claude/settings.json
-    const paths = [
-      this.getSettingsPath(),
-      resolve(".claude", "settings.json"),
-    ];
-    for (const configPath of paths) {
-      try {
-        const raw = readFileSync(configPath, "utf-8");
-        return JSON.parse(raw) as Record<string, unknown>;
-      } catch {
-        continue;
-      }
-    }
-    return null;
-  }
-
-  writeSettings(settings: Record<string, unknown>): void {
-    const configPath = this.getSettingsPath();
-    const dir = resolve(".github", "hooks");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      configPath,
-      JSON.stringify(settings, null, 2) + "\n",
-      "utf-8",
-    );
+  getInstructionFiles(): string[] {
+    return ["copilot-instructions.md"];
   }
 
   // ── Diagnostics (doctor) ─────────────────────────────────
@@ -495,96 +249,5 @@ export class VSCodeCopilotAdapter implements HookAdapter {
       }
     }
     return "not installed";
-  }
-
-  // ── Upgrade ────────────────────────────────────────────
-
-  configureAllHooks(pluginRoot: string): string[] {
-    const changes: string[] = [];
-    const hookConfig: Record<string, unknown> = { hooks: {} };
-    const hooks = hookConfig.hooks as Record<string, unknown>;
-
-    const hookTypes = [
-      VSCODE_HOOK_NAMES.PRE_TOOL_USE,
-      VSCODE_HOOK_NAMES.POST_TOOL_USE,
-      VSCODE_HOOK_NAMES.PRE_COMPACT,
-      VSCODE_HOOK_NAMES.SESSION_START,
-    ];
-
-    for (const hookType of hookTypes) {
-      const script = VSCODE_HOOK_SCRIPTS[hookType];
-      if (!script) continue;
-
-      hooks[hookType] = [
-        {
-          matcher: "",
-          hooks: [
-            {
-              type: "command",
-              command: buildVSCodeHookCommand(hookType, pluginRoot),
-            },
-          ],
-        },
-      ];
-      changes.push(`Configured ${hookType} hook`);
-    }
-
-    // Write to .github/hooks/context-mode.json
-    const outputDir = resolve(".github", "hooks");
-    mkdirSync(outputDir, { recursive: true });
-    const outputPath = resolve(outputDir, "context-mode.json");
-    writeFileSync(
-      outputPath,
-      JSON.stringify(hookConfig, null, 2) + "\n",
-      "utf-8",
-    );
-    changes.push(`Wrote hook config to ${outputPath}`);
-
-    return changes;
-  }
-
-  backupSettings(): string | null {
-    const settingsPath = this.getSettingsPath();
-    try {
-      accessSync(settingsPath, constants.R_OK);
-      const backupPath = settingsPath + ".bak";
-      copyFileSync(settingsPath, backupPath);
-      return backupPath;
-    } catch {
-      return null;
-    }
-  }
-
-  setHookPermissions(pluginRoot: string): string[] {
-    const set: string[] = [];
-    const hooksDir = join(pluginRoot, "hooks", "vscode-copilot");
-    for (const scriptName of Object.values(VSCODE_HOOK_SCRIPTS)) {
-      const scriptPath = resolve(hooksDir, scriptName);
-      try {
-        accessSync(scriptPath, constants.R_OK);
-        chmodSync(scriptPath, 0o755);
-        set.push(scriptPath);
-      } catch {
-        /* skip missing scripts */
-      }
-    }
-    return set;
-  }
-
-  updatePluginRegistry(_pluginRoot: string, _version: string): void {
-    // VS Code manages extensions through its own marketplace/extension system.
-    // No manual registry update needed.
-  }
-
-  // ── Internal helpers ───────────────────────────────────
-
-  /**
-   * Extract session ID from VS Code Copilot hook input.
-   * VS Code Copilot uses camelCase sessionId (NOT session_id).
-   */
-  private extractSessionId(input: VSCodeCopilotHookInput): string {
-    if (input.sessionId) return input.sessionId;
-    if (process.env.VSCODE_PID) return `vscode-${process.env.VSCODE_PID}`;
-    return `pid-${process.ppid}`;
   }
 }

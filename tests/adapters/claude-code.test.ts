@@ -6,6 +6,11 @@ import { join, resolve } from "node:path";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { ClaudeCodeAdapter } from "../../src/adapters/claude-code/index.js";
 import { fakeHome, realHome } from "../setup-home";
+import {
+  PRE_TOOL_USE_MATCHERS,
+  POST_TOOL_USE_MATCHERS,
+  POST_TOOL_USE_MATCHER_PATTERN,
+} from "../../src/adapters/claude-code/hooks.js";
 
 describe("ClaudeCodeAdapter", () => {
   let adapter: ClaudeCodeAdapter;
@@ -550,10 +555,90 @@ describe("ClaudeCodeAdapter", () => {
       const settings = JSON.parse(readFileSync(join(tempDir, "settings.json"), "utf-8"));
       const sessionHooks = settings.hooks.SessionStart;
       expect(sessionHooks).toHaveLength(1);
-      // The fresh entry should point to the new pluginRoot (path may use \ on Windows)
+      // buildNodeCommand() normalizes all paths to forward slashes (#369, #372),
+      // so compare with forward-slash pluginRoot on Windows too.
       const command = sessionHooks[0].hooks[0].command;
-      expect(command).toContain(pluginRoot);
+      expect(command).toContain(pluginRoot.replace(/\\/g, "/"));
       expect(command).toContain("sessionstart.mjs");
+    });
+
+    it("removes existing valid context-mode hooks from settings.json when plugin hooks.json covers all required hooks", () => {
+      // Plugin hooks.json covers all required hooks (pluginRoot already has scripts from beforeEach)
+      writeFileSync(
+        join(pluginRoot, "hooks", "hooks.json"),
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs" }] }],
+            SessionStart: [{ matcher: "", hooks: [{ type: "command", command: "node ${CLAUDE_PLUGIN_ROOT}/hooks/sessionstart.mjs" }] }],
+          },
+        }),
+      );
+
+      // settings.json has VALID (non-stale) context-mode hooks — paths exist, so they won't be
+      // removed by the stale-path filter. But they duplicate what hooks.json already registers,
+      // causing two concurrent hook processes for every tool call (the root cause of #NNN).
+      writeFileSync(
+        join(tempDir, "settings.json"),
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [{
+              matcher: "Bash|WebFetch|Read|Grep|Agent",
+              hooks: [{ type: "command", command: `node "${join(pluginRoot, "hooks", "pretooluse.mjs")}"` }],
+            }],
+            SessionStart: [{
+              matcher: "",
+              hooks: [{ type: "command", command: `node "${join(pluginRoot, "hooks", "sessionstart.mjs")}"` }],
+            }],
+          },
+        }),
+      );
+
+      adapter.configureAllHooks(pluginRoot);
+
+      // Valid duplicate hooks should be removed — hooks.json is the source of truth
+      const settings = JSON.parse(readFileSync(join(tempDir, "settings.json"), "utf-8"));
+      expect(settings.hooks?.PreToolUse ?? []).toHaveLength(0);
+      expect(settings.hooks?.SessionStart ?? []).toHaveLength(0);
+    });
+  });
+
+  // ── Hook matchers (#229, #241) ────────────────────────
+
+  describe("hook matchers (#229, #241)", () => {
+    it("PRE_TOOL_USE_MATCHERS does NOT contain 'Task' (#241)", () => {
+      expect(PRE_TOOL_USE_MATCHERS).not.toContain("Task");
+    });
+
+    it("PRE_TOOL_USE_MATCHERS contains 'Agent' for subagent routing", () => {
+      expect(PRE_TOOL_USE_MATCHERS).toContain("Agent");
+    });
+
+    it("POST_TOOL_USE_MATCHERS contains all tools that extractEvents handles", () => {
+      const required = [
+        "Bash", "Read", "Write", "Edit", "NotebookEdit", "Glob", "Grep",
+        "TodoWrite", "TaskCreate", "TaskUpdate",
+        "EnterPlanMode", "ExitPlanMode",
+        "Skill", "Agent", "AskUserQuestion", "EnterWorktree",
+        "mcp__",
+      ];
+      for (const tool of required) {
+        expect(POST_TOOL_USE_MATCHERS).toContain(tool);
+      }
+    });
+
+    it("POST_TOOL_USE_MATCHERS does NOT contain tools that produce zero events (#229)", () => {
+      const excluded = [
+        "TaskGet", "TaskList", "TaskStop", "TaskOutput",
+        "ExitWorktree", "WebFetch", "WebSearch",
+        "RemoteTrigger", "CronCreate", "CronDelete", "CronList",
+      ];
+      for (const tool of excluded) {
+        expect(POST_TOOL_USE_MATCHERS).not.toContain(tool);
+      }
+    });
+
+    it("POST_TOOL_USE_MATCHER_PATTERN is pipe-separated string", () => {
+      expect(POST_TOOL_USE_MATCHER_PATTERN).toBe(POST_TOOL_USE_MATCHERS.join("|"));
     });
   });
 

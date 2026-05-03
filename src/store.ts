@@ -13,6 +13,7 @@ import { loadDatabase, applyWALPragmas, closeDB, withRetry } from "./db-base.js"
 import type { PreparedStatement } from "./db-base.js";
 import { readFileSync, readdirSync, unlinkSync, existsSync, statSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { tmpdir, homedir } from "node:os";
 import { join, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -279,6 +280,32 @@ function findAllPositions(text: string, term: string): number[] {
   return positions;
 }
 
+function countAdjacentPairs(
+  positionLists: number[][],
+  terms: string[],
+  gap: number = 30,
+): number {
+  if (positionLists.length < 2 || terms.length < 2) return 0;
+  let total = 0;
+  const pairs = Math.min(positionLists.length, terms.length) - 1;
+  for (let i = 0; i < pairs; i++) {
+    const left = positionLists[i];
+    const right = positionLists[i + 1];
+    const leftLen = terms[i].length;
+    let j = 0;
+    for (const p of left) {
+      const minStart = p + leftLen;
+      const maxStart = minStart + gap;
+      while (j < right.length && right[j] < minStart) j++;
+      if (j < right.length && right[j] <= maxStart) {
+        total++;
+        j++;
+      }
+    }
+  }
+  return total;
+}
+
 /**
  * Find minimum span (window) covering at least one position from each list.
  * Uses a sweep-line approach: advance the pointer at the current minimum.
@@ -426,7 +453,9 @@ export class ContentStore {
         label TEXT NOT NULL,
         chunk_count INTEGER NOT NULL DEFAULT 0,
         code_chunk_count INTEGER NOT NULL DEFAULT 0,
-        indexed_at TEXT NOT NULL DEFAULT ''
+        indexed_at TEXT NOT NULL DEFAULT '',
+        file_path TEXT,
+        content_hash TEXT
       );
 
       CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
@@ -586,6 +615,10 @@ export class ContentStore {
         created_at TEXT NOT NULL DEFAULT ''
       );
     `);
+
+    // Safe for existing stores created before file-backed stale detection.
+    try { this.#db.exec("ALTER TABLE sources ADD COLUMN file_path TEXT"); } catch { /* already exists */ }
+    try { this.#db.exec("ALTER TABLE sources ADD COLUMN content_hash TEXT"); } catch { /* already exists */ }
   }
 
   #prepareStatements(): void {
@@ -789,7 +822,7 @@ export class ContentStore {
       "SELECT content FROM chunks WHERE source_id = ?",
     );
     this.#stmtSourceMeta = this.#db.prepare(
-      "SELECT label, chunk_count, code_chunk_count, indexed_at FROM sources WHERE label = ?",
+      "SELECT label, chunk_count, code_chunk_count, indexed_at, file_path, content_hash FROM sources WHERE label = ?",
     );
     this.#stmtStats = this.#db.prepare(`
       SELECT
@@ -808,15 +841,21 @@ export class ContentStore {
   }): IndexResult {
     const { content, path, source } = options;
 
-    if (!content && !path) {
+    // Treat empty string as "no content" so clients that materialize optional
+    // string fields as "" still fall back to reading the provided path.
+    const hasContent = typeof content === "string" && content.length > 0;
+
+    if (!hasContent && !path) {
       throw new Error("Either content or path must be provided");
     }
 
-    const text = content ?? readFileSync(path!, "utf-8");
+    const text = hasContent ? content! : readFileSync(path!, "utf-8");
     const label = source ?? path ?? "untitled";
     const chunks = this.#chunkMarkdown(text);
+    const filePath = path ?? undefined;
+    const contentHash = filePath ? createHash("sha256").update(text).digest("hex") : undefined;
 
-    return withRetry(() => this.#insertChunks(chunks, label, text));
+    return withRetry(() => this.#insertChunks(chunks, label, text, filePath, contentHash));
   }
 
   // ── Index Plain Text ──
@@ -887,7 +926,7 @@ export class ContentStore {
    * Reindex writes use fresh prepared statements because reusing cached
    * mutation statements can corrupt porter FTS state on doltlite.
    */
-  #insertChunks(chunks: Chunk[], label: string, text: string): IndexResult {
+  #insertChunks(chunks: Chunk[], label: string, text: string, filePath?: string, contentHash?: string): IndexResult {
     const codeChunks = chunks.filter((c) => c.hasCode).length;
 
     const deleteTransaction = this.#db.transaction(() => {
@@ -905,14 +944,14 @@ export class ContentStore {
     const insertTransaction = this.#db.transaction(() => {
       if (chunks.length === 0) {
         const info = this.#db.prepare(
-          "INSERT INTO sources (label, chunk_count, code_chunk_count, indexed_at) VALUES (?, 0, 0, datetime('now'))",
-        ).run(label);
+          "INSERT INTO sources (label, chunk_count, code_chunk_count, file_path, content_hash, indexed_at) VALUES (?, 0, 0, ?, ?, datetime('now'))",
+        ).run(label, filePath ?? null, contentHash ?? null);
         return Number(info.lastInsertRowid);
       }
 
       const info = this.#db.prepare(
-        "INSERT INTO sources (label, chunk_count, code_chunk_count, indexed_at) VALUES (?, ?, ?, datetime('now'))",
-      ).run(label, chunks.length, codeChunks);
+        "INSERT INTO sources (label, chunk_count, code_chunk_count, file_path, content_hash, indexed_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+      ).run(label, chunks.length, codeChunks, filePath ?? null, contentHash ?? null);
       const sourceId = Number(info.lastInsertRowid);
 
       for (const [index, chunk] of chunks.entries()) {
@@ -1110,27 +1149,36 @@ export class ContentStore {
     results: SearchResult[],
     query: string,
   ): SearchResult[] {
-    const terms = query
+    const allTerms = query
       .toLowerCase()
       .split(/\s+/)
       .filter((w) => w.length >= 2);
-
-    // Single-term queries: no reranking needed
-    if (terms.length < 2) return results;
+    const filtered = allTerms.filter((w) => !STOPWORDS.has(w));
+    const terms = filtered.length > 0 ? filtered : allTerms;
 
     return results
       .map((r) => {
-        const content = r.content.toLowerCase();
-        const positions = terms.map((t) => findAllPositions(content, t));
+        const titleLower = r.title.toLowerCase();
+        const titleHits = terms.filter((t) => titleLower.includes(t)).length;
+        const titleWeight = r.contentType === "code" ? 0.6 : 0.3;
+        const titleBoost = titleHits > 0 ? titleWeight * (titleHits / terms.length) : 0;
 
-        // If any term is missing from content, no proximity boost
-        if (positions.some((p) => p.length === 0)) {
-          return { result: r, boost: 0 };
+        let proximityBoost = 0;
+        let phraseBoost = 0;
+        if (terms.length >= 2) {
+          const content = r.content.toLowerCase();
+          const positions = terms.map((t) => findAllPositions(content, t));
+
+          if (!positions.some((p) => p.length === 0)) {
+            const minSpan = findMinSpan(positions);
+            proximityBoost = 1 / (1 + minSpan / Math.max(content.length, 1));
+
+            const adjacentPairs = countAdjacentPairs(positions, terms);
+            phraseBoost = 0.5 * Math.min(1, adjacentPairs / 4);
+          }
         }
 
-        const minSpan = findMinSpan(positions);
-        const boost = 1 / (1 + minSpan / Math.max(content.length, 1));
-        return { result: r, boost };
+        return { result: r, boost: titleBoost + proximityBoost + phraseBoost };
       })
       .sort((a, b) => b.boost - a.boost || a.result.rank - b.result.rank)
       .map(({ result }) => result);
@@ -1145,6 +1193,8 @@ export class ContentStore {
     contentType?: "code" | "prose",
     sourceMatchMode: SourceMatchMode = "like",
   ): SearchResult[] {
+    this.#refreshStaleSources();
+
     // Step 1: RRF fusion (porter OR + trigram OR → merge)
     const rrfResults = this.#rrfSearch(query, limit, source, contentType, sourceMatchMode);
     if (rrfResults.length > 0) {
@@ -1173,12 +1223,47 @@ export class ContentStore {
     return [];
   }
 
+  /** Number of sources auto-refreshed in the last searchWithFallback call. */
+  lastRefreshCount = 0;
+
+  #refreshStaleSources(): void {
+    this.lastRefreshCount = 0;
+    const sources = this.#db.prepare(
+      "SELECT label, file_path, content_hash, indexed_at FROM sources WHERE file_path IS NOT NULL",
+    ).all() as Array<{ label: string; file_path: string; content_hash: string; indexed_at: string }>;
+
+    for (const src of sources) {
+      try {
+        if (!existsSync(src.file_path)) continue;
+        const mtime = statSync(src.file_path).mtime;
+        const indexedAt = new Date(src.indexed_at + "Z");
+        if (mtime <= indexedAt) continue;
+
+        const newContent = readFileSync(src.file_path, "utf-8");
+        const newHash = createHash("sha256").update(newContent).digest("hex");
+        if (newHash === src.content_hash) continue;
+
+        this.index({ path: src.file_path, source: src.label });
+        this.lastRefreshCount++;
+      } catch {
+        // Search must keep working even if a tracked file cannot be refreshed.
+      }
+    }
+  }
+
   // ── Sources ──
 
-  getSourceMeta(label: string): { label: string; chunkCount: number; codeChunkCount: number; indexedAt: string } | null {
-    const row = this.#stmtSourceMeta.get(label) as { label: string; chunk_count: number; code_chunk_count: number; indexed_at: string } | undefined;
+  getSourceMeta(label: string): { label: string; chunkCount: number; codeChunkCount: number; indexedAt: string; filePath: string | null; contentHash: string | null } | null {
+    const row = this.#stmtSourceMeta.get(label) as { label: string; chunk_count: number; code_chunk_count: number; indexed_at: string; file_path: string | null; content_hash: string | null } | undefined;
     if (!row) return null;
-    return { label: row.label, chunkCount: row.chunk_count, codeChunkCount: row.code_chunk_count, indexedAt: row.indexed_at };
+    return {
+      label: row.label,
+      chunkCount: row.chunk_count,
+      codeChunkCount: row.code_chunk_count,
+      indexedAt: row.indexed_at,
+      filePath: row.file_path ?? null,
+      contentHash: row.content_hash ?? null,
+    };
   }
 
   listSources(): Array<{ label: string; chunkCount: number }> {

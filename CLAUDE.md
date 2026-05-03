@@ -1,45 +1,29 @@
-# context-mode-doltlite
+# context-mode
 
-## Project Docs (docs/pipeline.sqlite)
-
-`docs/pipeline.sqlite` is a doltlite database tracking project state. Query at session start:
-
-```bash
-DL=/data/projects/doltlite/doltlite
-DB=docs/pipeline.sqlite
-$DL $DB "SELECT key, value FROM config;"
-$DL $DB "SELECT name, status FROM workarounds WHERE status = 'active';"
-$DL $DB "SELECT id, title, status FROM plans;"
-```
-
-After updates: `$DL $DB "SELECT dolt_commit('-A', '-m', 'what changed');"`
-See `/data/projects/doltlite/CLAUDE.md` for full docs db workflow.
-
-## Context-Mode Usage
-
-Raw tool output floods your context window. Use context-mode-doltlite MCP tools to keep raw data in the sandbox.
+Raw tool output floods context window. Use context-mode MCP tools to keep raw data in sandbox.
 
 ## Think in Code — MANDATORY
 
-When you need to analyze, count, filter, compare, search, parse, transform, or process data: **write code** that does the work via `execute(language, code)` and `console.log()` only the answer. Do NOT read raw data into context to process mentally. Your role is to PROGRAM the analysis, not to COMPUTE it. Write robust, pure JavaScript — no npm dependencies, only Node.js built-ins (`fs`, `path`, `child_process`). Always use `try/catch`, handle `null`/`undefined`, and ensure compatibility with both Node.js and Bun. One script replaces ten tool calls and saves 100x context.
+Analyze/count/filter/compare/search/parse/transform data: **write code** via `ctx_execute(language, code)`, `console.log()` only the answer. Do NOT read raw data into context. PROGRAM the analysis, not COMPUTE it. Pure JavaScript — Node.js built-ins only (`fs`, `path`, `child_process`). `try/catch`, handle `null`/`undefined`. One script replaces ten tool calls.
 
 ## Tool Selection
 
-1. **GATHER**: `batch_execute(commands, queries)` — Primary tool for research. Runs all commands, auto-indexes, and searches. ONE call replaces many individual steps.
-2. **FOLLOW-UP**: `search(queries: ["q1", "q2", ...])` — Use for all follow-up questions. ONE call, many queries.
-3. **PROCESSING**: `execute(language, code)` or `execute_file(path, language, code)` — Use for API calls, log analysis, and data processing.
-4. **WEB**: `fetch_and_index(url)` then `search(queries)` — Fetch, index, then query. Never dump raw HTML.
+1. **GATHER**: `ctx_batch_execute(commands, queries)` — runs all commands, auto-indexes, searches. ONE call replaces many steps.
+2. **FOLLOW-UP**: `ctx_search(queries: ["q1", "q2", ...])` — all follow-up questions, ONE call.
+3. **PROCESSING**: `ctx_execute(language, code)` | `ctx_execute_file(path, language, code)` — sandbox, only stdout enters context.
+4. **WEB**: `ctx_fetch_and_index(url)` then `ctx_search(queries)` — never dump raw HTML.
 
 ## Rules
 
-- DO NOT use Bash for commands producing >20 lines of output — use `execute` or `batch_execute`.
-- DO NOT use Read for analysis — use `execute_file`. Read IS correct for files you intend to Edit.
-- DO NOT use WebFetch — use `fetch_and_index` instead.
-- DO NOT use curl/wget in Bash — use `execute` or `fetch_and_index`.
-- Bash is ONLY for git, mkdir, rm, mv, navigation, and short commands.
+- DO NOT use Bash for >20 lines output — use `ctx_execute` or `ctx_batch_execute`.
+- DO NOT use Read for analysis — use `ctx_execute_file`. Read IS correct for Edit.
+- DO NOT use WebFetch — use `ctx_fetch_and_index`.
+- DO NOT use curl/wget in Bash — use `ctx_execute` or `ctx_fetch_and_index`.
+- Bash ONLY for git, mkdir, rm, mv, navigation, short commands.
 
 ## Output
 
-- Keep responses under 500 words.
-- Write artifacts (code, configs) to FILES — never return them as inline text.
-- Return only: file path + 1-line description.
+Terse like caveman. Technical substance exact. Only fluff die.
+Drop: articles, filler (just/really/basically), pleasantries, hedging. Fragments OK. Short synonyms. Code unchanged.
+Pattern: [thing] [action] [reason]. [next step]. Auto-expand for: security warnings, irreversible actions, user confusion.
+Write artifacts to FILES — never inline. Return: file path + 1-line description.

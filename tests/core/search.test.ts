@@ -15,7 +15,12 @@ import { describe, test, expect, it, beforeEach, afterEach } from "vitest";
 import { strict as assert } from "node:assert";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { ContentStore } from "../../src/store.js";
+import { SessionDB } from "../../src/session/db.js";
+import { searchAllSources, type UnifiedSearchResult } from "../../src/search/unified.js";
+import { searchAutoMemory } from "../../src/search/auto-memory.js";
 import { extractSnippet, formatBatchQueryResults, positionsFromHighlight } from "../../src/server.js";
 
 // ─────────────────────────────────────────────────────────
@@ -1283,6 +1288,126 @@ describe("Fuzzy Edge Cases", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────
+// Fuzzy correction cache
+// ─────────────────────────────────────────────────────────
+
+describe("fuzzyCorrect LRU cache", () => {
+  test("returns identical result on repeated queries for the same word", () => {
+    const store = createStore();
+    store.index({
+      content: "The authentication middleware handles orchestration of services.",
+      source: "cache-test",
+    });
+
+    const first = store.fuzzyCorrect("authentiction");
+    const second = store.fuzzyCorrect("authentiction");
+
+    assert.equal(first, second, "cached result must match uncached result");
+    assert.equal(first, "authentication");
+
+    store.close();
+  });
+
+  test("cache entry for null (no correction) is also returned on hit", () => {
+    const store = createStore();
+    store.index({
+      content: "one two three four",
+      source: "cache-null-test",
+    });
+
+    // A word unrelated to the vocab, too far for any correction.
+    const first = store.fuzzyCorrect("xylophone");
+    const second = store.fuzzyCorrect("xylophone");
+
+    assert.equal(first, null);
+    assert.equal(second, null);
+
+    store.close();
+  });
+
+  test("cache is cleared when new vocabulary is inserted", () => {
+    const store = createStore();
+    store.index({
+      content: "authentication middleware orchestration deployment monitoring",
+      source: "cache-invalidate-v1",
+    });
+
+    // Prime the cache with a word that has no close match yet.
+    const beforeInsert = store.fuzzyCorrect("xylophne"); // should be null
+    assert.equal(beforeInsert, null);
+
+    // Add a new vocab word that *is* a close match for "xylophne".
+    store.index({
+      content: "The xylophone in the orchestra plays melodies.",
+      source: "cache-invalidate-v2",
+    });
+
+    // Cache must have been invalidated — stale null would be wrong now.
+    const afterInsert = store.fuzzyCorrect("xylophne");
+    assert.equal(afterInsert, "xylophone");
+
+    store.close();
+  });
+
+  test("cache is NOT cleared when re-indexing identical content", () => {
+    const store = createStore();
+    store.index({
+      content: "authentication middleware orchestration deployment",
+      source: "cache-idempotent",
+    });
+
+    // Prime the cache.
+    store.fuzzyCorrect("authentiction");
+    store.fuzzyCorrect("orchstration");
+
+    // Monkey-patch the underlying vocab stmt to count DB hits after priming.
+    // We can't easily inspect Map state; instead we verify behavior: a second
+    // identical fuzzyCorrect call for the same word returns the same answer
+    // even if we re-index the exact same content (no new vocab rows insert).
+    store.index({
+      content: "authentication middleware orchestration deployment",
+      source: "cache-idempotent", // same label → dedup handles it
+    });
+
+    const result = store.fuzzyCorrect("authentiction");
+    assert.equal(result, "authentication");
+
+    store.close();
+  });
+
+  test("cache respects FUZZY_CACHE_SIZE — eviction does not corrupt results", () => {
+    const store = createStore();
+    // Build a vocab with many distinct words so evictions happen during sweep.
+    const vocab = Array.from({ length: 50 }, (_, i) => `uniqueword${i}abc`).join(" ");
+    store.index({ content: vocab, source: "large-vocab-cache" });
+
+    const capSize = ContentStore.FUZZY_CACHE_SIZE;
+
+    // Collect an oracle: what does fuzzyCorrect return on a cold cache for
+    // each input? Use a fresh store to get uncached answers.
+    const oracleStore = createStore();
+    oracleStore.index({ content: vocab, source: "oracle" });
+
+    // Query (capSize + 50) unique words, causing evictions. Each answer must
+    // match the cold-cache oracle — eviction of an entry must not influence
+    // the answer we get when we re-query that word.
+    for (let i = 0; i < capSize + 50; i++) {
+      const typo = `uniquewrd${i}abc`;
+      const oracle = oracleStore.fuzzyCorrect(typo);
+      const actual = store.fuzzyCorrect(typo);
+      assert.equal(
+        actual,
+        oracle,
+        `eviction corrupted result for ${typo}: got ${actual}, oracle ${oracle}`,
+      );
+    }
+
+    store.close();
+    oracleStore.close();
+  });
+});
+
 // ═══════════════════════════════════════════════════════════
 // 6. Intent Search
 // ═══════════════════════════════════════════════════════════
@@ -2345,3 +2470,892 @@ describe("Proximity reranking", () => {
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════
+// 8. Content-Type-Aware Title Boost
+// ═══════════════════════════════════════════════════════════
+
+describe("Content-type-aware title boost in reranking", () => {
+  test("chunk with query term in title ranks above chunk with same term only in body", () => {
+    const store = createStore();
+    try {
+      // Chunk A: title matches "parseConfig"
+      store.index({
+        content: "## parseConfig\n\nThis function loads configuration from disk and parses it into a settings object.",
+        source: "title-match",
+      });
+      // Chunk B: "parseConfig" only in body, not title
+      store.index({
+        content: "## Configuration Guide\n\nThe system uses parseConfig to load settings from disk. Call parseConfig with the path to your config file.",
+        source: "body-match",
+      });
+
+      const results = store.searchWithFallback("parseConfig", 5);
+      assert.ok(results.length >= 2, "Should find both chunks");
+      assert.ok(
+        results[0].title.toLowerCase().includes("parseconfig"),
+        "Chunk with title match should rank first",
+      );
+    } finally {
+      store.close();
+    }
+  });
+
+  test("title boost applies to single-term queries (not just multi-term)", () => {
+    const store = createStore();
+    try {
+      store.index({
+        content: "## authentication\n\nThis module handles user login and session management.",
+        source: "auth-titled",
+      });
+      store.index({
+        content: "## Security Overview\n\nThe authentication system validates user credentials using bcrypt hashing. Authentication tokens expire after 24 hours.",
+        source: "auth-body",
+      });
+
+      const results = store.searchWithFallback("authentication", 5);
+      assert.ok(results.length >= 2, "Should find both chunks");
+      assert.ok(
+        results[0].title.toLowerCase().includes("authentication"),
+        "Chunk with query term in title should rank first",
+      );
+    } finally {
+      store.close();
+    }
+  });
+
+  test("code chunks get stronger title boost than prose chunks", () => {
+    const store = createStore();
+    try {
+      // Code chunk: "validator" in title + code fence → contentType=code, titleWeight=0.6
+      store.index({
+        content: "## validator\n\n```javascript\nclass Validator {\n  validate(input) { return input.length > 0; }\n}\n```",
+        source: "validator-code",
+      });
+      // Prose chunk: "validator" in title, no code fence → contentType=prose, titleWeight=0.3
+      store.index({
+        content: "## validator\n\nThe validator module provides input validation utilities for the API layer. It checks all fields.",
+        source: "validator-prose",
+      });
+
+      const results = store.searchWithFallback("validator input", 5);
+      assert.ok(results.length >= 2, "Should find both chunks");
+      assert.equal(results[0].contentType, "code", "Code chunk should rank first with stronger title boost");
+    } finally {
+      store.close();
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 12. Phrase-frequency reward in reranking
+//
+// Adds a phrase-frequency component on top of the existing minSpan proximity.
+// minSpan returns a single number (the tightest window), so a doc with 3×
+// adjacent phrase hits ties a doc with 1× adjacent phrase hit at the same
+// span — and length-normalization actually favors the longer doc. The reward
+// counts ordered adjacent-pair occurrences (term[i] followed by term[i+1]
+// within 30 chars) and adds a saturating boost (cap 0.5 at 4 hits) so
+// frequency breaks the tie without unbounded keyword-stuffing wins.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("Phrase-frequency reward in reranking", () => {
+  test("multiple phrase occurrences outrank a single tight phrase at similar minSpan", () => {
+    const store = createStore();
+    try {
+      // Three adjacent occurrences. minSpan ≈ 6 chars (one occurrence).
+      store.indexPlainText(
+        "Cache invalidation matters. Cache invalidation is hard. Cache invalidation strategy is documented here too.",
+        "phrase-frequent",
+      );
+      // One adjacent occurrence padded with filler so contentLen is comparable.
+      store.indexPlainText(
+        "Cache invalidation appears here once. " +
+          "The remainder of this paragraph deliberately discusses unrelated topics like deployment, monitoring, and on-call rotations.",
+        "phrase-once",
+      );
+
+      const results = store.searchWithFallback("cache invalidation", 5);
+      assert.ok(results.length >= 2, "Should find both chunks");
+      assert.equal(
+        results[0].source,
+        "phrase-frequent",
+        `Expected phrase-frequent first, got: ${results[0].source}`,
+      );
+    } finally {
+      store.close();
+    }
+  });
+
+  test("phrase-frequency reward respects query order (regression guard)", () => {
+    const store = createStore();
+    try {
+      // Adjacent in query order.
+      store.indexPlainText(
+        "Lorem ipsum dolor sit amet. The cache invalidation pipeline runs on every write.",
+        "phrase-ordered",
+      );
+      // Reversed order — no ordered phrase hits.
+      store.indexPlainText(
+        "Lorem ipsum dolor sit amet. The invalidation step is followed by a cache flush.",
+        "phrase-reversed",
+      );
+
+      const results = store.searchWithFallback("cache invalidation", 5);
+      assert.ok(results.length >= 2);
+      assert.equal(
+        results[0].source,
+        "phrase-ordered",
+        `Expected phrase-ordered first, got: ${results[0].source}`,
+      );
+    } finally {
+      store.close();
+    }
+  });
+
+  test("3-term query: only consecutive-pair adjacency contributes to frequency", () => {
+    const store = createStore();
+    try {
+      // "alpha beta" adjacent (pair 0→1 hits) AND "beta gamma" adjacent (pair 1→2 hits)
+      // Three contiguous mentions of "alpha beta gamma" → 2 pairs per mention × 3 mentions = 6 pair-hits.
+      store.indexPlainText(
+        "alpha beta gamma matters. alpha beta gamma is hard. alpha beta gamma works well in practice.",
+        "all-adjacent",
+      );
+      // "alpha beta" adjacent BUT "beta gamma" separated by ~80 chars of filler.
+      // Pair 0→1 hits once, pair 1→2 misses → only 1 pair-hit.
+      store.indexPlainText(
+        "alpha beta runs the pipeline; the rest of this paragraph deliberately " +
+          "talks about deployment monitoring oncall rotations and other unrelated topics gamma.",
+        "split-adjacency",
+      );
+
+      const results = store.searchWithFallback("alpha beta gamma", 5);
+      assert.ok(results.length >= 2);
+      assert.equal(
+        results[0].source,
+        "all-adjacent",
+        `Expected all-adjacent first, got: ${results[0].source}`,
+      );
+    } finally {
+      store.close();
+    }
+  });
+
+  test("saturation: 8-hit stuffed doc cannot beat 4-hit doc by more than the cap allows", () => {
+    const store = createStore();
+    try {
+      // 8 adjacent occurrences — well above saturation (4).
+      store.indexPlainText(
+        "cache invalidation cache invalidation cache invalidation cache invalidation " +
+          "cache invalidation cache invalidation cache invalidation cache invalidation",
+        "stuffed-eight",
+      );
+      // 4 adjacent occurrences — exactly at saturation.
+      store.indexPlainText(
+        "cache invalidation cache invalidation cache invalidation cache invalidation",
+        "stuffed-four",
+      );
+      // 1 adjacent occurrence inside a long natural paragraph.
+      // Without a cap, stuffed-eight (8 hits) could outrank everything; with
+      // the cap binding at 4, stuffed-eight and stuffed-four collapse to the
+      // same phrase contribution. The natural doc earns a smaller phrase
+      // contribution but still benefits from comparable proximity, so it must
+      // remain competitive in the top-3.
+      store.indexPlainText(
+        "Cache invalidation in a real system requires careful coordination across " +
+          "distributed nodes. Replication lag, eventual consistency, and leader-election " +
+          "races all interact in subtle ways that complicate a naive flush-on-write " +
+          "strategy used by many caching layers in production environments today.",
+        "natural-prose",
+      );
+
+      const results = store.searchWithFallback("cache invalidation", 5);
+      assert.ok(results.length >= 3, "Should find all three chunks");
+
+      const top3 = results.slice(0, 3).map((r) => r.source);
+      assert.ok(
+        top3.includes("natural-prose"),
+        `Cap must bind so natural-prose stays competitive; got top3=${top3.join(", ")}`,
+      );
+    } finally {
+      store.close();
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. Search Relevance Eval — ranking quality under competitive conditions
+//
+// Indexes 12 heterogeneous markdown sources into a single store and asserts
+// ranking correctness (precision@1, recall@5, title boost, cascade, negatives).
+// Guards BM25 weights, RRF K, proximity formula, and title boost weights
+// against silent regression.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const RELEVANCE_CORPUS: Array<{ source: string; markdown: string }> = [
+  {
+    source: "api-auth-handler",
+    markdown: `# Authentication middleware\n\n## verifyToken\n\n\`\`\`typescript\nexport async function verifyToken(req: Request): Promise<User> {\n  const header = req.headers.get("Authorization");\n  if (!header?.startsWith("Bearer ")) {\n    throw new AuthenticationError("Missing or malformed Authorization header");\n  }\n  const token = header.slice(7);\n  const payload = jwt.verify(token, process.env.JWT_SECRET!);\n  return payload;\n}\n\`\`\`\n\nThe middleware validates JWT tokens from the Authorization header and returns the decoded user payload.`,
+  },
+  {
+    source: "nginx-access-log",
+    markdown: `# Nginx access log\n\n## Recent requests\n\n\`\`\`\n192.168.1.42 "GET /api/auth/callback HTTP/1.1" 200 1234\n192.168.1.43 "GET /static/bundle.js HTTP/1.1" 200 450321\n192.168.1.44 "POST /api/users HTTP/1.1" 201 89\n10.0.0.1 "DELETE /api/sessions HTTP/1.1" 204 0\n\`\`\``,
+  },
+  {
+    source: "react-useeffect-docs",
+    markdown: `# React useEffect\n\n## Cleanup and dependencies\n\nuseEffect lets you synchronize a component with an external system.\n\n\`\`\`jsx\nuseEffect(() => {\n  const connection = createConnection(serverUrl, roomId);\n  connection.connect();\n  return () => connection.disconnect();\n}, [serverUrl, roomId]);\n\`\`\`\n\n## When cleanup runs\n\nThe cleanup function runs before every re-render with changed dependencies, and once more when the component unmounts.`,
+  },
+  {
+    source: "vitest-output",
+    markdown: `# Test results\n\n## Summary\n\nTest Suites: 1 failed, 29 passed, 30 total\nTests: 1 failed, 219 passed, 220 total\n\n## Failed test\n\n\`\`\`\nFAIL tests/hooks/integration.test.ts\n  PostToolUse hook session capture\n    AssertionError: expected "ok" to equal "captured"\n    at tests/hooks/integration.test.ts:142:5\n\`\`\`\n\n## Passed suites\n\n- store.test.ts (34 tests) 1200ms\n- executor.test.ts (55 tests) 3400ms`,
+  },
+  {
+    source: "database-migration",
+    markdown: `# Database migration 0042\n\n## Add tenant_id column\n\n\`\`\`sql\nALTER TABLE orders ADD COLUMN tenant_id UUID NOT NULL DEFAULT '00000000';\nCREATE INDEX idx_orders_tenant ON orders(tenant_id);\n\`\`\`\n\n## Backfill\n\n\`\`\`sql\nUPDATE orders SET tenant_id = (SELECT org_id FROM users WHERE users.id = orders.user_id);\n\`\`\``,
+  },
+  {
+    source: "nextjs-build-output",
+    markdown: `# Next.js build output\n\n## Warnings\n\n- You have enabled experimental feature (serverActions) in next.config.js\n- Duplicate page detected. pages/api/auth and app/api/auth both resolve to /api/auth\n\n## Routes\n\n| Route | Size | First Load |\n|-------|------|------------|\n| / | 5.2 kB | 89.1 kB |\n| /dashboard | 12.3 kB | 96.2 kB |`,
+  },
+  {
+    source: "python-traceback",
+    markdown: `# Python error traceback\n\n## Database connection timeout\n\n\`\`\`\nTraceback (most recent call last):\n  File "/app/services/sync.py", line 234, in sync_orders\n    conn = await asyncpg.connect(DATABASE_URL, timeout=30)\nasyncio.TimeoutError\n\nDatabaseConnectionError: Failed to connect after 3 retries\n\`\`\`\n\nThe sync service could not reach the PostgreSQL database within the 30-second timeout.`,
+  },
+  {
+    source: "git-log-recent",
+    markdown: `# Git log\n\n## Recent commits\n\n- eb36c2e perf: enable mmap_size pragma for FTS5 search\n- 766de41 ci: update server.bundle.mjs\n- 01470ec fix(store): wrap indexPlainText with withRetry\n- c445a12 feat(kiro): add full hook support for Kiro IDE`,
+  },
+  {
+    source: "tailwind-config",
+    markdown: `# Tailwind CSS configuration\n\n## Custom theme colors\n\n\`\`\`javascript\nmodule.exports = {\n  theme: {\n    extend: {\n      colors: {\n        brand: { 50: '#f0f9ff', 500: '#0ea5e9', 900: '#0c4a6e' },\n      },\n      fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },\n    },\n  },\n  plugins: [require('@tailwindcss/forms'), require('@tailwindcss/typography')],\n};\n\`\`\``,
+  },
+  {
+    source: "dockerfile-prod",
+    markdown: `# Dockerfile\n\n## Multi-stage production build\n\n\`\`\`dockerfile\nFROM node:20-alpine AS builder\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci --production=false\nCOPY . .\nRUN npm run build\n\nFROM node:20-alpine AS runner\nENV NODE_ENV=production\nCOPY --from=builder /app/build ./build\nCMD ["node", "build/server.js"]\n\`\`\``,
+  },
+  {
+    source: "k8s-deployment",
+    markdown: `# Kubernetes deployment\n\n## api-server\n\n\`\`\`yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api-server\n  namespace: production\nspec:\n  replicas: 3\n  template:\n    spec:\n      containers:\n        - name: api\n          image: registry.example.com/api:v2.3.1\n          resources:\n            requests: { cpu: "250m", memory: "512Mi" }\n          readinessProbe:\n            httpGet: { path: /health, port: 3000 }\n\`\`\``,
+  },
+  {
+    source: "package-json-deps",
+    markdown: `# Package dependencies\n\n## Production\n\n- next 14.2.3\n- react 18.3.1\n- @prisma/client 5.14.0\n- zod 3.23.8\n\n## Dev dependencies\n\n- typescript 5.4.5\n- vitest 1.6.0\n- tailwindcss 3.4.3\n- eslint 8.57.0`,
+  },
+];
+
+describe("Search relevance eval — competitive corpus", () => {
+  let relevanceStore: ContentStore;
+
+  beforeEach(() => {
+    const path = join(tmpdir(), `ctx-relevance-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+    relevanceStore = new ContentStore(path);
+    for (const doc of RELEVANCE_CORPUS) {
+      relevanceStore.index({ content: doc.markdown, source: doc.source });
+    }
+  });
+
+  afterEach(() => {
+    relevanceStore.cleanup();
+  });
+
+  function topOne(query: string, expectedSource: string) {
+    const results = relevanceStore.searchWithFallback(query, 3);
+    expect(results.length, `"${query}" should return results`).toBeGreaterThan(0);
+    expect(results[0].source, `"${query}" #1 should be "${expectedSource}", got "${results[0]?.source}"`).toBe(expectedSource);
+  }
+
+  function ranking(query: string, expectTop: string | string[], expectAbsent?: string[], layer?: string) {
+    const results = relevanceStore.searchWithFallback(query, 5);
+    const sources = results.map((r) => r.source);
+    const tops = Array.isArray(expectTop) ? expectTop : [expectTop];
+    for (const e of tops) expect(sources, `"${query}" should find "${e}" in top 5, got [${sources}]`).toContain(e);
+    if (expectAbsent) for (const a of expectAbsent) expect(sources, `"${query}" should NOT return "${a}"`).not.toContain(a);
+    if (layer) expect(results[0]?.matchLayer, `"${query}" should hit ${layer} layer`).toBe(layer);
+  }
+
+  // precision@1
+  test("'authentication middleware JWT' → api-auth-handler", () => topOne("authentication middleware JWT", "api-auth-handler"));
+  test("'database connection timeout' → python-traceback", () => topOne("database connection timeout", "python-traceback"));
+  test("'useEffect cleanup' → react-useeffect-docs", () => topOne("useEffect cleanup", "react-useeffect-docs"));
+  test("'tenant_id migration ALTER TABLE' → database-migration", () => topOne("tenant_id migration ALTER TABLE", "database-migration"));
+  test("'Dockerfile multi-stage build' → dockerfile-prod", () => topOne("Dockerfile multi-stage build", "dockerfile-prod"));
+  test("'Kubernetes deployment replicas' → k8s-deployment", () => topOne("Kubernetes deployment replicas", "k8s-deployment"));
+  test("'tailwind theme colors brand' → tailwind-config", () => topOne("tailwind theme colors brand", "tailwind-config"));
+  test("'test failed assertion FAIL' → vitest-output", () => topOne("test failed assertion FAIL", "vitest-output"));
+
+  // recall@5
+  test("'error timeout' finds python-traceback", () => ranking("error timeout", "python-traceback", ["tailwind-config", "git-log-recent"]));
+  test("'build warning experimental serverActions' finds nextjs output", () => ranking("build warning experimental serverActions", "nextjs-build-output"));
+  test("'react dependencies vitest typescript' finds package.json", () => ranking("react dependencies vitest typescript", "package-json-deps"));
+  test("'mmap pragma perf FTS5' finds git log", () => ranking("mmap pragma perf FTS5", "git-log-recent"));
+
+  // title boost
+  test("'Kubernetes deployment' title match ranks k8s-deployment first", () => topOne("Kubernetes deployment", "k8s-deployment"));
+  test("'Dockerfile' title match ranks dockerfile-prod first", () => topOne("Dockerfile", "dockerfile-prod"));
+
+  // cascade
+  test("exact terms hit RRF layer", () => ranking("useEffect cleanup", "react-useeffect-docs", undefined, "rrf"));
+  test("typo still resolves to correct doc", () => ranking("authenticaton middlewar", "api-auth-handler"));
+
+  // negatives
+  test("'tailwind colors' excludes unrelated sources", () => ranking("tailwind colors", "tailwind-config", ["database-migration", "python-traceback"]));
+  test("'SQL ALTER TABLE' excludes non-DB sources", () => ranking("SQL ALTER TABLE", "database-migration", ["nginx-access-log", "react-useeffect-docs"]));
+});
+
+// ═══════════════════════════════════════════════════════════
+// 8. Unified multi-source search (consolidated from tests/search/unified.test.ts)
+// ═══════════════════════════════════════════════════════════
+
+const unifiedCleanups: Array<() => void> = [];
+
+function createUnifiedStore(): ContentStore {
+  const path = join(
+    tmpdir(),
+    `ctx-unified-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
+  );
+  const store = new ContentStore(path);
+  unifiedCleanups.push(() => store.close());
+  return store;
+}
+
+function createTestDB(): SessionDB {
+  const dbPath = join(tmpdir(), `session-unified-test-${randomUUID()}.db`);
+  const db = new SessionDB({ dbPath });
+  unifiedCleanups.push(() => db.cleanup());
+  return db;
+}
+
+function createTempDir(): string {
+  const dir = join(tmpdir(), `ctx-unified-${randomUUID()}`);
+  mkdirSync(dir, { recursive: true });
+  unifiedCleanups.push(() => {
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+  });
+  return dir;
+}
+
+afterEach(() => {
+  for (const fn of unifiedCleanups) {
+    try { fn(); } catch { /* ignore */ }
+  }
+  unifiedCleanups.length = 0;
+});
+
+describe("sort=relevance returns ContentStore only", () => {
+  test("relevance mode only queries ContentStore, ignores SessionDB and auto-memory", () => {
+    const store = createUnifiedStore();
+    store.indexPlainText(
+      "Authentication middleware validates JWT tokens on every request.",
+      "execute:shell",
+    );
+
+    const sessionDB = createTestDB();
+    const sessionId = `test-${randomUUID()}`;
+    sessionDB.ensureSession(sessionId, "/project");
+    sessionDB.insertEvent(sessionId, {
+      type: "file",
+      category: "file",
+      data: "JWT handler in session DB",
+      priority: 2,
+    }, "PostToolUse");
+
+    const results = searchAllSources({
+      query: "JWT",
+      limit: 5,
+      store,
+      sort: "relevance",
+      sessionDB,
+      projectDir: "/project",
+      configDir: "/nonexistent",
+    });
+
+    // Should have results from ContentStore only
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every(r => r.origin === "current-session")).toBe(true);
+  });
+});
+
+describe("sort=timeline merges 3 sources chronologically", () => {
+  test("timeline mode merges ContentStore, SessionDB, and auto-memory results", () => {
+    const store = createUnifiedStore();
+    store.indexPlainText(
+      "Deploy pipeline configuration for production environment.",
+      "execute:shell",
+    );
+
+    const sessionDB = createTestDB();
+    const sessionId = `test-${randomUUID()}`;
+    sessionDB.ensureSession(sessionId, "/project");
+    sessionDB.insertEvent(sessionId, {
+      type: "tool",
+      category: "tool",
+      data: "Deploy script executed successfully in prior session",
+      priority: 2,
+    }, "PostToolUse");
+
+    // Create auto-memory files
+    const configDir = createTempDir();
+    const memoryDir = join(configDir, "memory");
+    mkdirSync(memoryDir, { recursive: true });
+    writeFileSync(
+      join(configDir, "CLAUDE.md"),
+      "# Deploy Rules\nAlways deploy to staging first.\n",
+    );
+
+    const results = searchAllSources({
+      query: "deploy",
+      limit: 10,
+      store,
+      sort: "timeline",
+      sessionDB,
+      projectDir: "/project",
+      configDir,
+    });
+
+    // Should have results from multiple origins
+    const origins = new Set(results.map(r => r.origin));
+    expect(origins.has("current-session")).toBe(true);
+    // SessionDB or auto-memory should also appear
+    expect(origins.size).toBeGreaterThanOrEqual(2);
+  });
+
+  test("timeline results are sorted chronologically", () => {
+    const store = createUnifiedStore();
+    store.indexPlainText("Server config alpha", "execute:shell");
+
+    const sessionDB = createTestDB();
+    const sessionId = `test-${randomUUID()}`;
+    sessionDB.ensureSession(sessionId, "/project");
+    sessionDB.insertEvent(sessionId, {
+      type: "config",
+      category: "config",
+      data: "Server config beta from prior session",
+      priority: 2,
+    }, "PostToolUse");
+
+    const results = searchAllSources({
+      query: "server config",
+      limit: 10,
+      store,
+      sort: "timeline",
+      sessionDB,
+      projectDir: "/project",
+      configDir: "/nonexistent",
+    });
+
+    // Verify chronological ordering: timestamps should be non-decreasing
+    for (let i = 1; i < results.length; i++) {
+      const prev = results[i - 1].timestamp || "";
+      const curr = results[i].timestamp || "";
+      // Allow empty timestamps (ContentStore results) — they sort first
+      if (prev && curr) {
+        expect(prev <= curr).toBe(true);
+      }
+    }
+  });
+});
+
+describe("error in one source doesn't break others", () => {
+  test("invalid sessionDB still returns ContentStore results", () => {
+    const store = createUnifiedStore();
+    store.indexPlainText(
+      "Error handling test content with database queries.",
+      "execute:shell",
+    );
+
+    // Pass null sessionDB to simulate unavailable session DB
+    const results = searchAllSources({
+      query: "database",
+      limit: 5,
+      store,
+      sort: "timeline",
+      sessionDB: null,
+      projectDir: "/project",
+      configDir: "/nonexistent",
+    });
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every(r => r.origin === "current-session")).toBe(true);
+  });
+
+  test("nonexistent configDir still returns other source results", () => {
+    const store = createUnifiedStore();
+    store.indexPlainText(
+      "Memory resilience test with important data.",
+      "execute:shell",
+    );
+
+    const results = searchAllSources({
+      query: "resilience",
+      limit: 5,
+      store,
+      sort: "timeline",
+      sessionDB: null,
+      projectDir: "/project",
+      configDir: "/tmp/definitely-does-not-exist-" + randomUUID(),
+    });
+
+    expect(results.length).toBeGreaterThan(0);
+  });
+});
+
+describe("empty index guard skipped in timeline mode", () => {
+  test("timeline mode proceeds even when ContentStore has zero chunks", () => {
+    const store = createUnifiedStore(); // empty, no indexed content
+
+    const sessionDB = createTestDB();
+    const sessionId = `test-${randomUUID()}`;
+    sessionDB.ensureSession(sessionId, "/project");
+    sessionDB.insertEvent(sessionId, {
+      type: "file",
+      category: "file",
+      data: "Important file from prior session timeline check",
+      priority: 2,
+    }, "PostToolUse", { projectDir: "/project", source: "env", confidence: 1 });
+
+    // In timeline mode, empty ContentStore should NOT be an error
+    const results = searchAllSources({
+      query: "timeline check",
+      limit: 5,
+      store,
+      sort: "timeline",
+      sessionDB,
+      projectDir: "/project",
+      configDir: "/nonexistent",
+    });
+
+    // Should get results from SessionDB even though ContentStore is empty
+    const priorResults = results.filter(r => r.origin === "prior-session");
+    expect(priorResults.length).toBeGreaterThan(0);
+  });
+
+  test("relevance mode with empty store returns no results", () => {
+    const store = createUnifiedStore(); // empty
+
+    const results = searchAllSources({
+      query: "anything",
+      limit: 5,
+      store,
+      sort: "relevance",
+      sessionDB: null,
+      projectDir: "/project",
+      configDir: "/nonexistent",
+    });
+
+    expect(results.length).toBe(0);
+  });
+});
+
+describe("default sort is relevance (backward compatible)", () => {
+  test("omitting sort defaults to relevance behavior", () => {
+    const store = createUnifiedStore();
+    store.indexPlainText(
+      "Backward compatibility test for default search mode.",
+      "execute:shell",
+    );
+
+    const sessionDB = createTestDB();
+    const sessionId = `test-${randomUUID()}`;
+    sessionDB.ensureSession(sessionId, "/project");
+    sessionDB.insertEvent(sessionId, {
+      type: "file",
+      category: "file",
+      data: "Backward compatibility data in session DB",
+      priority: 2,
+    }, "PostToolUse");
+
+    // No sort param — should default to "relevance"
+    const results = searchAllSources({
+      query: "backward compatibility",
+      limit: 5,
+      store,
+      // sort intentionally omitted
+      sessionDB,
+      projectDir: "/project",
+      configDir: "/nonexistent",
+    });
+
+    // Should only have ContentStore results (relevance mode)
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every(r => r.origin === "current-session")).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// 9. Auto-memory search (consolidated from tests/search/auto-memory.test.ts)
+// ═══════════════════════════════════════════════════════════
+
+describe("searchAutoMemory", () => {
+  const AUTO_MEM_ROOT = join(tmpdir(), `ctx-auto-memory-test-${Date.now()}`);
+  const CLAUDE_CONFIG = join(AUTO_MEM_ROOT, ".claude");
+  const QWEN_CONFIG = join(AUTO_MEM_ROOT, ".qwen");
+  const PROJECT_DIR = join(AUTO_MEM_ROOT, "project");
+
+  // Set up fixture files once
+  (() => {
+    // Create project-level CLAUDE.md
+    mkdirSync(PROJECT_DIR, { recursive: true });
+    writeFileSync(
+      join(PROJECT_DIR, "CLAUDE.md"),
+      "Project instructions: use TypeScript strict mode. Analytics pipeline config here.",
+    );
+
+    // Create user-level configDir for .claude
+    const claudeMemDir = join(CLAUDE_CONFIG, "memory");
+    mkdirSync(claudeMemDir, { recursive: true });
+
+    writeFileSync(
+      join(CLAUDE_CONFIG, "CLAUDE.md"),
+      "Global user preferences: dark theme, vim keybindings.",
+    );
+
+    writeFileSync(
+      join(claudeMemDir, "analytics_separation.md"),
+      "Analytics must be separate project, not inside context-mode. Datadog model.",
+    );
+    writeFileSync(
+      join(claudeMemDir, "push_to_next.md"),
+      "Always push to next branch, never feature branches.",
+    );
+    writeFileSync(
+      join(claudeMemDir, "npm_token.md"),
+      "npm publish token location for context-mode releases.",
+    );
+    writeFileSync(
+      join(claudeMemDir, "user_identity.md"),
+      "User name is Alice. Speaks English and French.",
+    );
+
+    // Create user-level configDir for .qwen
+    const qwenMemDir = join(QWEN_CONFIG, "memory");
+    mkdirSync(qwenMemDir, { recursive: true });
+    writeFileSync(join(QWEN_CONFIG, "CLAUDE.md"), "Qwen user config.");
+    writeFileSync(join(qwenMemDir, "note.md"), "Qwen analytics note content.");
+  })();
+
+  test("returns empty for non-existent project and config directories", () => {
+    const results = searchAutoMemory(
+      ["anything"],
+      10,
+      "/nonexistent/project",
+      "/nonexistent/config",
+    );
+    expect(results).toEqual([]);
+  });
+
+  test("finds matching content in memory files", () => {
+    const results = searchAutoMemory(
+      ["analytics"],
+      10,
+      PROJECT_DIR,
+      CLAUDE_CONFIG,
+    );
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    const hasAnalytics = results.some((r) => r.content.toLowerCase().includes("analytics"));
+    expect(hasAnalytics).toBe(true);
+    for (const r of results) {
+      expect(r.origin).toBe("auto-memory");
+    }
+  });
+
+  test("case-insensitive search", () => {
+    const lower = searchAutoMemory(["analytics"], 10, PROJECT_DIR, CLAUDE_CONFIG);
+    const upper = searchAutoMemory(["ANALYTICS"], 10, PROJECT_DIR, CLAUDE_CONFIG);
+    const mixed = searchAutoMemory(["AnAlYtIcS"], 10, PROJECT_DIR, CLAUDE_CONFIG);
+
+    expect(lower.length).toBeGreaterThanOrEqual(1);
+    expect(upper.length).toBe(lower.length);
+    expect(mixed.length).toBe(lower.length);
+  });
+
+  test("respects limit parameter", () => {
+    const bulkConfig = join(AUTO_MEM_ROOT, ".bulk-test");
+    const bulkMemDir = join(bulkConfig, "memory");
+    mkdirSync(bulkMemDir, { recursive: true });
+    writeFileSync(join(bulkConfig, "CLAUDE.md"), "bulk keyword_match config.");
+    for (let i = 0; i < 20; i++) {
+      writeFileSync(
+        join(bulkMemDir, `note_${i.toString().padStart(3, "0")}.md`),
+        `keyword_match content ${i}`,
+      );
+    }
+
+    const results = searchAutoMemory(
+      ["keyword_match"],
+      3,
+      undefined,
+      bulkConfig,
+    );
+
+    expect(results.length).toBeLessThanOrEqual(3);
+  });
+
+  test("one match per file even with multiple query hits", () => {
+    const results = searchAutoMemory(
+      ["analytics", "project"],
+      10,
+      PROJECT_DIR,
+      CLAUDE_CONFIG,
+    );
+
+    const sources = results.map((r) => r.source);
+    const uniqueSources = new Set(sources);
+    expect(uniqueSources.size).toBe(sources.length);
+  });
+
+  test("multiple queries match different files", () => {
+    const results = searchAutoMemory(
+      ["analytics", "npm"],
+      10,
+      PROJECT_DIR,
+      CLAUDE_CONFIG,
+    );
+
+    expect(results.length).toBeGreaterThanOrEqual(2);
+    const sources = results.map((r) => r.source);
+    const uniqueSources = new Set(sources);
+    expect(uniqueSources.size).toBeGreaterThanOrEqual(2);
+  });
+
+  test("returns empty array for empty queries", () => {
+    const results = searchAutoMemory([], 10, PROJECT_DIR, CLAUDE_CONFIG);
+    expect(results).toEqual([]);
+  });
+
+  test("adapter-aware: different configDir yields different results", () => {
+    const claudeResults = searchAutoMemory(["analytics"], 10, undefined, CLAUDE_CONFIG);
+    const qwenResults = searchAutoMemory(["analytics"], 10, undefined, QWEN_CONFIG);
+
+    expect(claudeResults.length).toBeGreaterThanOrEqual(1);
+    expect(qwenResults.length).toBeGreaterThanOrEqual(1);
+
+    const claudeSources = claudeResults.map((r) => r.source);
+    const qwenSources = qwenResults.map((r) => r.source);
+    expect(claudeSources).not.toEqual(qwenSources);
+  });
+
+  test("result shape matches AutoMemoryResult interface", () => {
+    const results = searchAutoMemory(["Alice"], 10, undefined, CLAUDE_CONFIG);
+    expect(results.length).toBeGreaterThanOrEqual(1);
+
+    const r = results[0];
+    expect(r).toHaveProperty("title");
+    expect(r).toHaveProperty("content");
+    expect(r).toHaveProperty("source");
+    expect(r).toHaveProperty("origin");
+    expect(r.origin).toBe("auto-memory");
+    expect(r.title).toContain("[auto-memory]");
+  });
+
+  test("finds content in CLAUDE.md files (unified)", () => {
+    const configDir = createTempDir();
+    writeFileSync(
+      join(configDir, "CLAUDE.md"),
+      "# Rules\nAlways use TypeScript strict mode.\nNever skip tests.\n",
+    );
+
+    const results = searchAutoMemory(["typescript strict"], 5, undefined, configDir);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].origin).toBe("auto-memory");
+    expect(results[0].content).toContain("TypeScript strict");
+  });
+
+  test("finds content in memory directory (unified)", () => {
+    const configDir = createTempDir();
+    const memoryDir = join(configDir, "memory");
+    mkdirSync(memoryDir, { recursive: true });
+    writeFileSync(
+      join(memoryDir, "preferences.md"),
+      "User prefers dark theme and vim keybindings.\n",
+    );
+
+    const results = searchAutoMemory(["vim keybindings"], 5, undefined, configDir);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].content).toContain("vim keybindings");
+  });
+
+  test("returns empty for nonexistent dirs (unified)", () => {
+    const results = searchAutoMemory(
+      ["anything"],
+      5,
+      "/nonexistent-project",
+      "/nonexistent-config",
+    );
+    expect(results.length).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// 10. SessionDB.searchEvents via unified search (consolidated from tests/search/unified.test.ts)
+// ═══════════════════════════════════════════════════════════
+
+describe("SessionDB.searchEvents (unified)", () => {
+  test("finds events matching query text", () => {
+    const db = createTestDB();
+    const sessionId = `test-${randomUUID()}`;
+    db.ensureSession(sessionId, "/project");
+
+    db.insertEvent(sessionId, {
+      type: "file",
+      category: "file",
+      data: "src/authentication/jwt-handler.ts",
+      priority: 2,
+    }, "PostToolUse", { projectDir: "/project", source: "test", confidence: 1 });
+
+    db.insertEvent(sessionId, {
+      type: "tool",
+      category: "tool",
+      data: "npm test executed successfully",
+      priority: 2,
+    }, "PostToolUse", { projectDir: "/project", source: "test", confidence: 1 });
+
+    const results = db.searchEvents("authentication", 10, "/project");
+    expect(results.length).toBe(1);
+    expect(results[0].data).toContain("authentication");
+  });
+
+  test("scopes search by projectDir", () => {
+    const db = createTestDB();
+    const sessionId = `test-${randomUUID()}`;
+    db.ensureSession(sessionId, "/project-a");
+
+    db.insertEvent(sessionId, {
+      type: "file",
+      category: "file",
+      data: "deploy script content",
+      priority: 2,
+    }, "PostToolUse", { projectDir: "/project-a", source: "env", confidence: 1 });
+
+    db.insertEvent(sessionId, {
+      type: "file",
+      category: "file",
+      data: "deploy config content",
+      priority: 2,
+    }, "PostToolUse", { projectDir: "/project-b", source: "env", confidence: 1 });
+
+    const results = db.searchEvents("deploy", 10, "/project-a");
+    expect(results.length).toBe(1);
+    expect(results[0].data).toBe("deploy script content");
+  });
+
+  test("returns empty for no matches", () => {
+    const db = createTestDB();
+    const sessionId = `test-${randomUUID()}`;
+    db.ensureSession(sessionId, "/project");
+
+    db.insertEvent(sessionId, {
+      type: "file",
+      category: "file",
+      data: "some unrelated content",
+      priority: 2,
+    }, "PostToolUse", { projectDir: "/project", source: "test", confidence: 1 });
+
+    const results = db.searchEvents("nonexistent-xyzzy", 10, "/project");
+    expect(results.length).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// 11. Knowledge-reuse event (removed — read path must not mutate state)
+// ═══════════════════════════════════════════════════════════

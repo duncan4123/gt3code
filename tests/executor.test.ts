@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { PolyglotExecutor } from "../src/executor.js";
+import { PolyglotExecutor, buildScriptFilename, buildSpawnOptions } from "../src/executor.js";
 import {
   detectRuntimes,
   buildCommand,
@@ -1453,6 +1453,75 @@ describe("Temp Cleanup Resilience", () => {
   });
 });
 
+describe("Background Mode", () => {
+  test("background: true returns partial output with backgrounded flag", async () => {
+    const bgExecutor = new PolyglotExecutor({ runtimes });
+    const r = await bgExecutor.execute({
+      language: "javascript",
+      code: `console.log("started"); setInterval(() => {}, 1000);`,
+      timeout: 500,
+      background: true,
+    });
+    assert.equal(r.backgrounded, true, "Should be marked as backgrounded");
+    assert.equal(r.timedOut, true, "Background detach fires on timeout");
+    assert.equal(r.exitCode, 0, "Backgrounded processes return exitCode 0");
+    assert.ok(r.stdout.includes("started"), "Should capture output before detach");
+    bgExecutor.cleanupBackgrounded();
+  }, 10_000);
+
+  test("cleanupBackgrounded kills detached process", async () => {
+    const bgExecutor = new PolyglotExecutor({ runtimes });
+    const r = await bgExecutor.execute({
+      language: "javascript",
+      code: `process.stdout.write(String(process.pid)); setInterval(() => {}, 1000);`,
+      timeout: 500,
+      background: true,
+    });
+    const pid = parseInt(r.stdout.trim(), 10);
+    assert.ok(pid > 0, `Expected valid PID, got: "${r.stdout}"`);
+
+    let alive = false;
+    try { process.kill(pid, 0); alive = true; } catch { /* ESRCH */ }
+    assert.equal(alive, true, "Process should be alive before cleanup");
+
+    bgExecutor.cleanupBackgrounded();
+    await new Promise((r) => setTimeout(r, 300));
+
+    alive = false;
+    try { process.kill(pid, 0); alive = true; } catch { /* ESRCH */ }
+    assert.equal(alive, false, `Process ${pid} should be dead after cleanup`);
+  }, 10_000);
+});
+
+describe("hardCapBytes Enforcement", () => {
+  test("kills process when combined output exceeds byte cap", async () => {
+    const cappedExecutor = new PolyglotExecutor({
+      runtimes,
+      hardCapBytes: 1024,
+    });
+    const r = await cappedExecutor.execute({
+      language: "javascript",
+      code: `for (let i = 0; i < 10000; i++) console.log("x".repeat(100));`,
+      timeout: 10_000,
+    });
+    assert.ok(r.stderr.includes("output capped at"), "Should indicate cap was hit");
+    assert.notEqual(r.exitCode, 0, "Process should be killed (non-zero exit)");
+  }, 15_000);
+
+  test("stderr contributes to byte cap", async () => {
+    const cappedExecutor = new PolyglotExecutor({
+      runtimes,
+      hardCapBytes: 1024,
+    });
+    const r = await cappedExecutor.execute({
+      language: "javascript",
+      code: `for (let i = 0; i < 10000; i++) console.error("e".repeat(100));`,
+      timeout: 10_000,
+    });
+    assert.ok(r.stderr.includes("output capped at"), "stderr should trigger cap");
+  }, 15_000);
+});
+
 describe("Windows Shell Support", () => {
   test("shell runtime is always a non-empty string", async () => {
     assert.ok(
@@ -1469,8 +1538,50 @@ describe("Windows Shell Support", () => {
 
   test("buildCommand returns shell command array", async () => {
     const cmd = buildCommand(runtimes, "shell", "/tmp/script.sh");
-    assert.ok(Array.isArray(cmd) && cmd.length === 2, `Expected [shell, path], got: ${cmd}`);
-    assert.equal(cmd[1], "/tmp/script.sh");
+    assert.ok(Array.isArray(cmd) && cmd.length > 0, `Expected non-empty array, got: ${cmd}`);
+    if (process.platform === "win32" && (cmd[0].toLowerCase().includes("bash") || cmd[0].toLowerCase().endsWith("\\sh.exe"))) {
+      // Windows + bash → `bash -c "source 'path'"` to dodge MSYS path mangling.
+      assert.equal(cmd.length, 3, `Expected [bash, -c, source ...], got: ${cmd}`);
+      assert.equal(cmd[1], "-c");
+      assert.ok(cmd[2].includes("/tmp/script.sh"), `Expected source clause to reference path, got: ${cmd[2]}`);
+    } else {
+      assert.equal(cmd.length, 2, `Expected [shell, path], got: ${cmd}`);
+      assert.equal(cmd[1], "/tmp/script.sh");
+    }
+  });
+
+  // --- Issue #384: hide Windows console + drop .sh extension for shell ---
+
+  test("buildSpawnOptions: windowsHide=true on Windows", async () => {
+    assert.equal(buildSpawnOptions("win32").windowsHide, true);
+  });
+
+  test("buildSpawnOptions: windowsHide=false on macOS/Linux", async () => {
+    assert.equal(buildSpawnOptions("darwin").windowsHide, false);
+    assert.equal(buildSpawnOptions("linux").windowsHide, false);
+  });
+
+  test("buildScriptFilename: shell on Windows has NO extension (avoid .sh file association)", async () => {
+    assert.equal(buildScriptFilename("shell", "win32"), "script");
+  });
+
+  test("buildScriptFilename: shell on Unix keeps .sh extension", async () => {
+    assert.equal(buildScriptFilename("shell", "darwin"), "script.sh");
+    assert.equal(buildScriptFilename("shell", "linux"), "script.sh");
+  });
+
+  test("buildScriptFilename: non-shell languages keep their extension on Windows", async () => {
+    assert.equal(buildScriptFilename("python", "win32"), "script.py");
+    assert.equal(buildScriptFilename("javascript", "win32"), "script.js");
+    assert.equal(buildScriptFilename("typescript", "win32"), "script.ts");
+    assert.equal(buildScriptFilename("ruby", "win32"), "script.rb");
+    assert.equal(buildScriptFilename("go", "win32"), "script.go");
+    assert.equal(buildScriptFilename("rust", "win32"), "script.rs");
+  });
+
+  test("buildScriptFilename: non-shell languages keep their extension on Unix", async () => {
+    assert.equal(buildScriptFilename("python", "linux"), "script.py");
+    assert.equal(buildScriptFilename("javascript", "darwin"), "script.js");
   });
 });
 

@@ -2,7 +2,7 @@
 import "./suppress-stderr.mjs";
 import "./ensure-deps.mjs";
 /**
- * SessionStart hook for context-mode-doltlite
+ * SessionStart hook for context-mode
  *
  * Provides the agent with XML-structured "Rules of Engagement"
  * at the beginning of each session. Injects session knowledge on
@@ -17,16 +17,16 @@ import "./ensure-deps.mjs";
 
 import { createRoutingBlock } from "./routing-block.mjs";
 import { createToolNamer } from "./core/tool-naming.mjs";
+import { buildAutoInjection } from "./auto-injection.mjs";
 
 const toolNamer = createToolNamer("claude-code");
 const ROUTING_BLOCK = createRoutingBlock(toolNamer);
-import { readStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath } from "./session-helpers.mjs";
-import { writeSessionEventsFile, buildSessionDirective, getSessionEvents, getLatestSessionEvents } from "./session-directive.mjs";
+import { readStdin, parseStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath, resolveConfigDir } from "./session-helpers.mjs";
+import { writeSessionEventsFile, buildSessionDirective, getSessionEvents } from "./session-directive.mjs";
 import { createSessionLoaders } from "./session-loaders.mjs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFileSync, unlinkSync, readdirSync, rmSync, statSync } from "node:fs";
-import { homedir } from "node:os";
 
 // Resolve absolute path for imports (fileURLToPath for Windows compat)
 const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +36,7 @@ let additionalContext = ROUTING_BLOCK;
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
   const source = input.source ?? "startup";
 
   if (source === "compact") {
@@ -55,6 +55,22 @@ try {
     if (events.length > 0) {
       const eventMeta = writeSessionEventsFile(events, getSessionEventsPath());
       additionalContext += buildSessionDirective("compact", eventMeta, toolNamer);
+
+      // Auto-inject behavioral state on compaction (role, decisions, skills, intent)
+      const autoInjection = buildAutoInjection(events);
+      if (autoInjection) {
+        additionalContext += "\n\n" + autoInjection;
+      }
+
+      // Write session-resume event
+      try {
+        db.insertEvent(sessionId, {
+          type: "resume_completed",
+          category: "session-resume",
+          data: `Session resumed from ${source}. Prior events loaded.`,
+          priority: 1,
+        }, "SessionStart");
+      } catch { /* best-effort */ }
     }
 
     db.close();
@@ -66,7 +82,13 @@ try {
     const dbPath = getSessionDBPath();
     const db = new SessionDB({ dbPath });
 
-    const events = getLatestSessionEvents(db);
+    // Filter events to the session being resumed. Falling back to
+    // getLatestSessionEvents(db) leaks events from any other session whose
+    // session_meta.started_at is more recent — observed cross-session bleed
+    // when a different worktree session started after this one and before
+    // the resume.
+    const sessionId = getSessionId(input);
+    const events = sessionId ? getSessionEvents(db, sessionId) : [];
     if (events.length > 0) {
       const eventMeta = writeSessionEventsFile(events, getSessionEventsPath());
       additionalContext += buildSessionDirective("resume", eventMeta, toolNamer);
@@ -93,7 +115,7 @@ try {
     const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
     db.ensureSession(sessionId, projectDir);
     const claudeMdPaths = [
-      join(homedir(), ".claude", "CLAUDE.md"),
+      join(resolveConfigDir(), "CLAUDE.md"),
       join(projectDir, "CLAUDE.md"),
       join(projectDir, ".claude", "CLAUDE.md"),
     ];
@@ -140,8 +162,9 @@ try {
     const { appendFileSync } = await import("node:fs");
     const { join: pjoin } = await import("node:path");
     const { homedir } = await import("node:os");
+    const { resolveConfigDir: _resolve } = await import("./session-helpers.mjs");
     appendFileSync(
-      pjoin(homedir(), ".claude", "context-mode-doltlite", "sessionstart-debug.log"),
+      pjoin(_resolve(), "context-mode", "sessionstart-debug.log"),
       `[${new Date().toISOString()}] ${err?.message || err}\n${err?.stack || ""}\n`,
     );
   } catch { /* ignore logging failure */ }

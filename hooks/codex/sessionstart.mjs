@@ -14,10 +14,10 @@ import {
   writeSessionEventsFile,
   buildSessionDirective,
   getSessionEvents,
-  getLatestSessionEvents,
 } from "../session-directive.mjs";
 import {
   readStdin,
+  parseStdin,
   getSessionId,
   getSessionDBPath,
   getSessionEventsPath,
@@ -25,24 +25,24 @@ import {
   getInputProjectDir,
   CODEX_OPTS,
 } from "../session-helpers.mjs";
-import { join } from "node:path";
+import { createSessionLoaders } from "../session-loaders.mjs";
 import { unlinkSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const HOOK_DIR = fileURLToPath(new URL(".", import.meta.url));
-const PKG_SESSION = join(HOOK_DIR, "..", "..", "build", "session");
+const { loadSessionDB } = createSessionLoaders(HOOK_DIR);
 const OPTS = CODEX_OPTS;
 
 let additionalContext = ROUTING_BLOCK;
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
   const source = input.source ?? "startup";
   const projectDir = getInputProjectDir(input, CODEX_OPTS);
 
   if (source === "compact" || source === "resume") {
-    const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
+    const { SessionDB } = await loadSessionDB();
     const dbPath = getSessionDBPath(OPTS);
     const db = new SessionDB({ dbPath });
 
@@ -56,9 +56,13 @@ try {
       try { unlinkSync(getCleanupFlagPath(OPTS)); } catch { /* no flag */ }
     }
 
-    const events = source === "compact"
-      ? getSessionEvents(db, getSessionId(input, OPTS))
-      : getLatestSessionEvents(db);
+    // Filter events to the session being resumed/compacted. Falling back to
+    // getLatestSessionEvents(db) for resume leaks events from any other
+    // session whose session_meta.started_at is more recent — observed
+    // cross-session bleed when a different session started after this one
+    // and before the resume.
+    const sessionId = getSessionId(input, OPTS);
+    const events = sessionId ? getSessionEvents(db, sessionId) : [];
     if (events.length > 0) {
       const eventMeta = writeSessionEventsFile(events, getSessionEventsPath(OPTS));
       additionalContext += buildSessionDirective(source, eventMeta, toolNamer);
@@ -66,7 +70,7 @@ try {
 
     db.close();
   } else if (source === "startup") {
-    const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
+    const { SessionDB } = await loadSessionDB();
     const dbPath = getSessionDBPath(OPTS);
     const db = new SessionDB({ dbPath });
     try { unlinkSync(getSessionEventsPath(OPTS)); } catch { /* no stale file */ }

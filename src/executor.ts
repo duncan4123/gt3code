@@ -14,6 +14,40 @@ import type { ExecResult } from "./types.js";
 const isWin = process.platform === "win32";
 
 /**
+ * Pure helper: extension map for temp script files per language.
+ * On Windows, shell scripts get NO extension to avoid Windows file-association
+ * for `.sh` (which spawns a visible Git Bash window over the user's IDE).
+ */
+const SCRIPT_EXT: Record<Language, string> = {
+  javascript: "js",
+  typescript: "ts",
+  python: "py",
+  shell: "sh",
+  ruby: "rb",
+  go: "go",
+  rust: "rs",
+  php: "php",
+  perl: "pl",
+  r: "R",
+  elixir: "exs",
+};
+
+/** Pure helper — exported for unit testing. Returns "script" or "script.<ext>". */
+export function buildScriptFilename(language: Language, platform: NodeJS.Platform): string {
+  if (platform === "win32" && language === "shell") return "script";
+  return `script.${SCRIPT_EXT[language]}`;
+}
+
+/**
+ * Pure helper — exported for unit testing. Adds `windowsHide: true` on Windows
+ * to prevent the spawned shell from creating a visible console window that
+ * intercepts stdout (issue #384).
+ */
+export function buildSpawnOptions(platform: NodeJS.Platform): { windowsHide: boolean } {
+  return { windowsHide: platform === "win32" };
+}
+
+/**
  * Resolve the real OS temp directory, bypassing any TMPDIR env override.
  * os.tmpdir() reads TMPDIR from the environment, which some shells/tools
  * set to the project root — causing temp files to pollute the working tree.
@@ -60,7 +94,14 @@ interface ExecuteFileOptions extends ExecuteOptions {
 
 export class PolyglotExecutor {
   #hardCapBytes: number;
-  #projectRoot: string;
+  /**
+   * Resolves the project root on every access. Stored as a thunk so the
+   * executor stays in sync with server-side env-cascade resolvers (e.g.
+   * `getProjectDir` in server.ts) instead of capturing a snapshot of
+   * `CLAUDE_PROJECT_DIR` at construction time. String inputs are wrapped
+   * to preserve constructor backward compatibility.
+   */
+  #projectRootResolver: () => string;
   #runtimes: RuntimeMap;
 
   /** PIDs of backgrounded processes — killed on cleanup to prevent zombies. */
@@ -68,12 +109,23 @@ export class PolyglotExecutor {
 
   constructor(opts?: {
     hardCapBytes?: number;
-    projectRoot?: string;
+    projectRoot?: string | (() => string);
     runtimes?: RuntimeMap;
   }) {
     this.#hardCapBytes = opts?.hardCapBytes ?? 100 * 1024 * 1024; // 100MB
-    this.#projectRoot = opts?.projectRoot ?? process.cwd();
+    const pr = opts?.projectRoot;
+    if (typeof pr === "function") {
+      this.#projectRootResolver = pr;
+    } else if (typeof pr === "string") {
+      this.#projectRootResolver = () => pr;
+    } else {
+      this.#projectRootResolver = () => process.cwd();
+    }
     this.#runtimes = opts?.runtimes ?? detectRuntimes();
+  }
+
+  get #projectRoot(): string {
+    return this.#projectRootResolver();
   }
 
   get runtimes(): RuntimeMap {
@@ -138,20 +190,6 @@ export class PolyglotExecutor {
   }
 
   #writeScript(tmpDir: string, code: string, language: Language): string {
-    const extMap: Record<Language, string> = {
-      javascript: "js",
-      typescript: "ts",
-      python: "py",
-      shell: "sh",
-      ruby: "rb",
-      go: "go",
-      rust: "rs",
-      php: "php",
-      perl: "pl",
-      r: "R",
-      elixir: "exs",
-    };
-
     // Go needs a main package wrapper if not present
     if (language === "go" && !code.includes("package ")) {
       code = `package main\n\nimport "fmt"\n\nfunc main() {\n${code}\n}\n`;
@@ -168,7 +206,7 @@ export class PolyglotExecutor {
       code = `Path.wildcard(Path.join(${escaped}, "*/ebin"))\n|> Enum.each(&Code.prepend_path/1)\n\n${code}`;
     }
 
-    const fp = join(tmpDir, `script.${extMap[language]}`);
+    const fp = join(tmpDir, buildScriptFilename(language, process.platform));
     if (language === "shell") {
       writeFileSync(fp, code, { encoding: "utf-8", mode: 0o700 });
     } else {
@@ -240,6 +278,11 @@ export class PolyglotExecutor {
         shell: needsShell,
         // On Unix, create a new process group so killTree can kill all children
         detached: !isWin,
+        // Hide the spawned-process console window on Windows. Without this,
+        // child_process.spawn creates a visible window that intercepts stdout,
+        // leaving the MCP response empty and popping a Git Bash terminal over
+        // the user's IDE. Issue #384.
+        ...buildSpawnOptions(process.platform),
       });
 
       let timedOut = false;

@@ -1,3 +1,5 @@
+import { buildNodeCommand } from "../types.js";
+
 /**
  * adapters/kiro/hooks — Kiro CLI hook definitions and matchers.
  *
@@ -25,6 +27,32 @@ export const HOOK_SCRIPTS: Record<string, string> = {
   [HOOK_TYPES.POST_TOOL_USE]: "posttooluse.mjs",
 };
 
+// ─────────────────────────────────────────────────────────
+// PreToolUse matchers
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Tools that context-mode's PreToolUse hook intercepts on Kiro.
+ *
+ * Kiro native tool names (from TOOL_ALIASES in routing.mjs):
+ *   execute_bash → Bash, fs_read → Read, fs_write → Write
+ *
+ * MCP tools surface as @context-mode-doltlite/ctx_* in Kiro.
+ */
+export const PRE_TOOL_USE_MATCHERS = [
+  "execute_bash",
+  "fs_read",
+  "@context-mode-doltlite/ctx_execute",
+  "@context-mode-doltlite/ctx_execute_file",
+  "@context-mode-doltlite/ctx_batch_execute",
+] as const;
+
+/**
+ * Combined matcher pattern for Kiro hook config (pipe-separated).
+ * Used by generateHookConfig and configureAllHooks.
+ */
+export const PRE_TOOL_USE_MATCHER_PATTERN = PRE_TOOL_USE_MATCHERS.join("|");
+
 export const REQUIRED_HOOKS: string[] = [
   HOOK_TYPES.PRE_TOOL_USE,
 ];
@@ -42,7 +70,7 @@ export function isContextModeHook(
 ): boolean {
   const scriptName = HOOK_SCRIPTS[hookType];
   if (!scriptName) return false;
-  return entry.command?.includes(scriptName) || entry.command?.includes("context-mode hook kiro") || false;
+  return entry.command?.includes(scriptName) || entry.command?.includes("context-mode-doltlite hook kiro") || false;
 }
 
 /**
@@ -51,7 +79,7 @@ export function isContextModeHook(
 export function buildHookCommand(hookType: string, pluginRoot?: string): string {
   const scriptName = HOOK_SCRIPTS[hookType];
   if (pluginRoot && scriptName) {
-    return `node "${pluginRoot}/hooks/kiro/${scriptName}"`;
+    return buildNodeCommand(`${pluginRoot}/hooks/kiro/${scriptName}`);
   }
-  return `context-mode hook kiro ${hookType.toLowerCase()}`;
+  return `context-mode-doltlite hook kiro ${hookType.toLowerCase()}`;
 }

@@ -18,6 +18,7 @@ import { homedir, tmpdir } from "node:os";
 import { readStdin } from "./core/stdin.mjs";
 import { routePreToolUse, initSecurity } from "./core/routing.mjs";
 import { formatDecision } from "./core/formatters.mjs";
+import { parseStdin, getSessionId, resolveConfigDir } from "./session-helpers.mjs";
 
 // ─── Manual recursive copy (avoids cpSync libuv crash on non-ASCII paths, Windows + Node 24) ───
 function copyDirSync(src, dest) {
@@ -73,7 +74,7 @@ try {
 
     // 2. Update installed_plugins.json → point to correct version dir
     //    Skip if not present (e.g. CI / non-Claude-Code environments)
-    const ipPath = resolve(homedir(), ".claude", "plugins", "installed_plugins.json");
+    const ipPath = resolve(resolveConfigDir(), "plugins", "installed_plugins.json");
     if (existsSync(ipPath)) {
       const ip = JSON.parse(readFileSync(ipPath, "utf-8"));
       for (const [key, entries] of Object.entries(ip.plugins || {})) {
@@ -90,30 +91,52 @@ try {
     // 3. Update hook paths + matcher in settings.json for ALL hook types (#187)
     //    Previously only fixed PreToolUse — SessionStart, PostToolUse, PreCompact,
     //    UserPromptSubmit paths remained stale after marketplace auto-update.
-    const settingsPath = resolve(homedir(), ".claude", "settings.json");
+    const settingsPath = resolve(resolveConfigDir(), "settings.json");
     try {
       const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
       const allHooks = settings.hooks || {};
       let changed = false;
 
-      for (const hookType of Object.keys(allHooks)) {
-        const entries = allHooks[hookType];
-        if (!Array.isArray(entries)) continue;
-
-        for (const entry of entries) {
-          // Fix deprecated Task-only matcher (PreToolUse only)
-          if (hookType === "PreToolUse" && entry.matcher?.includes("Task") && !entry.matcher.includes("Agent")) {
-            entry.matcher = entry.matcher.replace("Task", "Agent|Task");
+      // If hooks.json is present, the plugin system owns hook registration.
+      // Remove any settings.json context-mode entries to prevent duplicate concurrent
+      // hook processes that cause "non-blocking hook error" on every tool call.
+      const hooksJsonPath = resolve(myRoot, "hooks", "hooks.json");
+      if (existsSync(hooksJsonPath)) {
+        for (const hookType of Object.keys(allHooks)) {
+          const entries = allHooks[hookType];
+          if (!Array.isArray(entries)) continue;
+          const filtered = entries.filter(
+            (entry) =>
+              !entry.hooks?.some(
+                (h) => h.command?.includes(".mjs") && h.command?.includes("context-mode"),
+              ),
+          );
+          if (filtered.length !== entries.length) {
+            allHooks[hookType] = filtered;
             changed = true;
           }
-          // Rewrite stale context-mode hook paths to point to current version
-          for (const h of (entry.hooks || [])) {
-            if (h.command && h.command.includes(".mjs") && h.command.includes("context-mode") && !h.command.includes(targetDir)) {
-              // Extract the script filename (e.g., sessionstart.mjs, pretooluse.mjs)
-              const scriptMatch = h.command.match(/([a-z]+\.mjs)\s*"?\s*$/);
-              if (scriptMatch) {
-                h.command = "node " + resolve(targetDir, "hooks", scriptMatch[1]);
-                changed = true;
+        }
+      } else {
+        // Legacy: hooks.json absent — rewrite stale paths to current version dir.
+        for (const hookType of Object.keys(allHooks)) {
+          const entries = allHooks[hookType];
+          if (!Array.isArray(entries)) continue;
+
+          for (const entry of entries) {
+            // Fix deprecated Task-only matcher (PreToolUse only)
+            if (hookType === "PreToolUse" && entry.matcher?.includes("Task") && !entry.matcher.includes("Agent")) {
+              entry.matcher = entry.matcher.replace("Task", "Agent|Task");
+              changed = true;
+            }
+            // Rewrite stale context-mode hook paths to point to current version
+            for (const h of (entry.hooks || [])) {
+              if (h.command && h.command.includes(".mjs") && h.command.includes("context-mode") && !h.command.includes(targetDir)) {
+                // Extract the script filename (e.g., sessionstart.mjs, pretooluse.mjs)
+                const scriptMatch = h.command.match(/([a-z]+\.mjs)\s*"?\s*$/);
+                if (scriptMatch) {
+                  h.command = "node " + resolve(targetDir, "hooks", scriptMatch[1]);
+                  changed = true;
+                }
               }
             }
           }
@@ -136,13 +159,40 @@ await initSecurity(resolve(__hookDir, "..", "build"));
 
 // ─── Read stdin ───
 const raw = await readStdin();
-const input = JSON.parse(raw);
+const input = parseStdin(raw);
 const tool = input.tool_name ?? "";
 const toolInput = input.tool_input ?? {};
 
 // ─── Route and format response ───
-const decision = routePreToolUse(tool, toolInput, process.env.CLAUDE_PROJECT_DIR, "claude-code");
+const decision = routePreToolUse(tool, toolInput, process.env.CLAUDE_PROJECT_DIR, "claude-code", getSessionId(input));
 const response = formatDecision("claude-code", decision);
+
+// ─── Write latency marker for cross-hook timing (Category 27) ───
+// Marker writes MUST happen before stdout write — stdout is the last action
+// so the process can exit immediately after, avoiding CI test timeouts.
+try {
+  const sessionId = getSessionId(input);
+  if (tool) {
+    const markerPath = resolve(tmpdir(), `context-mode-latency-${sessionId}-${tool}.txt`);
+    writeFileSync(markerPath, String(Date.now()), "utf-8");
+  }
+} catch { /* latency tracking is best-effort — never block hook */ }
+
+// ─── Write rejected-approach marker for PostToolUse to pick up ───
+// PreToolUse cannot safely load SessionDB (native module loading breaks hook stdout).
+// Write a marker file instead; PostToolUse reads it and writes the event.
+if (decision && (decision.action === "deny" || decision.action === "modify")) {
+  try {
+    const sessionId = getSessionId(input);
+    const reason = decision.action === "deny"
+      ? (decision.reason || "denied")
+      : "Redirected to context-mode sandbox";
+    const markerPath = resolve(tmpdir(), `context-mode-rejected-${sessionId}.txt`);
+    writeFileSync(markerPath, `${tool}:${reason}`, "utf-8");
+  } catch { /* best-effort — never block hook */ }
+}
+
+// ─── stdout write is the LAST action — process exits immediately after ───
 if (response !== null) {
   process.stdout.write(JSON.stringify(response) + "\n");
 }

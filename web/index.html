@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>context-mode — Save 98% of your AI coding agent's context window</title>
-<meta name="description" content="MCP plugin for Claude Code, Cursor, Copilot, and 12 platforms. Sandbox tool output, index it into FTS5, search on demand. 66,000+ developers. Open source.">
+<meta name="description" content="MCP plugin for Claude Code, Cursor, Copilot, and 14 platforms. Sandbox tool output, index it into FTS5, search on demand. 66,000+ developers. Open source.">
 <meta name="keywords" content="claude code context window, ai coding agent limit, context window optimization, mcp plugin, think in code, claude code limit fix, cursor context, copilot context">
-<link rel="canonical" href="https://context-mode.pages.dev">
+<link rel="canonical" href="https://context-mode.com">
 
 <!-- Open Graph -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="context-mode — The other half of the context problem">
-<meta property="og:description" content="Your AI coding agent burns through context in 20 minutes. context-mode keeps 98% of tool output out of the conversation. 66,000+ developers across 12 platforms.">
-<meta property="og:url" content="https://context-mode.pages.dev">
+<meta property="og:description" content="Your AI coding agent burns through context in 20 minutes. context-mode keeps 98% of tool output out of the conversation. 66,000+ developers across 14 platforms.">
+<meta property="og:url" content="https://context-mode.com">
 <meta property="og:site_name" content="context-mode">
 
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="context-mode — Save 98% of your AI coding agent's context window">
-<meta name="twitter:description" content="MCP plugin that sandboxes tool output and indexes it into FTS5. Your limit lasts 30x longer. Open source, 12 platforms.">
+<meta name="twitter:description" content="MCP plugin that sandboxes tool output and indexes it into FTS5. Your limit lasts 30x longer. Open source, 14 platforms.">
 <meta name="twitter:creator" content="@AcikAnaliz">
 
 <!-- Structured Data -->
@@ -38,7 +38,7 @@
   },
   "license": "https://github.com/mksglu/context-mode/blob/main/LICENSE",
   "downloadUrl": "https://www.npmjs.com/package/context-mode",
-  "softwareVersion": "1.0.71",
+  "softwareVersion": "1.0.89",
   "aggregateRating": {
     "@type": "AggregateRating",
     "ratingValue": "5",
@@ -120,8 +120,17 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-code);color:var
 /* ── Section spacing ── */
 .chapter{padding:72px 0 0}
 
+/* ── Availability ── */
+.avail{position:relative;display:inline-flex;align-items:center;gap:5px;cursor:default}
+.avail .dot{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;flex-shrink:0}
+.avail .dot::after{content:'';position:absolute;width:6px;height:6px;border-radius:50%;background:var(--green);animation:ping 1.5s cubic-bezier(0,0,.2,1) infinite}
+@keyframes ping{75%,100%{transform:scale(2);opacity:0}}
+.avail-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);font-size:12px;line-height:1.5;padding:10px 14px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s}
+.avail-tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--text)}
+.avail:hover .avail-tip{opacity:1}
+
 /* ── Responsive ── */
-@media(max-width:600px){.hero-stats{gap:1.5rem}.bench{flex-direction:column}.cont{grid-template-columns:1fr 1fr}.layer{flex-wrap:wrap}}
+@media(max-width:600px){.hero-stats{gap:1.5rem}.bench{flex-direction:column}.cont{grid-template-columns:1fr 1fr}.layer{flex-wrap:wrap}.avail-tip{white-space:normal;width:220px}}
 </style>
 </head>
 <body>
@@ -137,11 +146,17 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-code);color:var
     <div class="hero-stat"><div class="val" id="stat-users">—</div><div class="lbl">users</div></div>
     <div class="hero-stat"><div class="val" id="stat-npm">—</div><div class="lbl">npm</div></div>
     <div class="hero-stat"><div class="val" id="stat-marketplace">—</div><div class="lbl">marketplace</div></div>
-    <div class="hero-stat"><div class="val">12</div><div class="lbl">platforms</div></div>
+    <div class="hero-stat"><div class="val">14</div><div class="lbl">platforms</div></div>
+    <div class="hero-stat"><div class="val" id="stat-stars">—</div><div class="lbl">GitHub stars</div></div>
   </div>
   <div class="hero-cta">
     <a href="https://github.com/mksglu/context-mode#install" class="pri">Get Started →</a>
     <a href="https://github.com/mksglu/context-mode" class="sec">View Source</a>
+  </div>
+  <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:1.2rem">
+    <a href="https://github.com/mksglu/context-mode/blob/main/LICENSE" style="font-family:var(--mono);font-size:12px;font-weight:500;color:var(--accent-dark);background:var(--accent-light);padding:5px 12px;border-radius:4px;text-decoration:none;transition:.15s">ELv2</a>
+    <a href="https://news.ycombinator.com/item?id=47193064" style="font-family:var(--mono);font-size:12px;font-weight:500;color:#b45309;background:#fef3c7;padding:5px 12px;border-radius:4px;text-decoration:none;transition:.15s">HN #1 · 570+ pts</a>
+    <a href="https://discord.gg/DCN9jUgN5v" style="font-family:var(--mono);font-size:12px;font-weight:500;color:#4338ca;background:#e0e7ff;padding:5px 12px;border-radius:4px;text-decoration:none;transition:.15s">Discord</a>
   </div>
 </section>
 
@@ -238,6 +253,18 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-code);color:var
   <p class="body-text">Without context-mode, those 20 tool calls put 600 KB into the conversation. Over 50 turns, 30 MB re-sent. With it, the same calls produce 20 KB. Over 50 turns, 1 MB. <strong>Same work. Same answers. 30 times fewer tokens.</strong></p>
 </section>
 
+<div style="margin:2rem 0">
+  <a href="https://www.youtube.com/watch?v=QUHrntlfPo4" target="_blank" style="display:block;position:relative;border-radius:8px;overflow:hidden">
+    <img src="https://img.youtube.com/vi/QUHrntlfPo4/maxresdefault.jpg" alt="Watch context-mode demo" style="width:100%;display:block">
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.3)">
+      <div style="width:64px;height:64px;background:rgba(255,0,0,.9);border-radius:50%;display:flex;align-items:center;justify-content:center">
+        <div style="width:0;height:0;border-top:12px solid transparent;border-bottom:12px solid transparent;border-left:20px solid #fff;margin-left:4px"></div>
+      </div>
+    </div>
+  </a>
+  <p style="text-align:center;font-size:13px;color:var(--text-4);margin-top:8px">Watch the 3-minute demo →</p>
+</div>
+
 <hr class="sep">
 
 <!-- Ch 4 -->
@@ -248,7 +275,7 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-code);color:var
 
   <p class="body-text">That handles the output side. Tool results stay in the sandbox. But there was still a problem with input. When the agent wants to analyze 47 files, it calls <code>Read()</code> on each one. Every file enters context. Every file stays there.</p>
 
-  <p class="body-text">v1.0.64 made this a rule, not a suggestion. We call it Think in Code. It's mandatory across all 12 platform configs. The idea fits in one sentence: <strong>if you need to analyze, count, filter, or process data, write code that does it.</strong> Stop pulling raw data into context to process mentally.</p>
+  <p class="body-text">v1.0.64 made this a rule, not a suggestion. We call it Think in Code. It's mandatory across all 14 platform configs. The idea fits in one sentence: <strong>if you need to analyze, count, filter, or process data, write code that does it.</strong> Stop pulling raw data into context to process mentally.</p>
 
 <div class="code-block"><span class="c">// Before: 47 files × Read() = 700 KB in context</span>
 <span class="c">// After: 1 ctx_execute() = 3.6 KB in context</span>
@@ -266,6 +293,37 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-code);color:var
 <span class="c">// Context used: 3.6 KB. Reduction: 200×.</span></div>
 
   <p class="body-text">The LLM writes a script. The script runs in a sandbox. Only stdout enters context. Your CPU does the work for free. Tokens cost money.</p>
+</section>
+
+<hr class="sep">
+
+<!-- Ch 4b -->
+<section class="chapter rev">
+  <p class="section-label">Output</p>
+  <h2 class="section-title">Output compression</h2>
+  <div class="rule"></div>
+
+  <p class="body-text">Context saving handles the input side. But the agent wastes output tokens too — filler words, pleasantries, verbose explanations, hedging. "Sure! I'd be happy to help you with that. Let me take a look at the file and see what we can do." That's 30 tokens of nothing.</p>
+
+  <p class="body-text">context-mode enforces output compression across all 14 platforms. Technical substance stays exact. Only fluff dies.</p>
+
+  <div style="background:var(--bg-alt);border:1px solid var(--border-light);border-radius:6px;padding:22px 24px;margin:1.5rem 0">
+    <p style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:10px">The rules</p>
+    <p style="font-size:14px;color:var(--text-2);line-height:1.8;margin:0">Drop: articles, filler (just/really/basically), pleasantries, hedging.<br>Fragments OK. Short synonyms. Code unchanged.<br>Pattern: <code>[thing] [action] [reason]. [next step].</code><br>Auto-expand for: security warnings, irreversible actions, user confusion.</p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:1.5rem 0">
+    <div style="padding:16px 18px;border:1px solid var(--border-light);border-radius:6px">
+      <p style="font-size:11px;font-weight:600;color:var(--text-4);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Before</p>
+      <p style="font-size:13.5px;color:var(--text-3);line-height:1.6;margin:0;font-style:italic">"Sure, I'd be happy to help! I've looked at the database connection pooling configuration and it appears that the issue is related to the maximum idle timeout setting being set too low for your workload. Let me walk you through the fix."</p>
+    </div>
+    <div style="padding:16px 18px;border:1px solid var(--accent);border-radius:6px;background:var(--accent-light)">
+      <p style="font-size:11px;font-weight:600;color:var(--accent-dark);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">After</p>
+      <p style="font-size:13.5px;color:var(--text);line-height:1.6;margin:0">"DB pool idle timeout too low for workload. Set <code>max_idle_ms: 30000</code> in config. Fix:"</p>
+    </div>
+  </div>
+
+  <p class="body-text">~65-75% output token reduction. Full technical accuracy. The agent says the same thing in fewer words. Your context window lasts longer from both sides.</p>
 </section>
 
 <hr class="sep">
@@ -297,16 +355,38 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-code);color:var
 
 <hr class="sep">
 
+<!-- Insight -->
+<section class="chapter rev">
+  <p class="section-label">Analytics</p>
+  <h2 class="section-title">See how you actually use AI</h2>
+  <div class="rule"></div>
+
+  <p class="body-text"><code>/ctx-insight</code> opens a local analytics dashboard in your browser. 15+ metrics built from your session data. No cloud, no telemetry, everything stays on your machine.</p>
+
+  <div class="cont">
+    <div><span class="ck">✓</span> Tool usage breakdown</div>
+    <div><span class="ck">✓</span> Session activity timeline</div>
+    <div><span class="ck">✓</span> Error rate tracking</div>
+    <div><span class="ck">✓</span> Parallel work patterns</div>
+    <div><span class="ck">✓</span> Explore/execute ratio</div>
+    <div><span class="ck">✓</span> Mastery curve</div>
+  </div>
+
+  <p class="body-text">Available as MCP tool (<code>ctx_insight</code>), CLI command (<code>context-mode insight</code>), or slash command (<code>/ctx-insight</code>). Built with TanStack Router and shadcn/ui. Runs on 127.0.0.1, works with both Node.js and Bun.</p>
+</section>
+
+<hr class="sep">
+
 <!-- Ch 6 -->
 <section class="chapter rev">
   <p class="section-label">Platforms</p>
-  <h2 class="section-title">12 platforms, one plugin</h2>
+  <h2 class="section-title">14 platforms, one plugin</h2>
   <div class="rule"></div>
 
-  <p class="body-text">Works on Claude Code, Cursor, Copilot, Codex, Gemini CLI, and seven more. Platforms with hook support get automatic routing. The rest use instruction-based rules. Same plugin everywhere.</p>
+  <p class="body-text">Works on Claude Code, Cursor, Copilot, Codex, Gemini CLI, and nine more. Platforms with hook support get automatic routing. The rest use instruction-based rules. Same plugin everywhere.</p>
 
   <div style="display:flex;flex-wrap:wrap;gap:6px;margin:1.2rem 0">
-    <span class="tag">Claude Code</span><span class="tag">Cursor</span><span class="tag">Codex CLI</span><span class="tag">VS Code Copilot</span><span class="tag">Gemini CLI</span><span class="tag">Kiro</span><span class="tag">OpenCode</span><span class="tag">KiloCode</span><span class="tag">Zed</span><span class="tag">OpenClaw</span><span class="tag">Pi</span><span class="tag">Antigravity</span>
+    <span class="tag">Claude Code</span><span class="tag">Cursor</span><span class="tag">Codex CLI</span><span class="tag">VS Code Copilot</span><span class="tag">JetBrains Copilot</span><span class="tag">Gemini CLI</span><span class="tag">Qwen Code</span><span class="tag">Kiro</span><span class="tag">OpenCode</span><span class="tag">KiloCode</span><span class="tag">Zed</span><span class="tag">OpenClaw</span><span class="tag">Pi</span><span class="tag">Antigravity</span>
   </div>
 </section>
 
@@ -359,6 +439,33 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-code);color:var
 
   <p class="body-text" style="font-size:14px;color:var(--text-4);margin-top:1.2rem">Open source · Elastic License 2.0 · Node.js 18+ · Works with Bun</p>
 </div>
+
+<hr class="sep">
+
+<!-- Blog -->
+<section class="chapter rev">
+  <p class="section-label">Blog</p>
+  <h2 class="section-title">Read the story</h2>
+  <div class="rule"></div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <a href="https://mksg.lu/blog/claude-code-limit-burn" target="_blank" style="display:block;padding:24px;border:1px solid var(--border);border-radius:8px;transition:.15s;text-decoration:none">
+      <p style="font-size:11px;font-weight:600;color:var(--text-4);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">mksg.lu</p>
+      <p style="font-size:18px;font-weight:600;color:var(--text);margin-bottom:6px;line-height:1.3">Why Claude Code Burns Through Your Limit</p>
+      <p style="font-size:14px;color:var(--text-3);line-height:1.6;margin:0">The math behind context window consumption. How tool output accumulates, why compaction kills productivity, and what you can do about it.</p>
+    </a>
+    <a href="https://mksg.lu/blog/think-in-code" target="_blank" style="display:block;padding:24px;border:1px solid var(--border);border-radius:8px;transition:.15s;text-decoration:none">
+      <p style="font-size:11px;font-weight:600;color:var(--text-4);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">mksg.lu</p>
+      <p style="font-size:18px;font-weight:600;color:var(--text);margin-bottom:6px;line-height:1.3">Think in Code</p>
+      <p style="font-size:14px;color:var(--text-3);line-height:1.6;margin:0">The paradigm shift: stop treating LLMs as data processors, start treating them as code generators. One script replaces ten tool calls.</p>
+    </a>
+    <a href="https://mksg.lu/blog/context-mode-v1-release" target="_blank" style="display:block;padding:24px;border:1px solid var(--border);border-radius:8px;transition:.15s;text-decoration:none">
+      <p style="font-size:11px;font-weight:600;color:var(--text-4);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">mksg.lu</p>
+      <p style="font-size:18px;font-weight:600;color:var(--text);margin-bottom:6px;line-height:1.3">context-mode v1 Release</p>
+      <p style="font-size:14px;color:var(--text-3);line-height:1.6;margin:0">The story behind building an MCP server that saves 98% of your AI coding agent's context window. Architecture decisions, benchmarks, and lessons from 14 platform adapters.</p>
+    </a>
+  </div>
+</section>
 
 <hr class="sep">
 
@@ -422,6 +529,7 @@ code{font-family:var(--mono);font-size:.88em;background:var(--bg-code);color:var
   <p style="font-family:var(--serif);font-size:clamp(1.2rem,3vw,1.6rem);font-style:italic;color:var(--text);margin-bottom:1.2rem;padding:0 24px">Stop feeding your context window raw bytes.<br>Feed it answers.</p>
   <p style="font-size:14px;color:var(--text-3)"><a href="https://github.com/mksglu/context-mode">github.com/mksglu/context-mode</a></p>
   <p style="margin-top:1rem;font-size:13px;color:var(--text-4)">Built by <a href="https://mksg.lu" style="color:var(--text-3)">B. Mert Köseoğlu</a></p>
+  <!-- <p style="margin-top:.4rem;font-size:12px;color:var(--text-4)"><span class="avail"><span class="dot"></span><span style="color:var(--green);font-size:12px">open to new opportunities</span><span class="avail-tip"><strong>Founding Engineer · AI · Tech Lead</strong><br>Fully remote preferred.<br>UK &amp; NL: sponsorship + competitive comp.</span></span></p> -->
   <p style="margin-top:.6rem"><a href="https://github.com/mksglu/context-mode/issues/134" style="color:var(--text-4);font-size:12px">Liked this? Help a solo dev out →</a></p>
   <p style="margin-top:2rem;font-size:11px;color:var(--text-4);line-height:1.6">MKSF LTD · Suite 8805 5 Brayford Square · London, E1 0SG · United Kingdom</p>
 </footer>
@@ -444,6 +552,15 @@ fetch('https://raw.githubusercontent.com/mksglu/context-mode/main/stats.json')
     document.getElementById('stat-npm').textContent='56.1k+';
     document.getElementById('stat-marketplace').textContent='10.2k+';
   });
+
+// GitHub stars
+fetch('https://api.github.com/repos/mksglu/context-mode')
+  .then(r=>r.json())
+  .then(d=>{
+    document.getElementById('stat-stars').textContent=
+      (d.stargazers_count>=1000?(d.stargazers_count/1000).toFixed(1)+'k':d.stargazers_count)||'—';
+  })
+  .catch(()=>{});
 </script>
 </body>
 </html>

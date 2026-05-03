@@ -5,12 +5,13 @@ import "../ensure-deps.mjs";
  * Cursor postToolUse hook — session event capture.
  */
 
-import { readStdin, getSessionId, getSessionDBPath, getInputProjectDir, CURSOR_OPTS } from "../session-helpers.mjs";
-import { join, dirname } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { readStdin, parseStdin, getSessionId, getSessionDBPath, getInputProjectDir, CURSOR_OPTS } from "../session-helpers.mjs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createSessionLoaders, attributeAndInsertEvents } from "../session-loaders.mjs";
 
 const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
-const PKG_SESSION = join(HOOK_DIR, "..", "..", "build", "session");
+const { loadSessionDB, loadExtract, loadProjectAttribution } = createSessionLoaders(HOOK_DIR);
 const OPTS = CURSOR_OPTS;
 
 function normalizeToolName(toolName) {
@@ -29,15 +30,16 @@ function normalizeToolName(toolName) {
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
   const projectDir = getInputProjectDir(input, CURSOR_OPTS);
 
   if (projectDir && !process.env.CURSOR_CWD) {
     process.env.CURSOR_CWD = projectDir;
   }
 
-  const { extractEvents } = await import(pathToFileURL(join(PKG_SESSION, "extract.js")).href);
-  const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
+  const { extractEvents } = await loadExtract();
+  const { resolveProjectAttributions } = await loadProjectAttribution();
+  const { SessionDB } = await loadSessionDB();
 
   const dbPath = getSessionDBPath(OPTS);
   const db = new SessionDB({ dbPath });
@@ -57,9 +59,8 @@ try {
   };
 
   const events = extractEvents(normalizedInput);
-  for (const event of events) {
-    db.insertEvent(sessionId, event, "PostToolUse");
-  }
+
+  attributeAndInsertEvents(db, sessionId, events, input, projectDir, "PostToolUse", resolveProjectAttributions);
 
   db.close();
 } catch {

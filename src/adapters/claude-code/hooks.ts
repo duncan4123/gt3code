@@ -1,3 +1,5 @@
+import { buildNodeCommand } from "../types.js";
+
 /**
  * adapters/claude-code/hooks — Claude Code hook definitions and matchers.
  *
@@ -42,7 +44,6 @@ export const PRE_TOOL_USE_MATCHERS = [
   "Read",
   "Grep",
   "Agent",
-  "Task",
   "mcp__plugin_context-mode_context-mode-doltlite__ctx_execute",
   "mcp__plugin_context-mode_context-mode-doltlite__ctx_execute_file",
   "mcp__plugin_context-mode_context-mode-doltlite__ctx_batch_execute",
@@ -53,6 +54,40 @@ export const PRE_TOOL_USE_MATCHERS = [
  * Used by the upgrade command when writing a single consolidated entry.
  */
 export const PRE_TOOL_USE_MATCHER_PATTERN = PRE_TOOL_USE_MATCHERS.join("|");
+
+// ─────────────────────────────────────────────────────────
+// PostToolUse matchers (#229)
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Tools that context-mode's PostToolUse hook should fire on.
+ * Only tools that extractEvents() actually handles — all others
+ * produce zero events and cause false "hook error" display.
+ */
+export const POST_TOOL_USE_MATCHERS = [
+  "Bash",
+  "Read",
+  "Write",
+  "Edit",
+  "NotebookEdit",
+  "Glob",
+  "Grep",
+  "TodoWrite",
+  "TaskCreate",
+  "TaskUpdate",
+  "EnterPlanMode",
+  "ExitPlanMode",
+  "Skill",
+  "Agent",
+  "AskUserQuestion",
+  "EnterWorktree",
+  "mcp__",
+] as const;
+
+/**
+ * Combined matcher pattern for PostToolUse in hooks.json / settings.json.
+ */
+export const POST_TOOL_USE_MATCHER_PATTERN = POST_TOOL_USE_MATCHERS.join("|");
 
 // ─────────────────────────────────────────────────────────
 // Hook script file names
@@ -87,7 +122,7 @@ export const OPTIONAL_HOOKS: HookType[] = [
 /**
  * Check if a hook entry points to a context-mode hook script.
  * Matches both legacy format (node .../pretooluse.mjs) and
- * CLI dispatcher format (context-mode hook claude-code pretooluse).
+ * CLI dispatcher format (context-mode-doltlite hook claude-code pretooluse).
  */
 export function isContextModeHook(
   entry: { hooks?: Array<{ command?: string }> },
@@ -104,26 +139,31 @@ export function isContextModeHook(
 
 /**
  * Build the hook command string for a given hook type.
- * Uses absolute node path to avoid PATH issues (homebrew, nvm, volta, etc.).
+ * Uses process.execPath + forward slashes to avoid PATH issues and MSYS
+ * path mangling on Windows (#369, #372).
  * Falls back to CLI dispatcher if pluginRoot is not provided.
  */
 export function buildHookCommand(hookType: HookType, pluginRoot?: string): string {
   if (pluginRoot) {
     const scriptName = HOOK_SCRIPTS[hookType];
-    return `node "${pluginRoot}/hooks/${scriptName}"`;
+    return buildNodeCommand(`${pluginRoot}/hooks/${scriptName}`);
   }
-  return `context-mode hook claude-code ${hookType.toLowerCase()}`;
+  return `context-mode-doltlite hook claude-code ${hookType.toLowerCase()}`;
 }
 
 /**
  * Extract the hook script file path from a command string.
- * Returns the path if the command uses the `node "/path/to/hook.mjs"` format,
+ * Returns the path if the command uses the `node "/path/to/hook.mjs"` format
+ * or the new `"/path/to/node" "/path/to/hook.mjs"` format (#369, #372),
  * or null if it uses the CLI dispatcher format (which is path-independent).
  *
  * Handles both quoted and unquoted paths, and both forward/back slashes.
  */
 export function extractHookScriptPath(command: string): string | null {
-  // Match: node "/path/to/hooks/scriptname.mjs" or node /path/to/hooks/scriptname.mjs
+  // New format: "nodePath" "scriptPath.mjs" (from buildNodeCommand)
+  const newFmt = command.match(/"[^"]+"\s+"([^"]+\.mjs)"/);
+  if (newFmt) return newFmt[1];
+  // Legacy format: node "/path/to/hooks/scriptname.mjs" or node /path/to/hooks/scriptname.mjs
   const match = command.match(/node\s+"?([^"]+\.mjs)"?/);
   return match?.[1] ?? null;
 }
@@ -141,7 +181,7 @@ export function isAnyContextModeHook(
     entry.hooks?.some((h) =>
       h.command != null &&
       (scriptNames.some((s) => h.command!.includes(s)) ||
-        h.command.includes("context-mode hook")),
+        h.command.includes("context-mode-doltlite hook")),
     ) ?? false
   );
 }

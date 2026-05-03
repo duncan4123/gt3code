@@ -10,32 +10,34 @@ import "../ensure-deps.mjs";
  * Must be fast (<20ms). No network, no LLM, just SQLite writes.
  */
 
-import { createSessionLoaders } from "../session-loaders.mjs";
-import { readStdin, getSessionId, getSessionDBPath, getProjectDir, VSCODE_OPTS } from "../session-helpers.mjs";
+import { createSessionLoaders, attributeAndInsertEvents } from "../session-loaders.mjs";
+import { readStdin, parseStdin, getSessionId, getSessionDBPath, getInputProjectDir, VSCODE_OPTS } from "../session-helpers.mjs";
 import { appendFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
 const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
-const { loadSessionDB, loadExtract } = createSessionLoaders(HOOK_DIR);
+const { loadSessionDB, loadExtract, loadProjectAttribution } = createSessionLoaders(HOOK_DIR);
 const OPTS = VSCODE_OPTS;
 const DEBUG_LOG = join(homedir(), ".vscode", "context-mode-doltlite", "posttooluse-debug.log");
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
+  const projectDir = getInputProjectDir(input, OPTS);
 
   appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] CALL: ${input.tool_name}\n`);
 
   const { extractEvents } = await loadExtract();
+  const { resolveProjectAttributions } = await loadProjectAttribution();
   const { SessionDB } = await loadSessionDB();
 
   const dbPath = getSessionDBPath(OPTS);
   const db = new SessionDB({ dbPath });
   const sessionId = getSessionId(input, OPTS);
 
-  db.ensureSession(sessionId, getProjectDir(OPTS));
+  db.ensureSession(sessionId, projectDir);
 
   const events = extractEvents({
     tool_name: input.tool_name,
@@ -46,9 +48,7 @@ try {
     tool_output: input.tool_output,
   });
 
-  for (const event of events) {
-    db.insertEvent(sessionId, event, "PostToolUse");
-  }
+  attributeAndInsertEvents(db, sessionId, events, input, projectDir, "PostToolUse", resolveProjectAttributions);
 
   appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] OK: ${input.tool_name} → ${events.length} events\n`);
   db.close();

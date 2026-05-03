@@ -8,7 +8,7 @@ body:
       value: |
         ## Read this before filing.
 
-        **This is a developer tool that runs on 12 platforms (Claude Code, Cursor, VS Code Copilot, Gemini CLI, OpenCode, KiloCode, Codex CLI, OpenClaw, Kiro, Antigravity, Zed, and more) across 3 operating systems (macOS, Linux, Windows). It is maintained by one person. I cannot reproduce every platform-specific edge case.**
+        **This is a developer tool that runs on 14 platforms (Claude Code, Cursor, VS Code Copilot, JetBrains Copilot, Gemini CLI, Qwen Code, OpenCode, KiloCode, Codex CLI, OpenClaw, Pi, Kiro, Antigravity, Zed) across 3 operating systems (macOS, Linux, Windows). It is maintained by one person. I cannot reproduce every platform-specific edge case.**
 
         ### PRs > Issues. Always.
 
@@ -17,7 +17,7 @@ body:
         1. **Reproduce the bug** with a specific prompt (paste it below)
         2. **Ask your agent to debug it**: _"Read the context-mode hooks source and find why this error occurs"_
         3. **Write a failing test** (RED) and fix it (GREEN) — see [CONTRIBUTING.md](https://github.com/mksglu/context-mode/blob/main/CONTRIBUTING.md)
-        4. **Open a PR** against `main` branch — CI verifies on Ubuntu, macOS, and Windows
+        4. **Open a PR** against `next` branch — CI verifies on Ubuntu, macOS, and Windows
 
         **Opening an issue does NOT guarantee a fix.** I welcome issues for discussion and triage, but the fastest path to resolution is a PR. If you can describe the bug, your AI agent can fix it.
 
@@ -45,11 +45,14 @@ body:
         - Claude Code
         - Cursor
         - VS Code Copilot (GitHub Copilot)
+        - JetBrains Copilot
         - Gemini CLI
+        - Qwen Code
         - OpenCode
         - KiloCode
         - Codex CLI
         - OpenClaw (Pi Agent)
+        - Pi
         - Kiro
         - Antigravity
         - Zed

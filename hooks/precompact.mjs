@@ -2,28 +2,27 @@
 import "./suppress-stderr.mjs";
 import "./ensure-deps.mjs";
 /**
- * PreCompact hook for context-mode-doltlite session continuity.
+ * PreCompact hook for context-mode session continuity.
  *
  * Triggered when Claude Code is about to compact the conversation.
  * Reads all captured session events, builds a priority-sorted resume
  * snapshot (<2KB XML), and stores it for injection after compact.
  */
 
-import { readStdin, getSessionId, getSessionDBPath } from "./session-helpers.mjs";
+import { readStdin, parseStdin, getSessionId, getSessionDBPath, resolveConfigDir } from "./session-helpers.mjs";
 import { createSessionLoaders } from "./session-loaders.mjs";
 import { appendFileSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 // Resolve absolute path for imports
 const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
 const { loadSessionDB, loadSnapshot } = createSessionLoaders(HOOK_DIR);
-const DEBUG_LOG = join(homedir(), ".claude", "context-mode-doltlite", "precompact-debug.log");
+const DEBUG_LOG = join(resolveConfigDir(), "context-mode", "precompact-debug.log");
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
 
   const { buildResumeSnapshot } = await loadSnapshot();
   const { SessionDB } = await loadSessionDB();
@@ -43,6 +42,15 @@ try {
 
     db.upsertResume(sessionId, snapshot, events.length);
     db.incrementCompactCount(sessionId);
+
+    // Write compaction category event for analytics
+    const fileEvents = events.filter(e => e.category === "file");
+    db.insertEvent(sessionId, {
+      type: "compaction_summary",
+      category: "compaction",
+      data: `Session compacted. ${events.length} events, ${fileEvents.length} files touched.`,
+      priority: 1,
+    }, "PreCompact");
   }
 
   db.close();

@@ -13,18 +13,19 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readStdin } from "../core/stdin.mjs";
 import { routePreToolUse, initSecurity } from "../core/routing.mjs";
+import { parseStdin, getSessionId, KIRO_OPTS } from "../session-helpers.mjs";
 
 const __hookDir = dirname(fileURLToPath(import.meta.url));
 await initSecurity(resolve(__hookDir, "..", "..", "build"));
 
 const raw = await readStdin();
-const input = JSON.parse(raw);
+const input = parseStdin(raw);
 // Kiro stdin: { hook_event_name, cwd, tool_name, tool_input }
 const tool = input.tool_name ?? "";
 const toolInput = input.tool_input ?? {};
 const projectDir = input.cwd ?? process.cwd();
 
-const decision = routePreToolUse(tool, toolInput, projectDir, "kiro");
+const decision = routePreToolUse(tool, toolInput, projectDir, "kiro", getSessionId(input, KIRO_OPTS));
 
 if (!decision) process.exit(0);
 

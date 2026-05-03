@@ -9,6 +9,7 @@
 import { SQLiteBase, defaultDBPath } from "../db-base.js";
 import type { PreparedStatement } from "../db-base.js";
 import type { SessionEvent } from "../types.js";
+import type { ProjectAttribution } from "./project-attribution.js";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 
@@ -24,37 +25,53 @@ import { execFileSync } from "node:child_process";
  * (useful in CI environments or when git is unavailable).
  * Set to empty string to disable isolation entirely.
  */
+// Memoized per (cwd, env override) — recomputing on every tool call cost
+// ~12ms (git worktree list subprocess fork) on macOS, 50ms+ on Windows.
+// Key by cwd so a defensive `process.chdir()` invalidates rather than
+// returning stale data.
+let _wtCache: { cwd: string; envSuffix: string | undefined; suffix: string } | undefined;
+
 export function getWorktreeSuffix(): string {
   const envSuffix = process.env.CONTEXT_MODE_SESSION_SUFFIX;
+  const cwd = process.cwd();
+  if (_wtCache && _wtCache.cwd === cwd && _wtCache.envSuffix === envSuffix) {
+    return _wtCache.suffix;
+  }
+
+  let suffix = "";
   if (envSuffix !== undefined) {
-    return envSuffix ? `__${envSuffix}` : "";
-  }
+    suffix = envSuffix ? `__${envSuffix}` : "";
+  } else {
+    try {
+      const mainWorktree = execFileSync(
+        "git",
+        ["worktree", "list", "--porcelain"],
+        {
+          encoding: "utf-8",
+          timeout: 2000,
+          stdio: ["ignore", "pipe", "ignore"],
+        },
+      )
+        .split(/\r?\n/)
+        .find((l) => l.startsWith("worktree "))
+        ?.replace("worktree ", "")
+        ?.trim();
 
-  try {
-    const cwd = process.cwd();
-    const mainWorktree = execFileSync(
-      "git",
-      ["worktree", "list", "--porcelain"],
-      {
-        encoding: "utf-8",
-        timeout: 2000,
-        stdio: ["ignore", "pipe", "ignore"],
-      },
-    )
-      .split(/\r?\n/)
-      .find((l) => l.startsWith("worktree "))
-      ?.replace("worktree ", "")
-      ?.trim();
-
-    if (mainWorktree && cwd !== mainWorktree) {
-      const suffix = createHash("sha256").update(cwd).digest("hex").slice(0, 8);
-      return `__${suffix}`;
+      if (mainWorktree && cwd !== mainWorktree) {
+        suffix = `__${createHash("sha256").update(cwd).digest("hex").slice(0, 8)}`;
+      }
+    } catch {
+      // git not available or not a git repo — no suffix
     }
-  } catch {
-    // git not available or not a git repo — no suffix
   }
 
-  return "";
+  _wtCache = { cwd, envSuffix, suffix };
+  return suffix;
+}
+
+// Test-only helper: clear the memoization between cases.
+export function _resetWorktreeSuffixCacheForTests(): void {
+  _wtCache = undefined;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -69,6 +86,9 @@ export interface StoredEvent {
   category: string;
   priority: number;
   data: string;
+  project_dir: string;
+  attribution_source: string;
+  attribution_confidence: number;
   source_hook: string;
   created_at: string;
   data_hash: string;
@@ -89,6 +109,13 @@ export interface ResumeRow {
   snapshot: string;
   event_count: number;
   consumed: number;
+}
+
+/** Aggregated tool-call stats for a single session. */
+export interface ToolCallStats {
+  totalCalls: number;
+  totalBytesReturned: number;
+  byTool: Record<string, { calls: number; bytesReturned: number }>;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -112,6 +139,7 @@ const S = {
   getEventsByPriority: "getEventsByPriority",
   getEventsByTypeAndPriority: "getEventsByTypeAndPriority",
   getEventCount: "getEventCount",
+  getLatestAttributedProject: "getLatestAttributedProject",
   checkDuplicate: "checkDuplicate",
   evictLowestPriority: "evictLowestPriority",
   updateMetaLastEvent: "updateMetaLastEvent",
@@ -125,6 +153,10 @@ const S = {
   deleteMeta: "deleteMeta",
   deleteResume: "deleteResume",
   getOldSessions: "getOldSessions",
+  searchEvents: "searchEvents",
+  incrementToolCall: "incrementToolCall",
+  getToolCallTotals: "getToolCallTotals",
+  getToolCallByTool: "getToolCallByTool",
 } as const;
 
 // ─────────────────────────────────────────────────────────
@@ -176,6 +208,9 @@ export class SessionDB extends SQLiteBase {
         category TEXT NOT NULL,
         priority INTEGER NOT NULL DEFAULT 2,
         data TEXT NOT NULL,
+        project_dir TEXT NOT NULL DEFAULT '',
+        attribution_source TEXT NOT NULL DEFAULT 'unknown',
+        attribution_confidence REAL NOT NULL DEFAULT 0,
         source_hook TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         data_hash TEXT NOT NULL DEFAULT ''
@@ -202,7 +237,36 @@ export class SessionDB extends SQLiteBase {
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         consumed INTEGER NOT NULL DEFAULT 0
       );
+
+      CREATE TABLE IF NOT EXISTS tool_calls (
+        session_id TEXT NOT NULL,
+        tool TEXT NOT NULL,
+        calls INTEGER NOT NULL DEFAULT 0,
+        bytes_returned INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (session_id, tool)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id);
     `);
+
+    // Migration: add per-event attribution columns for existing DBs.
+    try {
+      const colInfo = this.db.pragma("table_xinfo(session_events)") as Array<{ name: string }>;
+      const cols = new Set(colInfo.map((c) => c.name));
+      if (!cols.has("project_dir")) {
+        this.db.exec("ALTER TABLE session_events ADD COLUMN project_dir TEXT NOT NULL DEFAULT ''");
+      }
+      if (!cols.has("attribution_source")) {
+        this.db.exec("ALTER TABLE session_events ADD COLUMN attribution_source TEXT NOT NULL DEFAULT 'unknown'");
+      }
+      if (!cols.has("attribution_confidence")) {
+        this.db.exec("ALTER TABLE session_events ADD COLUMN attribution_confidence REAL NOT NULL DEFAULT 0");
+      }
+      this.db.exec("CREATE INDEX IF NOT EXISTS idx_session_events_project ON session_events(session_id, project_dir)");
+    } catch {
+      // best-effort migration only
+    }
 
   }
 
@@ -215,27 +279,46 @@ export class SessionDB extends SQLiteBase {
 
     // ── Events ──
     p(S.insertEvent,
-      `INSERT INTO session_events (session_id, type, category, priority, data, source_hook, data_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`);
+      `INSERT INTO session_events (
+         session_id, type, category, priority, data,
+         project_dir, attribution_source, attribution_confidence,
+         source_hook, data_hash
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
     p(S.getEvents,
-      `SELECT id, session_id, type, category, priority, data, source_hook, created_at, data_hash
+      `SELECT id, session_id, type, category, priority, data,
+              project_dir, attribution_source, attribution_confidence,
+              source_hook, created_at, data_hash
        FROM session_events WHERE session_id = ? ORDER BY id ASC LIMIT ?`);
 
     p(S.getEventsByType,
-      `SELECT id, session_id, type, category, priority, data, source_hook, created_at, data_hash
+      `SELECT id, session_id, type, category, priority, data,
+              project_dir, attribution_source, attribution_confidence,
+              source_hook, created_at, data_hash
        FROM session_events WHERE session_id = ? AND type = ? ORDER BY id ASC LIMIT ?`);
 
     p(S.getEventsByPriority,
-      `SELECT id, session_id, type, category, priority, data, source_hook, created_at, data_hash
+      `SELECT id, session_id, type, category, priority, data,
+              project_dir, attribution_source, attribution_confidence,
+              source_hook, created_at, data_hash
        FROM session_events WHERE session_id = ? AND priority >= ? ORDER BY id ASC LIMIT ?`);
 
     p(S.getEventsByTypeAndPriority,
-      `SELECT id, session_id, type, category, priority, data, source_hook, created_at, data_hash
+      `SELECT id, session_id, type, category, priority, data,
+              project_dir, attribution_source, attribution_confidence,
+              source_hook, created_at, data_hash
        FROM session_events WHERE session_id = ? AND type = ? AND priority >= ? ORDER BY id ASC LIMIT ?`);
 
     p(S.getEventCount,
       `SELECT COUNT(*) AS cnt FROM session_events WHERE session_id = ?`);
+
+    p(S.getLatestAttributedProject,
+      `SELECT project_dir
+       FROM session_events
+       WHERE session_id = ? AND project_dir != ''
+       ORDER BY id DESC
+       LIMIT 1`);
 
     p(S.checkDuplicate,
       `SELECT 1 FROM (
@@ -288,10 +371,37 @@ export class SessionDB extends SQLiteBase {
     p(S.deleteMeta, `DELETE FROM session_meta WHERE session_id = ?`);
     p(S.deleteResume, `DELETE FROM session_resume WHERE session_id = ?`);
 
+    // ── Search ──
+    p(S.searchEvents,
+      `SELECT id, session_id, category, type, data, created_at
+       FROM session_events
+       WHERE project_dir = ?
+         AND (data LIKE '%' || ? || '%' ESCAPE '\\' OR category LIKE '%' || ? || '%' ESCAPE '\\')
+         AND (? IS NULL OR category = ?)
+       ORDER BY id ASC
+       LIMIT ?`);
+
     // ── Cleanup ──
     p(S.getOldSessions,
       `SELECT session_id FROM session_meta WHERE started_at < datetime('now', ? || ' days')`);
 
+    // ── Tool calls (persistent counter) ──
+    p(S.incrementToolCall,
+      `INSERT INTO tool_calls (session_id, tool, calls, bytes_returned)
+       VALUES (?, ?, 1, ?)
+       ON CONFLICT(session_id, tool) DO UPDATE SET
+         calls = calls + 1,
+         bytes_returned = bytes_returned + excluded.bytes_returned,
+         updated_at = datetime('now')`);
+
+    p(S.getToolCallTotals,
+      `SELECT COALESCE(SUM(calls), 0) AS calls,
+              COALESCE(SUM(bytes_returned), 0) AS bytes_returned
+       FROM tool_calls WHERE session_id = ?`);
+
+    p(S.getToolCallByTool,
+      `SELECT tool, calls, bytes_returned
+       FROM tool_calls WHERE session_id = ? ORDER BY calls DESC`);
   }
 
   // ═══════════════════════════════════════════
@@ -307,13 +417,36 @@ export class SessionDB extends SQLiteBase {
    * Eviction: if session exceeds MAX_EVENTS_PER_SESSION, evicts the
    * lowest-priority (then oldest) event.
    */
-  insertEvent(sessionId: string, event: SessionEvent, sourceHook: string = "PostToolUse"): void {
+  insertEvent(
+    sessionId: string,
+    event: SessionEvent,
+    sourceHook: string = "PostToolUse",
+    attribution?: Partial<ProjectAttribution>,
+  ): void {
     // SHA256-based dedup hash (first 16 hex chars = 8 bytes of entropy)
     const dataHash = createHash("sha256")
       .update(event.data)
       .digest("hex")
       .slice(0, 16)
       .toUpperCase();
+    const projectDir = String(
+      attribution?.projectDir
+      ?? event.project_dir
+      ?? "",
+    ).trim();
+    const attributionSource = String(
+      attribution?.source
+      ?? event.attribution_source
+      ?? "unknown",
+    );
+    const rawConfidence = Number(
+      attribution?.confidence
+      ?? event.attribution_confidence
+      ?? 0,
+    );
+    const attributionConfidence = Number.isFinite(rawConfidence)
+      ? Math.max(0, Math.min(1, rawConfidence))
+      : 0;
 
     // Atomic: dedup check + eviction + insert in a single transaction
     // to prevent race conditions from concurrent hook calls.
@@ -335,6 +468,9 @@ export class SessionDB extends SQLiteBase {
         event.category,
         event.priority,
         event.data,
+        projectDir,
+        attributionSource,
+        attributionConfidence,
         sourceHook,
         dataHash,
       );
@@ -343,7 +479,86 @@ export class SessionDB extends SQLiteBase {
       this.stmt(S.updateMetaLastEvent).run(sessionId);
     });
 
-    transaction();
+    this.withRetry(() => transaction());
+  }
+
+  /**
+   * Bulk-insert N events in a SINGLE transaction.
+   *
+   * PostToolUse hooks emit 5–15 events per tool call. Calling insertEvent()
+   * in a loop runs N transactions = N WAL commits = N fsync candidates,
+   * which is painful on Windows NTFS where commit latency dominates.
+   * One transaction = one commit, dedup/evict checks reuse cached statements.
+   *
+   * Cross-platform: uses the same WAL-mode transaction primitive as
+   * insertEvent — behavior identical on macOS / Linux / Windows.
+   */
+  bulkInsertEvents(
+    sessionId: string,
+    events: SessionEvent[],
+    sourceHook: string = "PostToolUse",
+    attributions?: Array<Partial<ProjectAttribution> | undefined>,
+  ): void {
+    if (!events || events.length === 0) return;
+    if (events.length === 1) {
+      // Cheaper to fall through to insertEvent (its own dedicated transaction).
+      this.insertEvent(sessionId, events[0], sourceHook, attributions?.[0]);
+      return;
+    }
+
+    // Pre-compute hashes + normalized attribution outside the transaction
+    // so the SQL transaction holds only DB work (shorter lock window).
+    const prepared = events.map((event, i) => {
+      const dataHash = createHash("sha256")
+        .update(event.data)
+        .digest("hex")
+        .slice(0, 16)
+        .toUpperCase();
+      const attribution = attributions?.[i];
+      const projectDir = String(
+        attribution?.projectDir ?? event.project_dir ?? "",
+      ).trim();
+      const attributionSource = String(
+        attribution?.source ?? event.attribution_source ?? "unknown",
+      );
+      const rawConfidence = Number(
+        attribution?.confidence ?? event.attribution_confidence ?? 0,
+      );
+      const attributionConfidence = Number.isFinite(rawConfidence)
+        ? Math.max(0, Math.min(1, rawConfidence))
+        : 0;
+      return { event, dataHash, projectDir, attributionSource, attributionConfidence };
+    });
+
+    const transaction = this.db.transaction(() => {
+      let cnt = (this.stmt(S.getEventCount).get(sessionId) as { cnt: number }).cnt;
+      for (const row of prepared) {
+        const dup = this.stmt(S.checkDuplicate).get(
+          sessionId, DEDUP_WINDOW, row.event.type, row.dataHash,
+        );
+        if (dup) continue;
+        if (cnt >= MAX_EVENTS_PER_SESSION) {
+          this.stmt(S.evictLowestPriority).run(sessionId);
+        } else {
+          cnt++;
+        }
+        this.stmt(S.insertEvent).run(
+          sessionId,
+          row.event.type,
+          row.event.category,
+          row.event.priority,
+          row.event.data,
+          row.projectDir,
+          row.attributionSource,
+          row.attributionConfidence,
+          sourceHook,
+          row.dataHash,
+        );
+      }
+      this.stmt(S.updateMetaLastEvent).run(sessionId);
+    });
+
+    this.withRetry(() => transaction());
   }
 
   /**
@@ -377,12 +592,66 @@ export class SessionDB extends SQLiteBase {
     return row.cnt;
   }
 
+  /**
+   * Return the most recently attributed project dir for a session.
+   */
+  getLatestAttributedProjectDir(sessionId: string): string | null {
+    const row = this.stmt(S.getLatestAttributedProject).get(sessionId) as { project_dir: string } | undefined;
+    return row?.project_dir || null;
+  }
+
+  /**
+   * Search events by text query scoped to a project directory.
+   *
+   * Performs a case-insensitive LIKE search across the `data` and `category`
+   * columns. An optional `source` parameter filters by exact category match.
+   * Returns results ordered by monotonic id (chronological).
+   *
+   * Best-effort: returns empty array on any error.
+   */
+  searchEvents(
+    query: string,
+    limit: number,
+    projectDir: string,
+    source?: string,
+  ): Array<{
+    id: number;
+    session_id: string;
+    category: string;
+    type: string;
+    data: string;
+    created_at: string;
+  }> {
+    try {
+      const escapedQuery = query.replace(/[%_]/g, (char) => "\\" + char);
+      const sourceParam = source ?? null;
+      return this.stmt(S.searchEvents).all(
+        projectDir,
+        escapedQuery,
+        escapedQuery,
+        sourceParam,
+        sourceParam,
+        limit,
+      ) as Array<{
+        id: number;
+        session_id: string;
+        category: string;
+        type: string;
+        data: string;
+        created_at: string;
+      }>;
+    } catch {
+      return [];
+    }
+  }
+
   // ═══════════════════════════════════════════
   // Meta
   // ═══════════════════════════════════════════
 
   /**
    * Ensure a session metadata entry exists. Idempotent (INSERT OR IGNORE).
+   * `projectDir` is the session origin directory, not per-event attribution.
    */
   ensureSession(sessionId: string, projectDir: string): void {
     this.stmt(S.ensureSession).run(sessionId, projectDir);
@@ -427,6 +696,73 @@ export class SessionDB extends SQLiteBase {
    */
   markResumeConsumed(sessionId: string): void {
     this.stmt(S.markResumeConsumed).run(sessionId);
+  }
+
+  /**
+   * Return the most recent session_id from session_meta, or null if none.
+   * Used by the runtime to attach persistent counters to the right session
+   * after a process restart.
+   */
+  getLatestSessionId(): string | null {
+    try {
+      const row = this.db.prepare(
+        "SELECT session_id FROM session_meta ORDER BY started_at DESC LIMIT 1",
+      ).get() as { session_id?: string } | undefined;
+      return row?.session_id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // Tool call counters (Bug #1 + #2 — survive restart, --continue, upgrade)
+  // ═══════════════════════════════════════════
+
+  /**
+   * Increment the persistent tool-call counter for `tool` in `sessionId`.
+   * Adds `bytesReturned` to the cumulative total. Idempotent across
+   * SessionDB instances — counters survive process restart.
+   */
+  incrementToolCall(sessionId: string, tool: string, bytesReturned: number = 0): void {
+    const safeBytes = Number.isFinite(bytesReturned) && bytesReturned > 0 ? Math.round(bytesReturned) : 0;
+    try {
+      this.stmt(S.incrementToolCall).run(sessionId, tool, safeBytes);
+    } catch {
+      // best-effort: counter must never throw and break the parent call
+    }
+  }
+
+  /**
+   * Get aggregated tool-call stats for `sessionId`. Returns zero-stats
+   * when the session has no recorded calls.
+   */
+  getToolCallStats(sessionId: string): ToolCallStats {
+    try {
+      const totals = this.stmt(S.getToolCallTotals).get(sessionId) as
+        | { calls: number; bytes_returned: number }
+        | undefined;
+      const rows = this.stmt(S.getToolCallByTool).all(sessionId) as Array<{
+        tool: string;
+        calls: number;
+        bytes_returned: number;
+      }>;
+
+      const byTool: ToolCallStats["byTool"] = {};
+      for (const row of rows) {
+        byTool[row.tool] = {
+          calls: row.calls,
+          bytesReturned: row.bytes_returned,
+        };
+      }
+
+      return {
+        totalCalls: totals?.calls ?? 0,
+        totalBytesReturned: totals?.bytes_returned ?? 0,
+        byTool,
+      };
+    } catch {
+      return { totalCalls: 0, totalBytesReturned: 0, byTool: {} };
+    }
   }
 
   // ═══════════════════════════════════════════

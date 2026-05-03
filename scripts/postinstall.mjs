@@ -8,10 +8,11 @@
  *    Creates a directory junction so npm's %~dp0\node_modules\... resolves.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, symlinkSync, lstatSync, unlinkSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { dirname, resolve, join } from "node:path";
+import { dirname, resolve, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = resolve(__dirname, "..");
@@ -23,6 +24,33 @@ const pkgRoot = resolve(__dirname, "..");
 function isSafeWindowsPath(p) {
   return !/[&|<>"^%\r\n]/.test(p);
 }
+
+// ── 0. Self-heal Layer 3: Backward symlink for stale registry (anthropics/claude-code#46915) ──
+// When this install completes, installed_plugins.json may still point to an old
+// non-existent path. Create a symlink from that old path → our new directory.
+try {
+  const ipPath = resolve(homedir(), ".claude", "plugins", "installed_plugins.json");
+  if (existsSync(ipPath)) {
+    const ip = JSON.parse(readFileSync(ipPath, "utf-8"));
+    const cacheRoot = resolve(homedir(), ".claude", "plugins", "cache");
+    for (const [key, entries] of Object.entries(ip.plugins || {})) {
+      if (key !== "context-mode@context-mode") continue;
+      for (const entry of entries) {
+        const rp = entry.installPath;
+        if (!rp || existsSync(rp)) continue;
+        // Path traversal guard
+        if (!resolve(rp).startsWith(cacheRoot + sep)) continue;
+        // Remove dangling symlink
+        try { if (lstatSync(rp).isSymbolicLink()) unlinkSync(rp); } catch {}
+        const rpParent = dirname(rp);
+        if (!existsSync(rpParent)) mkdirSync(rpParent, { recursive: true });
+        try {
+          symlinkSync(pkgRoot, rp, process.platform === "win32" ? "junction" : undefined);
+        } catch { /* may fail if path is locked or permissions */ }
+      }
+    }
+  }
+} catch { /* best effort — don't block install */ }
 
 // ── 1. OpenClaw detection ────────────────────────────────────────────
 if (process.env.OPENCLAW_STATE_DIR) {

@@ -10,7 +10,7 @@ import "../ensure-deps.mjs";
  */
 
 import { createSessionLoaders } from "../session-loaders.mjs";
-import { readStdin, getSessionId, getSessionDBPath, VSCODE_OPTS } from "../session-helpers.mjs";
+import { readStdin, parseStdin, getSessionId, getSessionDBPath, VSCODE_OPTS } from "../session-helpers.mjs";
 import { appendFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,7 +23,7 @@ const DEBUG_LOG = join(homedir(), ".vscode", "context-mode-doltlite", "precompac
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
 
   const { buildResumeSnapshot } = await loadSnapshot();
   const { SessionDB } = await loadSessionDB();

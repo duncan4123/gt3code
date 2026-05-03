@@ -15,6 +15,7 @@
  *   - Codex CLI:      CODEX_CI, CODEX_THREAD_ID | ~/.codex/
  *   - Cursor:         CURSOR_TRACE_ID (MCP), CURSOR_CLI (terminal) | ~/.cursor/
  *   - VS Code Copilot: VSCODE_PID, VSCODE_CWD | ~/.vscode/
+ *   - JetBrains Copilot: IDEA_INITIAL_DIRECTORY, IDEA_HOME, JETBRAINS_CLIENT_ID | ~/.config/JetBrains/
  */
 
 import { existsSync } from "node:fs";
@@ -23,6 +24,87 @@ import { homedir } from "node:os";
 
 import type { PlatformId, DetectionSignal, HookAdapter } from "./types.js";
 import { CLIENT_NAME_TO_PLATFORM } from "./client-map.js";
+
+/**
+ * High-confidence env vars per platform, checked in priority order.
+ * Single source of truth — consumed by detectPlatform() below and by
+ * tests that need to clear platform-related env vars deterministically.
+ */
+export const PLATFORM_ENV_VARS = [
+  // Order matters: forks listed BEFORE the fork's parent so collision
+  // detection works. Every entry verified against platform's own runtime
+  // source code (PR #376 follow-up: full audit, May 2026 — see git blame).
+  ["claude-code",        ["CLAUDE_PROJECT_DIR", "CLAUDE_SESSION_ID"]],
+  // antigravity (Electron/VSCode fork) — google-gemini/gemini-cli
+  // packages/core/src/ide/detect-ide.ts checks ANTIGRAVITY_CLI_ALIAS as the
+  // canonical Antigravity marker. Listed before vscode-copilot.
+  ["antigravity",        ["ANTIGRAVITY_CLI_ALIAS"]],
+  // cursor (VSCode fork) — listed before vscode-copilot. CURSOR_TRACE_ID has
+  // 800+ hits in major OSS detection libs (Vercel Next.js, Bun, Google
+  // gemini-cli, Nx, CrewAI).
+  ["cursor",             ["CURSOR_TRACE_ID", "CURSOR_CLI"]],
+  // kilo (OpenCode fork) — Kilo-Org/kilocode packages/opencode/src/index.ts:140
+  // sets `process.env.KILO_PID = String(process.pid)`. Bare KILO is NEVER set
+  // (verified). Kilo also sets OPENCODE=1 (fork) — listed before opencode.
+  ["kilo",               ["KILO_PID"]],
+  // opencode — sst/opencode packages/opencode/src/index.ts:108-109 sets
+  // OPENCODE=1 + OPENCODE_PID=<pid> on every CLI invocation.
+  ["opencode",           ["OPENCODE", "OPENCODE_PID"]],
+  // zed — zed-industries/zed crates/terminal/src/terminal.rs sets ZED_TERM=true
+  // in `insert_zed_terminal_env()`. Google's gemini-cli uses ZED_SESSION_ID.
+  ["zed",                ["ZED_SESSION_ID", "ZED_TERM"]],
+  // codex — openai/codex codex-rs/core/src/exec_env.rs sets CODEX_THREAD_ID
+  // per exec; unified_exec/process_manager.rs sets CODEX_CI in CI mode.
+  ["codex",              ["CODEX_THREAD_ID", "CODEX_CI"]],
+  // gemini-cli — GEMINI_PROJECT_DIR per google-gemini/gemini-cli
+  // docs/hooks/index.md; GEMINI_CLI is the MCP-server sentinel.
+  ["gemini-cli",         ["GEMINI_PROJECT_DIR", "GEMINI_CLI"]],
+  // vscode-copilot — VSCODE_PID + VSCODE_CWD set by microsoft/vscode bootstrap.
+  // Listed AFTER cursor and antigravity since they inherit these vars as forks.
+  ["vscode-copilot",     ["VSCODE_PID", "VSCODE_CWD"]],
+  // jetbrains-copilot — IDEA_INITIAL_DIRECTORY set by JetBrains launcher.
+  // (IDEA_HOME and JETBRAINS_CLIENT_ID removed — no source-line evidence.)
+  ["jetbrains-copilot",  ["IDEA_INITIAL_DIRECTORY"]],
+  // qwen-code — QWEN_PROJECT_DIR per QwenLM/qwen-code docs/users/features/hooks.md.
+  // (QWEN_SESSION_ID removed — 0 hits in qwen-code repository.)
+  ["qwen-code",          ["QWEN_PROJECT_DIR"]],
+  // pi — PI_PROJECT_DIR consumed by src/pi-extension.ts:154 + src/server.ts:153
+  // — implies the Pi runtime sets it before invoking the extension.
+  ["pi",                 ["PI_PROJECT_DIR"]],
+  // openclaw — removed (runtime never sets OPENCLAW_HOME or OPENCLAW_CLI;
+  // detection falls through to ~/.openclaw/ config-dir tier below).
+  // kiro — not listed (no auto-set process env vars; ~/.kiro/ config-dir tier).
+] as const satisfies ReadonlyArray<readonly [PlatformId, readonly string[]]>;
+
+/**
+ * Sync map from platform identifier → home-relative path segments where that
+ * platform stores its config. Mirrors the `super([...])` argument passed by
+ * each adapter — kept in sync as the single source of truth used when we need
+ * a session dir BEFORE an adapter has been instantiated (race window between
+ * MCP server start and `initialize` handshake completion).
+ *
+ * Returns `null` for "unknown" or any string outside the supported set so the
+ * caller can decide on a safe fallback.
+ */
+export function getSessionDirSegments(platform: string): string[] | null {
+  switch (platform) {
+    case "claude-code":      return [".claude"];
+    case "gemini-cli":       return [".gemini"];
+    case "antigravity":      return [".gemini"];
+    case "openclaw":         return [".openclaw"];
+    case "codex":            return [".codex"];
+    case "cursor":           return [".cursor"];
+    case "vscode-copilot":   return [".vscode"];
+    case "kiro":             return [".kiro"];
+    case "pi":               return [".pi"];
+    case "qwen-code":        return [".qwen"];
+    case "kilo":             return [".config", "kilo"];
+    case "opencode":         return [".config", "opencode"];
+    case "zed":              return [".config", "zed"];
+    case "jetbrains-copilot": return [".config", "JetBrains"];
+    default:                 return null;
+  }
+}
 
 /**
  * Detect the current platform by checking env vars and config dirs.
@@ -41,6 +123,14 @@ export function detectPlatform(clientInfo?: { name: string; version?: string }):
         reason: `MCP clientInfo.name="${clientInfo.name}"`,
       };
     }
+    // Qwen Code uses dynamic client names: qwen-cli-mcp-client-<serverName>
+    if (clientInfo.name.startsWith("qwen-cli-mcp-client")) {
+      return {
+        platform: "qwen-code",
+        confidence: "high",
+        reason: `MCP clientInfo.name="${clientInfo.name}" (qwen-cli pattern)`,
+      };
+    }
   }
 
   // ── Explicit platform override ────────────────────────
@@ -48,7 +138,7 @@ export function detectPlatform(clientInfo?: { name: string; version?: string }):
   if (platformOverride) {
     const validPlatforms: PlatformId[] = [
       "claude-code", "gemini-cli", "kilo", "opencode", "codex",
-      "vscode-copilot", "cursor", "antigravity", "kiro", "pi", "zed",
+      "vscode-copilot", "jetbrains-copilot", "cursor", "antigravity", "kiro", "pi", "zed", "qwen-code",
     ];
     if (validPlatforms.includes(platformOverride as PlatformId)) {
       return {
@@ -61,68 +151,14 @@ export function detectPlatform(clientInfo?: { name: string; version?: string }):
 
   // ── High confidence: environment variables ─────────────
 
-  if (process.env.CLAUDE_PROJECT_DIR || process.env.CLAUDE_SESSION_ID) {
-    return {
-      platform: "claude-code",
-      confidence: "high",
-      reason: "CLAUDE_PROJECT_DIR or CLAUDE_SESSION_ID env var set",
-    };
-  }
-
-  if (process.env.GEMINI_PROJECT_DIR || process.env.GEMINI_CLI) {
-    return {
-      platform: "gemini-cli",
-      confidence: "high",
-      reason: "GEMINI_PROJECT_DIR or GEMINI_CLI env var set",
-    };
-  }
-
-  if (process.env.OPENCLAW_HOME || process.env.OPENCLAW_CLI) {
-    return {
-      platform: "openclaw",
-      confidence: "high",
-      reason: "OPENCLAW_HOME or OPENCLAW_CLI env var set",
-    };
-  }
-
-  if (process.env.KILO || process.env.KILO_PID) {
-    return {
-      platform: "kilo",
-      confidence: "high",
-      reason: "KILO or KILO_PID env var set",
-    };
-  }
-
-  if (process.env.OPENCODE || process.env.OPENCODE_PID) {
-    return {
-      platform: "opencode",
-      confidence: "high",
-      reason: "OPENCODE or OPENCODE_PID env var set",
-    };
-  }
-
-  if (process.env.CODEX_CI || process.env.CODEX_THREAD_ID) {
-    return {
-      platform: "codex",
-      confidence: "high",
-      reason: "CODEX_CI or CODEX_THREAD_ID env var set",
-    };
-  }
-
-  if (process.env.CURSOR_TRACE_ID || process.env.CURSOR_CLI) {
-    return {
-      platform: "cursor",
-      confidence: "high",
-      reason: "CURSOR_TRACE_ID or CURSOR_CLI env var set",
-    };
-  }
-
-  if (process.env.VSCODE_PID || process.env.VSCODE_CWD) {
-    return {
-      platform: "vscode-copilot",
-      confidence: "high",
-      reason: "VSCODE_PID or VSCODE_CWD env var set",
-    };
+  for (const [platform, vars] of PLATFORM_ENV_VARS) {
+    if (vars.some((v) => process.env[v])) {
+      return {
+        platform,
+        confidence: "high",
+        reason: `${vars.join(" or ")} env var set`,
+      };
+    }
   }
 
   // ── Medium confidence: config directory existence ──────
@@ -177,6 +213,14 @@ export function detectPlatform(clientInfo?: { name: string; version?: string }):
     };
   }
 
+  if (existsSync(resolve(home, ".qwen"))) {
+    return {
+      platform: "qwen-code",
+      confidence: "medium",
+      reason: "~/.qwen/ directory exists",
+    };
+  }
+
   if (existsSync(resolve(home, ".openclaw"))) {
     return {
       platform: "openclaw",
@@ -190,6 +234,14 @@ export function detectPlatform(clientInfo?: { name: string; version?: string }):
       platform: "kilo",
       confidence: "medium",
       reason: "~/.config/kilo/ directory exists",
+    };
+  }
+
+  if (existsSync(resolve(home, ".config", "JetBrains"))) {
+    return {
+      platform: "jetbrains-copilot",
+      confidence: "medium",
+      reason: "~/.config/JetBrains/ directory exists",
     };
   }
 
@@ -257,6 +309,11 @@ export async function getAdapter(platform?: PlatformId): Promise<HookAdapter> {
       return new VSCodeCopilotAdapter();
     }
 
+    case "jetbrains-copilot": {
+      const { JetBrainsCopilotAdapter } = await import("./jetbrains-copilot/index.js");
+      return new JetBrainsCopilotAdapter();
+    }
+
     case "cursor": {
       const { CursorAdapter } = await import("./cursor/index.js");
       return new CursorAdapter();
@@ -275,6 +332,11 @@ export async function getAdapter(platform?: PlatformId): Promise<HookAdapter> {
     case "zed": {
       const { ZedAdapter } = await import("./zed/index.js");
       return new ZedAdapter();
+    }
+
+    case "qwen-code": {
+      const { QwenCodeAdapter } = await import("./qwen-code/index.js");
+      return new QwenCodeAdapter();
     }
 
     default: {

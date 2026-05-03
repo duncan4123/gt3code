@@ -1,12 +1,16 @@
 /**
- * OpenCode TypeScript plugin entry point for context-mode.
+ * OpenCode / KiloCode TypeScript plugin entry point for context-mode.
  *
  * Provides three hooks:
  *   - tool.execute.before  — Routing enforcement (deny/modify/passthrough)
  *   - tool.execute.after   — Session event capture
  *   - experimental.session.compacting — Compaction snapshot generation
  *
- * Loaded by OpenCode via: import("context-mode/plugin").ContextModePlugin(ctx)
+ * KiloCode loads this via: import("context-mode") → expects default export
+ * with shape { server: (input) => Promise<Hooks> } (PluginModule).
+ *
+ * OpenCode loads this via: import("context-mode/plugin") → also supports
+ * the named export ContextModePlugin for backward compat.
  *
  * Constraints:
  *   - No SessionStart hook (OpenCode doesn't support it — #14808, #5409)
@@ -25,12 +29,14 @@ import type { HookInput } from "./session/extract.js";
 import { buildResumeSnapshot } from "./session/snapshot.js";
 import type { SessionEvent } from "./types.js";
 import { AdapterPlatformType, OpenCodeAdapter } from "./adapters/opencode/index.js";
+import { PLATFORM_ENV_VARS } from "./adapters/detect.js";
 
 // ── Types ─────────────────────────────────────────────────
 
-/** OpenCode plugin context passed to the factory function. */
+/** KiloCode/OpenCode plugin input — both platforms pass at least `directory`. */
 interface PluginContext {
   directory: string;
+  [key: string]: unknown;
 }
 
 /** OpenCode tool.execute.before — first parameter */
@@ -72,17 +78,43 @@ interface CompactingHookOutput {
 }
 
 // ── Helpers ───────────────────────────────────────────────
+/**
+ * Detect whether the plugin is running under KiloCode or OpenCode.
+ *
+ * Reuses the canonical PLATFORM_ENV_VARS list (src/adapters/detect.ts) instead
+ * of hardcoding env var names — single source of truth, future-proof if Kilo
+ * or OpenCode add/rename env vars upstream.
+ *
+ * Order matters: KiloCode is an OpenCode fork and sets `OPENCODE=1` in
+ * addition to `KILO_PID`. PLATFORM_ENV_VARS lists `kilo` BEFORE `opencode`
+ * so KILO_PID wins the iteration.
+ *
+ * Pre-fix version was `return process.env.KILO_PID ? "kilo" : "opencode";` —
+ * surfaced by github.com/mksglu/context-mode/pull/376 (mikij). Full symmetric
+ * fix: also actively check opencode env vars instead of blind fallback.
+ */
 function getPlatform(): AdapterPlatformType {
-  return process.env.KILO ? "kilo" : "opencode";
+  for (const [platform, vars] of PLATFORM_ENV_VARS) {
+    if (platform !== "kilo" && platform !== "opencode") continue;
+    if (vars.some((v) => process.env[v])) {
+      return platform as AdapterPlatformType;
+    }
+  }
+  // Plugin host should always set one of the env vars. Fallback to opencode
+  // (the wider ecosystem) when neither is set, for predictable behavior.
+  return "opencode";
 }
 
 // ── Plugin Factory ────────────────────────────────────────
 
 /**
- * OpenCode plugin factory. Called once when OpenCode loads the plugin.
+ * Plugin factory. Called once when KiloCode/OpenCode loads the plugin.
  * Returns an object mapping hook event names to async handler functions.
-*/
-export const ContextModePlugin = async (ctx: PluginContext) => {
+ *
+ * KiloCode expects: export default { server: (input) => Promise<Hooks> }
+ * OpenCode expects: export const ContextModePlugin = (ctx) => Promise<Hooks>
+ */
+async function createContextModePlugin(ctx: PluginContext) {
   // Resolve build dir from compiled JS location
   const adapter = new OpenCodeAdapter(getPlatform());
   const buildDir = dirname(fileURLToPath(import.meta.url));
@@ -101,6 +133,11 @@ export const ContextModePlugin = async (ctx: PluginContext) => {
   // Clean up old sessions on startup (replaces SessionStart hook)
   db.cleanupOldSessions(7);
 
+  // Track whether we've already injected the prior-session resume into
+  // a chat turn — `experimental.chat.messages.transform` fires on every
+  // turn, but we only want to inject once per process (SessionStart-equivalent).
+  let sessionStartInjected = false;
+
   return {
     // ── PreToolUse: Routing enforcement ─────────────────
 
@@ -110,7 +147,7 @@ export const ContextModePlugin = async (ctx: PluginContext) => {
 
       let decision;
       try {
-        decision = routing.routePreToolUse(toolName, toolInput, projectDir, "opencode");
+        decision = routing.routePreToolUse(toolName, toolInput, projectDir, getPlatform());
       } catch {
         return; // Routing failure → allow passthrough
       }
@@ -174,5 +211,43 @@ export const ContextModePlugin = async (ctx: PluginContext) => {
         return "";
       }
     },
+
+    // ── SessionStart equivalent (PR #376) ───────────────
+    // OpenCode lacks a real SessionStart hook (#14808, #5409) but
+    // recently added `experimental.chat.messages.transform`, which
+    // fires once per chat turn before messages are sent to the model.
+    // We piggyback on the *first* invocation per process to inject the
+    // most-recent resume snapshot from a prior session — matching what
+    // every other adapter's SessionStart hook does.
+    "experimental.chat.messages.transform": async (
+      _input: unknown,
+      output: { messages?: Array<{ role: string; content: string }> } | undefined,
+    ) => {
+      if (sessionStartInjected) return;
+      sessionStartInjected = true;
+      try {
+        // Find the most recent resume snapshot for this project across
+        // any prior session. ContextSessionDB has no per-project resume
+        // lookup, so we fall back to the current session's resume row.
+        const row = db.getResume(sessionId);
+        const snapshot = row?.snapshot;
+        if (!snapshot || snapshot.length === 0) return;
+
+        if (output && Array.isArray(output.messages)) {
+          output.messages.unshift({
+            role: "system",
+            content: snapshot,
+          });
+        }
+      } catch {
+        // Silent — never break the chat turn
+      }
+    },
   };
-};
+}
+
+// ── Exports ──────────────────────────────────────────────
+// KiloCode PluginModule: default export with { server } shape
+// OpenCode compat: named export for direct import("context-mode/plugin")
+export default { server: createContextModePlugin };
+export { createContextModePlugin as ContextModePlugin };

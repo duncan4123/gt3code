@@ -218,6 +218,42 @@ export interface HookAdapter {
   /** Compute per-project session events file path. */
   getSessionEventsPath(projectDir: string): string;
 
+  /**
+   * Platform config directory.
+   *
+   * Contract: ALWAYS returns an absolute path. Never returns a relative
+   * segment, never returns an empty string. This eliminates the leaky-seam
+   * where callers could not tell whether the return needed further resolution.
+   *
+   * Resolution rules:
+   *   - Home-rooted platforms (claude-code, codex, qwen, gemini, antigravity,
+   *     zed, opencode, …) return paths under `homedir()` / XDG / APPDATA.
+   *   - Project-scoped platforms (cursor → `.cursor`, vscode-copilot &
+   *     jetbrains-copilot → `.github`, kiro → `.kiro`, openclaw → project root)
+   *     resolve their segment against the supplied `projectDir`. When
+   *     `projectDir` is omitted, `process.cwd()` is used as the fallback.
+   *
+   * @param projectDir Optional project root used to resolve project-scoped
+   *                   adapters. Ignored by home-rooted adapters.
+   */
+  getConfigDir(projectDir?: string): string;
+
+  /**
+   * Names of platform-native instruction/rule files that act as the
+   * project's "user CLAUDE.md equivalent" (e.g., ["CLAUDE.md"],
+   * ["AGENTS.md"], ["GEMINI.md"]). Auto-memory scans for these in the
+   * project root and config dir, and rule-detection emits "rule" events
+   * when they are read.
+   */
+  getInstructionFiles(): string[];
+
+  /**
+   * Directory where persistent per-user memory is stored
+   * (e.g., ~/.claude/memory, ~/.codex/memories). Auto-memory scans
+   * *.md files in this directory.
+   */
+  getMemoryDir(): string;
+
   /** Generate hook registration config for this platform. */
   generateHookConfig(pluginRoot: string): HookRegistration;
 
@@ -274,6 +310,28 @@ export interface DiagnosticResult {
 // Platform detection
 // ─────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────
+// Cross-platform command helpers (#369, #372)
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Build a cross-platform `node <script>` command string.
+ *
+ * Fixes two Windows bugs:
+ *   #369 — Bare `node` fails on Windows Git Bash (MSYS) because PATH
+ *          resolution is unreliable. Uses `process.execPath` instead.
+ *   #372 — MSYS rewrites absolute paths on non-C: drives (e.g.
+ *          `C:\Users\...` → `D:\c\Users\...`). Forward slashes +
+ *          double-quoting prevents the translation.
+ *
+ * Safe on macOS/Linux — quoting and forward slashes are no-ops there.
+ */
+export function buildNodeCommand(scriptPath: string): string {
+  const nodePath = process.execPath.replace(/\\/g, "/");
+  const safePath = scriptPath.replace(/\\/g, "/");
+  return `"${nodePath}" "${safePath}"`;
+}
+
 /** Supported platform identifiers. */
 export type PlatformId =
   | "claude-code"
@@ -283,11 +341,13 @@ export type PlatformId =
   | "openclaw"
   | "codex"
   | "vscode-copilot"
+  | "jetbrains-copilot"
   | "cursor"
   | "antigravity"
   | "kiro"
   | "pi"
   | "zed"
+  | "qwen-code"
   | "unknown";
 
 /** Detection signal used to identify which platform is running. */

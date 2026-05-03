@@ -12,7 +12,7 @@ import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { ContentStore, cleanupStaleDBs } from "../src/store.js";
-import { withRetry } from "../src/db-base.js";
+import { withRetry, closeDB, loadDatabase, applyWALPragmas } from "../src/db-base.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixtureDir = join(__dirname, "fixtures");
@@ -24,20 +24,6 @@ function createStore(): ContentStore {
   );
   return new ContentStore(path);
 }
-
-function hasDoltliteVersioning(): boolean {
-  const store = createStore();
-  try {
-    const engine = store.queryOne("SELECT doltlite_engine() as e") as { e: string } | undefined;
-    return engine?.e === "prolly";
-  } catch {
-    return false;
-  } finally {
-    store.close();
-  }
-}
-
-const DOLTLITE_ENABLED = hasDoltliteVersioning();
 
 describe("Schema & Lifecycle", () => {
   test("creates store with empty stats", () => {
@@ -56,411 +42,137 @@ describe("Schema & Lifecycle", () => {
     assert.doesNotThrow(() => store.close());
   });
 
-  test("creates draft convoy/bead tables", () => {
-    const store = createStore();
-    const tables = store.queryAll(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('issues', 'dependencies', 'labels', 'comments', 'events') ORDER BY name",
-    ) as Array<{ name: string }>;
-    assert.deepEqual(
-      tables.map((t) => t.name),
-      ["comments", "dependencies", "events", "issues", "labels"],
+  test("Fresh DB creates new FTS5 schema with 8 columns", () => {
+    const dbPath = join(
+      tmpdir(),
+      `context-mode-test-fresh-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
     );
+    const store = new ContentStore(dbPath);
+
+    // Verify the schema by opening the raw DB and checking columns
+    const Database = loadDatabase();
+    const db = new Database(dbPath, { readonly: true });
+    const cols = db.prepare("SELECT name FROM pragma_table_xinfo('chunks')").all() as Array<{ name: string }>;
+    const colNames = cols.map(c => c.name);
+
+    // FTS5 tables should have 8 user columns + 2 hidden (table-name, rank) = 10 total
+    // pragma_table_xinfo includes hidden FTS5 internal columns
+    expect(colNames).toContain("title");
+    expect(colNames).toContain("content");
+    expect(colNames).toContain("source_id");
+    expect(colNames).toContain("content_type");
+    expect(colNames).toContain("source_category");
+    expect(colNames).toContain("session_id");
+    expect(colNames).toContain("event_id");
+    expect(colNames).toContain("timestamp");
+    // 8 user-defined + 2 hidden FTS5 internal (chunks, rank)
+    expect(colNames.length).toBe(10);
+
+    // Same check for trigram table
+    const trigramCols = db.prepare("SELECT name FROM pragma_table_xinfo('chunks_trigram')").all() as Array<{ name: string }>;
+    const trigramColNames = trigramCols.map(c => c.name);
+    expect(trigramColNames).toContain("source_category");
+    expect(trigramColNames).toContain("session_id");
+    expect(trigramColNames).toContain("event_id");
+    expect(trigramColNames).toContain("timestamp");
+    expect(trigramColNames.length).toBe(10);
+
+    db.close();
     store.close();
-  });
-});
 
-describe("Draft convoy/bead schema", () => {
-  test("stores convoy, bead, labels, and dependency hierarchy", () => {
-    const store = createStore();
-    const convoyId = "convoy-1";
-    const beadId = "bead-1";
-    const now = "2026-04-03T00:00:00.000Z";
-
-    store.exec(
-      `INSERT INTO issues (id, title, description, issue_type, status, rig, created_at, updated_at, metadata)
-       VALUES ('${convoyId}', 'Integrate context mode', 'Top-level rollout', 'convoy', 'open', 't3code', '${now}', '${now}', '{"phase":"draft"}')`,
-    );
-    store.exec(`INSERT INTO labels (issue_id, label) VALUES ('${convoyId}', 'draft')`);
-
-    store.exec(
-      `INSERT INTO issues (id, title, description, issue_type, status, rig, priority, assignee, created_at, updated_at, metadata)
-       VALUES ('${beadId}', 'Wire doltlite schema', 'Add issue tables', 'task', 'open', 't3code', 1, 'codex', '${now}', '${now}', '{}')`,
-    );
-    store.exec(`INSERT INTO labels (issue_id, label) VALUES ('${beadId}', 'draft')`);
-    store.exec(
-      `INSERT INTO dependencies (issue_id, depends_on_id, type, created_at, created_by)
-       VALUES ('${beadId}', '${convoyId}', 'child-of', '${now}', 'test')`,
-    );
-
-    const convoy = store.queryOne(
-      "SELECT title, issue_type, rig FROM issues WHERE id = ?",
-      convoyId,
-    ) as { title: string; issue_type: string; rig: string } | undefined;
-    assert.equal(convoy?.title, "Integrate context mode");
-    assert.equal(convoy?.issue_type, "convoy");
-    assert.equal(convoy?.rig, "t3code");
-
-    const bead = store.queryOne(
-      "SELECT title, issue_type, priority, assignee FROM issues WHERE id = ?",
-      beadId,
-    ) as { title: string; issue_type: string; priority: number; assignee: string } | undefined;
-    assert.equal(bead?.title, "Wire doltlite schema");
-    assert.equal(bead?.issue_type, "task");
-    assert.equal(bead?.priority, 1);
-    assert.equal(bead?.assignee, "codex");
-
-    const childLink = store.queryOne(
-      "SELECT type, created_by FROM dependencies WHERE issue_id = ? AND depends_on_id = ?",
-      beadId,
-      convoyId,
-    ) as { type: string; created_by: string } | undefined;
-    assert.equal(childLink?.type, "child-of");
-    assert.equal(childLink?.created_by, "test");
-
-    const draftLabels = store.queryAll(
-      "SELECT issue_id FROM labels WHERE label = 'draft' ORDER BY issue_id",
-    ) as Array<{ issue_id: string }>;
-    assert.deepEqual(draftLabels.map((r) => r.issue_id), [beadId, convoyId]);
-    store.close();
-  });
-
-  test("convoy list query returns only draft convoys with ordered beads and blocker counts", () => {
-    const store = createStore();
-    const now = "2026-04-03T00:00:00.000Z";
-    const convoyId = "convoy-list-1";
-    const firstBead = "bead-list-1";
-    const secondBead = "bead-list-2";
-
-    store.exec(
-      `INSERT INTO issues (id, title, description, issue_type, status, rig, created_at, updated_at, metadata)
-       VALUES ('${convoyId}', 'GC integration', 'Draft convoy', 'convoy', 'open', 'gascity', '${now}', '${now}', '{}')`,
-    );
-    store.exec(`INSERT INTO labels (issue_id, label) VALUES ('${convoyId}', 'draft')`);
-
-    store.exec(
-      `INSERT INTO issues (id, title, description, issue_type, status, rig, priority, assignee, created_at, updated_at, metadata)
-       VALUES ('${firstBead}', 'Build bridge UI', 'UI work', 'task', 'open', 't3code', 2, 'alice', '${now}', '${now}', '{}')`,
-    );
-    store.exec(
-      `INSERT INTO issues (id, title, description, issue_type, status, rig, priority, assignee, created_at, updated_at, metadata)
-       VALUES ('${secondBead}', 'Add sync endpoint', 'API work', 'gate', 'open', 'gascity', 1, '', '${now}', '${now}', '{}')`,
-    );
-    store.exec(
-      `INSERT INTO dependencies (issue_id, depends_on_id, type, created_at, created_by)
-       VALUES ('${firstBead}', '${convoyId}', 'child-of', '${now}', 'test')`,
-    );
-    store.exec(
-      `INSERT INTO dependencies (issue_id, depends_on_id, type, created_at, created_by)
-       VALUES ('${secondBead}', '${convoyId}', 'child-of', '${now}', 'test')`,
-    );
-    store.exec(
-      `INSERT INTO dependencies (issue_id, depends_on_id, type, created_at, created_by)
-       VALUES ('${firstBead}', '${secondBead}', 'blocks', '${now}', 'test')`,
-    );
-
-    const convoys = store.queryAll(
-      `SELECT id, title, description, rig, status, created_at FROM issues
-       WHERE issue_type = 'convoy' AND id IN (SELECT issue_id FROM labels WHERE label = 'draft')
-       ORDER BY created_at DESC`,
-    ) as Array<{ id: string; title: string }>;
-    assert.equal(convoys.length, 1);
-    assert.equal(convoys[0].id, convoyId);
-
-    const beads = store.queryAll(
-      `SELECT i.id, i.title, i.issue_type, i.rig, i.priority, i.assignee
-       FROM issues i
-       JOIN dependencies d ON d.issue_id = i.id AND d.depends_on_id = ? AND d.type = 'child-of'
-       WHERE i.issue_type != 'convoy'
-       ORDER BY i.priority, i.created_at`,
-      convoyId,
-    ) as Array<{ id: string; title: string; priority: number; issue_type: string; rig: string; assignee: string }>;
-
-    assert.deepEqual(
-      beads.map((b) => ({ id: b.id, title: b.title, priority: b.priority })),
-      [
-        { id: secondBead, title: "Add sync endpoint", priority: 1 },
-        { id: firstBead, title: "Build bridge UI", priority: 2 },
-      ],
-    );
-
-    const blockerCounts = beads.map((b) => store.queryOne(
-      "SELECT COUNT(*) as n FROM dependencies WHERE issue_id = ? AND type = 'blocks'",
-      b.id,
-    ) as { n: number });
-    assert.deepEqual(blockerCounts.map((r) => r.n), [0, 1]);
-    assert.equal(beads[0].issue_type, "gate");
-    assert.equal(beads[0].rig, "gascity");
-    assert.equal(beads[1].assignee, "alice");
-    store.close();
-  });
-});
-
-describe.runIf(DOLTLITE_ENABLED)("Doltlite version control", () => {
-  test("commits indexed content and records clean history", () => {
-    const store = createStore();
-    try {
-      const engine = store.queryOne("SELECT doltlite_engine() as e") as { e: string } | undefined;
-      assert.equal(engine?.e, "prolly");
-
-      store.index({
-        content: "# Alpha\n\nInitial snapshot content.",
-        source: "alpha-doc",
-      });
-
-      const dirtyBeforeCommit = store.queryAll(
-        "SELECT table_name, staged, status FROM dolt_status",
-      ) as Array<{ table_name: string; staged: number | boolean; status: string }>;
-      assert.ok(dirtyBeforeCommit.length > 0, "Expected uncommitted changes before first commit");
-
-      store.exec(`SELECT dolt_add('-A')`);
-      const firstCommit = store.queryOne(
-        "SELECT dolt_commit('-m', ?) as hash",
-        "initial snapshot",
-      ) as { hash: string } | undefined;
-      assert.match(firstCommit?.hash ?? "", /^[0-9a-f]{40}$/);
-
-      const cleanStatus = store.queryAll(
-        "SELECT table_name, staged, status FROM dolt_status",
-      ) as Array<{ table_name: string; staged: number | boolean; status: string }>;
-      assert.equal(cleanStatus.length, 0, "Working set should be clean after commit");
-
-      const firstLog = store.queryAll(
-        "SELECT commit_hash, message FROM dolt_log LIMIT 1",
-      ) as Array<{ commit_hash: string; message: string }>;
-      assert.equal(firstLog[0]?.message, "initial snapshot");
-      assert.equal(firstLog[0]?.commit_hash, firstCommit?.hash);
-
-      store.index({
-        content: "# Beta\n\nFollow-up snapshot content.",
-        source: "beta-doc",
-      });
-
-      const dirtyAfterSecondIndex = store.queryAll(
-        "SELECT table_name, staged, status FROM dolt_status",
-      ) as Array<{ table_name: string; staged: number | boolean; status: string }>;
-      assert.ok(dirtyAfterSecondIndex.length > 0, "Expected changes after second index");
-
-      store.exec(`SELECT dolt_add('-A')`);
-      const secondCommit = store.queryOne(
-        "SELECT dolt_commit('-m', ?) as hash",
-        "second snapshot",
-      ) as { hash: string } | undefined;
-      assert.match(secondCommit?.hash ?? "", /^[0-9a-f]{40}$/);
-      assert.notEqual(secondCommit?.hash, firstCommit?.hash);
-
-      const log = store.queryAll(
-        "SELECT commit_hash, message FROM dolt_log LIMIT 2",
-      ) as Array<{ commit_hash: string; message: string }>;
-      assert.equal(log.length, 2);
-      assert.equal(log[0]?.message, "second snapshot");
-      assert.equal(log[1]?.message, "initial snapshot");
-    } finally {
-      store.close();
+    // Cleanup
+    for (const suffix of ["", "-wal", "-shm"]) {
+      try { unlinkSync(dbPath + suffix); } catch { /* ignore */ }
     }
   });
 
-  test("supports branch checkout isolation and tags for knowledge base state", () => {
-    const store = createStore();
-    try {
-      store.index({
-        content: "# Main\n\nBase branch content.",
-        source: "main-doc",
-      });
-      store.exec(`SELECT dolt_add('-A')`);
-      const baseCommit = store.queryOne(
-        "SELECT dolt_commit('-m', ?) as hash",
-        "base snapshot",
-      ) as { hash: string } | undefined;
-      assert.match(baseCommit?.hash ?? "", /^[0-9a-f]{40}$/);
+  test("Old schema detected and migrated to new schema", () => {
+    const dbPath = join(
+      tmpdir(),
+      `context-mode-test-migrate-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
+    );
 
-      const branchResult = store.queryOne(
-        "SELECT dolt_branch('experiment') as r",
-      ) as { r: number } | undefined;
-      assert.equal(branchResult?.r, 0);
-
-      const checkoutExperiment = store.queryOne(
-        "SELECT dolt_checkout('experiment') as r",
-      ) as { r: number } | undefined;
-      assert.equal(checkoutExperiment?.r, 0);
-
-      const currentExperiment = store.queryOne(
-        "SELECT active_branch() as name",
-      ) as { name: string } | undefined;
-      assert.equal(currentExperiment?.name, "experiment");
-
-      store.index({
-        content: "# Experiment\n\nBranch-only content.",
-        source: "experiment-doc",
-      });
-      store.exec(`SELECT dolt_add('-A')`);
-      const experimentCommit = store.queryOne(
-        "SELECT dolt_commit('-m', ?) as hash",
-        "experiment snapshot",
-      ) as { hash: string } | undefined;
-      assert.match(experimentCommit?.hash ?? "", /^[0-9a-f]{40}$/);
-
-      const experimentCount = store.queryOne(
-        "SELECT COUNT(*) as n FROM sources WHERE label = ?",
-        "experiment-doc",
-      ) as { n: number } | undefined;
-      assert.equal(experimentCount?.n, 1);
-
-      const tagResult = store.queryOne(
-        "SELECT dolt_tag('experiment-v1') as r",
-      ) as { r: number } | undefined;
-      assert.equal(tagResult?.r, 0);
-
-      const tags = store.queryAll(
-        "SELECT tag_name, tag_hash, message FROM dolt_tags ORDER BY tag_name",
-      ) as Array<{ tag_name: string; tag_hash: string; message: string }>;
-      const experimentTag = tags.find((tag) => tag.tag_name === "experiment-v1");
-      assert.ok(experimentTag);
-      assert.equal(experimentTag?.tag_hash, experimentCommit?.hash);
-
-      const checkoutMain = store.queryOne(
-        "SELECT dolt_checkout('main') as r",
-      ) as { r: number } | undefined;
-      assert.equal(checkoutMain?.r, 0);
-
-      const currentMain = store.queryOne(
-        "SELECT active_branch() as name",
-      ) as { name: string } | undefined;
-      assert.equal(currentMain?.name, "main");
-
-      const mainCount = store.queryOne(
-        "SELECT COUNT(*) as n FROM sources WHERE label = ?",
-        "experiment-doc",
-      ) as { n: number } | undefined;
-      assert.equal(mainCount?.n, 0, "Branch-only source should not leak back to main");
-
-      const branches = store.queryAll(
-        "SELECT name FROM dolt_branches ORDER BY name",
-      ) as Array<{ name: string }>;
-      assert.deepEqual(
-        branches.map((branch) => branch.name),
-        ["experiment", "main"],
+    // Step 1: Create a DB with the OLD schema (4-column FTS5)
+    const Database = loadDatabase();
+    const rawDb = new Database(dbPath);
+    applyWALPragmas(rawDb);
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS sources (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT NOT NULL,
+        chunk_count INTEGER NOT NULL DEFAULT 0,
+        code_chunk_count INTEGER NOT NULL DEFAULT 0,
+        indexed_at TEXT NOT NULL DEFAULT (datetime('now')),
+        file_path TEXT,
+        content_hash TEXT
       );
-    } finally {
-      store.close();
-    }
-  });
+      CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
+        title,
+        content,
+        source_id UNINDEXED,
+        content_type UNINDEXED,
+        tokenize='porter unicode61'
+      );
+      CREATE VIRTUAL TABLE IF NOT EXISTS chunks_trigram USING fts5(
+        title,
+        content,
+        source_id UNINDEXED,
+        content_type UNINDEXED,
+        tokenize='trigram'
+      );
+      CREATE TABLE IF NOT EXISTS vocabulary (
+        word TEXT PRIMARY KEY
+      );
+      CREATE INDEX IF NOT EXISTS idx_sources_label ON sources(label);
+    `);
 
-  test("supports reset for clearing working changes", () => {
-    const store = createStore();
-    try {
-      store.index({
-        content: "# Baseline\n\nCommitted baseline.",
-        source: "baseline-doc",
-      });
-      store.exec(`SELECT dolt_add('-A')`);
-      const baselineCommit = store.queryOne(
-        "SELECT dolt_commit('-m', ?) as hash",
-        "baseline snapshot",
-      ) as { hash: string } | undefined;
-      assert.match(baselineCommit?.hash ?? "", /^[0-9a-f]{40}$/);
+    // Insert a row into old schema to confirm data is present
+    rawDb.exec("INSERT INTO sources (label, chunk_count, code_chunk_count) VALUES ('old-source', 1, 0)");
+    rawDb.exec("INSERT INTO chunks (title, content, source_id, content_type) VALUES ('old title', 'old content', 1, 'prose')");
+    rawDb.exec("INSERT INTO chunks_trigram (title, content, source_id, content_type) VALUES ('old title', 'old content', 1, 'prose')");
 
-      store.index({
-        content: "# Alpha\n\nReset target content.",
-        source: "reset-doc",
-      });
+    // Verify old schema has only 4 user columns (+ 2 hidden FTS5 = 6 total)
+    const oldCols = rawDb.prepare("SELECT name FROM pragma_table_xinfo('chunks')").all() as Array<{ name: string }>;
+    expect(oldCols.length).toBe(6);
+    expect(oldCols.map(c => c.name)).not.toContain("source_category");
 
-      store.exec(`SELECT dolt_add('-A')`);
-      const stagedBeforeSoft = store.queryAll(
-        "SELECT table_name, staged, status FROM dolt_status",
-      ) as Array<{ table_name: string; staged: number | boolean; status: string }>;
-      assert.ok(stagedBeforeSoft.some((row) => row.staged === 1 || row.staged === true));
+    rawDb.close();
 
-      store.queryOne("SELECT dolt_reset('--soft') as r");
-      const afterSoft = store.queryAll(
-        "SELECT table_name, staged, status FROM dolt_status",
-      ) as Array<{ table_name: string; staged: number | boolean; status: string }>;
-      assert.ok(afterSoft.length > 0);
+    // Step 2: Open with ContentStore — migration should trigger
+    const store = new ContentStore(dbPath);
 
-      store.queryOne("SELECT dolt_reset('--hard') as r");
-      const afterHard = store.queryAll(
-        "SELECT table_name, staged, status FROM dolt_status",
-      ) as Array<{ table_name: string; staged: number | boolean; status: string }>;
-      assert.equal(afterHard.length, 0);
-    } finally {
-      store.close();
-    }
-  });
+    // Step 3: Verify migration happened — new columns exist
+    const checkDb = new Database(dbPath, { readonly: true });
+    const newCols = checkDb.prepare("SELECT name FROM pragma_table_xinfo('chunks')").all() as Array<{ name: string }>;
+    const newColNames = newCols.map(c => c.name);
+    expect(newColNames).toContain("source_category");
+    expect(newColNames).toContain("session_id");
+    expect(newColNames).toContain("event_id");
+    expect(newColNames).toContain("timestamp");
+    expect(newColNames.length).toBe(10);
 
-  test("supports history, as-of queries, diff stat/summary, and merge base", () => {
-    const store = createStore();
-    try {
-      store.index({
-        content: "# Alpha\n\nInitial content.",
-        source: "history-doc",
-      });
-      store.exec(`SELECT dolt_add('-A')`);
-      const baseCommit = store.queryOne(
-        "SELECT dolt_commit('-m', ?) as hash",
-        "base history snapshot",
-      ) as { hash: string } | undefined;
-      assert.match(baseCommit?.hash ?? "", /^[0-9a-f]{40}$/);
+    const newTrigramCols = checkDb.prepare("SELECT name FROM pragma_table_xinfo('chunks_trigram')").all() as Array<{ name: string }>;
+    expect(newTrigramCols.map(c => c.name)).toContain("source_category");
+    expect(newTrigramCols.length).toBe(10);
 
-      store.index({
-        content: "# Beta\n\nUpdated content.",
-        source: "history-doc",
-      });
-      store.exec(`SELECT dolt_add('-A')`);
-      const secondCommit = store.queryOne(
-        "SELECT dolt_commit('-m', ?) as hash",
-        "second history snapshot",
-      ) as { hash: string } | undefined;
-      assert.match(secondCommit?.hash ?? "", /^[0-9a-f]{40}$/);
+    // Old chunk data is gone (DROP + re-CREATE clears data)
+    const chunkCount = checkDb.prepare("SELECT COUNT(*) as cnt FROM chunks").get() as { cnt: number };
+    expect(chunkCount.cnt).toBe(0);
 
-      const historyRows = store.queryAll(
-        "SELECT * FROM dolt_history_sources WHERE commit_hash = ? LIMIT 5",
-        secondCommit?.hash,
-      ) as Array<Record<string, unknown>>;
-      assert.ok(historyRows.length > 0);
+    // Sources table still intact (not dropped)
+    const sourceCount = checkDb.prepare("SELECT COUNT(*) as cnt FROM sources").get() as { cnt: number };
+    expect(sourceCount.cnt).toBe(1);
 
-      const asOfRows = store.queryAll(
-        "SELECT * FROM dolt_at_sources(?) WHERE label = ? LIMIT 5",
-        baseCommit?.hash,
-        "history-doc",
-      ) as Array<Record<string, unknown>>;
-      assert.equal(asOfRows.length, 1);
+    // Store still functional — can index new content
+    const result = store.index({ content: "# Test\n\nNew content after migration.", source: "post-migration" });
+    expect(result.totalChunks).toBeGreaterThan(0);
 
-      const diffStat = store.queryAll(
-        "SELECT * FROM dolt_diff_stat(?, ?, ?)",
-        baseCommit?.hash,
-        secondCommit?.hash,
-        "sources",
-      ) as Array<Record<string, unknown>>;
-      assert.equal(diffStat.length, 1);
+    checkDb.close();
+    store.close();
 
-      const diffSummary = store.queryAll(
-        "SELECT * FROM dolt_diff_summary(?, ?, ?)",
-        baseCommit?.hash,
-        secondCommit?.hash,
-        "sources",
-      ) as Array<Record<string, unknown>>;
-      assert.equal(diffSummary.length, 1);
-
-      store.queryOne("SELECT dolt_branch('history-feature') as r");
-      store.queryOne("SELECT dolt_checkout('history-feature') as r");
-      store.index({
-        content: "# Gamma\n\nFeature branch content.",
-        source: "feature-doc",
-      });
-      store.exec(`SELECT dolt_add('-A')`);
-      const featureCommit = store.queryOne(
-        "SELECT dolt_commit('-m', ?) as hash",
-        "feature history snapshot",
-      ) as { hash: string } | undefined;
-      assert.match(featureCommit?.hash ?? "", /^[0-9a-f]{40}$/);
-
-      const mergeBase = store.queryOne(
-        "SELECT dolt_merge_base(?, ?) as hash",
-        secondCommit?.hash,
-        featureCommit?.hash,
-      ) as { hash: string } | undefined;
-      assert.equal(mergeBase?.hash, secondCommit?.hash);
-    } finally {
-      store.close();
+    // Cleanup
+    for (const suffix of ["", "-wal", "-shm"]) {
+      try { unlinkSync(dbPath + suffix); } catch { /* ignore */ }
     }
   });
 });
@@ -523,6 +235,23 @@ describe("Basic Indexing", () => {
   test("index throws when neither content nor path provided", () => {
     const store = createStore();
     assert.throws(() => store.index({}), /Either content or path/);
+    store.close();
+  });
+
+  test("index reads file when content is empty string and path is provided (regression #350)", () => {
+    // Some MCP clients send `content: ""` together with `path`. The previous
+    // implementation used `content ?? readFileSync(path)` which kept the empty
+    // string and indexed 0 chunks. Empty content + a valid path must fall
+    // back to reading the file.
+    const store = createStore();
+    const result = store.index({
+      content: "",
+      path: join(fixtureDir, "context7-react-docs.md"),
+      source: "Context7: empty-content path repro",
+    });
+    assert.ok(result.totalChunks > 0, "Should chunk the fixture from path even when content is empty string");
+    assert.ok(result.codeChunks > 0, "React docs have code blocks");
+    assert.equal(result.label, "Context7: empty-content path repro");
     store.close();
   });
 
@@ -1599,46 +1328,6 @@ describe("Persistent content store lifecycle", () => {
     store.close();
   });
 
-  test("cleanupStaleSources deletes aged sources without breaking later search or reindex", () => {
-    const store = createStore();
-    store.index({ content: "# Old\nlegacy token", source: "old-source" });
-    store.index({ content: "# Fresh\nfresh token", source: "fresh-source" });
-    store.exec("UPDATE sources SET indexed_at = datetime('now', '-90 days') WHERE label = 'old-source'");
-
-    const deleted = store.cleanupStaleSources(30);
-    expect(deleted).toBe(1);
-    expect(store.getSourceMeta("old-source")).toBeNull();
-    expect(store.getSourceMeta("fresh-source")).not.toBeNull();
-
-    const freshResults = store.search("fresh token", 3, "fresh-source");
-    expect(freshResults.length).toBeGreaterThan(0);
-
-    store.index({ content: "# Reborn\nold source restored", source: "old-source" });
-    const rebornResults = store.search("restored", 3, "old-source");
-    expect(rebornResults.length).toBeGreaterThan(0);
-    store.close();
-  });
-
-  test("repeated multi-chunk reindex keeps search healthy", () => {
-    const store = createStore();
-    const makeDoc = (version: number) =>
-      Array.from({ length: 24 }, (_, i) =>
-        `## Section ${version}-${i}\n\nRepeated reindex token ${version}-${i}\n\nLine A\nLine B`,
-      ).join("\n\n");
-
-    for (let version = 1; version <= 8; version++) {
-      store.index({
-        content: `# Large Doc ${version}\n\n${makeDoc(version)}`,
-        source: "reindex-stress",
-      });
-    }
-
-    const results = store.search("Repeated reindex token 8-12", 5, "reindex-stress");
-    expect(results.length).toBeGreaterThan(0);
-    expect(results[0]!.source).toBe("reindex-stress");
-    store.close();
-  });
-
   test("getDBSizeBytes returns positive number after indexing", () => {
     const store = createStore();
     store.index({ content: "# Test\nSome content for size", source: "size-test" });
@@ -1683,12 +1372,12 @@ describe("Persistent content store lifecycle", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("SQLITE_BUSY retry logic", () => {
-  test("SQLiteBase uses 30s timeout", () => {
-    const dbBaseSrc = readFileSync(
-      join(__dirname, "../src/db-base.ts"),
+  test("ContentStore uses 30s timeout", () => {
+    const storeSrc = readFileSync(
+      join(__dirname, "../src/store.ts"),
       "utf-8",
     );
-    expect(dbBaseSrc).toContain("timeout: 30000");
+    expect(storeSrc).toContain("timeout: 30000");
   });
 
   test("withRetry retries on SQLITE_BUSY and succeeds", () => {
@@ -1742,5 +1431,383 @@ describe("SQLITE_BUSY retry logic", () => {
       }, [0, 0, 0]);
     }).toThrow("UNIQUE constraint failed");
     expect(attempts).toBe(1);
+  });
+});
+
+// ── withRetry coverage for all write/read paths ──
+
+describe("withRetry edge cases", () => {
+  test("withRetry succeeds on first attempt", () => {
+    const result = withRetry(() => "immediate", [0, 0, 0]);
+    expect(result).toBe("immediate");
+  });
+
+  test("withRetry recovers on last retry", () => {
+    let attempts = 0;
+    const result = withRetry(() => {
+      attempts++;
+      if (attempts <= 3) {
+        throw new Error("SQLITE_BUSY: database is locked");
+      }
+      return "recovered";
+    }, [0, 0, 0]);
+    expect(result).toBe("recovered");
+    expect(attempts).toBe(4); // 1 initial + 3 retries
+  });
+
+  test("withRetry handles 'database is locked' without SQLITE_BUSY prefix", () => {
+    let attempts = 0;
+    const result = withRetry(() => {
+      attempts++;
+      if (attempts < 2) {
+        throw new Error("database is locked");
+      }
+      return "ok";
+    }, [0, 0, 0]);
+    expect(result).toBe("ok");
+    expect(attempts).toBe(2);
+  });
+
+  test("withRetry with empty delays array throws immediately on BUSY", () => {
+    expect(() => {
+      withRetry(() => {
+        throw new Error("SQLITE_BUSY: database is locked");
+      }, []);
+    }).toThrow(/SQLITE_BUSY.*0 retries/);
+  });
+
+  test("withRetry preserves return type", () => {
+    const obj = withRetry(() => ({ key: "value", num: 42 }), [0]);
+    expect(obj).toEqual({ key: "value", num: 42 });
+  });
+});
+
+// ── Concurrent write resilience ──
+
+describe("concurrent DB access", () => {
+  test("two ContentStore instances can write to the same DB file", () => {
+    const dbPath = join(tmpdir(), `concurrent-write-${Date.now()}.db`);
+    const store1 = new ContentStore(dbPath);
+    const store2 = new ContentStore(dbPath);
+
+    store1.index({ content: "# First\n\nContent from store 1.", source: "store1-doc" });
+    store2.index({ content: "# Second\n\nContent from store 2.", source: "store2-doc" });
+
+    // Both sources should be searchable from either store
+    const results1 = store1.search("Content from store", 10);
+    expect(results1.length).toBeGreaterThanOrEqual(2);
+
+    const results2 = store2.search("Content from store", 10);
+    expect(results2.length).toBeGreaterThanOrEqual(2);
+
+    store1.cleanup();
+    store2.close();
+  });
+
+  test("indexPlainText is protected by withRetry", () => {
+    // Verify indexPlainText doesn't throw on transient BUSY by testing
+    // concurrent plain text indexing on same DB
+    const dbPath = join(tmpdir(), `concurrent-plaintext-${Date.now()}.db`);
+    const store1 = new ContentStore(dbPath);
+    const store2 = new ContentStore(dbPath);
+
+    store1.indexPlainText("alpha bravo charlie", "plain-1");
+    store2.indexPlainText("delta echo foxtrot", "plain-2");
+
+    const r1 = store1.search("alpha bravo", 5, "plain-1");
+    expect(r1.length).toBeGreaterThan(0);
+    const r2 = store1.search("delta echo", 5, "plain-2");
+    expect(r2.length).toBeGreaterThan(0);
+
+    store1.cleanup();
+    store2.close();
+  });
+
+  test("indexJSON is protected by withRetry", () => {
+    const dbPath = join(tmpdir(), `concurrent-json-${Date.now()}.db`);
+    const store1 = new ContentStore(dbPath);
+    const store2 = new ContentStore(dbPath);
+
+    store1.indexJSON(JSON.stringify({ users: [{ name: "Alice" }] }), "json-1");
+    store2.indexJSON(JSON.stringify({ items: [{ id: 1 }] }), "json-2");
+
+    const results = store1.search("Alice", 5);
+    expect(results.length).toBeGreaterThan(0);
+
+    store1.cleanup();
+    store2.close();
+  });
+
+  test("search and searchTrigram work under concurrent writes", () => {
+    const dbPath = join(tmpdir(), `concurrent-search-${Date.now()}.db`);
+    const store1 = new ContentStore(dbPath);
+    const store2 = new ContentStore(dbPath);
+
+    store1.index({ content: "# Guide\n\nReact hooks are powerful.", source: "guide" });
+
+    // Write from store2 while store1 searches
+    store2.index({ content: "# Tutorial\n\nVue composition API.", source: "tutorial" });
+    const results = store1.search("hooks", 5);
+    expect(results.length).toBeGreaterThan(0);
+
+    store1.cleanup();
+    store2.close();
+  });
+});
+
+// ── WAL checkpoint on close (#244) ──
+
+describe("closeDB — WAL checkpoint", () => {
+  test("closeDB checkpoints WAL so no -wal file remains", () => {
+    const dbPath = join(tmpdir(), `wal-test-${Date.now()}.db`);
+    const Database = loadDatabase();
+    const db = Database(dbPath, { timeout: 30000 });
+    applyWALPragmas(db);
+    db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, val TEXT)");
+    db.exec("INSERT INTO t VALUES (1, 'hello')");
+
+    // WAL file should exist after writes in WAL mode
+    expect(existsSync(dbPath + "-wal")).toBe(true);
+
+    closeDB(db);
+
+    // After closeDB, WAL should be checkpointed (truncated to 0 or removed)
+    // The file may still exist but should be empty, or may not exist
+    const walExists = existsSync(dbPath + "-wal");
+    if (walExists) {
+      const walSize = readFileSync(dbPath + "-wal").length;
+      expect(walSize).toBe(0);
+    }
+
+    // cleanup
+    for (const s of ["", "-wal", "-shm"]) {
+      try { unlinkSync(dbPath + s); } catch {}
+    }
+  });
+});
+
+// ── Corrupt DB recovery (#244) ──
+
+describe("ContentStore — corrupt DB recovery", () => {
+  // Windows file locking prevents WAL/SHM deletion while another worker holds them open
+  test.skipIf(process.platform === "win32")("recovers from corrupt DB file by deleting and recreating", () => {
+    const dbPath = join(tmpdir(), `corrupt-store-${Date.now()}.db`);
+    // Write garbage to simulate corrupt DB
+    writeFileSync(dbPath, "THIS IS NOT A SQLITE DATABASE FILE");
+    writeFileSync(dbPath + "-wal", "CORRUPT WAL");
+
+    // Should recover: delete corrupt files and create fresh DB
+    const store = new ContentStore(dbPath);
+    // Store should be functional
+    store.index({ content: "test content", source: "test" });
+    const results = store.search("test content");
+    expect(results.length).toBeGreaterThan(0);
+
+    store.cleanup();
+  });
+
+  test("non-SQLite errors still throw", () => {
+    // A path to a directory (not a file) should throw a non-corruption error
+    expect(() => new ContentStore(tmpdir())).toThrow();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// mmap_size pragma
+// ═══════════════════════════════════════════════════════════
+
+describe("mmap_size pragma", () => {
+  test("mmap_size is set on new ContentStore", () => {
+    const dbPath = join(tmpdir(), `ctx-mmap-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+    const store = new ContentStore(dbPath);
+    store.indexPlainText("Memory-mapped I/O test content for FTS5 search", "mmap-test");
+    const results = store.search("memory-mapped");
+    expect(results.length).toBeGreaterThan(0);
+    store.cleanup();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// FTS5 Periodic Optimization
+// ═══════════════════════════════════════════════════════════
+
+describe("FTS5 periodic optimize", () => {
+  test("search works correctly after OPTIMIZE_EVERY inserts", () => {
+    const dbPath = join(tmpdir(), `ctx-optimize-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+    const store = new ContentStore(dbPath);
+
+    for (let i = 0; i < ContentStore.OPTIMIZE_EVERY + 5; i++) {
+      store.indexPlainText(`Document number ${i} about testing optimization`, `source-${i}`);
+    }
+
+    const results = store.search("testing optimization");
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].content).toContain("testing optimization");
+
+    store.cleanup();
+  });
+
+  test("close() does not throw even after many inserts", () => {
+    const dbPath = join(tmpdir(), `ctx-optimize-close-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+    const store = new ContentStore(dbPath);
+
+    for (let i = 0; i < 10; i++) {
+      store.indexPlainText(`Content ${i}`, `src-${i}`);
+    }
+
+    expect(() => store.close()).not.toThrow();
+  });
+
+  test("OPTIMIZE_EVERY is a reasonable value", () => {
+    expect(ContentStore.OPTIMIZE_EVERY).toBeGreaterThanOrEqual(20);
+    expect(ContentStore.OPTIMIZE_EVERY).toBeLessThanOrEqual(200);
+  });
+});
+
+describe("Sanitize query token deduplication", () => {
+  test("sanitizeQuery removes duplicate tokens (case-insensitive)", async () => {
+    const { sanitizeQuery } = await import("../src/store.js");
+    assert.equal(
+      sanitizeQuery("error error error"),
+      '"error"',
+      "three identical tokens should compile to a single quoted term",
+    );
+    assert.equal(
+      sanitizeQuery("Error ERROR error"),
+      '"Error"',
+      "case differences should not create duplicate tokens",
+    );
+  });
+
+  test("sanitizeQuery preserves first-occurrence casing after dedup", async () => {
+    const { sanitizeQuery } = await import("../src/store.js");
+    assert.equal(sanitizeQuery("Database database DATABASE"), '"Database"');
+  });
+
+  test("sanitizeQuery preserves distinct tokens and their order", async () => {
+    const { sanitizeQuery } = await import("../src/store.js");
+    // "update" is a stopword, but the meaningful terms remain distinct.
+    assert.equal(
+      sanitizeQuery("database query database index query"),
+      '"database" "query" "index"',
+      "distinct tokens should be kept; duplicates collapsed in first-seen order",
+    );
+  });
+
+  test("sanitizeTrigramQuery removes duplicate tokens", async () => {
+    const { sanitizeTrigramQuery } = await import("../src/store.js");
+    assert.equal(
+      sanitizeTrigramQuery("error error error"),
+      '"error"',
+    );
+    assert.equal(
+      sanitizeTrigramQuery("error ERROR Error"),
+      '"error"',
+      "case-insensitive dedup across all three trigram sanitize paths",
+    );
+  });
+
+  test("dedup in OR mode collapses duplicates but preserves distinct terms", async () => {
+    const { sanitizeQuery } = await import("../src/store.js");
+    assert.equal(
+      sanitizeQuery("error error database", "OR"),
+      '"error" OR "database"',
+    );
+  });
+
+  test("search returns identical results for duplicated and deduplicated queries", () => {
+    const store = createStore();
+    store.index({
+      content:
+        "# Error Handling\n\nThe database connection threw an error during migration.\n\n# Overview\n\nPlain content.",
+      source: "dedup-behavioral",
+    });
+
+    const duplicated = store.search("error error error database database");
+    const unique = store.search("error database");
+
+    assert.equal(duplicated.length, unique.length);
+    for (let i = 0; i < duplicated.length; i++) {
+      assert.equal(duplicated[i].title, unique[i].title);
+      assert.equal(duplicated[i].content, unique[i].content);
+    }
+    store.close();
+  });
+});
+
+describe("Stopword filtering in search queries", () => {
+  test("stopwords are filtered from search — meaningful terms drive ranking", () => {
+    const store = createStore();
+    // "fix" and "update" are stopwords in the domain list.
+    // "database" and "connection" are meaningful terms.
+    store.index({
+      content:
+        "# Database Connection Pool\n\nManage database connections with pooling.\n\n# Update Log\n\nFix applied to update module on Tuesday.",
+      source: "stopword-search",
+    });
+
+    // Search with stopwords mixed in — results should prioritize "database connection"
+    const results = store.search("fix database connection", 2);
+    assert.ok(results.length > 0, "Should return results");
+    assert.ok(
+      results[0].content.toLowerCase().includes("database") &&
+        results[0].content.toLowerCase().includes("connection"),
+      `Top result should match meaningful terms 'database connection', got: ${results[0].title}`,
+    );
+    store.close();
+  });
+
+  test("all-stopword query still returns results (fallback)", () => {
+    const store = createStore();
+    store.index({
+      content: "# Updates\n\nUpdate the test runner to fix the issue.\n\n# Other\n\nUnrelated content.",
+      source: "all-stopwords",
+    });
+
+    // "update test fix" are all stopwords — should fall back to using them
+    const results = store.search("update test fix", 2);
+    assert.ok(results.length > 0, "All-stopword query should still return results via fallback");
+    store.close();
+  });
+
+  test("stopwords filtered from trigram search", () => {
+    const store = createStore();
+    store.index({
+      content:
+        "# Encryption Module\n\nAES encryption with key rotation.\n\n# Testing Guide\n\nRun tests using the test framework.",
+      source: "trigram-stopwords",
+    });
+
+    // "using" is a stopword, "encryption" is meaningful
+    const results = store.searchTrigram("using encryption", 2);
+    assert.ok(results.length > 0, "Should return results");
+    assert.ok(
+      results[0].content.toLowerCase().includes("encryption"),
+      `Should match on meaningful term 'encryption', got: ${results[0].title}`,
+    );
+    store.close();
+  });
+
+  test("proximity reranking ignores stopwords for boost calculation", () => {
+    const store = createStore();
+    // Two chunks: one has "database error" close together, the other has them far apart
+    // but has "fix" (stopword) nearby
+    store.index({
+      content:
+        "# Error Handling\n\nThe database threw an error during migration.\n\n# Fix Log\n\nWe fix things. Much later in this document we mention database. Even later we see error.",
+      source: "proximity-stopwords",
+    });
+
+    const results = store.searchWithFallback("fix database error", 2);
+    assert.ok(results.length > 0, "Should return results");
+    // The chunk with "database" and "error" close together should rank higher
+    // because "fix" (stopword) is excluded from proximity calculation
+    assert.ok(
+      results[0].content.toLowerCase().includes("database") &&
+        results[0].content.toLowerCase().includes("error") &&
+        results[0].title.includes("Error"),
+      `Proximity should favor chunk with meaningful terms close together, got: ${results[0].title}`,
+    );
+    store.close();
   });
 });
