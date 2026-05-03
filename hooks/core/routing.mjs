@@ -15,9 +15,15 @@ import {
   createRoutingBlock, createReadGuidance, createGrepGuidance, createBashGuidance,
 } from "../routing-block.mjs";
 import { createToolNamer } from "./tool-naming.mjs";
+import { isMCPReady } from "./mcp-ready.mjs";
 import { existsSync, mkdirSync, rmSync, openSync, closeSync, constants as fsConstants } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+
+function mcpRedirect(result) {
+  if (!isMCPReady()) return null;
+  return result;
+}
 
 // Guidance throttle: show each advisory type at most once per session.
 // Hybrid approach:
@@ -217,12 +223,12 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
       });
 
       if (hasDangerousSegment) {
-        return {
+        return mcpRedirect({
           action: "modify",
           updatedInput: {
             command: `echo "context-mode-doltlite: curl/wget blocked. Think in Code — use ${t("ctx_execute")}(language, code) to write code that fetches, processes, and prints only answer. Or use ${t("ctx_fetch_and_index")}(url, source) to fetch and index. Write pure JS with try/catch, no npm deps. Do NOT retry with curl/wget."`,
           },
-        };
+        });
       }
       // All segments safe → allow through
       return null;
@@ -239,24 +245,24 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
       /requests\.(get|post|put)\s*\(/i.test(noHeredoc) ||
       /http\.(get|request)\s*\(/i.test(noHeredoc)
     ) {
-      return {
+      return mcpRedirect({
         action: "modify",
         updatedInput: {
           command: `echo "context-mode-doltlite: Inline HTTP blocked. Think in Code — use ${t("ctx_execute")}(language, code) to write code that fetches, processes, and console.log() only result. Write robust pure JS with try/catch, no npm deps. Or use ${t("ctx_fetch_and_index")}(url, source) for web pages. Do NOT retry with Bash."`,
         },
-      };
+      });
     }
 
     // Build tools (gradle, maven) → redirect to execute sandbox (Issue #38).
     // These produce extremely verbose output that should stay in sandbox.
     if (/(^|\s|&&|\||\;)(\.\/gradlew|gradlew|gradle|\.\/mvnw|mvnw|mvn)\s/i.test(stripped)) {
       const safeCmd = command.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-      return {
+      return mcpRedirect({
         action: "modify",
         updatedInput: {
           command: `echo "context-mode-doltlite: Build tool redirected. Think in Code — use ${t("ctx_execute")}(language: \\"shell\\", code: \\"${safeCmd} 2>&1 | tail -30\\") to run and print only errors/summary. Do NOT retry with Bash."`,
         },
-      };
+      });
     }
 
     // allow all other Bash commands, but inject routing nudge (once per session)
@@ -276,10 +282,10 @@ export function routePreToolUse(toolName, toolInput, projectDir, platform) {
   // ─── WebFetch: deny + redirect to sandbox ───
   if (canonical === "WebFetch") {
     const url = toolInput.url ?? "";
-    return {
+    return mcpRedirect({
       action: "deny",
       reason: `context-mode-doltlite: WebFetch blocked. Think in Code — use ${t("ctx_fetch_and_index")}(url: "${url}", source: "...") to fetch and index, then ${t("ctx_search")}(queries: [...]) to query. Or use ${t("ctx_execute")}(language, code) to fetch, process, and console.log() only what you need. Write pure JS, no npm deps. Do NOT use curl, wget, mcp_web_fetch, mcp_fetch_tool, or WebFetch.`,
-    };
+    });
   }
 
   // ─── Agent/Task: inject context-mode-doltlite routing into subagent prompts ───

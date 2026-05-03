@@ -808,11 +808,15 @@ export class ContentStore {
   }): IndexResult {
     const { content, path, source } = options;
 
-    if (!content && !path) {
+    // Treat empty string as "no content" so clients that materialize optional
+    // string fields as "" still fall back to reading the provided path.
+    const hasContent = typeof content === "string" && content.length > 0;
+
+    if (!hasContent && !path) {
       throw new Error("Either content or path must be provided");
     }
 
-    const text = content ?? readFileSync(path!, "utf-8");
+    const text = hasContent ? content! : readFileSync(path!, "utf-8");
     const label = source ?? path ?? "untitled";
     const chunks = this.#chunkMarkdown(text);
 

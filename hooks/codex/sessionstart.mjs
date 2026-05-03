@@ -14,7 +14,6 @@ import {
   writeSessionEventsFile,
   buildSessionDirective,
   getSessionEvents,
-  getLatestSessionEvents,
 } from "../session-directive.mjs";
 import {
   readStdin,
@@ -56,9 +55,10 @@ try {
       try { unlinkSync(getCleanupFlagPath(OPTS)); } catch { /* no flag */ }
     }
 
-    const events = source === "compact"
-      ? getSessionEvents(db, getSessionId(input, OPTS))
-      : getLatestSessionEvents(db);
+    // Filter events to the session being resumed/compacted. Falling back to
+    // latest events can leak data from another session that started later.
+    const sessionId = getSessionId(input, OPTS);
+    const events = sessionId ? getSessionEvents(db, sessionId) : [];
     if (events.length > 0) {
       const eventMeta = writeSessionEventsFile(events, getSessionEventsPath(OPTS));
       additionalContext += buildSessionDirective(source, eventMeta, toolNamer);

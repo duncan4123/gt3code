@@ -17,7 +17,7 @@ import { createToolNamer } from "../core/tool-naming.mjs";
 
 const toolNamer = createToolNamer("vscode-copilot");
 const ROUTING_BLOCK = createRoutingBlock(toolNamer);
-import { writeSessionEventsFile, buildSessionDirective, getSessionEvents, getLatestSessionEvents } from "../session-directive.mjs";
+import { writeSessionEventsFile, buildSessionDirective, getSessionEvents } from "../session-directive.mjs";
 import {
   readStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath,
   getProjectDir, VSCODE_OPTS,
@@ -63,7 +63,10 @@ try {
     const dbPath = getSessionDBPath(OPTS);
     const db = new SessionDB({ dbPath });
 
-    const events = getLatestSessionEvents(db);
+    // Filter events to the session being resumed. Falling back to latest
+    // events can leak data from another session that started later.
+    const sessionId = getSessionId(input, OPTS);
+    const events = sessionId ? getSessionEvents(db, sessionId) : [];
     if (events.length > 0) {
       const eventMeta = writeSessionEventsFile(events, getSessionEventsPath(OPTS));
       additionalContext += buildSessionDirective("resume", eventMeta, toolNamer);

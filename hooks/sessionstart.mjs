@@ -21,7 +21,7 @@ import { createToolNamer } from "./core/tool-naming.mjs";
 const toolNamer = createToolNamer("claude-code");
 const ROUTING_BLOCK = createRoutingBlock(toolNamer);
 import { readStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath } from "./session-helpers.mjs";
-import { writeSessionEventsFile, buildSessionDirective, getSessionEvents, getLatestSessionEvents } from "./session-directive.mjs";
+import { writeSessionEventsFile, buildSessionDirective, getSessionEvents } from "./session-directive.mjs";
 import { createSessionLoaders } from "./session-loaders.mjs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,7 +66,10 @@ try {
     const dbPath = getSessionDBPath();
     const db = new SessionDB({ dbPath });
 
-    const events = getLatestSessionEvents(db);
+    // Filter events to the session being resumed. Falling back to latest
+    // session events leaks data from other worktrees that started later.
+    const sessionId = getSessionId(input);
+    const events = sessionId ? getSessionEvents(db, sessionId) : [];
     if (events.length > 0) {
       const eventMeta = writeSessionEventsFile(events, getSessionEventsPath());
       additionalContext += buildSessionDirective("resume", eventMeta, toolNamer);

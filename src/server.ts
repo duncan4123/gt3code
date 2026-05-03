@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
-import { existsSync, unlinkSync, readdirSync, readFileSync, rmSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, unlinkSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdirSync, statSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir, tmpdir } from "node:os";
@@ -3863,6 +3863,11 @@ async function main() {
     version: VERSION,
   });
 
+  // MCP readiness sentinel. Hooks scan live sentinel files instead of relying
+  // on PPID, which is unstable through shell wrappers.
+  const mcpSentinelDir = process.platform === "win32" ? tmpdir() : "/tmp";
+  const mcpSentinel = join(mcpSentinelDir, `context-mode-mcp-ready-${process.pid}`);
+
   // Clean up own DB + backgrounded processes on shutdown
   const shutdown = () => {
     executor.cleanupBackgrounded();
@@ -3872,6 +3877,7 @@ async function main() {
       try { ns.close(); } catch { /* ignore */ }
     }
     _namedStores.clear();
+    try { unlinkSync(mcpSentinel); } catch { /* best effort */ }
     removeMcpProcessRecordIfPid(projectDir, process.pid);
   };
   const gracefulShutdown = async () => {
@@ -3882,11 +3888,13 @@ async function main() {
   process.on("SIGINT", () => { gracefulShutdown(); });
   process.on("SIGTERM", () => { gracefulShutdown(); });
 
-  // Lifecycle guard: detect parent death + stdin close to prevent orphaned processes (#103)
+  // Lifecycle guard: detect parent death without treating stdin close alone as fatal.
   startLifecycleGuard({ onShutdown: () => gracefulShutdown() });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  try { writeFileSync(mcpSentinel, String(process.pid)); } catch { /* best effort */ }
 
   // Log detected MCP client for diagnostics
   try {
