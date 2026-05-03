@@ -16,7 +16,7 @@
 
 import * as p from "@clack/prompts";
 import color from "picocolors";
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync, execSync, execFile as nodeExecFile } from "node:child_process";
 import { readFileSync, writeFileSync, cpSync, accessSync, existsSync, readdirSync, rmSync, closeSync, openSync, chmodSync, constants } from "node:fs";
 import { request as httpsRequest } from "node:https";
 import { resolve, dirname, join } from "node:path";
@@ -66,10 +66,31 @@ const HOOK_MAP: Record<string, Record<string, string>> = {
     pretooluse: "hooks/cursor/pretooluse.mjs",
     posttooluse: "hooks/cursor/posttooluse.mjs",
     sessionstart: "hooks/cursor/sessionstart.mjs",
+    stop: "hooks/cursor/stop.mjs",
+  },
+  "codex": {
+    pretooluse: "hooks/codex/pretooluse.mjs",
+    posttooluse: "hooks/codex/posttooluse.mjs",
+    sessionstart: "hooks/codex/sessionstart.mjs",
+    userpromptsubmit: "hooks/codex/userpromptsubmit.mjs",
+    stop: "hooks/codex/stop.mjs",
   },
   "kiro": {
     pretooluse: "hooks/kiro/pretooluse.mjs",
     posttooluse: "hooks/kiro/posttooluse.mjs",
+  },
+  "jetbrains-copilot": {
+    pretooluse: "hooks/jetbrains-copilot/pretooluse.mjs",
+    posttooluse: "hooks/jetbrains-copilot/posttooluse.mjs",
+    precompact: "hooks/jetbrains-copilot/precompact.mjs",
+    sessionstart: "hooks/jetbrains-copilot/sessionstart.mjs",
+  },
+  "qwen-code": {
+    pretooluse: "hooks/pretooluse.mjs",
+    posttooluse: "hooks/posttooluse.mjs",
+    precompact: "hooks/precompact.mjs",
+    sessionstart: "hooks/sessionstart.mjs",
+    userpromptsubmit: "hooks/userpromptsubmit.mjs",
   },
 };
 
@@ -107,6 +128,10 @@ if (args[0] === "doctor") {
   upgrade();
 } else if (args[0] === "hook") {
   hookDispatch(args[1], args[2]);
+} else if (args[0] === "insight") {
+  insight(args[1] ? Number(args[1]) : 4747);
+} else if (args[0] === "statusline") {
+  statuslineForward();
 } else {
   // Default: start MCP server
   import("./server.js");
@@ -119,6 +144,51 @@ if (args[0] === "doctor") {
 /** Normalize Windows backslash paths to forward slashes for Bash (MSYS2) compatibility. */
 export function toUnixPath(p: string): string {
   return p.replace(/\\/g, "/");
+}
+
+const isWin = process.platform === "win32";
+
+export function npmExec(command: string, opts: Record<string, unknown> = {}): void {
+  execSync(isWin ? command.replace(/^npm /, "npm.cmd ") : command, {
+    ...opts,
+    ...(isWin ? { shell: "cmd.exe" } : {}),
+  } as import("node:child_process").ExecSyncOptions);
+}
+
+export type ExecFileFn = (
+  file: string,
+  args: readonly string[],
+  opts?: Record<string, unknown>,
+) => unknown;
+
+export function openInBrowser(
+  url: string,
+  platform: NodeJS.Platform = process.platform,
+  runner: ExecFileFn = nodeExecFile as unknown as ExecFileFn,
+): void {
+  const opts = { stdio: "ignore" as const };
+  const hint = () =>
+    console.error(`\nCould not auto-open browser. Open manually: ${url}`);
+
+  try {
+    if (platform === "darwin") {
+      runner("open", [url], opts);
+    } else if (platform === "win32") {
+      runner("cmd", ["/c", "start", "", url], opts);
+    } else {
+      try {
+        runner("xdg-open", [url], opts);
+      } catch {
+        try {
+          runner("sensible-browser", [url], opts);
+        } catch {
+          hint();
+        }
+      }
+    }
+  } catch {
+    hint();
+  }
 }
 
 function defaultPluginRoot(): string {
@@ -531,6 +601,105 @@ async function doctor(): Promise<number> {
 }
 
 /* -------------------------------------------------------
+ * Insight — analytics dashboard
+ * ------------------------------------------------------- */
+
+async function insight(port: number) {
+  try {
+    const { execSync: execSyncChild, spawn } = await import("node:child_process");
+    const { statSync, mkdirSync: mkdirSyncFs, cpSync: cpSyncFs } = await import("node:fs");
+
+    const pluginRoot = getPluginRoot();
+    const insightSource = resolve(pluginRoot, "insight");
+    const detection = detectPlatform();
+    const adapter = await getAdapter(detection.platform);
+    const sessDir = adapter.getSessionDir();
+    const contentDir = join(dirname(sessDir), "content");
+    const cacheDir = join(dirname(sessDir), "insight-cache");
+
+    if (!existsSync(join(insightSource, "server.mjs"))) {
+      console.error("Error: Insight source not found. Try upgrading context-mode.");
+      process.exit(1);
+    }
+
+    mkdirSyncFs(cacheDir, { recursive: true });
+
+    const srcMtime = statSync(join(insightSource, "server.mjs")).mtimeMs;
+    const cacheMtime = existsSync(join(cacheDir, "server.mjs"))
+      ? statSync(join(cacheDir, "server.mjs")).mtimeMs
+      : 0;
+    if (srcMtime > cacheMtime) {
+      console.log("Copying Insight source...");
+      cpSyncFs(insightSource, cacheDir, { recursive: true, force: true });
+    }
+
+    if (!existsSync(join(cacheDir, "node_modules"))) {
+      console.log("Installing dependencies (first run)...");
+      try {
+        npmExec("npm install --production=false", { cwd: cacheDir, stdio: "inherit", timeout: 300000 });
+      } catch {
+        try { rmSync(join(cacheDir, "node_modules"), { recursive: true, force: true }); } catch {}
+        throw new Error("npm install failed — please retry");
+      }
+      if (!existsSync(join(cacheDir, "node_modules", "vite"))) {
+        rmSync(join(cacheDir, "node_modules"), { recursive: true, force: true });
+        throw new Error("npm install incomplete — please retry");
+      }
+    }
+
+    console.log("Building dashboard...");
+    execSyncChild("npx vite build", { cwd: cacheDir, stdio: "pipe", timeout: 60000 });
+
+    const url = `http://localhost:${port}`;
+    console.log(`\n  context-mode Insight\n  ${url}\n`);
+
+    const serverRuntime = hasBunRuntime() ? "bun" : (process.execPath && !process.execPath.endsWith("/bun") ? process.execPath : "/usr/bin/node");
+    const child = spawn(serverRuntime, [join(cacheDir, "server.mjs")], {
+      cwd: cacheDir,
+      env: {
+        ...process.env,
+        PORT: String(port),
+        INSIGHT_SESSION_DIR: sessDir,
+        INSIGHT_CONTENT_DIR: contentDir,
+      },
+      stdio: "inherit",
+    });
+    child.on("error", () => {});
+
+    await new Promise((r) => setTimeout(r, 1500));
+
+    try {
+      const { request } = await import("node:http");
+      await new Promise<void>((resolveReady, rejectReady) => {
+        const req = request(`http://127.0.0.1:${port}/api/overview`, { timeout: 3000 }, (res) => {
+          resolveReady();
+          res.resume();
+        });
+        req.on("error", rejectReady);
+        req.on("timeout", () => { req.destroy(); rejectReady(new Error("timeout")); });
+        req.end();
+      });
+    } catch {
+      console.error(`\nError: Port ${port} appears to be in use. Either a previous dashboard is still running, or another service is using this port.`);
+      console.error("\nTo fix:");
+      console.error(`  Kill the existing process: ${process.platform === "win32" ? `netstat -ano | findstr :${port}` : `lsof -ti:${port} | xargs kill`}`);
+      console.error(`  Or use a different port:   context-mode-doltlite insight ${port + 1}`);
+      child.kill();
+      process.exit(1);
+    }
+
+    openInBrowser(url);
+
+    process.on("SIGINT", () => { child.kill(); process.exit(0); });
+    process.on("SIGTERM", () => { child.kill(); process.exit(0); });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`\nInsight error: ${msg}`);
+    process.exit(1);
+  }
+}
+
+/* -------------------------------------------------------
  * Upgrade — adapter-aware hook configuration
  * ------------------------------------------------------- */
 
@@ -813,4 +982,20 @@ async function upgrade() {
         color.dim(` — restart your ${adapter.name} session to pick up the new version`),
     );
   }
+}
+
+/* -------------------------------------------------------
+ * statusline — forward to bin/statusline.mjs
+ * ------------------------------------------------------- */
+
+function statuslineForward(): void {
+  const scriptPath = resolve(getPluginRoot(), "bin", "statusline.mjs");
+  if (!existsSync(scriptPath)) {
+    process.stderr.write(`statusline script missing: ${scriptPath}\n`);
+    process.exit(1);
+  }
+  import(pathToFileURL(scriptPath).href).catch((err) => {
+    process.stderr.write(`statusline failed: ${err?.message ?? err}\n`);
+    process.exit(1);
+  });
 }
