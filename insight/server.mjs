@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * context-mode Insight — Local analytics dashboard.
- * Cross-platform: works with Bun (bun:sqlite) or Node.js (better-sqlite3).
+ * Cross-platform: prefers the fork's doltlite-capable better-sqlite3 addon,
+ * then falls back to Bun/stock SQLite for upstream-compatible databases.
  *
  * Usage:
  *   bun insight/server.mjs      # fast, uses bun:sqlite
@@ -13,36 +14,61 @@ import { join, dirname, extname, normalize } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createServer as createHttpServer } from "node:http";
+import { createRequire } from "node:module";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4747;
 
 // ── Cross-platform SQLite ────────────────────────────────
-// Detect runtime: Bun has bun:sqlite built-in, Node needs better-sqlite3
+// The doltlite fork writes prolly-backed DB files. Stock SQLite readers
+// (including bun:sqlite) report "file is not a database" for those files, so
+// Insight must prefer the vendored doltlite-capable addon when available.
 
 let Database;
+let databaseRuntime = "unknown";
 const isBun = typeof globalThis.Bun !== "undefined";
+const require = createRequire(import.meta.url);
 
-if (isBun) {
-  Database = (await import("bun:sqlite")).Database;
-} else {
-  try {
-    Database = (await import("better-sqlite3")).default;
-    // Verify native addon loads correctly (catches arch mismatch: x86_64 vs arm64)
-    const testDb = new Database(":memory:");
-    testDb.close();
-  } catch (err) {
+function loadBetterSqlite() {
+  const candidates = [
+    process.env.CONTEXT_MODE_PLUGIN_ROOT
+      ? join(process.env.CONTEXT_MODE_PLUGIN_ROOT, "vendor", "better-sqlite3")
+      : null,
+    join(dirname(__dirname), "vendor", "better-sqlite3"),
+    "better-sqlite3",
+  ].filter(Boolean);
+
+  const errors = [];
+  for (const candidate of candidates) {
+    try {
+      const mod = require(candidate);
+      const Ctor = mod.default ?? mod;
+      const testDb = new Ctor(":memory:");
+      try { testDb.prepare("SELECT doltlite_engine()").get(); } catch {}
+      testDb.close();
+      databaseRuntime = String(candidate);
+      return Ctor;
+    } catch (err) {
+      errors.push(`${candidate}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  throw new Error(errors.join("\n"));
+}
+
+try {
+  Database = loadBetterSqlite();
+} catch (err) {
+  if (isBun) {
+    Database = (await import("bun:sqlite")).Database;
+    databaseRuntime = "bun:sqlite";
+  } else {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("\n  Error: better-sqlite3 failed to load.");
     console.error(`  ${msg}`);
-    if (msg.includes("incompatible architecture") || msg.includes("dlopen")) {
-      const cacheHint = process.env.INSIGHT_SESSION_DIR
-        ? join(dirname(process.env.INSIGHT_SESSION_DIR), "insight-cache", "node_modules")
-        : join("~", ".claude", "context-mode", "insight-cache", "node_modules");
-      console.error(`\n  Fix: rm -rf ${cacheHint} && context-mode insight`);
-    } else {
-      console.error("  Install it: npm install better-sqlite3");
-    }
+    const cacheHint = process.env.INSIGHT_SESSION_DIR
+      ? join(dirname(process.env.INSIGHT_SESSION_DIR), "insight-cache", "node_modules")
+      : join("~", ".claude", "context-mode", "insight-cache", "node_modules");
+    console.error(`\n  Fix: rm -rf ${cacheHint} && context-mode-doltlite insight`);
     process.exit(1);
   }
 }
@@ -1250,4 +1276,5 @@ if (Number.isFinite(PARENT_PID) && PARENT_PID > 0) {
 
 console.log(`\n  context-mode Insight`);
 console.log(`  http://localhost:${PORT}`);
-console.log(`  Runtime: ${isBun ? "Bun" : "Node.js"}\n`);
+console.log(`  Runtime: ${isBun ? "Bun" : "Node.js"}`);
+console.log(`  DB runtime: ${databaseRuntime}\n`);

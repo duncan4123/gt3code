@@ -818,6 +818,12 @@ function formatCommandOutput(label: string, raw: string, onFsBytes?: (bytes: num
   return `# ${label}\n\n${output}\n`;
 }
 
+function wrapBatchShellCommand(command: string, nodeOptsPrefix: string): string {
+  // Redirect the whole command group, not just the final simple command.
+  // Appending `2>&1` loses stderr for multiline/heredoc commands.
+  return `${nodeOptsPrefix}{\n${command}\n} 2>&1`;
+}
+
 /**
  * Execute batch commands. concurrency=1 preserves the legacy serial path
  * (shared timeout budget + cascading skip-on-timeout). concurrency>1 runs
@@ -848,7 +854,7 @@ export async function runBatchCommands(
       }
       const result = await executor.execute({
         language: "shell",
-        code: `${nodeOptsPrefix}${cmd.command} 2>&1`,
+        code: wrapBatchShellCommand(cmd.command, nodeOptsPrefix),
         timeout: remaining,
       });
       outputs.push(formatCommandOutput(cmd.label, result.stdout, onFsBytes));
@@ -870,7 +876,7 @@ export async function runBatchCommands(
     run: async () => {
       const result = await executor.execute({
         language: "shell",
-        code: `${nodeOptsPrefix}${cmd.command} 2>&1`,
+        code: wrapBatchShellCommand(cmd.command, nodeOptsPrefix),
         timeout,
       });
       // Always route partial stdout through formatCommandOutput so __CM_FS__
@@ -2945,13 +2951,15 @@ server.registerTool(
       // not orphan when Claude closes. The child also watches INSIGHT_PARENT_PID
       // as a fallback for SIGKILL/crash paths.
       const { spawn } = await import("node:child_process");
-      const child = spawn("node", [join(cacheDir, "server.mjs")], {
+      const serverRuntime = process.execPath && !process.execPath.endsWith("/bun") ? process.execPath : "/usr/bin/node";
+      const child = spawn(serverRuntime, [join(cacheDir, "server.mjs")], {
         cwd: cacheDir,
         env: {
           ...process.env,
           PORT: String(port),
           INSIGHT_SESSION_DIR: getSessionDir(),
           INSIGHT_CONTENT_DIR: join(dirname(getSessionDir()), "content"),
+          CONTEXT_MODE_PLUGIN_ROOT: pluginRoot,
           INSIGHT_PARENT_PID: String(process.pid),
         },
         detached: true,

@@ -654,7 +654,7 @@ async function insight(port: number) {
     const url = `http://localhost:${port}`;
     console.log(`\n  context-mode Insight\n  ${url}\n`);
 
-    const serverRuntime = hasBunRuntime() ? "bun" : (process.execPath && !process.execPath.endsWith("/bun") ? process.execPath : "/usr/bin/node");
+    const serverRuntime = process.execPath && !process.execPath.endsWith("/bun") ? process.execPath : "/usr/bin/node";
     const child = spawn(serverRuntime, [join(cacheDir, "server.mjs")], {
       cwd: cacheDir,
       env: {
@@ -662,6 +662,7 @@ async function insight(port: number) {
         PORT: String(port),
         INSIGHT_SESSION_DIR: sessDir,
         INSIGHT_CONTENT_DIR: contentDir,
+        CONTEXT_MODE_PLUGIN_ROOT: pluginRoot,
       },
       stdio: "inherit",
     });
