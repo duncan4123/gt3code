@@ -166,7 +166,7 @@ export class ClaudeCodeAdapter extends ClaudeCodeBaseAdapter implements HookAdap
         check: "PreToolUse hook",
         status: "fail",
         message: "Could not read ~/.claude/settings.json",
-        fix: "context-mode upgrade",
+        fix: "context-mode-doltlite upgrade",
       });
       return results;
     }
@@ -185,7 +185,7 @@ export class ClaudeCodeAdapter extends ClaudeCodeBaseAdapter implements HookAdap
       message: hasPreToolUse
         ? "PreToolUse hook configured"
         : "No PreToolUse hooks found",
-      fix: hasPreToolUse ? undefined : "context-mode upgrade",
+      fix: hasPreToolUse ? undefined : "context-mode-doltlite upgrade",
     });
 
     // Check SessionStart (settings.json first, then plugin hooks.json fallback)
@@ -196,7 +196,7 @@ export class ClaudeCodeAdapter extends ClaudeCodeBaseAdapter implements HookAdap
       message: hasSessionStart
         ? "SessionStart hook configured"
         : "No SessionStart hooks found",
-      fix: hasSessionStart ? undefined : "context-mode upgrade",
+      fix: hasSessionStart ? undefined : "context-mode-doltlite upgrade",
     });
 
     return results;

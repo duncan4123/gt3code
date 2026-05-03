@@ -3,12 +3,13 @@
  * context-mode CLI
  *
  * Usage:
- *   context-mode                              → Start MCP server (stdio)
- *   context-mode doctor                       → Diagnose runtime issues, hooks, FTS5, version
- *   context-mode restart                      → Terminate the current project's MCP server so the client respawns it
- *   context-mode upgrade                      → Fix hooks, permissions, and settings
- *   context-mode mcp restart                  → Alias for `context-mode restart`
- *   context-mode hook <platform> <event>      → Dispatch a hook script (used by platform hook configs)
+ *   context-mode-doltlite                     → Start MCP server (stdio)
+ *   context-mode-doltlite doctor              → Diagnose runtime issues, hooks, FTS5, version
+ *   context-mode-doltlite restart             → Terminate the current project's MCP server so the client respawns it
+ *   context-mode-doltlite upgrade             → Fix hooks, permissions, and settings
+ *   context-mode-doltlite mcp restart         → Alias for `context-mode-doltlite restart`
+ *   context-mode-doltlite hook <platform> <event>
+ *                                             → Dispatch a hook script (used by platform hook configs)
  *
  * Platform auto-detection: CLI detects which platform is running
  * (Claude Code, Gemini CLI, OpenCode, etc.) and uses the appropriate adapter.
@@ -39,7 +40,7 @@ import { detectPlatform, getAdapter } from "./adapters/detect.js";
 import type { HookAdapter } from "./adapters/types.js";
 
 /* -------------------------------------------------------
- * Hook dispatcher — `context-mode hook <platform> <event>`
+ * Hook dispatcher — `context-mode-doltlite hook <platform> <event>`
  * ------------------------------------------------------- */
 
 const HOOK_MAP: Record<string, Record<string, string>> = {
@@ -372,7 +373,7 @@ async function doctor(): Promise<number> {
   const detection = detectPlatform();
   const adapter = await getAdapter(detection.platform);
 
-  p.intro(color.bgMagenta(color.white(" context-mode doctor ")));
+  p.intro(color.bgMagenta(color.white(" context-mode-doltlite doctor ")));
   p.log.info(
     `Platform: ${color.cyan(adapter.name)}` +
       color.dim(` (${detection.confidence} confidence — ${detection.reason})`),
@@ -710,7 +711,7 @@ async function upgrade() {
     readFileSync(resolve(getPluginRoot(), "package.json"), "utf-8"),
   ) as { name?: string };
   if (localPkg.name === "context-mode-doltlite") {
-    p.intro(color.bgCyan(color.black(" context-mode upgrade ")));
+    p.intro(color.bgCyan(color.black(" context-mode-doltlite upgrade ")));
     p.log.error(
       color.red("Upgrade disabled in this fork") +
         color.dim(" — upstream auto-upgrade would overwrite the local main install"),
@@ -732,7 +733,7 @@ async function upgrade() {
   const detection = detectPlatform();
   const adapter = await getAdapter(detection.platform);
 
-  p.intro(color.bgCyan(color.black(" context-mode upgrade ")));
+  p.intro(color.bgCyan(color.black(" context-mode-doltlite upgrade ")));
   p.log.info(
     `Platform: ${color.cyan(adapter.name)}` +
       color.dim(` (${detection.confidence} confidence)`),

@@ -301,7 +301,7 @@ export class CursorAdapter extends BaseAdapter implements HookAdapter {
         check: "Native hook config",
         status: "fail",
         message: "No readable native Cursor hook config found in .cursor/hooks.json or ~/.cursor/hooks.json",
-        fix: "context-mode upgrade",
+        fix: "context-mode-doltlite upgrade",
       });
     } else {
       const hooks = loaded.config.hooks ?? {};
@@ -322,7 +322,7 @@ export class CursorAdapter extends BaseAdapter implements HookAdapter {
           message: hasHook
             ? `${hookType} hook configured`
             : `${hookType} hook not configured in ${loaded.path}`,
-          fix: hasHook ? undefined : "context-mode upgrade",
+          fix: hasHook ? undefined : "context-mode-doltlite upgrade",
         });
       }
 

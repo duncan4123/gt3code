@@ -60,7 +60,7 @@ Full hook config reference: [`configs/jetbrains-copilot/hooks.json`](../configs/
 Update context-mode to the latest version:
 
 ```
-context-mode upgrade
+context-mode-doltlite upgrade
 ```
 
 Or from within a Copilot chat session, type `ctx upgrade`.
@@ -70,7 +70,7 @@ Or from within a Copilot chat session, type `ctx upgrade`.
 Run the diagnostics to verify everything is working:
 
 ```
-context-mode doctor
+context-mode-doltlite doctor
 ```
 
 Or from within a Copilot chat session, type `ctx doctor`.

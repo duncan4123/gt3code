@@ -691,7 +691,7 @@ Full configs: [`configs/antigravity/mcp_config.json`](configs/antigravity/mcp_co
      "description": "Context-mode hooks for context window protection",
      "hooks": {
        "preToolUse": [
-         { "matcher": "execute_bash|fs_read|@context-mode/ctx_execute|@context-mode/ctx_execute_file|@context-mode/ctx_batch_execute", "command": "context-mode hook kiro pretooluse" }
+         { "matcher": "execute_bash|fs_read|@context-mode-doltlite/ctx_execute|@context-mode-doltlite/ctx_execute_file|@context-mode-doltlite/ctx_batch_execute", "command": "context-mode hook kiro pretooluse" }
        ],
        "postToolUse": [
          { "matcher": "*", "command": "context-mode hook kiro posttooluse" }
@@ -710,7 +710,7 @@ Full configs: [`configs/antigravity/mcp_config.json`](configs/antigravity/mcp_co
 
 **Verify:** Open the Kiro panel > MCP Servers tab and confirm "context-mode" shows a green status indicator. In chat, type `ctx stats`.
 
-**Routing:** Hooks enforce routing programmatically via `preToolUse`/`postToolUse`. The `KIRO.md` file provides routing instructions since `agentSpawn` (SessionStart equivalent) is not yet wired. Tool names appear as `@context-mode/ctx_batch_execute`, `@context-mode/ctx_search`, etc. Auto-detected via MCP protocol handshake.
+**Routing:** Hooks enforce routing programmatically via `preToolUse`/`postToolUse`. The `KIRO.md` file provides routing instructions since `agentSpawn` (SessionStart equivalent) is not yet wired. Tool names appear as `@context-mode-doltlite/ctx_batch_execute`, `@context-mode-doltlite/ctx_search`, etc. Auto-detected via MCP protocol handshake.
 
 Full configs: [`configs/kiro/mcp.json`](configs/kiro/mcp.json) | [`configs/kiro/agent.json`](configs/kiro/agent.json) | [`configs/kiro/KIRO.md`](configs/kiro/KIRO.md)
 
@@ -1110,9 +1110,9 @@ ctx insight     → personal analytics dashboard (opens local web UI)
 **From your terminal** — run directly without an AI session:
 
 ```bash
-context-mode doctor
-context-mode upgrade
-context-mode insight          # opens analytics dashboard in browser
+context-mode-doltlite doctor
+context-mode-doltlite upgrade
+context-mode-doltlite insight # opens analytics dashboard in browser
 bash scripts/ctx-debug.sh    # full diagnostic report for bug reports
 ```
 
