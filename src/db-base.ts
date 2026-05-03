@@ -162,6 +162,22 @@ export function needsNativePrebuildRefresh(prebuildSrc: string, targetBin: strin
   }
 }
 
+function resolvePluginRoot(baseDir: string): string {
+  const candidates = [
+    process.env.CONTEXT_MODE_PLUGIN_ROOT,
+    baseDir,
+    dirname(baseDir),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, "vendor", "better-sqlite3"))) {
+      return candidate;
+    }
+  }
+
+  return baseDir;
+}
+
 /**
  * Lazy-load the SQLite driver for the current runtime.
  * Bun → bun:sqlite via BunSQLiteAdapter (issue #45).
@@ -178,10 +194,11 @@ export function loadDatabase(): typeof DatabaseConstructor {
       // From src/: dirname gives src/, prebuilds/ won't exist → skip (start.mjs handles it)
       // From bundle at root: dirname gives plugin root where prebuilds/ lives
       const baseDir = dirname(fileURLToPath(import.meta.url));
+      const pluginRoot = resolvePluginRoot(baseDir);
       const abi = process.versions.modules;
-      const prebuildSrc = join(baseDir, "prebuilds", `${process.platform}-${process.arch}`, `node.abi${abi}.node`);
+      const prebuildSrc = join(pluginRoot, "prebuilds", `${process.platform}-${process.arch}`, `node.abi${abi}.node`);
       const prebuildMarker = join(dirname(prebuildSrc), ".doltlite-version");
-      const targetDir = join(baseDir, "vendor", "better-sqlite3", "build", "Release");
+      const targetDir = join(pluginRoot, "vendor", "better-sqlite3", "build", "Release");
       const targetBin = join(targetDir, "better_sqlite3.node");
 
       if (existsSync(prebuildSrc)) {
@@ -197,7 +214,9 @@ export function loadDatabase(): typeof DatabaseConstructor {
     }
 
     try {
-      _Database = require("../vendor/better-sqlite3") as typeof DatabaseConstructor;
+      const baseDir = dirname(fileURLToPath(import.meta.url));
+      const pluginRoot = resolvePluginRoot(baseDir);
+      _Database = require(join(pluginRoot, "vendor", "better-sqlite3")) as typeof DatabaseConstructor;
     } catch (err: any) {
       throw err;
     }

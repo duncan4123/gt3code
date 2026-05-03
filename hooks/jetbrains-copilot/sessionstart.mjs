@@ -87,6 +87,12 @@ try {
     const sessionId = getSessionId(input, OPTS);
     const projectDir = getProjectDir(OPTS);
     db.ensureSession(sessionId, projectDir);
+    db.insertEvent(sessionId, {
+      type: "session_start",
+      category: "session",
+      data: projectDir,
+      priority: 1,
+    }, "SessionStart", { projectDir, source: "session-origin", confidence: 1 });
 
     const ruleFilePaths = [
       join(projectDir, ".github", "copilot-instructions.md"),

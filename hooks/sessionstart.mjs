@@ -114,6 +114,12 @@ try {
     const sessionId = getSessionId(input);
     const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
     db.ensureSession(sessionId, projectDir);
+    db.insertEvent(sessionId, {
+      type: "session_start",
+      category: "session",
+      data: projectDir,
+      priority: 1,
+    }, "SessionStart", { projectDir, source: "session-origin", confidence: 1 });
     const claudeMdPaths = [
       join(resolveConfigDir(), "CLAUDE.md"),
       join(projectDir, "CLAUDE.md"),

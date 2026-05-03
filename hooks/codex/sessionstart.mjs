@@ -80,6 +80,12 @@ try {
 
     const sessionId = getSessionId(input, OPTS);
     db.ensureSession(sessionId, projectDir);
+    db.insertEvent(sessionId, {
+      type: "session_start",
+      category: "session",
+      data: projectDir,
+      priority: 1,
+    }, "SessionStart", { projectDir, source: "session-origin", confidence: 1 });
 
     db.close();
   }

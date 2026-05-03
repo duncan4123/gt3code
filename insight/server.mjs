@@ -24,8 +24,10 @@ const PORT = process.env.PORT || 4747;
 // (including bun:sqlite) report "file is not a database" for those files, so
 // Insight must prefer the vendored doltlite-capable addon when available.
 
-let Database;
-let databaseRuntime = "unknown";
+let ContentDatabase;
+let SessionDatabase;
+let contentDatabaseRuntime = "unknown";
+let sessionDatabaseRuntime = "unknown";
 const isBun = typeof globalThis.Bun !== "undefined";
 const require = createRequire(import.meta.url);
 
@@ -46,7 +48,7 @@ function loadBetterSqlite() {
       const testDb = new Ctor(":memory:");
       try { testDb.prepare("SELECT doltlite_engine()").get(); } catch {}
       testDb.close();
-      databaseRuntime = String(candidate);
+      contentDatabaseRuntime = String(candidate);
       return Ctor;
     } catch (err) {
       errors.push(`${candidate}: ${err instanceof Error ? err.message : String(err)}`);
@@ -56,11 +58,11 @@ function loadBetterSqlite() {
 }
 
 try {
-  Database = loadBetterSqlite();
+  ContentDatabase = loadBetterSqlite();
 } catch (err) {
   if (isBun) {
-    Database = (await import("bun:sqlite")).Database;
-    databaseRuntime = "bun:sqlite";
+    ContentDatabase = (await import("bun:sqlite")).Database;
+    contentDatabaseRuntime = "bun:sqlite";
   } else {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("\n  Error: better-sqlite3 failed to load.");
@@ -70,6 +72,19 @@ try {
       : join("~", ".claude", "context-mode", "insight-cache", "node_modules");
     console.error(`\n  Fix: rm -rf ${cacheHint} && context-mode-doltlite insight`);
     process.exit(1);
+  }
+}
+
+if (isBun) {
+  SessionDatabase = ContentDatabase;
+  sessionDatabaseRuntime = contentDatabaseRuntime;
+} else {
+  try {
+    SessionDatabase = (await import("node:sqlite")).DatabaseSync;
+    sessionDatabaseRuntime = "node:sqlite";
+  } catch {
+    SessionDatabase = ContentDatabase;
+    sessionDatabaseRuntime = contentDatabaseRuntime;
   }
 }
 
@@ -98,11 +113,19 @@ function cached(key, fn) {
 
 // ── SQLite helpers ───────────────────────────────────────
 
-function openDB(path) {
+function openDB(path, kind = "content") {
   try {
+    const Ctor = kind === "session" ? SessionDatabase : ContentDatabase;
+    if (kind === "session" && sessionDatabaseRuntime === "node:sqlite") {
+      try {
+        return new Ctor(path, { readOnly: true });
+      } catch {
+        return new ContentDatabase(path, { readonly: true, fileMustExist: true });
+      }
+    }
     return isBun
-      ? new Database(path, { readonly: true })
-      : new Database(path, { readonly: true, fileMustExist: true });
+      ? new Ctor(path, { readonly: true })
+      : new Ctor(path, { readonly: true, fileMustExist: true });
   } catch { return null; }
 }
 
@@ -231,7 +254,7 @@ function formatBytes(b) {
 function queryAllSessionDBs(fn) {
   const results = [];
   for (const f of listDBFiles(SESSION_DIR)) {
-    const db = openDB(f.path);
+    const db = openDB(f.path, "session");
     if (!db) continue;
     try { results.push(...fn(db)); } finally { db.close(); }
   }
@@ -282,10 +305,10 @@ function apiOverview() {
   }
   for (const f of sessionDBs) {
     totalSessionSize += f.size;
-    const db = openDB(f.path);
+    const db = openDB(f.path, "session");
     if (!db) continue;
     try {
-      totalSessions += safeGet(db, "SELECT COUNT(*) as c FROM session_meta WHERE event_count > 0")?.c || 0;
+      totalSessions += safeGet(db, "SELECT COUNT(*) as c FROM session_meta")?.c || 0;
       totalEvents += safeGet(db, "SELECT COUNT(*) as c FROM session_events")?.c || 0;
     } finally { db.close(); }
   }
@@ -358,7 +381,7 @@ function apiSearchAll(query) {
     } finally { db.close(); }
   }
   for (const f of listDBFiles(SESSION_DIR)) {
-    const db = openDB(f.path);
+    const db = openDB(f.path, "session");
     if (!db) continue;
     try {
       const rows = safeAll(db,
@@ -375,13 +398,12 @@ function apiSearchAll(query) {
 
 function apiSessionDBs() {
   return listDBFiles(SESSION_DIR).map(f => {
-    const db = openDB(f.path);
+    const db = openDB(f.path, "session");
     if (!db) return { hash: f.name.replace(".db",""), size: formatBytes(f.size), sessions: [] };
     try {
       const sessions = safeAll(db,
         `SELECT session_id, project_dir, started_at, last_event_at, event_count, compact_count
          FROM session_meta
-         WHERE event_count > 0
          ORDER BY started_at DESC`);
       return {
         hash: f.name.replace(".db",""), size: formatBytes(f.size), sizeBytes: f.size,
@@ -394,7 +416,7 @@ function apiSessionDBs() {
 }
 
 function apiSessionEvents(dbHash, sessionId) {
-  const db = openDB(join(SESSION_DIR, `${dbHash}.db`));
+  const db = openDB(join(SESSION_DIR, `${dbHash}.db`), "session");
   if (!db) return { events: [], resume: null };
   try {
     const events = safeAll(db,
@@ -1279,4 +1301,5 @@ if (Number.isFinite(PARENT_PID) && PARENT_PID > 0) {
 console.log(`\n  context-mode Insight`);
 console.log(`  http://localhost:${PORT}`);
 console.log(`  Runtime: ${isBun ? "Bun" : "Node.js"}`);
-console.log(`  DB runtime: ${databaseRuntime}\n`);
+console.log(`  Content DB runtime: ${contentDatabaseRuntime}`);
+console.log(`  Session DB runtime: ${sessionDatabaseRuntime}\n`);
