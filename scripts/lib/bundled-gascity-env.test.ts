@@ -28,6 +28,8 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.equal(env.GC_WORKTREES_DIR, expectedWorktreesDir);
       assert.equal(env.GC_CITY_PATH, DEFAULT_GC_CITY_PATH);
       assert.equal(env.GC_API_URL, "http://127.0.0.1:8372");
+      assert.equal(env.GC_BEADS_BACKEND, "doltlite");
+      assert.equal(env.BEADS_BACKEND, "doltlite");
       assert.equal(
         env.GC_BIN,
         path.join(expectedBinDir, process.platform === "win32" ? "gc.exe" : "gc"),
@@ -63,6 +65,29 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.equal(env.GC_BIN, "/tmp/bin/gc");
       assert.equal(env.BD_BIN, "/tmp/bin/bd");
       assert.equal(env.GC_CITY_PATH, "/tmp/city");
+    }),
+  );
+
+  it.effect("drops stale Dolt server env while keeping bundled runtime wiring", () =>
+    Effect.gen(function* () {
+      const env = yield* createBundledGascityProcessEnv({
+        baseEnv: {
+          GC_DOLT_PORT: "3307",
+          GC_DOLT_HOST: "127.0.0.1",
+          BEADS_DOLT_PORT: "3307",
+          BEADS_DOLT_SERVER_HOST: "127.0.0.1",
+          BEADS_DOLT_SHARED_SERVER: "true",
+        },
+        t3Home: undefined,
+      });
+
+      assert.equal(env.GC_DOLT_PORT, undefined);
+      assert.equal(env.GC_DOLT_HOST, undefined);
+      assert.equal(env.BEADS_DOLT_PORT, undefined);
+      assert.equal(env.BEADS_DOLT_SERVER_HOST, undefined);
+      assert.equal(env.BEADS_DOLT_SHARED_SERVER, undefined);
+      assert.equal(env.GC_BEADS_BACKEND, "doltlite");
+      assert.equal(env.BEADS_BACKEND, "doltlite");
     }),
   );
 });

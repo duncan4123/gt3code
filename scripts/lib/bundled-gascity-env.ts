@@ -32,6 +32,30 @@ export interface CreateBundledGascityProcessEnvInput {
   readonly t3Home: string | undefined;
 }
 
+function clearDoltServerEnv(env: NodeJS.ProcessEnv): void {
+  for (const key of [
+    "BEADS_DOLT_AUTO_START",
+    "BEADS_DOLT_DATABASE",
+    "BEADS_DOLT_SHARED_SERVER",
+    "BEADS_DOLT_PORT",
+    "BEADS_DOLT_SERVER_DATABASE",
+    "BEADS_DOLT_SERVER_HOST",
+    "BEADS_DOLT_SERVER_PASSWORD",
+    "BEADS_DOLT_SERVER_PORT",
+    "BEADS_DOLT_SERVER_USER",
+    "DOLT_HOST",
+    "DOLT_PASSWORD",
+    "DOLT_PORT",
+    "DOLT_USER",
+    "GC_DOLT_HOST",
+    "GC_DOLT_PASSWORD",
+    "GC_DOLT_PORT",
+    "GC_DOLT_USER",
+  ]) {
+    delete env[key];
+  }
+}
+
 export function createBundledGascityProcessEnv({
   baseEnv,
   t3Home,
@@ -42,9 +66,15 @@ export function createBundledGascityProcessEnv({
     const gascityHome = baseEnv.T3CODE_GASCITY_HOME?.trim() || DEFAULT_T3CODE_GASCITY_HOME;
     const worktreesDir =
       baseEnv.T3CODE_WORKTREES_DIR?.trim() || path.join(resolvedBaseDir, "worktrees");
+    const env = {
+      ...baseEnv,
+      GC_BEADS_BACKEND: "doltlite",
+      BEADS_BACKEND: "doltlite",
+    } satisfies NodeJS.ProcessEnv;
+    clearDoltServerEnv(env);
 
     return {
-      ...baseEnv,
+      ...env,
       T3CODE_HOME: resolvedBaseDir,
       T3CODE_GASCITY_HOME: gascityHome,
       T3CODE_WORKTREES_DIR: worktreesDir,

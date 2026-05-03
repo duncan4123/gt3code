@@ -108,6 +108,12 @@ for schema init: file is not a database` against
   failed to open CTLD files as doltlite. Copying the packaged `bd`, `gc`, and
   sibling `libdoltlite.so` into `/home/ubuntu/go/bin` restored plain `bd list`,
   `gc ... bd list`, and `gc mail inbox`. `libdoltlite.so` must be installed
+- 2026-05-03: the new bundled runner env helper (`scripts/lib/bundled-gascity-env.ts`)
+  was still inheriting stale `GC_DOLT_*` / `BEADS_DOLT_*` server-mode vars from
+  the caller shell. That let `dev-runner` / `start-runner` drift back toward
+  shared-server behavior even though `gascity-runner` already forces
+  `BEADS_BACKEND=GC_BEADS_BACKEND=doltlite` and clears Dolt server vars. The
+  helper now matches that doltlite sanitation path.
   next to every installed `bd` path because the packaged binary resolves it via
   `$ORIGIN`; this was also applied to `/home/ubuntu/.local/bin`. Backups of the
   old binaries are `bd.pre-doltlite-linkage-fix-20260502` and
