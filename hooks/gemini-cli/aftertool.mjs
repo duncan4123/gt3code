@@ -10,31 +10,34 @@ import "../ensure-deps.mjs";
  * Must be fast (<20ms). No network, no LLM, just SQLite writes.
  */
 
-import { readStdin, getSessionId, getSessionDBPath, getProjectDir, GEMINI_OPTS } from "../session-helpers.mjs";
+import { readStdin, parseStdin, getSessionId, getSessionDBPath, getInputProjectDir, GEMINI_OPTS } from "../session-helpers.mjs";
+import { createSessionLoaders, attributeAndInsertEvents } from "../session-loaders.mjs";
 import { appendFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
-const PKG_SESSION = join(HOOK_DIR, "..", "..", "build", "session");
+const { loadSessionDB, loadExtract, loadProjectAttribution } = createSessionLoaders(HOOK_DIR);
 const OPTS = GEMINI_OPTS;
 const DEBUG_LOG = join(homedir(), ".gemini", "context-mode-doltlite", "aftertool-debug.log");
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
+  const projectDir = getInputProjectDir(input, OPTS);
 
   appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] CALL: ${input.tool_name}\n`);
 
-  const { extractEvents } = await import(pathToFileURL(join(PKG_SESSION, "extract.js")).href);
-  const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
+  const { extractEvents } = await loadExtract();
+  const { resolveProjectAttributions } = await loadProjectAttribution();
+  const { SessionDB } = await loadSessionDB();
 
   const dbPath = getSessionDBPath(OPTS);
   const db = new SessionDB({ dbPath });
   const sessionId = getSessionId(input, OPTS);
 
-  db.ensureSession(sessionId, getProjectDir(OPTS));
+  db.ensureSession(sessionId, projectDir);
 
   const events = extractEvents({
     tool_name: input.tool_name,
@@ -45,9 +48,7 @@ try {
     tool_output: input.tool_output,
   });
 
-  for (const event of events) {
-    db.insertEvent(sessionId, event, "AfterTool");
-  }
+  attributeAndInsertEvents(db, sessionId, events, input, projectDir, "AfterTool", resolveProjectAttributions);
 
   appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] OK: ${input.tool_name} → ${events.length} events\n`);
   db.close();

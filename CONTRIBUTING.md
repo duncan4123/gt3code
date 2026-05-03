@@ -1,10 +1,10 @@
-# Contributing to context-mode-doltlite
+# Contributing to context-mode
 
 This project is licensed under the Elastic License 2.0 (ELv2) and moves forward with your support. Every issue, every PR, every idea matters.
 
 Don't overthink it. Don't ask yourself "is my PR good enough?" or "is this issue too small?" -- just send it. A rough draft beats a perfect plan that never ships. If you found a bug, report it. If you have an idea, open an issue. If you wrote a fix, submit the PR.
 
-That said, I'm a solo maintainer with limited time. The best way to help me help you: follow the templates, run the debug script (`bash scripts/ctx-debug.sh`), include your `/context-mode-doltlite:doctor` output when relevant, and write tests for your changes. The more context you give me, the faster I can review.
+That said, I'm a solo maintainer with limited time. The best way to help me help you: follow the templates, run the debug script (`bash scripts/ctx-debug.sh`), and write tests for your changes. The more context you give me, the faster I can review.
 
 I genuinely love open source and I'm grateful to have you here. Don't hesitate to reach out -- whether it's a question, a suggestion, or just to say hi. Let's build this together.
 
@@ -14,7 +14,7 @@ This guide covers the local development workflow so you can test changes in a li
 
 ## Architecture Overview
 
-context-mode-doltlite uses a flat `src/` structure:
+context-mode uses a flat `src/` structure:
 
 ```
 src/
@@ -35,6 +35,7 @@ src/
     types.ts       → HookAdapter interface, RoutingInstructionsConfig
     detect.ts      → Platform detection via env vars
     claude-code/   → Claude Code adapter (index.ts, hooks.ts, config.ts)
+    qwen-code/     → Qwen Code adapter (extends Claude Code wire protocol)
     gemini-cli/    → Gemini CLI adapter
     opencode/      → OpenCode adapter
     codex/         → Codex CLI adapter
@@ -57,12 +58,12 @@ configs/             → Per-platform install files (settings.json, mcp.json, CL
 
 Session events flow through a two-database system:
 
-1. **SessionDB** (persistent, per-project): `~/.claude/context-mode-doltlite/sessions/<hash>.db`
+1. **SessionDB** (persistent, per-project): `~/.claude/context-mode/sessions/<hash>.db`
    - PostToolUse hook captures events in real-time
    - PreCompact hook builds resume snapshots
    - UserPromptSubmit hook captures user prompts
 
-2. **ContentStore** (ephemeral, per-process): `/tmp/context-mode-doltlite-<PID>.db`
+2. **ContentStore** (ephemeral, per-process): `/tmp/context-mode-<PID>.db`
    - FTS5 full-text search index for tool outputs
    - Auto-indexes session events file written by SessionStart hook
    - Dies when MCP server process exits
@@ -76,21 +77,21 @@ MCP server        → detects markdown file on next getStore() call
 LLM               → searches source:"session-events" for details on demand
 ```
 
-Raw session events are **never injected into context**. Only a compact summary table + search queries are injected. The LLM searches for details via the existing `search()` MCP tool.
+Raw session events are **never injected into context**. Only a compact summary table + search queries are injected. The LLM searches for details via the existing `ctx_search()` MCP tool.
 
 ## Prerequisites
 
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed
 - Node.js 20+ or [Bun](https://bun.sh/) (recommended for speed)
-- context-mode-doltlite plugin installed via marketplace
+- context-mode plugin installed via marketplace
 
 ## Local Development Setup
 
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/sfncore/claude-context-mode-doltlite.git
-cd context-mode-doltlite
+git clone https://github.com/mksglu/context-mode.git
+cd context-mode
 npm install
 npm run build  # tsc compiles src/ → build/
 ```
@@ -102,7 +103,7 @@ Claude Code's plugin system manages `~/.claude/plugins/installed_plugins.json` a
 First, find your cached version:
 
 ```bash
-ls ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/
+ls ~/.claude/plugins/cache/context-mode/context-mode/
 # Example output: 0.9.23
 ```
 
@@ -110,15 +111,15 @@ Then replace it with a symlink:
 
 ```bash
 # Back up the cache (use your actual version number)
-mv ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/0.9.23 \
-   ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/0.9.23.bak
+mv ~/.claude/plugins/cache/context-mode/context-mode/0.9.23 \
+   ~/.claude/plugins/cache/context-mode/context-mode/0.9.23.bak
 
 # Symlink to your local clone
-ln -s /path/to/your/clone/context-mode-doltlite \
-   ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/0.9.23
+ln -s /path/to/your/clone/context-mode \
+   ~/.claude/plugins/cache/context-mode/context-mode/0.9.23
 ```
 
-Replace `/path/to/your/clone/context-mode-doltlite` with your actual local path.
+Replace `/path/to/your/clone/context-mode` with your actual local path.
 
 > **Why symlink?** The plugin system overwrites `installed_plugins.json` on every session start, reverting any manual path changes. A symlink lets the plugin system keep its managed path while the actual code resolves to your local clone.
 
@@ -133,11 +134,11 @@ The symlink in step 2 ensures `hooks.json` (which registers PostToolUse, PreComp
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Read|Grep|WebFetch|Agent|Task|mcp__plugin_context-mode-doltlite_context-mode-doltlite__ctx_execute|mcp__plugin_context-mode-doltlite_context-mode-doltlite__ctx_execute_file|mcp__plugin_context-mode-doltlite_context-mode-doltlite__ctx_batch_execute",
+        "matcher": "Bash|Read|Grep|WebFetch|Agent|mcp__plugin_context-mode_context-mode__ctx_execute|mcp__plugin_context-mode_context-mode__ctx_execute_file|mcp__plugin_context-mode_context-mode__ctx_batch_execute",
         "hooks": [
           {
             "type": "command",
-            "command": "node /path/to/your/clone/context-mode-doltlite/hooks/pretooluse.mjs"
+            "command": "node /path/to/your/clone/context-mode/hooks/pretooluse.mjs"
           }
         ]
       }
@@ -146,7 +147,7 @@ The symlink in step 2 ensures `hooks.json` (which registers PostToolUse, PreComp
 }
 ```
 
-Replace `/path/to/your/clone/context-mode-doltlite` with your actual local path.
+Replace `/path/to/your/clone/context-mode` with your actual local path.
 
 > **Important:** Do NOT add PostToolUse, PreCompact, SessionStart, or UserPromptSubmit to `settings.json` — they are already registered in `hooks.json` and the symlink makes them resolve to your local clone. Adding them to both causes double invocations, split session IDs, and SQLite locking errors.
 
@@ -171,11 +172,11 @@ npm run build
 ### 5. Kill cached MCP processes and restart
 
 ```bash
-# Kill any running context-mode-doltlite processes
-pkill -f "context-mode-doltlite.*start.mjs"
+# Kill any running context-mode processes
+pkill -f "context-mode.*start.mjs"
 
 # Verify no processes remain
-ps aux | grep context-mode-doltlite | grep -v grep
+ps aux | grep context-mode | grep -v grep
 # Should return nothing
 ```
 
@@ -183,7 +184,7 @@ Restart Claude Code (`/exit` then `claude`).
 
 ### 6. Verify local dev mode
 
-Run `/context-mode-doltlite:ctx-doctor` in Claude Code. You should see your dev version:
+Run `/context-mode:ctx-doctor` in Claude Code. You should see your dev version:
 
 ```
 npm (MCP): WARN — local v0.9.23-dev, latest v0.9.23
@@ -197,9 +198,9 @@ To switch back to the marketplace version:
 
 ```bash
 # Remove symlink and restore backup
-rm ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/0.9.23
-mv ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/0.9.23.bak \
-   ~/.claude/plugins/cache/context-mode-doltlite/context-mode-doltlite/0.9.23
+rm ~/.claude/plugins/cache/context-mode/context-mode/0.9.23
+mv ~/.claude/plugins/cache/context-mode/context-mode/0.9.23.bak \
+   ~/.claude/plugins/cache/context-mode/context-mode/0.9.23
 ```
 
 Then revert hooks in `~/.claude/settings.json` and restart Claude Code.
@@ -287,6 +288,7 @@ npx skills add mksglu/context-mode --skill context-mode-ops
 | Cursor hooks | `tests/hooks/cursor-hooks.test.ts` |
 | Gemini hooks | `tests/hooks/gemini-hooks.test.ts` |
 | VS Code hooks | `tests/hooks/vscode-hooks.test.ts` |
+| JetBrains hooks | `tests/hooks/jetbrains-hooks.test.ts` |
 | Kiro hooks | `tests/hooks/kiro-hooks.test.ts` |
 | Session DB | `tests/session/session-db.test.ts` |
 | Session extract | `tests/session/session-extract.test.ts` |
@@ -302,7 +304,7 @@ If your change doesn't fit any existing file, discuss with the maintainer before
 
 ### Output quality matters
 
-When your change affects tool output (execute, search, fetch_and_index, etc.), always compare before and after:
+When your change affects tool output (ctx_execute, ctx_search, ctx_fetch_and_index, etc.), always compare before and after:
 
 1. Run the same prompt **before** your change (on `main`)
 2. Run it **again** with your change
@@ -341,7 +343,6 @@ See [`docs/adapters/openclaw.md`](docs/adapters/openclaw.md) for hook registrati
 When filing a bug, **always include your prompt**. The exact message you sent to the agent is critical for reproduction. Without it, we can't debug the issue.
 
 Required information:
-- `/context-mode-doltlite:doctor` output (must be latest version)
 - Debug script output: `bash scripts/ctx-debug.sh` (collects OS, runtimes, configs, hooks, SQLite diagnostics)
 - The prompt that triggered the bug
 - Full error output (expand with `Ctrl+O` in Claude Code)
@@ -350,7 +351,7 @@ Required information:
 ## Submitting a Pull Request
 
 1. Fork the repository
-2. Create a feature branch from `main`
+2. Create a feature branch from `next`
 3. Follow the local development setup above
 4. Write tests first (TDD)
 5. Run `npm test` and `npm run typecheck`
@@ -362,13 +363,13 @@ Required information:
 
 | Task | Command |
 |---|---|
-| Check version | `/context-mode-doltlite:doctor` |
-| Upgrade plugin | `/context-mode-doltlite:upgrade` |
-| View session stats | `/context-mode-doltlite:stats` |
-| Purge knowledge base | `/context-mode-doltlite:ctx-purge` |
+| Check version | `/context-mode:ctx-doctor` |
+| Upgrade plugin | `/context-mode:ctx-upgrade` |
+| View session stats | `/context-mode:ctx-stats` |
+| Purge knowledge base | `/context-mode:ctx-purge` |
 | Run diagnostics | `bash scripts/ctx-debug.sh` |
 | See background steps | `Ctrl+O` |
-| Kill cached server | `pkill -f "context-mode-doltlite.*start.mjs"` |
+| Kill cached server | `pkill -f "context-mode.*start.mjs"` |
 | Rebuild after changes | `npm run build` |
 | Run all tests | `npm test` |
 | Watch mode | `npm run test:watch` |

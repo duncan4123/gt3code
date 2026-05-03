@@ -6,11 +6,11 @@ import "../setup-home";
  * simulated JSON stdin and asserting correct output/behavior.
  */
 
-import { describe, test, expect, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, test, expect, beforeAll, beforeEach, afterAll, afterEach } from "vitest";
 import { spawnSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdtempSync, rmSync, existsSync, unlinkSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, unlinkSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir, homedir } from "node:os";
 
@@ -112,14 +112,27 @@ describe("VS Code Copilot hooks", () => {
     try { if (existsSync(eventsPath)) unlinkSync(eventsPath); } catch { /* best effort */ }
   });
 
+  // MCP readiness sentinel — subprocess hooks check process.ppid (= this test's pid)
+  const _sentinelDir = process.platform === "win32" ? tmpdir() : "/tmp";
+  const mcpSentinel = resolve(_sentinelDir, `context-mode-mcp-ready-${process.pid}`);
+
   // Clean file-based guidance throttle markers between tests.
-  // Subprocess hooks use process.ppid (= this test's pid) for marker dir.
+  // Subprocess hooks use process.ppid (= this test's pid) for the legacy marker dir;
+  // the sessionId-scoped dir (#298) is derived from getSessionId() which falls back
+  // to `pid-${process.ppid}` when the hook input has no session_id.
   // VITEST_WORKER_ID is inherited by subprocesses, matching routing.mjs logic.
   beforeEach(() => {
     const wid = process.env.VITEST_WORKER_ID;
     const suffix = wid ? `${process.pid}-w${wid}` : String(process.pid);
-    const guidanceDir = resolve(tmpdir(), `context-mode-guidance-${suffix}`);
-    try { rmSync(guidanceDir, { recursive: true, force: true }); } catch { /* best effort */ }
+    const legacyDir = resolve(tmpdir(), `context-mode-guidance-${suffix}`);
+    const sessionDir = resolve(tmpdir(), `context-mode-guidance-s-pid-${process.pid}`);
+    try { rmSync(legacyDir, { recursive: true, force: true }); } catch { /* best effort */ }
+    try { rmSync(sessionDir, { recursive: true, force: true }); } catch { /* best effort */ }
+    writeFileSync(mcpSentinel, String(process.pid));
+  });
+
+  afterEach(() => {
+    try { unlinkSync(mcpSentinel); } catch {}
   });
 
   const vscodeEnv = () => ({ VSCODE_CWD: tempDir });

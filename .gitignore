@@ -16,6 +16,9 @@ context-mode-guidance-*/
 node-compile-cache/
 *.archived
 vendor/better-sqlite3/build/
+.claude-worktrees/
+.vibetree/
+.cw/
 
 # Gas City
 .beads/*

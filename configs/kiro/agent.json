@@ -4,14 +4,14 @@
   "hooks": {
     "preToolUse": [
       {
-        "matcher": "*",
-        "command": "context-mode hook kiro pretooluse"
+        "matcher": "execute_bash|fs_read|@context-mode-doltlite/ctx_execute|@context-mode-doltlite/ctx_execute_file|@context-mode-doltlite/ctx_batch_execute",
+        "command": "context-mode-doltlite hook kiro pretooluse"
       }
     ],
     "postToolUse": [
       {
         "matcher": "*",
-        "command": "context-mode hook kiro posttooluse"
+        "command": "context-mode-doltlite hook kiro posttooluse"
       }
     ]
   }

@@ -1,5 +1,25 @@
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync } from "node:fs";
+
+/**
+ * Allowlist for SHELL env override. Only POSIX shells + Windows shells permit
+ * arbitrary command interpretation; anything else (e.g., /usr/bin/python set
+ * as SHELL) would let an attacker redirect the executor to a non-shell binary.
+ *
+ * basename split handles BOTH `/` and `\` separators so a Windows-style path
+ * (`C:\Program Files\PowerShell\7\pwsh.exe`) classifies correctly even when
+ * the runtime is on POSIX (where node:path.basename only splits on `/`).
+ *
+ * Match is case-insensitive; `.exe` extension tolerated for Windows binaries.
+ */
+const ALLOWED_SHELL_BASENAMES = /^(bash|sh|zsh|dash|pwsh|powershell|cmd)(\.exe)?$/i;
+
+export function isAllowlistedShell(shellPath: string): boolean {
+  // Cross-OS basename: split on either separator, take the last segment.
+  const segments = shellPath.split(/[\\/]/);
+  const base = segments[segments.length - 1];
+  return ALLOWED_SHELL_BASENAMES.test(base);
+}
 
 export type Language =
   | "javascript"
@@ -49,18 +69,32 @@ function commandExists(cmd: string): boolean {
 
 function bunExists(): boolean {
   if (commandExists("bun")) return true;
-  // Bun installs to ~/.bun/bin which may not be in PATH in MCP server environments
-  if (!isWindows) {
-    const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
-    if (home && existsSync(`${home}/.bun/bin/bun`)) return true;
+  for (const p of bunFallbackPaths()) {
+    if (existsSync(p)) return true;
   }
   return false;
 }
 
 function bunCommand(): string {
   if (commandExists("bun")) return "bun";
+  for (const p of bunFallbackPaths()) {
+    if (existsSync(p)) return p;
+  }
   const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
-  return `${home}/.bun/bin/bun`;
+  return isWindows ? `${home}\\.bun\\bin\\bun.exe` : `${home}/.bun/bin/bun`;
+}
+
+/** Fallback paths where Bun may be installed but not on PATH. */
+function bunFallbackPaths(): string[] {
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  if (isWindows) {
+    const localAppData = process.env.LOCALAPPDATA ?? "";
+    return [
+      ...(home ? [`${home}\\.bun\\bin\\bun.exe`] : []),
+      ...(localAppData ? [`${localAppData}\\bun\\bin\\bun.exe`] : []),
+    ];
+  }
+  return home ? [`${home}/.bun/bin/bun`] : [];
 }
 
 /**
@@ -95,10 +129,11 @@ function resolveWindowsBash(): string | null {
   }
 }
 
-function getVersion(cmd: string): string {
+function getVersion(cmd: string, args: string[] = ["--version"]): string {
   try {
-    return execSync(`${cmd} --version`, {
+    return execFileSync(cmd, args, {
       encoding: "utf-8",
+      shell: process.platform === "win32",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 5000,
     })
@@ -110,25 +145,40 @@ function getVersion(cmd: string): string {
 }
 
 export function detectRuntimes(): RuntimeMap {
-  // Always use the same Node.js that runs the MCP server for JS/TS.
-  // Bun resolves native modules from its own cache (~/.bun/install/cache/),
-  // which doesn't have the doltlite-linked better-sqlite3 binary.
-  // One runtime = one module path = one native binary = reliable.
+  const hasBun = bunExists();
+  const bun = hasBun ? bunCommand() : null;
+
+  // Honor SHELL env var when it points at a real binary AND the basename is
+  // an allowlisted shell. Lets users with non-standard setups (WSL, custom
+  // bash, msys2) pin context-mode to their preferred shell.
+  //
+  // Allowlist (PR #401 ops review): basename must match
+  // /^(bash|sh|zsh|dash|pwsh|cmd)(\.exe)?$/. Without this guard, an attacker
+  // who controls SHELL (e.g., supply-chain compromise of a profile script)
+  // could redirect the executor to /usr/bin/python or any arbitrary binary.
+  const userShell = process.env.SHELL;
+  const shellOverride = userShell && existsSync(userShell) && isAllowlistedShell(userShell)
+    ? userShell
+    : null;
+  const isWin = process.platform === "win32";
+
   return {
-    javascript: process.execPath,
-    typescript: commandExists("tsx")
-      ? "tsx"
-      : commandExists("ts-node")
-        ? "ts-node"
-        : null,
+    javascript: bun ?? process.execPath,
+    typescript: bun
+      ? bun
+      : commandExists("tsx")
+        ? "tsx"
+        : commandExists("ts-node")
+          ? "ts-node"
+          : null,
     python: commandExists("python3")
       ? "python3"
       : commandExists("python")
         ? "python"
         : null,
-    shell: isWindows
+    shell: shellOverride ?? (isWin
       ? (resolveWindowsBash() ?? (commandExists("sh") ? "sh" : commandExists("powershell") ? "powershell" : "cmd.exe"))
-      : commandExists("bash") ? "bash" : "sh",
+      : commandExists("bash") ? "bash" : "sh"),
     ruby: commandExists("ruby") ? "ruby" : null,
     go: commandExists("go") ? "go" : null,
     rust: commandExists("rustc") ? "rustc" : null,
@@ -183,7 +233,7 @@ export function getRuntimeSummary(runtimes: RuntimeMap): string {
       `  Ruby:       ${runtimes.ruby} (${getVersion(runtimes.ruby)})`,
     );
   if (runtimes.go)
-    lines.push(`  Go:         ${runtimes.go} (${getVersion(runtimes.go)})`);
+    lines.push(`  Go:         ${runtimes.go} (${getVersion(runtimes.go, ["version"])})`);
   if (runtimes.rust)
     lines.push(
       `  Rust:       ${runtimes.rust} (${getVersion(runtimes.rust)})`,
@@ -256,8 +306,28 @@ export function buildCommand(
       }
       return [runtimes.python, filePath];
 
-    case "shell":
+    case "shell": {
+      // Re-evaluate platform per call so detection-time and command-build-time
+      // can be tested independently (and to allow tests to stub process.platform).
+      const winNow = process.platform === "win32";
+      if (winNow) {
+        const shellName = runtimes.shell.toLowerCase();
+        if (shellName.includes("bash") || shellName.endsWith("/sh") || shellName.endsWith("\\sh.exe")) {
+          // bash -c "source 'path'" — avoids MSYS2 path mangling on non-C:
+          // drives. When bash.exe receives a script as a direct argument,
+          // MSYS rewrites D:\tmp\script → D:\c\tmp\script and execution
+          // breaks. The -c flag prevents MSYS from touching the file arg.
+          // Single-quote escape: ' → '\''
+          const escaped = filePath.replace(/'/g, "'\\''");
+          return [runtimes.shell, "-c", `source '${escaped}'`];
+        }
+        if (shellName.includes("powershell") || shellName.includes("pwsh")) {
+          return [runtimes.shell, "-File", filePath];
+        }
+        // cmd.exe and others: direct file (cmd reads .cmd association safely).
+      }
       return [runtimes.shell, filePath];
+    }
 
     case "ruby":
       if (!runtimes.ruby) {

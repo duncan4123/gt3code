@@ -9,11 +9,14 @@
 - [ ] Claude Code
 - [ ] Cursor
 - [ ] VS Code Copilot (GitHub Copilot)
+- [ ] JetBrains Copilot
 - [ ] Gemini CLI
+- [ ] Qwen Code
 - [ ] OpenCode
 - [ ] KiloCode
 - [ ] Codex CLI
 - [ ] OpenClaw (Pi Agent)
+- [ ] Pi
 - [ ] Kiro
 - [ ] Antigravity
 - [ ] Zed

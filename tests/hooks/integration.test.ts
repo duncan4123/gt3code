@@ -9,7 +9,7 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } fr
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   mkdirSync,
   mkdtempSync,
@@ -17,6 +17,7 @@ import {
   readFileSync,
   rmSync,
   existsSync,
+  unlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 
@@ -28,12 +29,31 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const HOOK_PATH = join(__dirname, "..", "..", "hooks", "pretooluse.mjs");
 
 // Clean guidance throttle markers before each test so guidance fires fresh.
-// Subprocess hooks use process.ppid (= this test's pid) + VITEST_WORKER_ID.
+// Subprocess hooks scope markers two ways (#298): the legacy ppid-based dir
+// (kept as fallback when no sessionId is passed) and the sessionId-scoped dir
+// (derived from getSessionId which falls back to `pid-${process.ppid}` when
+// the hook payload has no session_id).
 const _wid = process.env.VITEST_WORKER_ID;
 const _guidanceSuffix = _wid ? `${process.pid}-w${_wid}` : String(process.pid);
 const _guidanceDir = resolve(tmpdir(), `context-mode-guidance-${_guidanceSuffix}`);
+const _sessionGuidanceDir = resolve(tmpdir(), `context-mode-guidance-s-pid-${process.pid}`);
+
+// MCP readiness sentinel — subprocess hooks check process.ppid (= this test's pid)
+// Use the same sentinel directory that isMCPReady() scans: /tmp on Unix, tmpdir() on Windows.
+// On macOS, tmpdir() returns /var/folders/... but isMCPReady() hardcodes /tmp — if we write
+// the sentinel to tmpdir(), CI environments (with no running MCP server in /tmp) will fail
+// because isMCPReady() returns false and all mcpRedirect() calls become passthrough (#347).
+const mcpSentinelDir = process.platform === "win32" ? tmpdir() : "/tmp";
+const mcpSentinel = resolve(mcpSentinelDir, `context-mode-mcp-ready-${process.pid}`);
+
 beforeEach(() => {
   try { rmSync(_guidanceDir, { recursive: true, force: true }); } catch {}
+  try { rmSync(_sessionGuidanceDir, { recursive: true, force: true }); } catch {}
+  writeFileSync(mcpSentinel, String(process.pid));
+});
+
+afterEach(() => {
+  try { unlinkSync(mcpSentinel); } catch {}
 });
 
 interface HookResult {
@@ -197,89 +217,33 @@ describe("WebFetch", () => {
   });
 });
 
-describe("Task", () => {
-  test("Task + prompt: hookSpecificOutput with updatedInput containing routing block", () => {
+describe("Task (#241: no longer routed)", () => {
+  test("Task tool returns empty stdout (passthrough, no routing)", () => {
     const result = runHook({
       tool_name: "Task",
       tool_input: { prompt: "Analyze this codebase and summarize the architecture." },
     });
     assert.equal(result.exitCode, 0, `Expected exit 0, got ${result.exitCode}`);
-    assert.ok(result.stdout.length > 0, "Expected non-empty stdout");
-    const parsed = JSON.parse(result.stdout);
-    assert.ok(parsed.hookSpecificOutput, "Expected hookSpecificOutput");
-    assert.equal(parsed.hookSpecificOutput.hookEventName, "PreToolUse");
-    assert.ok(parsed.hookSpecificOutput.updatedInput, "Expected updatedInput");
-    assert.ok(
-      parsed.hookSpecificOutput.updatedInput.prompt.includes("<context_window_protection>"),
-      "Expected <context_window_protection> XML tag in updatedInput.prompt",
-    );
-    assert.ok(
-      parsed.hookSpecificOutput.updatedInput.prompt.includes("</context_window_protection>"),
-      "Expected </context_window_protection> closing tag in updatedInput.prompt",
-    );
-    assert.ok(
-      parsed.hookSpecificOutput.updatedInput.prompt.includes("<tool_selection_hierarchy>"),
-      "Expected <tool_selection_hierarchy> tag in updatedInput.prompt",
-    );
-    assert.ok(
-      parsed.hookSpecificOutput.updatedInput.prompt.includes("<forbidden_actions>"),
-      "Expected <forbidden_actions> tag in updatedInput.prompt",
-    );
-    assert.ok(
-      parsed.hookSpecificOutput.updatedInput.prompt.includes(
-        "Analyze this codebase and summarize the architecture.",
-      ),
-      "Expected original prompt preserved in updatedInput.prompt",
-    );
+    // Task is no longer intercepted — hook produces no hookSpecificOutput
+    assert.equal(result.stdout.trim(), "", "Expected empty stdout for passthrough");
   });
 
-  test("Task + Bash subagent: upgraded to general-purpose for MCP access", () => {
+  test("TaskCreate returns empty stdout (passthrough)", () => {
     const result = runHook({
-      tool_name: "Task",
-      tool_input: {
-        prompt: "Research this GitHub repository.",
-        subagent_type: "Bash",
-        description: "Research repo",
-      },
+      tool_name: "TaskCreate",
+      tool_input: { title: "my task" },
     });
     assert.equal(result.exitCode, 0);
-    const parsed = JSON.parse(result.stdout);
-    const updated = parsed.hookSpecificOutput.updatedInput;
-    assert.equal(
-      updated.subagent_type,
-      "general-purpose",
-      `Expected subagent_type upgraded to general-purpose, got: ${updated.subagent_type}`,
-    );
-    assert.ok(
-      updated.prompt.includes("<context_window_protection>"),
-      "Expected XML routing block in prompt",
-    );
-    assert.ok(
-      updated.prompt.includes("Research this GitHub repository."),
-      "Expected original prompt preserved",
-    );
-    assert.equal(
-      updated.description,
-      "Research repo",
-      "Expected other fields preserved",
-    );
+    assert.equal(result.stdout.trim(), "", "Expected empty stdout for passthrough");
   });
 
-  test("Task + Explore subagent: keeps original subagent_type", () => {
+  test("TaskUpdate returns empty stdout (passthrough)", () => {
     const result = runHook({
-      tool_name: "Task",
-      tool_input: {
-        prompt: "Find all TypeScript files.",
-        subagent_type: "Explore",
-      },
+      tool_name: "TaskUpdate",
+      tool_input: { id: "123", status: "done" },
     });
     assert.equal(result.exitCode, 0);
-    const parsed = JSON.parse(result.stdout);
-    const updated = parsed.hookSpecificOutput.updatedInput;
-    assert.ok(
-      updated.subagent_type === undefined || updated.subagent_type === "Explore",
-      `Expected subagent_type to remain Explore or undefined, got: ${updated.subagent_type}`,
-    );
+    assert.equal(result.stdout.trim(), "", "Expected empty stdout for passthrough");
   });
 });
 
@@ -515,8 +479,8 @@ describe("Plugin Tool Name Format in ROUTING_BLOCK", () => {
   const PLUGIN_PREFIX = "mcp__plugin_context-mode_context-mode__";
   const SHORT_PREFIX = "mcp__context-mode__";
 
-  test("Task routing block uses plugin-format tool names", () => {
-    const result = runHook({ tool_name: "Task", tool_input: { prompt: "Do something." } });
+  test("Agent routing block uses plugin-format tool names", () => {
+    const result = runHook({ tool_name: "Agent", tool_input: { prompt: "Do something." } });
     assert.equal(result.exitCode, 0);
     const parsed = JSON.parse(result.stdout);
     const prompt = parsed.hookSpecificOutput.updatedInput.prompt;
@@ -609,5 +573,438 @@ describe("UTF-8 BOM handling (core/stdin.mjs path)", () => {
       tool_input: { command: "curl -s http://example.com" },
     }, undefined, { bom: true });
     assertRedirect(result, "context-mode");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// resolveConfigDir — respects platform CONFIG_DIR env vars (#289)
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("resolveConfigDir (#289)", () => {
+  const HELPERS_PATH = join(__dirname, "..", "..", "hooks", "session-helpers.mjs");
+
+  async function loadHelpers(env: Record<string, string> = {}) {
+    // Use a subprocess to isolate env var changes
+    const code = `
+      ${Object.entries(env).map(([k, v]) => `process.env[${JSON.stringify(k)}] = ${JSON.stringify(v)};`).join("\n")}
+      const { resolveConfigDir, GEMINI_OPTS, CODEX_OPTS, VSCODE_OPTS, CURSOR_OPTS, KIRO_OPTS } = await import(${JSON.stringify(pathToFileURL(HELPERS_PATH).href)});
+      const result = {
+        claude_default: resolveConfigDir(),
+        gemini_default: resolveConfigDir(GEMINI_OPTS),
+        codex_default: resolveConfigDir(CODEX_OPTS),
+        vscode_default: resolveConfigDir(VSCODE_OPTS),
+        cursor_default: resolveConfigDir(CURSOR_OPTS),
+        kiro_default: resolveConfigDir(KIRO_OPTS),
+      };
+      process.stdout.write(JSON.stringify(result));
+    `;
+    const r = spawnSync("node", ["--input-type=module", "-e", code], {
+      encoding: "utf-8",
+      env: { ...process.env, ...env, CONTEXT_MODE_SESSION_SUFFIX: "" },
+      timeout: 10000,
+    });
+    return JSON.parse(r.stdout);
+  }
+
+  test("defaults to ~/<configDir> when no env var set", async () => {
+    const home = process.env.HOME || process.env.USERPROFILE || "";
+    const result = await loadHelpers({
+      CLAUDE_CONFIG_DIR: "",
+      GEMINI_CLI_HOME: "",
+      CODEX_HOME: "",
+    });
+    expect(result.claude_default).toBe(join(home, ".claude"));
+    expect(result.gemini_default).toBe(join(home, ".gemini"));
+    expect(result.codex_default).toBe(join(home, ".codex"));
+    expect(result.vscode_default).toBe(join(home, ".vscode"));
+    expect(result.cursor_default).toBe(join(home, ".cursor"));
+    expect(result.kiro_default).toBe(join(home, ".kiro"));
+  });
+
+  test("CLAUDE_CONFIG_DIR overrides Claude Code config path", async () => {
+    const result = await loadHelpers({ CLAUDE_CONFIG_DIR: "/custom/claude-work" });
+    expect(result.claude_default).toBe("/custom/claude-work");
+    // Other platforms unaffected
+    const home = process.env.HOME || process.env.USERPROFILE || "";
+    expect(result.gemini_default).toBe(join(home, ".gemini"));
+  });
+
+  test("GEMINI_CLI_HOME overrides Gemini CLI config path", async () => {
+    const result = await loadHelpers({ GEMINI_CLI_HOME: "/custom/gemini" });
+    expect(result.gemini_default).toBe("/custom/gemini");
+  });
+
+  test("CODEX_HOME overrides Codex CLI config path", async () => {
+    const result = await loadHelpers({ CODEX_HOME: "/custom/codex" });
+    expect(result.codex_default).toBe("/custom/codex");
+  });
+
+  test("tilde expansion works in env var values", async () => {
+    const home = process.env.HOME || process.env.USERPROFILE || "";
+    const result = await loadHelpers({ CLAUDE_CONFIG_DIR: "~/.claude-work" });
+    expect(result.claude_default).toBe(join(home, ".claude-work"));
+  });
+
+  test("platforms without configDirEnv ignore env vars", async () => {
+    const home = process.env.HOME || process.env.USERPROFILE || "";
+    // VS Code Copilot, Cursor, Kiro have no configDirEnv
+    const result = await loadHelpers({});
+    expect(result.vscode_default).toBe(join(home, ".vscode"));
+    expect(result.cursor_default).toBe(join(home, ".cursor"));
+    expect(result.kiro_default).toBe(join(home, ".kiro"));
+  });
+
+  test("session DB path uses resolved config dir", async () => {
+    const customDir = mkdtempSync(join(tmpdir(), "ctx-config-dir-test-"));
+    try {
+      const code = `
+        process.env.CLAUDE_CONFIG_DIR = ${JSON.stringify(customDir)};
+        process.env.CLAUDE_PROJECT_DIR = "/test/project";
+        process.env.CONTEXT_MODE_SESSION_SUFFIX = "";
+        const { getSessionDBPath } = await import(${JSON.stringify(pathToFileURL(HELPERS_PATH).href)});
+        process.stdout.write(getSessionDBPath());
+      `;
+      const r = spawnSync("node", ["--input-type=module", "-e", code], {
+        encoding: "utf-8",
+        env: { ...process.env, CLAUDE_CONFIG_DIR: customDir, CLAUDE_PROJECT_DIR: "/test/project", CONTEXT_MODE_SESSION_SUFFIX: "" },
+        timeout: 10000,
+      });
+      expect(r.stdout).toContain(customDir);
+      expect(r.stdout).toContain("context-mode");
+      expect(r.stdout).toContain("sessions");
+      expect(r.stdout).toMatch(/\.db$/);
+    } finally {
+      rmSync(customDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// parseStdin — safe JSON parse for empty/malformed stdin (#322)
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("parseStdin (#322)", () => {
+  const HELPERS_PATH = join(__dirname, "..", "..", "hooks", "session-helpers.mjs");
+
+  function runParseTest(raw: string): { parsed: boolean; result: unknown; error?: string } {
+    const code = `
+      const { parseStdin } = await import(${JSON.stringify(pathToFileURL(HELPERS_PATH).href)});
+      try {
+        const result = parseStdin(${JSON.stringify(raw)});
+        process.stdout.write(JSON.stringify({ parsed: true, result }));
+      } catch(e) {
+        process.stdout.write(JSON.stringify({ parsed: false, error: e.message }));
+      }
+    `;
+    const r = spawnSync("node", ["--input-type=module", "-e", code], {
+      encoding: "utf-8",
+      timeout: 10000,
+    });
+    return JSON.parse(r.stdout);
+  }
+
+  test("empty string returns empty object", () => {
+    expect(runParseTest("").result).toEqual({});
+  });
+
+  test("whitespace-only returns empty object", () => {
+    expect(runParseTest("   \n  ").result).toEqual({});
+  });
+
+  test("BOM-only returns empty object", () => {
+    expect(runParseTest("\uFEFF").result).toEqual({});
+  });
+
+  test("valid JSON parsed correctly", () => {
+    expect(runParseTest('{"source":"startup"}').result).toEqual({ source: "startup" });
+  });
+
+  test("BOM-prefixed JSON parsed correctly", () => {
+    expect(runParseTest('\uFEFF{"source":"compact"}').result).toEqual({ source: "compact" });
+  });
+
+  test("malformed JSON throws", () => {
+    const out = runParseTest("{broken");
+    expect(out.parsed).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Empty stdin resilience — all hooks survive empty input (#322)
+// ═══════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════
+// Category 27: Latency — cross-hook state via tmpdir files
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("Category 27 — Latency cross-hook bridge", () => {
+  const POSTTOOL_PATH = join(__dirname, "..", "..", "hooks", "posttooluse.mjs");
+  let fakeHome: string;
+  let fakeProject: string;
+  let latencyEnv: Record<string, string>;
+
+  beforeAll(() => {
+    fakeHome = mkdtempSync(join(tmpdir(), "ctx-latency-home-"));
+    fakeProject = mkdtempSync(join(tmpdir(), "ctx-latency-project-"));
+    latencyEnv = {
+      HOME: fakeHome,
+      USERPROFILE: fakeHome,
+      CLAUDE_PROJECT_DIR: fakeProject,
+      CLAUDE_SESSION_ID: "latency-test-session",
+      CONTEXT_MODE_SESSION_SUFFIX: "",
+    };
+  });
+
+  afterAll(() => {
+    try { rmSync(fakeHome, { recursive: true, force: true }); } catch {}
+    try { rmSync(fakeProject, { recursive: true, force: true }); } catch {}
+  });
+
+  test("pretooluse.mjs writes latency marker file to tmpdir", () => {
+    const sessionId = "latency-test-session";
+    const toolName = "Bash";
+
+    // Run pretooluse.mjs — it should write a latency marker
+    const result = runHook(
+      { tool_name: toolName, tool_input: { command: "echo hello" }, session_id: sessionId },
+      latencyEnv,
+    );
+
+    assert.equal(result.exitCode, 0);
+
+    // Check marker file exists
+    const markerPath = resolve(tmpdir(), `context-mode-latency-${sessionId}-${toolName}.txt`);
+    assert.ok(existsSync(markerPath), `Latency marker should exist at ${markerPath}`);
+
+    // Marker content should be a timestamp
+    const content = readFileSync(markerPath, "utf-8").trim();
+    const ts = parseInt(content, 10);
+    assert.ok(!isNaN(ts), `Marker content should be a valid timestamp, got: "${content}"`);
+    assert.ok(ts > 0, "Timestamp should be positive");
+    assert.ok(ts <= Date.now(), "Timestamp should not be in the future");
+
+    // Clean up
+    try { unlinkSync(markerPath); } catch {}
+  });
+
+  test("posttooluse.mjs reads and deletes latency marker file", () => {
+    const sessionId = "latency-test-session";
+    const toolName = "Read";
+    const markerPath = resolve(tmpdir(), `context-mode-latency-${sessionId}-${toolName}.txt`);
+
+    // Write a marker as if pretooluse.mjs ran — use a recent timestamp (not slow)
+    writeFileSync(markerPath, String(Date.now()), "utf-8");
+
+    // Run posttooluse.mjs
+    const result = spawnSync("node", [POSTTOOL_PATH], {
+      input: JSON.stringify({
+        session_id: sessionId,
+        tool_name: toolName,
+        tool_input: { file_path: "/tmp/test.ts" },
+        tool_response: "file contents",
+      }),
+      encoding: "utf-8",
+      timeout: 30_000,
+      env: { ...process.env, ...latencyEnv },
+    });
+
+    assert.equal(result.status, 0, `PostToolUse should exit 0, stderr: ${result.stderr}`);
+
+    // Marker file should be cleaned up
+    assert.ok(!existsSync(markerPath), "Latency marker should be deleted after PostToolUse reads it");
+  });
+
+  test("posttooluse.mjs emits latency event when tool takes >5s", () => {
+    const sessionId = "latency-test-session";
+    const toolName = "Bash";
+    const markerPath = resolve(tmpdir(), `context-mode-latency-${sessionId}-${toolName}.txt`);
+
+    // Write a marker with a timestamp 6 seconds ago (simulating a slow tool)
+    const sixSecsAgo = Date.now() - 6000;
+    writeFileSync(markerPath, String(sixSecsAgo), "utf-8");
+
+    // Run posttooluse.mjs
+    const result = spawnSync("node", [POSTTOOL_PATH], {
+      input: JSON.stringify({
+        session_id: sessionId,
+        tool_name: toolName,
+        tool_input: { command: "npm test" },
+        tool_response: "all passed",
+      }),
+      encoding: "utf-8",
+      timeout: 30_000,
+      env: { ...process.env, ...latencyEnv },
+    });
+
+    assert.equal(result.status, 0);
+
+    // Verify: the latency event should be in the DB.
+    // We can't easily query SQLite here, but we can verify the marker was cleaned up.
+    assert.ok(!existsSync(markerPath), "Marker should be cleaned up");
+  });
+
+  test("posttooluse.mjs does NOT emit latency event when tool is fast (<5s)", () => {
+    const sessionId = "latency-test-session";
+    const toolName = "Edit";
+    const markerPath = resolve(tmpdir(), `context-mode-latency-${sessionId}-${toolName}.txt`);
+
+    // Write a marker with a timestamp 100ms ago (fast tool)
+    writeFileSync(markerPath, String(Date.now() - 100), "utf-8");
+
+    // Run posttooluse.mjs
+    const result = spawnSync("node", [POSTTOOL_PATH], {
+      input: JSON.stringify({
+        session_id: sessionId,
+        tool_name: toolName,
+        tool_input: { file_path: "/tmp/test.ts", old_string: "a", new_string: "b" },
+        tool_response: "ok",
+      }),
+      encoding: "utf-8",
+      timeout: 30_000,
+      env: { ...process.env, ...latencyEnv },
+    });
+
+    assert.equal(result.status, 0);
+    assert.ok(!existsSync(markerPath), "Marker should be cleaned up even for fast tools");
+  });
+
+  test("posttooluse.mjs handles missing marker gracefully (no crash)", () => {
+    const sessionId = "latency-test-session";
+    const toolName = "Glob";
+
+    // Do NOT write a marker — simulate case where pretooluse.mjs didn't run
+    const markerPath = resolve(tmpdir(), `context-mode-latency-${sessionId}-${toolName}.txt`);
+    if (existsSync(markerPath)) unlinkSync(markerPath);
+
+    const result = spawnSync("node", [POSTTOOL_PATH], {
+      input: JSON.stringify({
+        session_id: sessionId,
+        tool_name: toolName,
+        tool_input: { pattern: "**/*.ts" },
+        tool_response: "[]",
+      }),
+      encoding: "utf-8",
+      timeout: 30_000,
+      env: { ...process.env, ...latencyEnv },
+    });
+
+    assert.equal(result.status, 0, "PostToolUse must not crash when no marker exists");
+  });
+});
+
+describe("empty stdin resilience (#322)", () => {
+  const PROJECT_ROOT = join(__dirname, "..", "..");
+
+  function runHookWithEmptyStdin(hookPath: string): { exitCode: number } {
+    const fakeHome = mkdtempSync(join(tmpdir(), "ctx-empty-stdin-"));
+    const fakeProject = mkdtempSync(join(tmpdir(), "ctx-empty-project-"));
+    try {
+      const r = spawnSync("node", [join(PROJECT_ROOT, "hooks", hookPath)], {
+        input: "",
+        encoding: "utf-8",
+        timeout: 15000,
+        env: {
+          ...process.env,
+          HOME: fakeHome,
+          CLAUDE_PROJECT_DIR: fakeProject,
+          GEMINI_PROJECT_DIR: fakeProject,
+          VSCODE_CWD: fakeProject,
+          CURSOR_CWD: fakeProject,
+          CONTEXT_MODE_SESSION_SUFFIX: "",
+        },
+      });
+      return { exitCode: r.status ?? -1 };
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+      rmSync(fakeProject, { recursive: true, force: true });
+    }
+  }
+
+  // All 6 adapters × their hook files
+  const hooks = [
+    "sessionstart.mjs", "precompact.mjs", "posttooluse.mjs", "userpromptsubmit.mjs",
+    "gemini-cli/sessionstart.mjs", "gemini-cli/beforetool.mjs", "gemini-cli/aftertool.mjs", "gemini-cli/precompress.mjs",
+    "vscode-copilot/sessionstart.mjs", "vscode-copilot/pretooluse.mjs", "vscode-copilot/posttooluse.mjs", "vscode-copilot/precompact.mjs",
+    "cursor/sessionstart.mjs", "cursor/pretooluse.mjs", "cursor/posttooluse.mjs", "cursor/stop.mjs",
+    "codex/sessionstart.mjs", "codex/pretooluse.mjs", "codex/posttooluse.mjs",
+    "kiro/pretooluse.mjs", "kiro/posttooluse.mjs",
+  ];
+
+  for (const hook of hooks) {
+    test(`${hook} exits 0 on empty stdin`, () => {
+      expect(runHookWithEmptyStdin(hook).exitCode).toBe(0);
+    });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// buildAutoInjection — compaction auto-injection logic
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("buildAutoInjection", () => {
+  let buildAutoInjection: (events: Array<{category: string; data: string}>) => string;
+  let estimateTokens: (text: string) => number;
+
+  beforeAll(async () => {
+    const mod = await import("../../hooks/auto-injection.mjs");
+    buildAutoInjection = mod.buildAutoInjection;
+    estimateTokens = mod.estimateTokens;
+  });
+
+  test("returns empty for no events", () => {
+    const result = buildAutoInjection([]);
+    expect(result).toBe("");
+  });
+
+  test("includes role as behavioral_directive", () => {
+    const events = [
+      { category: "role", data: "You are a senior staff engineer" },
+    ];
+    const result = buildAutoInjection(events);
+    expect(result).toContain("<behavioral_directive>");
+    expect(result).toContain("senior staff engineer");
+    expect(result).toContain("</behavioral_directive>");
+  });
+
+  test("includes decisions as rules", () => {
+    const events = [
+      { category: "decision", data: "Use ctx- prefix instead of cm-" },
+      { category: "decision", data: "Never push to main without asking" },
+    ];
+    const result = buildAutoInjection(events);
+    expect(result).toContain("<rules>");
+    expect(result).toContain("ctx- prefix");
+    expect(result).toContain("Never push");
+    expect(result).toContain("</rules>");
+  });
+
+  test("includes skill names", () => {
+    const events = [
+      { category: "skill", data: "tdd" },
+      { category: "skill", data: "commit" },
+    ];
+    const result = buildAutoInjection(events);
+    expect(result).toContain("<active_skills>");
+    expect(result).toContain("tdd");
+    expect(result).toContain("commit");
+    expect(result).toContain("</active_skills>");
+  });
+
+  test("token budget cap 500", () => {
+    // Fill with many large events to test budget enforcement
+    const events = [];
+    for (let i = 0; i < 20; i++) {
+      events.push({ category: "decision", data: "A".repeat(200) });
+    }
+    events.push({ category: "role", data: "B".repeat(400) });
+    events.push({ category: "intent", data: "implement" });
+    for (let i = 0; i < 50; i++) {
+      events.push({ category: "skill", data: `skill-${i}` });
+    }
+    const result = buildAutoInjection(events);
+    const tokens = estimateTokens(result);
+    // The budget is 500 tokens. Role (P1) is never truncated but decisions
+    // overflow to 3. Total should stay near or under budget.
+    expect(tokens).toBeLessThanOrEqual(600); // allow small overshoot from structural XML
   });
 });

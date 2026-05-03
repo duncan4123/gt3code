@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "context-mode hook gemini-cli beforetool"
+            "command": "context-mode-doltlite hook gemini-cli beforetool"
           }
         ]
       }
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "context-mode hook gemini-cli aftertool"
+            "command": "context-mode-doltlite hook gemini-cli aftertool"
           }
         ]
       }
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "context-mode hook gemini-cli precompress"
+            "command": "context-mode-doltlite hook gemini-cli precompress"
           }
         ]
       }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "context-mode hook gemini-cli sessionstart"
+            "command": "context-mode-doltlite hook gemini-cli sessionstart"
           }
         ]
       }

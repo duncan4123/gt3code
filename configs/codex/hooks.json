@@ -3,21 +3,35 @@
     "PreToolUse": [
       {
         "hooks": [
-          { "type": "command", "command": "context-mode hook codex pretooluse" }
+          { "type": "command", "command": "context-mode-doltlite hook codex pretooluse" }
         ]
       }
     ],
     "PostToolUse": [
       {
         "hooks": [
-          { "type": "command", "command": "context-mode hook codex posttooluse" }
+          { "type": "command", "command": "context-mode-doltlite hook codex posttooluse" }
         ]
       }
     ],
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "context-mode hook codex sessionstart" }
+          { "type": "command", "command": "context-mode-doltlite hook codex sessionstart" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "context-mode-doltlite hook codex userpromptsubmit" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "context-mode-doltlite hook codex stop" }
         ]
       }
     ]

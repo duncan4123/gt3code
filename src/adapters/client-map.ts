@@ -15,6 +15,9 @@ export const CLIENT_NAME_TO_PLATFORM: Record<string, PlatformId> = {
   "antigravity-client": "antigravity",
   "cursor-vscode": "cursor",
   "Visual-Studio-Code": "vscode-copilot",
+  "JetBrains Client": "jetbrains-copilot",
+  "IntelliJ IDEA": "jetbrains-copilot",
+  "PyCharm": "jetbrains-copilot",
   "Codex": "codex",
   "codex-mcp-client": "codex",
   "Kilo Code": "kilo",
@@ -23,4 +26,6 @@ export const CLIENT_NAME_TO_PLATFORM: Record<string, PlatformId> = {
   "Pi Coding Agent": "pi",
   "Zed": "zed",
   "zed": "zed",
+  "qwen-code": "qwen-code",
+  "qwen-cli-mcp-client": "qwen-code",
 };

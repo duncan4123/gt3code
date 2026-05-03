@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { KiroAdapter } from "../../src/adapters/kiro/index.js";
+import { PRE_TOOL_USE_MATCHER_PATTERN, PRE_TOOL_USE_MATCHERS } from "../../src/adapters/kiro/hooks.js";
 
 describe("KiroAdapter", () => {
   let adapter: KiroAdapter;
@@ -140,6 +141,26 @@ describe("KiroAdapter", () => {
       const config = adapter.generateHookConfig("/some/plugin/root");
       const preEntries = config["preToolUse"] as Array<{ hooks: Array<{ command: string }> }>;
       expect(preEntries[0].hooks[0].command).toContain("kiro/pretooluse.mjs");
+    });
+
+    it("preToolUse matcher is specific, not wildcard", () => {
+      const config = adapter.generateHookConfig("/some/plugin/root");
+      const preEntries = config["preToolUse"] as Array<{ matcher: string }>;
+      expect(preEntries[0].matcher).not.toBe("*");
+      expect(preEntries[0].matcher).toBe(PRE_TOOL_USE_MATCHER_PATTERN);
+      expect(preEntries[0].matcher).toContain("execute_bash");
+      expect(preEntries[0].matcher).toContain("fs_read");
+      expect(preEntries[0].matcher).toContain("@context-mode/ctx_execute");
+    });
+
+    it("postToolUse matcher stays wildcard for event capture", () => {
+      const config = adapter.generateHookConfig("/some/plugin/root");
+      const postEntries = config["postToolUse"] as Array<{ matcher: string }>;
+      expect(postEntries[0].matcher).toBe("*");
+    });
+
+    it("PRE_TOOL_USE_MATCHER_PATTERN is pipe-separated string", () => {
+      expect(PRE_TOOL_USE_MATCHER_PATTERN).toBe(PRE_TOOL_USE_MATCHERS.join("|"));
     });
 
     it("setHookPermissions returns empty array", () => {

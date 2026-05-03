@@ -16,17 +16,17 @@
  *   - Session dir: ~/.openclaw/context-mode/sessions/
  */
 
-import { createHash } from "node:crypto";
 import {
   readFileSync,
   writeFileSync,
-  mkdirSync,
   copyFileSync,
   accessSync,
   constants,
 } from "node:fs";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
+
+import { BaseAdapter } from "../base.js";
 
 import type {
   HookAdapter,
@@ -59,6 +59,7 @@ interface OpenClawHookInput {
   is_error?: boolean;
   sessionId?: string;
   source?: string;
+  cwd?: string;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -71,7 +72,11 @@ import { HOOK_EVENTS as OPENCLAW_HOOK_EVENTS } from "./hooks.js";
 // Adapter implementation
 // ─────────────────────────────────────────────────────────
 
-export class OpenClawAdapter implements HookAdapter {
+export class OpenClawAdapter extends BaseAdapter implements HookAdapter {
+  constructor() {
+    super([".openclaw"]);
+  }
+
   readonly name = "OpenClaw";
   readonly paradigm: HookParadigm = "ts-plugin";
 
@@ -93,7 +98,7 @@ export class OpenClawAdapter implements HookAdapter {
       toolName: input.toolName ?? input.tool_name ?? "",
       toolInput: input.params ?? input.tool_input ?? {},
       sessionId: this.extractSessionId(input),
-      projectDir: process.cwd(),
+      projectDir: this.getProjectDir(input),
       raw,
     };
   }
@@ -106,7 +111,7 @@ export class OpenClawAdapter implements HookAdapter {
       toolOutput: input.output ?? input.tool_output,
       isError: input.isError ?? input.is_error,
       sessionId: this.extractSessionId(input),
-      projectDir: process.cwd(),
+      projectDir: this.getProjectDir(input),
       raw,
     };
   }
@@ -115,7 +120,7 @@ export class OpenClawAdapter implements HookAdapter {
     const input = raw as OpenClawHookInput;
     return {
       sessionId: this.extractSessionId(input),
-      projectDir: process.cwd(),
+      projectDir: this.getProjectDir(input),
       raw,
     };
   }
@@ -142,7 +147,7 @@ export class OpenClawAdapter implements HookAdapter {
     return {
       sessionId: this.extractSessionId(input),
       source,
-      projectDir: process.cwd(),
+      projectDir: this.getProjectDir(input),
       raw,
     };
   }
@@ -201,26 +206,22 @@ export class OpenClawAdapter implements HookAdapter {
     return resolve("openclaw.json");
   }
 
-  getSessionDir(): string {
-    const dir = join(homedir(), ".openclaw", "context-mode", "sessions");
-    mkdirSync(dir, { recursive: true });
-    return dir;
+  /**
+   * OpenClaw stores everything in the project root — no separate config
+   * dir. Returned as the absolute project directory itself per the
+   * HookAdapter.getConfigDir contract (always-absolute).
+   */
+  getConfigDir(projectDir?: string): string {
+    return resolve(projectDir ?? process.cwd());
   }
 
-  getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
-    return join(this.getSessionDir(), `${hash}.db`);
+  getInstructionFiles(): string[] {
+    return ["AGENTS.md"];
   }
 
-  getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
-    return join(this.getSessionDir(), `${hash}-events.md`);
+  /** Absolute <projectRoot>/memory directory. */
+  getMemoryDir(): string {
+    return join(this.getConfigDir(), "memory");
   }
 
   generateHookConfig(_pluginRoot: string): HookRegistration {
@@ -508,6 +509,17 @@ export class OpenClawAdapter implements HookAdapter {
   }
 
   // ── Internal helpers ───────────────────────────────────
+
+  /**
+   * Resolve the project directory for an OpenClaw hook input.
+   * Priority: input.cwd > OPENCLAW_PROJECT_DIR env > process.cwd().
+   * Mirrors the cursor / opencode pattern so downstream hooks always
+   * receive a defined projectDir even under worktrees or when the
+   * platform omits cwd from the wire payload.
+   */
+  private getProjectDir(input: OpenClawHookInput): string {
+    return input.cwd ?? process.env.OPENCLAW_PROJECT_DIR ?? process.cwd();
+  }
 
   /**
    * Extract session ID from OpenClaw hook input.

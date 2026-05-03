@@ -2,7 +2,7 @@
 import "../suppress-stderr.mjs";
 import "../ensure-deps.mjs";
 /**
- * VS Code Copilot SessionStart hook for context-mode-doltlite
+ * VS Code Copilot SessionStart hook for context-mode
  *
  * Session lifecycle management:
  * - "startup"  → Cleanup old sessions, capture instruction file rules
@@ -19,7 +19,7 @@ const toolNamer = createToolNamer("vscode-copilot");
 const ROUTING_BLOCK = createRoutingBlock(toolNamer);
 import { writeSessionEventsFile, buildSessionDirective, getSessionEvents } from "../session-directive.mjs";
 import {
-  readStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath,
+  readStdin, parseStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath,
   getProjectDir, VSCODE_OPTS,
 } from "../session-helpers.mjs";
 import { join } from "node:path";
@@ -35,7 +35,7 @@ let additionalContext = ROUTING_BLOCK;
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
   const source = input.source ?? "startup";
 
   if (source === "compact") {
@@ -63,8 +63,10 @@ try {
     const dbPath = getSessionDBPath(OPTS);
     const db = new SessionDB({ dbPath });
 
-    // Filter events to the session being resumed. Falling back to latest
-    // events can leak data from another session that started later.
+    // Filter events to the session being resumed. Falling back to
+    // getLatestSessionEvents(db) leaks events from any other session whose
+    // session_meta.started_at is more recent — observed cross-session bleed
+    // when a different session started after this one and before the resume.
     const sessionId = getSessionId(input, OPTS);
     const events = sessionId ? getSessionEvents(db, sessionId) : [];
     if (events.length > 0) {
@@ -114,7 +116,7 @@ try {
     const { join: pjoin } = await import("node:path");
     const { homedir: hd } = await import("node:os");
     appendFileSync(
-      pjoin(hd(), ".vscode", "context-mode-doltlite", "sessionstart-debug.log"),
+      pjoin(hd(), ".vscode", "context-mode", "sessionstart-debug.log"),
       `[${new Date().toISOString()}] ${err?.message || err}\n${err?.stack || ""}\n`,
     );
   } catch { /* ignore logging failure */ }

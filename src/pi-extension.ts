@@ -127,6 +127,24 @@ function buildStatsText(db: SessionDB, sessionId: string): string {
   }
 }
 
+function resolveCommandContext(argsOrCtx: unknown, ctx: unknown): any {
+  if (ctx !== undefined) return ctx;
+  if (argsOrCtx && typeof argsOrCtx === "object") return argsOrCtx;
+  return undefined;
+}
+
+function handleCommandText(
+  text: string,
+  ctx: any,
+): { text: string } | undefined {
+  if (ctx?.hasUI) {
+    ctx.ui.notify(text, "info");
+    return;
+  }
+
+  return { text };
+}
+
 // ── Extension entry point ────────────────────────────────
 
 /** Pi extension default export. Called once by Pi runtime with the extension API. */
@@ -266,7 +284,7 @@ export default function piExtension(pi: any): void {
       db.markResumeConsumed(_sessionId);
 
       // Build memory context from recent high-priority events
-      const allEvents = db.getEvents(_sessionId, { minPriority: 2, limit: 50 });
+      const allEvents = db.getEvents(_sessionId, { minPriority: 3, limit: 50 });
       let memoryContext = "";
       if (allEvents.length > 0) {
         const memoryLines: string[] = ["<active_memory>"];
@@ -343,17 +361,21 @@ export default function piExtension(pi: any): void {
 
   pi.registerCommand("ctx-stats", {
     description: "Show context-mode session statistics",
-    handler: () => {
-      if (!_db || !_sessionId) {
-        return { text: "context-mode: no active session" };
-      }
-      return { text: buildStatsText(_db, _sessionId) };
+    handler: async (argsOrCtx: unknown, maybeCtx: unknown) => {
+      const ctx = resolveCommandContext(argsOrCtx, maybeCtx);
+      const text =
+        !_db || !_sessionId
+          ? "context-mode: no active session"
+          : buildStatsText(_db, _sessionId);
+
+      return handleCommandText(text, ctx);
     },
   });
 
   pi.registerCommand("ctx-doctor", {
     description: "Run context-mode diagnostics",
-    handler: () => {
+    handler: async (argsOrCtx: unknown, maybeCtx: unknown) => {
+      const ctx = resolveCommandContext(argsOrCtx, maybeCtx);
       const dbPath = getDBPath();
       const dbExists = existsSync(dbPath);
       const lines: string[] = [
@@ -381,7 +403,8 @@ export default function piExtension(pi: any): void {
         }
       }
 
-      return { text: lines.join("\n") };
+      const text = lines.join("\n");
+      return handleCommandText(text, ctx);
     },
   });
 }

@@ -16,8 +16,6 @@
  *   - Session dir: ~/.config/opencode/context-mode/sessions/
  */
 
-import { createHash } from "node:crypto";
-
 /** Strip JSONC comments (// and /* *​/) and trailing commas for JSON.parse. */
 function stripJsonComments(str: string): string {
   return str
@@ -35,6 +33,8 @@ import {
 } from "node:fs";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
+
+import { BaseAdapter } from "../base.js";
 
 import type {
   HookAdapter,
@@ -89,7 +89,7 @@ import { HOOK_TYPES as OPENCODE_HOOK_NAMES } from "./hooks.js";
 
 export type AdapterPlatformType = Extract<PlatformId, "opencode" | "kilo">;
 
-export class OpenCodeAdapter implements HookAdapter {
+export class OpenCodeAdapter extends BaseAdapter implements HookAdapter {
   get name(): string {
     return this.platform === "kilo" ? "KiloCode" : "OpenCode";
   }
@@ -109,6 +109,9 @@ export class OpenCodeAdapter implements HookAdapter {
   private platform: AdapterPlatformType;
 
   constructor(platform: AdapterPlatformType = "opencode") {
+    // sessionDirSegments unused — opencode overrides getSessionDir()
+    // with XDG_CONFIG_HOME / APPDATA logic
+    super([".config", platform]);
     this.platform = platform;
   }
 
@@ -250,31 +253,29 @@ export class OpenCodeAdapter implements HookAdapter {
   }
 
   getSessionDir(): string {
-    let configDir: string;
-    if (process.platform === "win32") {
-      configDir = process.env.APPDATA || join(homedir(), "AppData", "Roaming");
-    } else {
-      configDir = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
-    }
-    const dir = join(configDir, this.platform, "context-mode", "sessions");
+    const dir = join(this.getConfigDir(), "context-mode", "sessions");
     mkdirSync(dir, { recursive: true });
     return dir;
   }
 
-  getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
-    return join(this.getSessionDir(), `${hash}.db`);
+  /**
+   * OpenCode/KiloCode honor XDG_CONFIG_HOME on POSIX and APPDATA on Windows.
+   * Falls back to ~/.config/<platform> (or %APPDATA%\<platform>).
+   * Always absolute. `_projectDir` is accepted for interface symmetry but
+   * unused — config is home/XDG-rooted, never project-scoped.
+   */
+  getConfigDir(_projectDir?: string): string {
+    let root: string;
+    if (process.platform === "win32") {
+      root = process.env.APPDATA || join(homedir(), "AppData", "Roaming");
+    } else {
+      root = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+    }
+    return join(root, this.platform);
   }
 
-  getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
-    return join(this.getSessionDir(), `${hash}-events.md`);
+  getInstructionFiles(): string[] {
+    return ["AGENTS.md"];
   }
 
   generateHookConfig(_pluginRoot: string): HookRegistration {

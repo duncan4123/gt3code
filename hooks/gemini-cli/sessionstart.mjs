@@ -2,7 +2,7 @@
 import "../suppress-stderr.mjs";
 import "../ensure-deps.mjs";
 /**
- * Gemini CLI SessionStart hook for context-mode-doltlite
+ * Gemini CLI SessionStart hook for context-mode
  *
  * Session lifecycle management:
  * - "startup"  → Cleanup old sessions, capture GEMINI.md rules
@@ -18,27 +18,28 @@ const toolNamer = createToolNamer("gemini-cli");
 const ROUTING_BLOCK = createRoutingBlock(toolNamer);
 import { writeSessionEventsFile, buildSessionDirective, getSessionEvents } from "../session-directive.mjs";
 import {
-  readStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath,
+  readStdin, parseStdin, getSessionId, getSessionDBPath, getSessionEventsPath, getCleanupFlagPath,
   getProjectDir, GEMINI_OPTS,
 } from "../session-helpers.mjs";
+import { createSessionLoaders } from "../session-loaders.mjs";
 import { join, dirname } from "node:path";
 import { readFileSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
-const PKG_SESSION = join(HOOK_DIR, "..", "..", "build", "session");
+const { loadSessionDB } = createSessionLoaders(HOOK_DIR);
 const OPTS = GEMINI_OPTS;
 
 let additionalContext = ROUTING_BLOCK;
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
   const source = input.source ?? "startup";
 
   if (source === "compact") {
-    const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
+    const { SessionDB } = await loadSessionDB();
     const dbPath = getSessionDBPath(OPTS);
     const db = new SessionDB({ dbPath });
     const sessionId = getSessionId(input, OPTS);
@@ -58,12 +59,14 @@ try {
   } else if (source === "resume") {
     try { unlinkSync(getCleanupFlagPath(OPTS)); } catch { /* no flag */ }
 
-    const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
+    const { SessionDB } = await loadSessionDB();
     const dbPath = getSessionDBPath(OPTS);
     const db = new SessionDB({ dbPath });
 
-    // Filter events to the session being resumed. Falling back to latest
-    // events can leak data from another session that started later.
+    // Filter events to the session being resumed. Falling back to
+    // getLatestSessionEvents(db) leaks events from any other session whose
+    // session_meta.started_at is more recent — observed cross-session bleed
+    // when a different session started after this one and before the resume.
     const sessionId = getSessionId(input, OPTS);
     const events = sessionId ? getSessionEvents(db, sessionId) : [];
     if (events.length > 0) {
@@ -73,7 +76,7 @@ try {
 
     db.close();
   } else if (source === "startup") {
-    const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
+    const { SessionDB } = await loadSessionDB();
     const dbPath = getSessionDBPath(OPTS);
     const db = new SessionDB({ dbPath });
     try { unlinkSync(getSessionEventsPath(OPTS)); } catch { /* no stale file */ }
@@ -114,11 +117,19 @@ try {
     const { join: pjoin } = await import("node:path");
     const { homedir: hd } = await import("node:os");
     appendFileSync(
-      pjoin(hd(), ".gemini", "context-mode-doltlite", "sessionstart-debug.log"),
+      pjoin(hd(), ".gemini", "context-mode", "sessionstart-debug.log"),
       `[${new Date().toISOString()}] ${err?.message || err}\n${err?.stack || ""}\n`,
     );
   } catch { /* ignore logging failure */ }
 }
 
-const output = `SessionStart:compact hook success: Success\nSessionStart hook additional context: \n${additionalContext}`;
-process.stdout.write(output);
+// Emit structured JSON rather than plain text so Gemini CLI treats the
+// routing block as hook metadata instead of user-visible output (#299).
+// Matches the format already used by Claude Code and VS Code Copilot
+// SessionStart hooks.
+console.log(JSON.stringify({
+  hookSpecificOutput: {
+    hookEventName: "SessionStart",
+    additionalContext,
+  },
+}));

@@ -4,9 +4,12 @@
  * Detects parent process death (ppid polling) and OS signals to prevent
  * orphaned MCP server processes consuming 100% CPU (issue #103).
  *
- * Stdin close is not a standalone shutdown signal. The MCP stdio transport
- * owns stdin, and transient pipe events can otherwise close the transport
- * while the parent process is still alive.
+ * Stdin close is NOT used as a *standalone* shutdown signal — the MCP stdio
+ * transport owns stdin and transient pipe events cause spurious -32000
+ * errors (#236). We do, however, treat stdin EOF as a hint to re-run the
+ * parent-liveness probe immediately (instead of waiting up to 30 s for the
+ * next poll tick), which closes the multi-day CPU-spin window seen in
+ * #311/#388 without reintroducing the false-positive shutdowns of #236.
  *
  * Cross-platform: macOS, Linux, Windows.
  */
@@ -49,12 +52,19 @@ export interface IsParentAliveDeps {
 }
 
 /**
- * Build a parent-liveness check that handles wrapper processes.
+ * Build a parent-liveness check that handles the npm-exec wrapper case (#311).
  *
- * A plain ppid comparison can miss launches like:
- * `start.mjs -> npm exec -> context-mode server`. If the original session
- * owner dies, the grandparent can reparent to init while the direct parent
- * remains alive.
+ * A plain ppid comparison misses Claude Code sessions launched via
+ * `start.mjs → npm exec → context-mode server`: when Claude Code dies,
+ * `start.mjs` reparents to init but `npm exec` stays alive, so the server's
+ * direct ppid never changes. We additionally check whether the grandparent
+ * process has been reparented to init (PID 1). When the original grandparent
+ * was already 1 (daemonized startup) the check is skipped, and on Windows
+ * where there's no cheap `ps` equivalent we also skip — so this change is
+ * strictly additive to the previous behavior.
+ *
+ * Exported for unit-testing with injected readers. Production code uses
+ * {@link defaultIsParentAlive} (captured once at module load).
  */
 export function makeDefaultIsParentAlive(deps: IsParentAliveDeps = {}): () => boolean {
   const getPpid = deps.getPpid ?? (() => process.ppid);
@@ -67,6 +77,9 @@ export function makeDefaultIsParentAlive(deps: IsParentAliveDeps = {}): () => bo
     if (ppid !== originalPpid) return false;
     if (ppid === 0 || ppid === 1) return false;
 
+    // Grandparent orphan check (#311): npm-exec wrappers stay alive past the
+    // session owner. If our grandparent is now PID 1 but wasn't at startup,
+    // the wrapping chain is orphaned and we should shut down.
     if (!Number.isNaN(originalGrandparentPpid) && originalGrandparentPpid > 1) {
       if (readGp() === 1) return false;
     }
@@ -103,8 +116,21 @@ export function startLifecycleGuard(opts: LifecycleGuardOptions): () => void {
   if (process.platform !== "win32") signals.push("SIGHUP");
   for (const sig of signals) process.on(sig, shutdown);
 
-  // Treat stdin EOF as an immediate parent-liveness probe, not as a shutdown
-  // signal by itself. This preserves orphan cleanup without spurious MCP closes.
+  // P0: Stdin-EOF assist (#311/#388). The vendored MCP SDK's
+  // StdioServerTransport only registers 'data' / 'error' listeners — not
+  // 'end' — so when the parent (e.g. Claude Code) dies abruptly without
+  // sending SIGTERM, the server keeps reading from a half-closed pipe and
+  // CPU-spins until the 30 s ppid poll catches up. Observed in #388 with
+  // single processes accumulating ~80 h of CPU time before SIGKILL.
+  //
+  // We deliberately DO NOT call shutdown() unconditionally on 'end' — that
+  // is exactly the false-positive behavior #236 tore out. Instead we run
+  // the same isParentAlive() check the periodic timer uses, just earlier.
+  // If the parent is alive, this is a no-op and the existing #236
+  // regression test still passes; if the parent is gone, we collapse the
+  // 30 s detection window to ~0.
+  //
+  // Skipped on TTY (OpenCode ts-plugin) where stdin is not the MCP channel.
   const onStdinEnd = () => {
     if (!check()) shutdown();
   };

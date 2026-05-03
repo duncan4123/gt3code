@@ -2,7 +2,7 @@
 import "../suppress-stderr.mjs";
 import "../ensure-deps.mjs";
 /**
- * Cursor sessionStart hook for context-mode-doltlite.
+ * Cursor sessionStart hook for context-mode.
  */
 
 import { createRoutingBlock } from "../routing-block.mjs";
@@ -17,6 +17,7 @@ import {
 } from "../session-directive.mjs";
 import {
   readStdin,
+  parseStdin,
   getSessionId,
   getSessionDBPath,
   getSessionEventsPath,
@@ -24,19 +25,19 @@ import {
   getInputProjectDir,
   CURSOR_OPTS,
 } from "../session-helpers.mjs";
-import { join } from "node:path";
 import { unlinkSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import { createSessionLoaders } from "../session-loaders.mjs";
 
 const HOOK_DIR = fileURLToPath(new URL(".", import.meta.url));
-const PKG_SESSION = join(HOOK_DIR, "..", "..", "build", "session");
+const { loadSessionDB } = createSessionLoaders(HOOK_DIR);
 const OPTS = CURSOR_OPTS;
 
 let additionalContext = ROUTING_BLOCK;
 
 try {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  const input = parseStdin(raw);
   const source = input.source ?? input.trigger ?? "startup";
   const projectDir = getInputProjectDir(input, CURSOR_OPTS);
 
@@ -45,7 +46,7 @@ try {
   }
 
   if (source === "compact" || source === "resume") {
-    const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
+    const { SessionDB } = await loadSessionDB();
     const dbPath = getSessionDBPath(OPTS);
     const db = new SessionDB({ dbPath });
 
@@ -60,7 +61,10 @@ try {
     }
 
     // Filter events to the session being resumed/compacted. Falling back to
-    // latest events can leak data from another session that started later.
+    // getLatestSessionEvents(db) for resume leaks events from any other
+    // session whose session_meta.started_at is more recent — observed
+    // cross-session bleed when a different session started after this one
+    // and before the resume.
     const sessionId = getSessionId(input, OPTS);
     const events = sessionId ? getSessionEvents(db, sessionId) : [];
     if (events.length > 0) {
@@ -70,7 +74,7 @@ try {
 
     db.close();
   } else if (source === "startup") {
-    const { SessionDB } = await import(pathToFileURL(join(PKG_SESSION, "db.js")).href);
+    const { SessionDB } = await loadSessionDB();
     const dbPath = getSessionDBPath(OPTS);
     const db = new SessionDB({ dbPath });
     try { unlinkSync(getSessionEventsPath(OPTS)); } catch { /* no stale file */ }

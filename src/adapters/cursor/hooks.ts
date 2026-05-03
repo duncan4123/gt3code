@@ -83,5 +83,5 @@ export function isContextModeHook(
 
 /** Build the CLI dispatcher command for a Cursor hook type. */
 export function buildHookCommand(hookType: HookType): string {
-  return `context-mode hook cursor ${hookType.toLowerCase()}`;
+  return `context-mode-doltlite hook cursor ${hookType.toLowerCase()}`;
 }

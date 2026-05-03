@@ -18,21 +18,22 @@
  *   - CLI hooks: https://kiro.dev/docs/cli/custom-agents/configuration-reference#hooks-field
  */
 
-import { createHash } from "node:crypto";
 import {
   readFileSync,
   writeFileSync,
   mkdirSync,
-  copyFileSync,
   accessSync,
   constants,
 } from "node:fs";
-import { resolve, join, dirname } from "node:path";
+import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
+import { BaseAdapter } from "../base.js";
+
 import {
   HOOK_TYPES as KIRO_HOOK_TYPES,
+  PRE_TOOL_USE_MATCHER_PATTERN as KIRO_PRE_TOOL_USE_MATCHER_PATTERN,
   buildHookCommand as buildKiroHookCommand,
   isContextModeHook as isKiroContextModeHook,
 } from "./hooks.js";
@@ -69,7 +70,11 @@ interface KiroCLIHookInput {
 // Adapter implementation
 // ─────────────────────────────────────────────────────────
 
-export class KiroAdapter implements HookAdapter {
+export class KiroAdapter extends BaseAdapter implements HookAdapter {
+  constructor() {
+    super([".kiro"]);
+  }
+
   readonly name = "Kiro";
   readonly paradigm: HookParadigm = "json-stdio";
 
@@ -152,26 +157,18 @@ export class KiroAdapter implements HookAdapter {
     return resolve(homedir(), ".kiro", "settings", "mcp.json");
   }
 
-  getSessionDir(): string {
-    const dir = join(homedir(), ".kiro", "context-mode", "sessions");
-    mkdirSync(dir, { recursive: true });
-    return dir;
+  /**
+   * Kiro stores per-project context under .kiro/ (steering files, etc).
+   * Auto-memory + rule detection use this project-relative dir, returned as
+   * an absolute path resolved against `projectDir` (or `process.cwd()`).
+   * (Settings/MCP config still live under ~/.kiro/.)
+   */
+  getConfigDir(projectDir?: string): string {
+    return resolve(projectDir ?? process.cwd(), ".kiro");
   }
 
-  getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
-    return join(this.getSessionDir(), `${hash}.db`);
-  }
-
-  getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
-    return join(this.getSessionDir(), `${hash}-events.md`);
+  getInstructionFiles(): string[] {
+    return ["KIRO.md"];
   }
 
   generateHookConfig(pluginRoot: string): HookRegistration {
@@ -179,7 +176,7 @@ export class KiroAdapter implements HookAdapter {
     // Note: This generates the entries for agent config files
     return {
       [KIRO_HOOK_TYPES.PRE_TOOL_USE]: [{
-        matcher: "*",
+        matcher: KIRO_PRE_TOOL_USE_MATCHER_PATTERN,
         hooks: [{ type: "command", command: buildKiroHookCommand(KIRO_HOOK_TYPES.PRE_TOOL_USE, pluginRoot) }],
       }],
       [KIRO_HOOK_TYPES.POST_TOOL_USE]: [{
@@ -324,7 +321,7 @@ export class KiroAdapter implements HookAdapter {
       const preToolUseEntries = (hooks[KIRO_HOOK_TYPES.PRE_TOOL_USE] ?? []) as Array<Record<string, unknown>>;
       if (!preToolUseEntries.some(e => isKiroContextModeHook(e as { command?: string }, KIRO_HOOK_TYPES.PRE_TOOL_USE))) {
         preToolUseEntries.push({
-          matcher: "*",
+          matcher: KIRO_PRE_TOOL_USE_MATCHER_PATTERN,
           command: buildKiroHookCommand(KIRO_HOOK_TYPES.PRE_TOOL_USE, pluginRoot),
         });
         hooks[KIRO_HOOK_TYPES.PRE_TOOL_USE] = preToolUseEntries;
@@ -349,18 +346,6 @@ export class KiroAdapter implements HookAdapter {
     }
 
     return changes;
-  }
-
-  backupSettings(): string | null {
-    const settingsPath = this.getSettingsPath();
-    try {
-      accessSync(settingsPath, constants.R_OK);
-      const backupPath = settingsPath + ".bak";
-      copyFileSync(settingsPath, backupPath);
-      return backupPath;
-    } catch {
-      return null;
-    }
   }
 
   setHookPermissions(_pluginRoot: string): string[] {

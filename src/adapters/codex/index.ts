@@ -9,39 +9,35 @@
  *   - Config: ~/.codex/hooks.json + ~/.codex/config.toml (TOML for MCP/features)
  *   - Session dir: ~/.codex/context-mode/sessions/
  *
- * IMPORTANT: Hook dispatch is NOT yet active in Codex CLI (v0.118.0).
- * codex_hooks feature flag is Stage::UnderDevelopment — hooks are implemented
- * in codex-rs/hooks/ but not wired into the tool execution pipeline.
- * Our adapter is ready; it will work once Codex enables dispatch.
- * Track: https://github.com/openai/codex/issues/16685
+ * Hook dispatch is stable in Codex CLI. PreToolUse deny decisions work,
+ * while input rewriting remains blocked on upstream updatedInput support.
+ * Track: https://github.com/openai/codex/issues/18491
  */
 
-import { createHash } from "node:crypto";
 import {
   readFileSync,
-  mkdirSync,
-  copyFileSync,
-  accessSync,
-  constants,
 } from "node:fs";
-import { resolve, join, dirname } from "node:path";
+import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
-import type {
-  HookAdapter,
-  HookParadigm,
-  PlatformCapabilities,
-  DiagnosticResult,
-  PreToolUseEvent,
-  PostToolUseEvent,
-  PreCompactEvent,
-  SessionStartEvent,
-  PreToolUseResponse,
-  PostToolUseResponse,
-  PreCompactResponse,
-  SessionStartResponse,
-  HookRegistration,
+import { BaseAdapter } from "../base.js";
+
+import {
+  buildNodeCommand,
+  type HookAdapter,
+  type HookParadigm,
+  type PlatformCapabilities,
+  type DiagnosticResult,
+  type PreToolUseEvent,
+  type PostToolUseEvent,
+  type PreCompactEvent,
+  type SessionStartEvent,
+  type PreToolUseResponse,
+  type PostToolUseResponse,
+  type PreCompactResponse,
+  type SessionStartResponse,
+  type HookRegistration,
 } from "../types.js";
 
 // ─────────────────────────────────────────────────────────
@@ -67,7 +63,11 @@ interface CodexHookInput {
 // Adapter implementation
 // ─────────────────────────────────────────────────────────
 
-export class CodexAdapter implements HookAdapter {
+export class CodexAdapter extends BaseAdapter implements HookAdapter {
+  constructor() {
+    super([".codex"]);
+  }
+
   readonly name = "Codex CLI";
   readonly paradigm: HookParadigm = "json-stdio";
 
@@ -89,7 +89,7 @@ export class CodexAdapter implements HookAdapter {
       toolName: input.tool_name ?? "",
       toolInput: input.tool_input ?? {},
       sessionId: this.extractSessionId(input),
-      projectDir: input.cwd,
+      projectDir: this.getProjectDir(input),
       raw,
     };
   }
@@ -101,7 +101,7 @@ export class CodexAdapter implements HookAdapter {
       toolInput: input.tool_input ?? {},
       toolOutput: input.tool_response,
       sessionId: this.extractSessionId(input),
-      projectDir: input.cwd,
+      projectDir: this.getProjectDir(input),
       raw,
     };
   }
@@ -110,7 +110,7 @@ export class CodexAdapter implements HookAdapter {
     const input = raw as CodexHookInput;
     return {
       sessionId: this.extractSessionId(input),
-      projectDir: input.cwd,
+      projectDir: this.getProjectDir(input),
       raw,
     };
   }
@@ -137,7 +137,7 @@ export class CodexAdapter implements HookAdapter {
     return {
       sessionId: this.extractSessionId(input),
       source,
-      projectDir: input.cwd,
+      projectDir: this.getProjectDir(input),
       raw,
     };
   }
@@ -207,37 +207,25 @@ export class CodexAdapter implements HookAdapter {
     return resolve(homedir(), ".codex", "config.toml");
   }
 
-  getSessionDir(): string {
-    const dir = join(homedir(), ".codex", "context-mode", "sessions");
-    mkdirSync(dir, { recursive: true });
-    return dir;
+  getInstructionFiles(): string[] {
+    // Codex CLI honors AGENTS.md plus an optional override file.
+    return ["AGENTS.md", "AGENTS.override.md"];
   }
 
-  getSessionDBPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
-    return join(this.getSessionDir(), `${hash}.db`);
-  }
-
-  getSessionEventsPath(projectDir: string): string {
-    const hash = createHash("sha256")
-      .update(projectDir)
-      .digest("hex")
-      .slice(0, 16);
-    return join(this.getSessionDir(), `${hash}-events.md`);
+  getMemoryDir(): string {
+    // Codex uses "memories" (plural), not the default "memory".
+    return resolve(homedir(), ".codex", "memories");
   }
 
   generateHookConfig(pluginRoot: string): HookRegistration {
     return {
       PreToolUse: [
         {
-          matcher: "",
+          matcher: "local_shell|shell|shell_command|exec_command|container.exec|Bash|Shell|grep_files|mcp__plugin_context-mode_context-mode-doltlite__ctx_execute|mcp__plugin_context-mode_context-mode-doltlite__ctx_execute_file|mcp__plugin_context-mode_context-mode-doltlite__ctx_batch_execute",
           hooks: [
             {
               type: "command",
-              command: `node ${pluginRoot}/hooks/pretooluse.mjs`,
+              command: buildNodeCommand(`${pluginRoot}/hooks/pretooluse.mjs`),
             },
           ],
         },
@@ -248,7 +236,7 @@ export class CodexAdapter implements HookAdapter {
           hooks: [
             {
               type: "command",
-              command: `node ${pluginRoot}/hooks/posttooluse.mjs`,
+              command: buildNodeCommand(`${pluginRoot}/hooks/posttooluse.mjs`),
             },
           ],
         },
@@ -259,7 +247,29 @@ export class CodexAdapter implements HookAdapter {
           hooks: [
             {
               type: "command",
-              command: `node ${pluginRoot}/hooks/sessionstart.mjs`,
+              command: buildNodeCommand(`${pluginRoot}/hooks/sessionstart.mjs`),
+            },
+          ],
+        },
+      ],
+      UserPromptSubmit: [
+        {
+          matcher: "",
+          hooks: [
+            {
+              type: "command",
+              command: buildNodeCommand(`${pluginRoot}/hooks/codex/userpromptsubmit.mjs`),
+            },
+          ],
+        },
+      ],
+      Stop: [
+        {
+          matcher: "",
+          hooks: [
+            {
+              type: "command",
+              command: buildNodeCommand(`${pluginRoot}/hooks/codex/stop.mjs`),
             },
           ],
         },
@@ -292,9 +302,9 @@ export class CodexAdapter implements HookAdapter {
     return [
       {
         check: "Hook support",
-        status: "warn",
+        status: "pass",
         message:
-          "Codex CLI hooks are implemented but dispatch is not yet active (Stage::UnderDevelopment, v0.118.0). Enable flag: [features] codex_hooks = true in ~/.codex/config.toml. Track: openai/codex#16685",
+          "Codex CLI hooks are stable. Configure ~/.codex/hooks.json for PreToolUse, PostToolUse, SessionStart, UserPromptSubmit, and Stop.",
       },
     ];
   }
@@ -352,17 +362,7 @@ export class CodexAdapter implements HookAdapter {
     return [];
   }
 
-  backupSettings(): string | null {
-    const settingsPath = this.getSettingsPath();
-    try {
-      accessSync(settingsPath, constants.R_OK);
-      const backupPath = settingsPath + ".bak";
-      copyFileSync(settingsPath, backupPath);
-      return backupPath;
-    } catch {
-      return null;
-    }
-  }
+
 
   setHookPermissions(_pluginRoot: string): string[] {
     // Hook permissions are set during plugin install
@@ -392,6 +392,17 @@ export class CodexAdapter implements HookAdapter {
   }
 
   // ── Internal helpers ───────────────────────────────────
+
+  /**
+   * Resolve the project directory for a Codex hook input.
+   * Priority: input.cwd > CODEX_PROJECT_DIR env > process.cwd().
+   * Mirrors the cursor / opencode pattern so downstream hooks always
+   * receive a defined projectDir even under worktrees or when the
+   * platform omits cwd from the wire payload.
+   */
+  private getProjectDir(input: CodexHookInput): string {
+    return input.cwd ?? process.env.CODEX_PROJECT_DIR ?? process.cwd();
+  }
 
   /**
    * Extract session ID from Codex CLI hook input.
