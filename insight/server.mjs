@@ -285,7 +285,7 @@ function apiOverview() {
     const db = openDB(f.path);
     if (!db) continue;
     try {
-      totalSessions += safeGet(db, "SELECT COUNT(*) as c FROM session_meta")?.c || 0;
+      totalSessions += safeGet(db, "SELECT COUNT(*) as c FROM session_meta WHERE event_count > 0")?.c || 0;
       totalEvents += safeGet(db, "SELECT COUNT(*) as c FROM session_events")?.c || 0;
     } finally { db.close(); }
   }
@@ -380,7 +380,9 @@ function apiSessionDBs() {
     try {
       const sessions = safeAll(db,
         `SELECT session_id, project_dir, started_at, last_event_at, event_count, compact_count
-         FROM session_meta ORDER BY started_at DESC`);
+         FROM session_meta
+         WHERE event_count > 0
+         ORDER BY started_at DESC`);
       return {
         hash: f.name.replace(".db",""), size: formatBytes(f.size), sizeBytes: f.size,
         sessions: sessions.map(s => ({ id: s.session_id, projectDir: s.project_dir,
