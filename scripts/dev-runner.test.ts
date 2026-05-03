@@ -64,6 +64,10 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         });
 
         assert.equal(env.T3CODE_HOME, path.resolve(NodeOS.homedir(), ".t3"));
+        assert.equal(env.GC_CITY_PATH?.length ? "set" : "unset", "set");
+        assert.equal(env.GC_BIN?.length ? "set" : "unset", "set");
+        assert.equal(env.BD_BIN?.length ? "set" : "unset", "set");
+        assert.equal(env.T3CODE_GASCITY_HOME?.length ? "set" : "unset", "set");
       }),
     );
 

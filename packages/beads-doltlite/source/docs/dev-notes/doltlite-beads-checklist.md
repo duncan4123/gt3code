@@ -72,7 +72,7 @@ Expected state:
   `dolt_mode=embedded`.
 - 2026-05-02: `gc convoy create` can still fail after metadata repair if the
   doltlite store config lacks `issue_prefix`. Fresh `bd init --backend
-  doltlite --prefix <prefix>` writes the prefix into the store config; writing
+doltlite --prefix <prefix>` writes the prefix into the store config; writing
   `.beads/config.yaml` is only a compatibility mirror. Gas City and the T3Code
   runner now use that `bd init` parity operation for HQ and every configured
   rig store, with `--skip-agents --skip-hooks --non-interactive --quiet`.

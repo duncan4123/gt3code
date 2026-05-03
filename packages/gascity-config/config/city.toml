@@ -37,29 +37,29 @@ includes = ["packs/gastown"]
 [[rigs]]
 name = "context-mode"
 prefix = "ccm"
-suspended = true
+suspended = false
 includes = ["packs/gastown"]
-
 
 [[rigs.overrides]]
 agent = "convoymaster"
-suspended = true
+suspended = false
 
 [[rigs.overrides]]
 agent = "crew"
-suspended = true
+suspended = false
 
 [[rigs.overrides]]
 agent = "polecat"
-suspended = true
+suspended = false
 
 [[rigs.overrides]]
 agent = "refinery"
-suspended = true
+suspended = false
 
 [[rigs.overrides]]
 agent = "witness"
-suspended = true
+suspended = false
+
 [patches]
 
 [[patches.agent]]
@@ -113,7 +113,7 @@ wake_mode = "resume"
 
 [[patches.named_session]]
 template = "mayor"
-mode = "on_demand"
+mode = "always"
 
 [[patches.named_session]]
 template = "deacon"
@@ -144,7 +144,26 @@ restart_window = "1h"
 shutdown_timeout = "5s"
 
 [orders]
-skip = ["spawn-storm-detect", "orphan-sweep", "cross-rig-deps", "gate-sweep", "wisp-compact", "prune-branches", "mol-dog-jsonl", "mol-dog-reaper", "doltlite-compact", "digest-generate", "dolt-health", "dolt-remotes-patrol", "mol-dog-stale-db", "mol-dog-phantom-db", "mol-dog-compactor", "mol-dog-backup", "mol-dog-doctor", "beads-health"]
+skip = [
+  "spawn-storm-detect",
+  "orphan-sweep",
+  "cross-rig-deps",
+  "gate-sweep",
+  "wisp-compact",
+  "prune-branches",
+  "mol-dog-jsonl",
+  "mol-dog-reaper",
+  "doltlite-compact",
+  "digest-generate",
+  "dolt-health",
+  "dolt-remotes-patrol",
+  "mol-dog-stale-db",
+  "mol-dog-phantom-db",
+  "mol-dog-compactor",
+  "mol-dog-backup",
+  "mol-dog-doctor",
+  "beads-health",
+]
 
 [api]
 port = 8372

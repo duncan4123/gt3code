@@ -45,6 +45,45 @@ Docs:
 
 - Codex App Server docs: https://developers.openai.com/codex/sdk/#app-server
 
+## Bundled Gas City Config
+
+Bundled Gas City config lives under `packages/gascity-config/config`.
+
+Key files:
+
+- `city.toml`: live city entrypoint used by bundled T3Code development runs.
+- `pack.toml`: root pack with bundled provider defaults and top-level patches.
+- `packs/gastown/pack.toml`: Gastown roles, formulas, named sessions, includes.
+- `packs/maintenance/pack.toml`: shared infrastructure included by Gastown.
+- `.gc/site.toml`: machine-local rig path bindings, not packaged city behavior.
+
+Important semantics:
+
+- `[[patches.agent]].dir` is config scoping for city vs rig patches.
+- `work_dir` is runtime working-directory configuration for an agent.
+- Do not confuse `dir` with `cwd`/`workdir`.
+
+## GC Session Env Boundary
+
+T3Code surfaces Gas City session metadata in the sidebar, including `GC_*`
+values. That does not guarantee every tool shell inherits the same env.
+
+Rules:
+
+- Sidebar GC context describes the provider session.
+- Tool shells may run in separate child-process environments.
+- Empty `GC_*` in a shell does not prove GC session identity is missing.
+- When running `gc`/`bd` commands from tools, pass `GC_ALIAS`,
+  `GC_SESSION_ID`, `GC_SESSION_NAME`, and `GC_SESSION_ORIGIN` explicitly if the
+  command depends on them.
+
+When debugging:
+
+- Use sidebar/session metadata as identity truth.
+- Use server/runtime code to verify env forwarding boundaries.
+- Do not assume `gc prime` exports shell variables; it emits agent prompt
+  content.
+
 ## Reference Repos
 
 - Open-source Codex repo: https://github.com/openai/codex

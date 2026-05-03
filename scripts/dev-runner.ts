@@ -4,14 +4,11 @@ import * as NodeOS from "node:os";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import {
-  getBundledGascityConfigLayout,
-  getDefaultGascityRuntimeRoot,
-} from "../packages/gascity-config/src/index.ts";
 import { NetService } from "@t3tools/shared/Net";
 import { Config, Data, Effect, Hash, Layer, Logger, Option, Path, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import { ChildProcess } from "effect/unstable/process";
+import { createBundledGascityProcessEnv } from "./lib/bundled-gascity-env.ts";
 
 const BASE_SERVER_PORT = 3773;
 const BASE_WEB_PORT = 5733;
@@ -19,10 +16,6 @@ const MAX_HASH_OFFSET = 3000;
 const MAX_PORT = 65535;
 const DESKTOP_DEV_LOOPBACK_HOST = "127.0.0.1";
 const DEV_PORT_PROBE_HOSTS = ["127.0.0.1", "0.0.0.0", "::1", "::"] as const;
-const DEFAULT_GASCITY_API_URL = "http://127.0.0.1:8372";
-const DEFAULT_T3CODE_GASCITY_HOME = getDefaultGascityRuntimeRoot();
-const DEFAULT_GC_CITY_PATH = getBundledGascityConfigLayout().rootDir;
-
 export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) =>
   path.join(NodeOS.homedir(), ".t3"),
 );
@@ -153,25 +146,14 @@ export function createDevRunnerEnv({
   return Effect.gen(function* () {
     const serverPort = port ?? BASE_SERVER_PORT + serverOffset;
     const webPort = BASE_WEB_PORT + webOffset;
-    const resolvedBaseDir = yield* resolveBaseDir(t3Home);
     const path = yield* Path.Path;
     const isDesktopMode = mode === "dev:desktop";
-    const gascityHome = baseEnv.T3CODE_GASCITY_HOME?.trim() || DEFAULT_T3CODE_GASCITY_HOME;
+    const output = yield* createBundledGascityProcessEnv({ baseEnv, t3Home });
 
-    const output: NodeJS.ProcessEnv = {
-      ...baseEnv,
-      PORT: String(webPort),
-      VITE_DEV_SERVER_URL:
-        devUrl?.toString() ??
-        `http://${isDesktopMode ? DESKTOP_DEV_LOOPBACK_HOST : "localhost"}:${webPort}`,
-      T3CODE_HOME: resolvedBaseDir,
-      T3CODE_GASCITY_HOME: gascityHome,
-      GC_API_URL: baseEnv.GC_API_URL ?? DEFAULT_GASCITY_API_URL,
-      GC_BIN:
-        baseEnv.GC_BIN ??
-        path.join(gascityHome, "bin", process.platform === "win32" ? "gc.exe" : "gc"),
-      GC_CITY_PATH: baseEnv.GC_CITY_PATH ?? baseEnv.GC_CITY ?? DEFAULT_GC_CITY_PATH,
-    };
+    output.PORT = String(webPort);
+    output.VITE_DEV_SERVER_URL =
+      devUrl?.toString() ??
+      `http://${isDesktopMode ? DESKTOP_DEV_LOOPBACK_HOST : "localhost"}:${webPort}`;
 
     if (!isDesktopMode) {
       output.T3CODE_PORT = String(serverPort);
