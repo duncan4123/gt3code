@@ -78,6 +78,7 @@ function resolveDoltliteBuildDir() {
       : undefined,
     path.join(packageRoot, "doltlite", "build"),
     path.join(packageRoot, "..", "doltlite", "build"),
+    path.join(packageRoot, "..", "..", "..", "doltlite", "build"),
   ].filter(Boolean);
   for (const candidate of candidates) {
     const resolved = path.resolve(candidate);
