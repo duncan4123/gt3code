@@ -74,3 +74,35 @@ func TestBuildStartupEnvelope_NamedSessionPublishesQualifiedTemplateIdentity(t *
 		t.Fatalf("gc.template = %#v, want t3code/gastown.crew", got)
 	}
 }
+
+func TestBuildStartupEnvelope_FreshWakeDisablesThreadReuse(t *testing.T) {
+	tp := TemplateParams{
+		TemplateName:             "context-mode/crew",
+		InstanceName:             "context-mode/crew",
+		SessionName:              "context-mode--crew-mcp",
+		EffectiveSessionProvider: "t3bridge",
+		WakeMode:                 "fresh",
+		WorkDir:                  "/home/ubuntu/.t3/worktrees/gascity/context-mode/crew/crew-mcp",
+		Command:                  "codex",
+		Env: map[string]string{
+			"GC_CITY_PATH":    "/data/projects/t3code/packages/gascity-config/config",
+			"GC_PROVIDER":     "codex",
+			"GC_AGENT":        "context-mode/crew-mcp",
+			"GC_TEMPLATE":     "context-mode/crew",
+			"GC_SESSION_NAME": "context-mode--crew-mcp",
+		},
+	}
+
+	raw := buildStartupEnvelope(tp, "prime")
+	var envelope map[string]any
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatalf("unmarshal envelope: %v", err)
+	}
+	resume, ok := envelope["resume"].(map[string]any)
+	if !ok {
+		t.Fatalf("resume section missing: %#v", envelope["resume"])
+	}
+	if got := resume["allowThreadReuse"]; got != false {
+		t.Fatalf("resume.allowThreadReuse = %#v, want false", got)
+	}
+}

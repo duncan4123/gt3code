@@ -1548,7 +1548,12 @@ func deriveThreadTitle(name string, envelope StartupEnvelope) string {
 	return name + " · " + shortAgent
 }
 
-func deriveProjectWorkspaceRoot(workDir string, envelope StartupEnvelope) string {
+func deriveProjectWorkspaceRoot(workDir string, envelope StartupEnvelope, provider string) string {
+	if strings.EqualFold(strings.TrimSpace(provider), "codex") {
+		if root := strings.TrimSpace(workDir); root != "" {
+			return root
+		}
+	}
 	if root := strings.TrimSpace(envelope.GC.RigPath); root != "" {
 		return root
 	}
@@ -2114,7 +2119,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	providerName, modelName := resolveProviderModel(cfg, envelope)
 	openCodeAgent, openCodeVariant := resolveOpenCodeModelOptions(cfg)
 	fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) resolved provider=%s model=%s opencode_agent=%s workdir=%s projectRoot=%s agent=%s template=%s\n", //nolint:errcheck
-		name, providerName, modelName, openCodeAgent, cfg.WorkDir, deriveProjectWorkspaceRoot(cfg.WorkDir, envelope), envelope.GC.Agent, envelope.GC.Template)
+		name, providerName, modelName, openCodeAgent, cfg.WorkDir, deriveProjectWorkspaceRoot(cfg.WorkDir, envelope, providerName), envelope.GC.Agent, envelope.GC.Template)
 	if envelope.Runtime.Provider == "" {
 		envelope.Runtime.Provider = providerName
 	}
@@ -2184,7 +2189,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	existingBinding := snapshotThreadBinding(existingThread)
 
 	threadTitle := deriveThreadTitle(name, envelope)
-	projectWorkspaceRoot := deriveProjectWorkspaceRoot(cfg.WorkDir, envelope)
+	projectWorkspaceRoot := deriveProjectWorkspaceRoot(cfg.WorkDir, envelope, providerName)
 	projectTitle := deriveProjectTitle(name, projectWorkspaceRoot, envelope)
 
 	projectID := ""

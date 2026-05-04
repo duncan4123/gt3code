@@ -9,9 +9,44 @@ source = "packs/gastown"
 base = "builtin:codex"
 command = "codex"
 ready_delay_ms = 0
+options_schema_merge = "by_key"
 
 [providers.codex.env]
 GC_MODEL = "gpt-5.4"
+
+[[providers.codex.options_schema]]
+key = "model"
+label = "Model"
+type = "select"
+
+  [[providers.codex.options_schema.choices]]
+  value = ""
+  label = "Default"
+
+  [[providers.codex.options_schema.choices]]
+  value = "gpt-5.5"
+  label = "GPT-5.5"
+  flag_args = ["--model", "gpt-5.5"]
+
+  [[providers.codex.options_schema.choices]]
+  value = "gpt-5.4"
+  label = "GPT-5.4"
+  flag_args = ["--model", "gpt-5.4"]
+
+  [[providers.codex.options_schema.choices]]
+  value = "gpt-5.4-mini"
+  label = "GPT-5.4 Mini"
+  flag_args = ["--model", "gpt-5.4-mini"]
+
+  [[providers.codex.options_schema.choices]]
+  value = "o4-mini"
+  label = "o4-mini"
+  flag_args = ["--model", "o4-mini"]
+
+  [[providers.codex.options_schema.choices]]
+  value = "o3"
+  label = "o3"
+  flag_args = ["--model", "o3"]
 
 [providers.kimi-for-coding]
 base = "builtin:opencode"

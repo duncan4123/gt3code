@@ -2,13 +2,26 @@
 suspended = false
 global_fragments = ["command-glossary", "operational-awareness-doltlite"]
 
+[providers]
 [providers.kimi-for-coding]
 base = "builtin:opencode"
-
+ready_delay_ms = 0
 [providers.kimi-for-coding.env]
-GC_PROVIDER = "opencode"
 GC_MODEL = "kimi-for-coding/k2p6"
 GC_OPENCODE_AGENT = "build"
+GC_PROVIDER = "opencode"
+
+[[named_session]]
+name = "crew-mcp"
+template = "crew"
+dir = "context-mode"
+mode = "always"
+
+[[named_session]]
+name = "crew-mcp-fresh"
+template = "crew"
+dir = "context-mode"
+mode = "always"
 
 [[rigs]]
 name = "gascity"
@@ -88,8 +101,8 @@ name = "boot"
 suspended = false
 provider = "kimi-for-coding"
 [patches.agent.option_defaults]
-model = "kimi-for-coding/k2p6"
 agent = "build"
+model = "kimi-for-coding/k2p6"
 
 [[patches.agent]]
 dir = ""
@@ -106,6 +119,11 @@ suspended = false
 
 [[patches.agent]]
 dir = "context-mode"
+name = "crew"
+max_active_sessions = 3
+
+[[patches.agent]]
+dir = "context-mode"
 name = "witness"
 suspended = false
 
@@ -118,6 +136,11 @@ suspended = false
 dir = "beads-doltlite"
 name = "polecat"
 wake_mode = "resume"
+
+[[patches.agent]]
+dir = "context-mode"
+name = "convoymaster"
+suspended = false
 
 [[patches.named_session]]
 template = "mayor"
@@ -152,26 +175,7 @@ restart_window = "1h"
 shutdown_timeout = "5s"
 
 [orders]
-skip = [
-  "spawn-storm-detect",
-  "orphan-sweep",
-  "cross-rig-deps",
-  "gate-sweep",
-  "wisp-compact",
-  "prune-branches",
-  "mol-dog-jsonl",
-  "mol-dog-reaper",
-  "doltlite-compact",
-  "digest-generate",
-  "dolt-health",
-  "dolt-remotes-patrol",
-  "mol-dog-stale-db",
-  "mol-dog-phantom-db",
-  "mol-dog-compactor",
-  "mol-dog-backup",
-  "mol-dog-doctor",
-  "beads-health",
-]
+skip = ["spawn-storm-detect", "orphan-sweep", "cross-rig-deps", "gate-sweep", "wisp-compact", "prune-branches", "mol-dog-jsonl", "mol-dog-reaper", "doltlite-compact", "digest-generate", "dolt-health", "dolt-remotes-patrol", "mol-dog-stale-db", "mol-dog-phantom-db", "mol-dog-compactor", "mol-dog-backup", "mol-dog-doctor", "beads-health"]
 
 [api]
 port = 8372

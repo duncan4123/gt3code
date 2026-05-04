@@ -220,10 +220,19 @@ func effectiveOverlayDirs(cityDirs []string, rigDirs map[string][]string, rigNam
 
 // templateNameFor returns the configuration template name for an agent.
 // For pool instances, this is the original template name (PoolName).
-// For regular agents, it's the qualified name.
+// For regular agents, use the configured agent identity rather than the
+// resolved session identity. Named sessions can have their own identity
+// (for example rig/crew-mcp) while inheriting attachments from a template
+// agent (for example rig/crew); hidden materializer commands must target the
+// configured template so `gc internal ... --agent` can resolve it.
 func templateNameFor(cfgAgent *config.Agent, qualifiedName string) string {
 	if cfgAgent.PoolName != "" {
 		return cfgAgent.PoolName
+	}
+	if cfgAgent != nil {
+		if template := cfgAgent.QualifiedName(); template != "" {
+			return template
+		}
 	}
 	return qualifiedName
 }

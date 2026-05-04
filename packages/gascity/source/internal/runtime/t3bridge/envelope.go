@@ -1,6 +1,9 @@
 package t3bridge
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 type AgentKind string
 
@@ -94,12 +97,12 @@ type Intent struct {
 }
 
 func allowThreadReuse(kind AgentKind, wakeMode string) bool {
+	if strings.EqualFold(strings.TrimSpace(wakeMode), "fresh") {
+		return false
+	}
 	if kind != AgentKindNamed {
 		return false
 	}
-	// Named sessions should keep one durable T3 thread even if the runtime
-	// prefers a fresh process on wake.
-	_ = wakeMode
 	return true
 }
 

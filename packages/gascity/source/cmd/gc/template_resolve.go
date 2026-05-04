@@ -800,6 +800,7 @@ func buildStartupEnvelope(tp TemplateParams, startupPrompt string) json.RawMessa
 	if !templateParamsUseT3Bridge(tp) {
 		return nil
 	}
+	allowThreadReuse := !strings.EqualFold(strings.TrimSpace(tp.WakeMode), "fresh")
 	envelope := map[string]any{
 		"version": 1,
 		"gc": map[string]any{
@@ -857,7 +858,7 @@ func buildStartupEnvelope(tp TemplateParams, startupPrompt string) json.RawMessa
 		},
 		"resume": map[string]any{
 			"policy":                 "match-or-recreate",
-			"allowThreadReuse":       true,
+			"allowThreadReuse":       allowThreadReuse,
 			"requiredThreadProvider": tp.Env["GC_PROVIDER"],
 			"requiredThreadModel":    startupEnvelopeModel(tp),
 		},

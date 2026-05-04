@@ -184,6 +184,9 @@ var builtinProviderSpecs = map[string]BuiltinProviderSpec{
 				Type:  "select",
 				Choices: []BuiltinOptionChoice{
 					{Value: "", Label: "Default"},
+					{Value: "gpt-5.5", Label: "GPT-5.5", FlagArgs: []string{"--model", "gpt-5.5"}},
+					{Value: "gpt-5.4", Label: "GPT-5.4", FlagArgs: []string{"--model", "gpt-5.4"}},
+					{Value: "gpt-5.4-mini", Label: "GPT-5.4 Mini", FlagArgs: []string{"--model", "gpt-5.4-mini"}},
 					{Value: "o3", Label: "o3", FlagArgs: []string{"--model", "o3"}},
 					{Value: "o4-mini", Label: "o4-mini", FlagArgs: []string{"--model", "o4-mini"}},
 				},

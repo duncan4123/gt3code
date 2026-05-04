@@ -3,6 +3,7 @@ GOLANGCI_LINT_VERSION := 2.9.0
 # Detect OS and arch for binary download.
 GOOS   := $(shell go env GOOS)
 GOARCH := $(shell go env GOARCH)
+UNAME  := $(shell uname)
 
 BIN_DIR := $(shell go env GOPATH)/bin
 GOLANGCI_LINT := $(BIN_DIR)/golangci-lint
@@ -10,6 +11,21 @@ GOLANGCI_LINT := $(BIN_DIR)/golangci-lint
 BINARY     := gc
 BUILD_DIR  := bin
 INSTALL_DIR := $(BIN_DIR)
+
+# Gas City must be built with doltlite linked in so `gc` can open CTLD stores
+# directly. Keep this in sync with ../scripts/build.mjs, which is the packaged
+# T3Code build entrypoint.
+DOLTLITE_BUILD_DIR ?= $(abspath ../../doltlite/build)
+ifeq ($(UNAME),Darwin)
+DOLTLITE_LIBRARY := libdoltlite.dylib
+DOLTLITE_RPATH := -Wl,-rpath,@loader_path
+else
+DOLTLITE_LIBRARY := libdoltlite.so
+DOLTLITE_RPATH := -Wl,-rpath,\$$ORIGIN
+endif
+DOLTLITE_CGO_CFLAGS := $(strip $(CGO_CFLAGS) -I$(DOLTLITE_BUILD_DIR))
+DOLTLITE_CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) -L$(DOLTLITE_BUILD_DIR) $(DOLTLITE_RPATH) -ldoltlite -lz)
+DOLTLITE_GOFLAGS := $(strip $(GOFLAGS) -tags=libsqlite3)
 
 # Version metadata injected via ldflags.
 VERSION    := $(shell tag=$$(git describe --tags --exact-match 2>/dev/null || true); if [ -n "$$tag" ]; then printf '%s' "$$tag" | sed 's/^v//'; else echo "dev"; fi)
@@ -24,7 +40,11 @@ LDFLAGS := -X main.version=$(VERSION) \
 
 ## build: compile gc binary with version metadata
 build:
-	go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY) ./cmd/gc
+	@test -f "$(DOLTLITE_BUILD_DIR)/sqlite3.h" || (echo "missing $(DOLTLITE_BUILD_DIR)/sqlite3.h; build doltlite first or set DOLTLITE_BUILD_DIR" && exit 1)
+	@test -f "$(DOLTLITE_BUILD_DIR)/$(DOLTLITE_LIBRARY)" || (echo "missing $(DOLTLITE_BUILD_DIR)/$(DOLTLITE_LIBRARY); build doltlite first or set DOLTLITE_BUILD_DIR" && exit 1)
+	@mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=1 CGO_CFLAGS="$(DOLTLITE_CGO_CFLAGS)" CGO_LDFLAGS="$(DOLTLITE_CGO_LDFLAGS)" GOFLAGS="$(DOLTLITE_GOFLAGS)" go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY) ./cmd/gc
+	@cp "$(DOLTLITE_BUILD_DIR)/$(DOLTLITE_LIBRARY)" "$(BUILD_DIR)/$(DOLTLITE_LIBRARY)"
 ifeq ($(shell uname),Darwin)
 	@codesign -s - -f $(BUILD_DIR)/$(BINARY) 2>/dev/null || true
 	@echo "Signed $(BINARY) for macOS"
