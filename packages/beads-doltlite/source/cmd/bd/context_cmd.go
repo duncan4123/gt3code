@@ -46,7 +46,6 @@ Examples:
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		info := ContextInfo{
-			Backend:   configfile.BackendDolt,
 			BdVersion: Version,
 		}
 
@@ -85,6 +84,7 @@ Examples:
 			cfg = configfile.DefaultConfig()
 		}
 
+		info.Backend = cfg.GetBackend()
 		info.DoltMode = cfg.GetDoltMode()
 		info.Database = cfg.GetDoltDatabase()
 		info.ProjectID = cfg.ProjectID
