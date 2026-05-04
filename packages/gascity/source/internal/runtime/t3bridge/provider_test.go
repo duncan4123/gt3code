@@ -58,6 +58,34 @@ func TestResolveProviderModel_NormalizesClaudeProviderName(t *testing.T) {
 	}
 }
 
+func TestResolveProviderModel_NormalizesKimiProviderName(t *testing.T) {
+	cfg := runtime.Config{
+		Env: map[string]string{
+			"GC_PROVIDER": "kimi-for-coding",
+			"GC_MODEL":    "kimi-for-coding/k2p6",
+		},
+	}
+
+	provider, model := resolveProviderModel(cfg, StartupEnvelope{})
+	if provider != "opencode" {
+		t.Fatalf("provider = %q, want opencode", provider)
+	}
+	if model != "kimi-for-coding/k2p6" {
+		t.Fatalf("model = %q, want kimi-for-coding/k2p6", model)
+	}
+}
+
+func TestT3ModelSelectionIncludesOpenCodeAgentOption(t *testing.T) {
+	got := t3ModelSelection("opencode", "kimi-for-coding/k2p6", "build", "")
+	options, ok := got["options"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("options missing from selection: %#v", got)
+	}
+	if options["agent"] != "build" {
+		t.Fatalf("options.agent = %#v, want build", options["agent"])
+	}
+}
+
 func TestResolveProviderModel_InfersCodexFromGptModelWhenProviderMissing(t *testing.T) {
 	cfg := runtime.Config{
 		Env: map[string]string{
@@ -236,6 +264,43 @@ func TestIsRunning_UsesCachedSnapshotWithinTTL(t *testing.T) {
 	}
 	if calls := server.wsCalls(); calls != 1 {
 		t.Fatalf("ws calls = %d, want 1", calls)
+	}
+}
+
+func TestIsRunning_TreatsBoundThreadWithoutProviderSessionAsRunning(t *testing.T) {
+	resetBridgeAuthCacheForTest(t)
+	oldDefaults := defaultWSURLCandidates
+	defaultWSURLCandidates = nil
+	t.Cleanup(func() {
+		defaultWSURLCandidates = oldDefaults
+	})
+
+	server := newT3BridgeTestServer(t, map[string]interface{}{
+		"threads": []interface{}{
+			map[string]interface{}{
+				"id":        "thread-1",
+				"projectId": "project-1",
+				"customMetadata": map[string]interface{}{
+					"gc.agent":       "mayor",
+					"gc.sessionName": "mayor",
+				},
+			},
+		},
+	})
+	defer server.Close()
+	t.Setenv("T3_BEARER_TOKEN", "test-bearer")
+	t.Setenv("T3_WS_URL", server.wsURL())
+
+	p := &Provider{
+		watchers:     make(map[string]context.CancelFunc),
+		recentStarts: make(map[string]time.Time),
+	}
+
+	if !p.IsRunning("mayor") {
+		t.Fatal("IsRunning(bound thread without provider session) = false, want true")
+	}
+	if p.ProcessAlive("mayor", nil) {
+		t.Fatal("ProcessAlive(bound thread without provider session) = true, want false")
 	}
 }
 

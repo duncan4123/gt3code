@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// CachingStore wraps a BdStore with an in-memory cache.
+// CachingStore wraps a bd-backed Store with an in-memory cache.
 // Reads are served from memory when the cache is live. Writes pass
 // through to the backing store and update the cache on success.
 //
@@ -20,9 +20,11 @@ import (
 // reconciler acts as a watchdog and only performs a full scan once the
 // cache has gone stale or degraded.
 //
-// Only wraps BdStore because the event hook path requires dolt/bd.
+// Production callers should wrap bd-backed stores because the event hook path
+// requires bd hooks. DoltliteReadStore is bd-backed: writes still delegate to bd
+// while hot reads use the in-process doltlite connection.
 type CachingStore struct {
-	backing Store // runtime: always *BdStore; tests may use MemStore
+	backing Store // runtime: BdStore or DoltliteReadStore; tests may use MemStore
 
 	mu          sync.RWMutex
 	beads       map[string]Bead
@@ -73,19 +75,19 @@ const (
 	cacheReconcileIntervalLarge  = 120 * time.Second
 )
 
-// NewCachingStore wraps a BdStore with an in-memory read cache.
+// NewCachingStore wraps a bd-backed store with an in-memory read cache.
 // Call Prime() before serving reads, then StartReconciler() for
 // watchdog reconciliation. The onChange callback (optional) is called for
 // each detected external change with event type and bead JSON.
 //
-// Only BdStore is supported because the event hook path (bd hooks ->
-// gc event emit -> event bus -> ApplyEvent) requires dolt infrastructure.
-func NewCachingStore(backing *BdStore, onChange func(eventType, beadID string, payload json.RawMessage)) *CachingStore {
+// NewCachingStore wraps a bd-backed store. The event hook path (bd hooks ->
+// gc event emit -> event bus -> ApplyEvent) requires bd infrastructure.
+func NewCachingStore(backing Store, onChange func(eventType, beadID string, payload json.RawMessage)) *CachingStore {
 	return newCachingStore(backing, onChange)
 }
 
 // NewCachingStoreForTest wraps any Store for testing. Production code
-// must use NewCachingStore with a *BdStore.
+// must use NewCachingStore with a bd-backed store.
 func NewCachingStoreForTest(backing Store, onChange func(eventType, beadID string, payload json.RawMessage)) *CachingStore {
 	return newCachingStore(backing, onChange)
 }

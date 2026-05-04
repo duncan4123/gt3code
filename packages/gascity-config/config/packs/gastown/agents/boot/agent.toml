@@ -1,6 +1,6 @@
 scope = "city"
-provider = "opencode"
-option_defaults = { model = "kimi-for-coding/k2p6" }
+provider = "kimi-for-coding"
+option_defaults = { model = "kimi-for-coding/k2p6", agent = "build" }
 wake_mode = "fresh"
 work_dir = ".gc/agents/boot"
 max_active_sessions = 1

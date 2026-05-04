@@ -1,7 +1,14 @@
 [workspace]
-name = "t3code"
 suspended = false
 global_fragments = ["command-glossary", "operational-awareness-doltlite"]
+
+[providers.kimi-for-coding]
+base = "builtin:opencode"
+
+[providers.kimi-for-coding.env]
+GC_PROVIDER = "opencode"
+GC_MODEL = "kimi-for-coding/k2p6"
+GC_OPENCODE_AGENT = "build"
 
 [[rigs]]
 name = "gascity"
@@ -79,9 +86,10 @@ provider = "codex"
 dir = ""
 name = "boot"
 suspended = false
-provider = "opencode"
+provider = "kimi-for-coding"
 [patches.agent.option_defaults]
 model = "kimi-for-coding/k2p6"
+agent = "build"
 
 [[patches.agent]]
 dir = ""

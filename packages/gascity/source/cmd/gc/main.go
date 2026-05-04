@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gastownhall/gascity/internal/agent"
 	"github.com/gastownhall/gascity/internal/beads"
 	beadsexec "github.com/gastownhall/gascity/internal/beads/exec"
 	"github.com/gastownhall/gascity/internal/citylayout"
@@ -277,9 +276,6 @@ var cliStoreCache struct {
 // agents don't open the store repeatedly. Silently falls back to legacy
 // naming if the store is unavailable.
 func cliSessionName(cityPath, cityName, agentName, sessionTemplate string) string {
-	if cityUsesDoltliteBeadsBackend(cityPath) || statusCityHasDoltliteMetadata(cityPath) {
-		return agent.SessionNameFor(cityName, agentName, sessionTemplate)
-	}
 	cliStoreCache.mu.Lock()
 	if cliStoreCache.path != cityPath {
 		cliStoreCache.store, _ = openCityStoreAt(cityPath)

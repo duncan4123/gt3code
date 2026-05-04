@@ -197,6 +197,75 @@ function RuntimeEnvRows({ rows }: { rows: ReturnType<typeof getRuntimeEnvRows> }
   );
 }
 
+function RuntimeMcpServers({ runtime }: { runtime: GcThreadContextResult["runtime"] | undefined }) {
+  const servers = runtime?.mcpServers ?? [];
+  if (servers.length === 0) {
+    return (
+      <div className="rounded-lg bg-background/60 px-2 py-1.5 text-[12px] leading-snug text-muted-foreground">
+        No projected MCP servers found for this workdir.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      {servers.map((server) => (
+        <div
+          key={`${server.source}:${server.name}`}
+          className="rounded-lg bg-background/60 px-2 py-1.5"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 truncate font-mono text-[12px] text-foreground/90">
+              {server.name}
+            </div>
+            <Badge variant="outline" className="shrink-0">
+              {server.source}
+            </Badge>
+          </div>
+          <div className="mt-1 min-w-0 break-words font-mono text-[10px] leading-snug text-muted-foreground">
+            {server.url ?? [server.command, ...(server.args ?? [])].filter(Boolean).join(" ")}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RuntimeSkills({ runtime }: { runtime: GcThreadContextResult["runtime"] | undefined }) {
+  const skills = runtime?.skills ?? [];
+  if (skills.length === 0) {
+    return (
+      <div className="rounded-lg bg-background/60 px-2 py-1.5 text-[12px] leading-snug text-muted-foreground">
+        No materialized or source skills found for this agent.
+      </div>
+    );
+  }
+  return (
+    <div className="max-h-64 space-y-1 overflow-auto pr-1">
+      {skills.map((skill) => (
+        <div
+          key={`${skill.source}:${skill.path}`}
+          className="rounded-lg bg-background/60 px-2 py-1.5"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 truncate text-[12px] text-foreground/90">{skill.name}</div>
+            <Badge variant={skill.source === "materialized" ? "default" : "outline"}>
+              {skill.source}
+            </Badge>
+          </div>
+          {skill.description && (
+            <div className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-muted-foreground">
+              {skill.description}
+            </div>
+          )}
+          <div className="mt-1 min-w-0 break-words font-mono text-[10px] leading-snug text-muted-foreground/75">
+            {skill.path}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FormulaSteps({
   steps,
 }: {
@@ -251,6 +320,7 @@ const GcContextSidebar = memo(function GcContextSidebar({
   const hookFormula = formula?.name ?? gcMeta.formula ?? bead?.ref;
   const hookMolecule = gcMeta.molecule ?? bead?.metadata?.molecule_id;
   const runtimeEnvRows = useMemo(() => getRuntimeEnvRows(gcMeta.sessionEnv), [gcMeta.sessionEnv]);
+  const runtime = threadContext?.runtime;
   const beadMetadata = bead?.metadata;
   const worktreePath = metadataValue(beadMetadata, ["work_dir", "worktree", "worktree_path"]);
   const sourceBranch = metadataValue(beadMetadata, ["branch", "source_branch", "git_branch"]);
@@ -377,6 +447,16 @@ const GcContextSidebar = memo(function GcContextSidebar({
             GC env forwarded to the provider process. Sensitive values are redacted.
           </div>
           <RuntimeEnvRows rows={runtimeEnvRows} />
+        </SectionCard>
+
+        <SectionCard title="MCP">
+          <ContextRow label="Config" value={runtime?.mcpConfigPath} mono />
+          <RuntimeMcpServers runtime={runtime} />
+        </SectionCard>
+
+        <SectionCard title="Skills">
+          <ContextRow label="Workdir" value={runtime?.workDir} mono />
+          <RuntimeSkills runtime={runtime} />
         </SectionCard>
 
         {(gcMeta.groupKind ||

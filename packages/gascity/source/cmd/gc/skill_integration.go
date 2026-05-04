@@ -60,6 +60,8 @@ func canStage1Materialize(citySessionProvider string, agent *config.Agent) bool 
 //
 //	tmux  → eligible. PreStart runs on the host via tmux/adapter.go
 //	        runPreStart before the tmux session is created.
+//	t3bridge → eligible. PreStart runs on the host before the T3 thread
+//	           is created.
 //	""    → eligible (workspace default maps to tmux).
 //	acp   → ineligible. Session runs in-process; out of scope v0.15.1.
 //	k8s   → ineligible. PreStart runs inside the pod; gc binary and
@@ -92,7 +94,7 @@ func isStage2EligibleSession(citySessionProvider string, agent *config.Agent) bo
 		return false
 	}
 	switch strings.TrimSpace(citySessionProvider) {
-	case "", "tmux":
+	case "", "tmux", "t3bridge":
 		return true
 	default:
 		// subprocess, k8s, acp, fake, fail, hybrid, exec:<script>, ...

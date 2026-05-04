@@ -1063,10 +1063,34 @@ const GcFormulaSchema = Schema.Struct({
   steps: Schema.Array(GcFormulaStepSchema),
 });
 
+const GcRuntimeMcpServerSchema = Schema.Struct({
+  name: Schema.String,
+  command: Schema.optional(Schema.String),
+  args: Schema.optional(Schema.Array(Schema.String)),
+  url: Schema.optional(Schema.String),
+  source: Schema.Literals(["projected", "source"]),
+  path: Schema.optional(Schema.String),
+});
+
+const GcRuntimeSkillSchema = Schema.Struct({
+  name: Schema.String,
+  path: Schema.String,
+  source: Schema.Literals(["materialized", "source"]),
+  description: Schema.optional(Schema.String),
+});
+
+const GcRuntimeDetailsSchema = Schema.Struct({
+  workDir: Schema.optional(Schema.String),
+  mcpConfigPath: Schema.optional(Schema.String),
+  mcpServers: Schema.Array(GcRuntimeMcpServerSchema),
+  skills: Schema.Array(GcRuntimeSkillSchema),
+});
+
 export const GcThreadContextResult = Schema.Struct({
   bead: Schema.NullOr(GcBeadSchema),
   convoy: Schema.NullOr(GcConvoySchema),
   formula: Schema.NullOr(GcFormulaSchema),
+  runtime: Schema.optionalKey(GcRuntimeDetailsSchema),
 });
 export type GcThreadContextResult = typeof GcThreadContextResult.Type;
 

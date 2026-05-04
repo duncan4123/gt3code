@@ -35,6 +35,10 @@ func bdStoreForCity(dir, cityPath string) *beads.BdStore {
 // bdStoreForRig opens a bead store at rigDir using rig-level Dolt config
 // when available, falling back to city-level config. Use this when the rig
 // may have its own Dolt server (e.g., shared from another city).
+//
+// These helpers intentionally return raw BdStore backings. Production readers
+// should normally go through openStoreAtForCity/openCityStoreAt so Doltlite
+// stores can be wrapped with the in-process read path.
 func bdStoreForRig(rigDir, cityPath string, cfg *config.City) *beads.BdStore {
 	return beads.NewBdStore(rigDir, bdCommandRunnerWithManagedRetry(cityPath, func(_ string) map[string]string {
 		env := bdRuntimeEnvForRig(cityPath, cfg, rigDir)

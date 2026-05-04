@@ -128,21 +128,76 @@ func evaluatePendingPools(
 }
 
 func evaluateDefaultPoolDemand(template string, sp scaleParams, store beads.Store) (int, error) {
-	counter, ok := store.(interface {
-		PoolDemandCount(string) (int, error)
-	})
-	if !ok {
+	if store == nil {
 		return evaluatePool(template, sp, "", nil, shellScaleCheck)
 	}
-	count, err := counter.PoolDemandCount(template)
+	if counter, ok := store.(interface {
+		PoolDemandCount(string) (int, error)
+	}); ok {
+		count, err := counter.PoolDemandCount(template)
+		if err != nil {
+			return sp.Min, fmt.Errorf("agent %q: %w", template, err)
+		}
+		return clampPoolDemand(count, sp), nil
+	}
+	count, err := defaultPoolDemandFromStore(template, store)
 	if err != nil {
 		return sp.Min, fmt.Errorf("agent %q: %w", template, err)
 	}
+	return clampPoolDemand(count, sp), nil
+}
+
+func clampPoolDemand(count int, sp scaleParams) int {
 	if count < sp.Min {
-		count = sp.Min
+		return sp.Min
 	}
 	if sp.Max >= 0 && count > sp.Max {
-		count = sp.Max
+		return sp.Max
+	}
+	return count
+}
+
+func defaultPoolDemandFromStore(template string, store beads.Store) (int, error) {
+	template = strings.TrimSpace(template)
+	if template == "" || store == nil {
+		return 0, nil
+	}
+	count := 0
+	ready, err := beads.ReadyLive(store)
+	if err != nil {
+		return count, err
+	}
+	for _, bead := range ready {
+		if strings.TrimSpace(bead.Assignee) == "" && bead.Metadata["gc.routed_to"] == template {
+			count++
+		}
+	}
+	inProgress, err := store.List(beads.ListQuery{
+		Status:   "in_progress",
+		Metadata: map[string]string{"gc.routed_to": template},
+		Live:     true,
+	})
+	if err != nil {
+		return count, err
+	}
+	for _, bead := range inProgress {
+		if strings.TrimSpace(bead.Assignee) == "" {
+			count++
+		}
+	}
+	molecules, err := store.List(beads.ListQuery{
+		Status:   "open",
+		Type:     "molecule",
+		Metadata: map[string]string{"gc.routed_to": template},
+		Live:     true,
+	})
+	if err != nil {
+		return count, err
+	}
+	for _, bead := range molecules {
+		if strings.TrimSpace(bead.Assignee) == "" {
+			count++
+		}
 	}
 	return count, nil
 }
@@ -370,39 +425,6 @@ func buildDesiredStateWithSessionBeads(
 	}
 	if len(assignedWorkBeads) > 0 {
 		fmt.Fprintf(stderr, "namedWorkReady: %d assigned beads, %d named specs, ready=%v\n", len(assignedWorkBeads), len(namedSpecs), namedWorkReady) //nolint:errcheck
-	}
-	for identity, spec := range namedSpecs {
-		if spec.Mode == "always" || namedWorkReady[identity] || !namedSessionAllowsControllerWorkQuery(cityPath, cfg, spec) {
-			continue
-		}
-		// Controller-side work_query demand stays intentionally narrow.
-		// Generic city-scoped named sessions materialize from direct continuity
-		// (canonical bead or explicit assignee demand), while rig-scoped named
-		// sessions still probe here so the controller validates rig-local query
-		// env such as scoped Dolt credentials.
-		queryStore := workQueryStoreForAgent(cityPath, cfg, spec.Agent, store, rigStores)
-		if strings.TrimSpace(spec.Agent.WorkQuery) == "" {
-			if ok, handled := defaultWorkQueryHasReadyWork(cfg, cityPath, cityName, queryStore, bp.sessionBeads, spec.Agent); handled {
-				if ok {
-					namedWorkReady[identity] = true
-				}
-				continue
-			}
-		}
-		wq := spec.Agent.EffectiveWorkQuery()
-		if wq == "" {
-			continue
-		}
-		wq = expandAgentCommandTemplate(cityPath, cityName, spec.Agent, cfg.Rigs, "work_query", wq, stderr)
-		dir := agentCommandDir(cityPath, spec.Agent, cfg.Rigs)
-		probeEnv := controllerQueryRuntimeEnv(cityPath, cfg, spec.Agent)
-		out, err := shellScaleCheck(prefixShellEnv(controllerQueryPrefixEnv(probeEnv), wq), dir, probeEnv)
-		if err != nil {
-			continue
-		}
-		if workQueryHasReadyWork(strings.TrimSpace(out)) {
-			namedWorkReady[identity] = true
-		}
 	}
 	for identity, spec := range namedSpecs {
 		canonicalBead, hasCanonical := findCanonicalNamedSessionBead(bp.sessionBeads, spec)
@@ -1250,16 +1272,6 @@ func agentInSuspendedRig(
 		return false
 	}
 	return suspendedRigPaths[filepath.Clean(rigRootForName(rigName, rigs))]
-}
-
-func namedSessionAllowsControllerWorkQuery(cityPath string, cfg *config.City, spec namedSessionSpec) bool {
-	if cfg == nil || spec.Agent == nil {
-		return false
-	}
-	if spec.Named != nil && strings.TrimSpace(spec.Named.Dir) != "" {
-		return true
-	}
-	return configuredRigName(cityPath, spec.Agent, cfg.Rigs) != ""
 }
 
 // prepareTemplateResolution installs any hook-backed files that must exist

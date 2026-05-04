@@ -22,12 +22,13 @@ import {
 } from "@t3tools/gascity-config";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const projectsRoot = dirname(repoRoot);
 const defaultRuntimeRoot = getDefaultGascityRuntimeRoot();
 const defaultCityRoot = getBundledGascityConfigLayout().rootDir;
 const defaultRigBindings = [
-  { name: "gascity", path: join(repoRoot, "packages", "gascity") },
-  { name: "beads-doltlite", path: join(repoRoot, "packages", "beads-doltlite") },
-  { name: "context-mode", path: join(repoRoot, "packages", "context-mode") },
+  { name: "gascity", path: join(projectsRoot, "gascity") },
+  { name: "beads-doltlite", path: join(projectsRoot, "beads-doltlite") },
+  { name: "context-mode", path: join(projectsRoot, "claude-context-mode") },
 ] as const;
 
 const command = process.argv[2] ?? "help";
@@ -254,11 +255,12 @@ function initializeDoltliteBeadsStore(
   }
 }
 
-function prepareBdInitEnv(
-  binDir: string,
-  env: NodeJS.ProcessEnv,
-): NodeJS.ProcessEnv {
-  const next = { ...env, BEADS_BACKEND: "doltlite", GC_BEADS_BACKEND: "doltlite" };
+function prepareBdInitEnv(binDir: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const next: NodeJS.ProcessEnv = {
+    ...env,
+    BEADS_BACKEND: "doltlite",
+    GC_BEADS_BACKEND: "doltlite",
+  };
   prependPathEnv(next, "PATH", binDir);
   if (process.platform === "linux") {
     next.LD_LIBRARY_PATH = binDir;

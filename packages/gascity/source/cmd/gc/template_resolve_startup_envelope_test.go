@@ -42,20 +42,20 @@ func TestBuildStartupEnvelope_UsesTemplateForGroupingAgent(t *testing.T) {
 	}
 }
 
-func TestBuildStartupEnvelope_NamedSessionPublishesTemplatePatchIdentity(t *testing.T) {
+func TestBuildStartupEnvelope_NamedSessionPublishesQualifiedTemplateIdentity(t *testing.T) {
 	tp := TemplateParams{
-		TemplateName: "crew",
-		InstanceName: "t3code/gastown.crew",
-		Alias:        "t3code/gastown.crew",
-		SessionName:  "t3code--gastown__crew",
+		TemplateName:             "t3code/gastown.crew",
+		InstanceName:             "t3code/gastown.crew",
+		Alias:                    "t3code/gastown.crew",
+		SessionName:              "t3code--gastown__crew",
 		EffectiveSessionProvider: "t3bridge",
-		WorkDir:      "/data/projects/gc/.gc/worktrees/t3code/crew/gastown.crew",
-		Command:      "codex",
+		WorkDir:                  "/data/projects/gc/.gc/worktrees/t3code/crew/gastown.crew",
+		Command:                  "codex",
 		Env: map[string]string{
 			"GC_CITY_PATH":    "/data/projects/gc",
 			"GC_PROVIDER":     "codex",
 			"GC_AGENT":        "t3code/gastown.crew",
-			"GC_TEMPLATE":     "crew",
+			"GC_TEMPLATE":     "t3code/gastown.crew",
 			"GC_SESSION_NAME": "t3code--gastown__crew",
 		},
 	}
@@ -70,7 +70,7 @@ func TestBuildStartupEnvelope_NamedSessionPublishesTemplatePatchIdentity(t *test
 	if !ok {
 		t.Fatalf("gc section missing: %#v", envelope["gc"])
 	}
-	if got := gc["template"]; got != "crew" {
-		t.Fatalf("gc.template = %#v, want crew", got)
+	if got := gc["template"]; got != "t3code/gastown.crew" {
+		t.Fatalf("gc.template = %#v, want t3code/gastown.crew", got)
 	}
 }

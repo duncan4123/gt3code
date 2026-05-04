@@ -462,6 +462,9 @@ func ensureSessionSubmitPoller(cityPath, agentName, sessionName string) error {
 		if err != nil {
 			return err
 		}
+		if isGoTestBinary(exe) {
+			return nil
+		}
 		cmd := exec.Command(exe, "nudge", "poll", "--city", cityPath, "--session", sessionName, agentName)
 		cmd.Env = os.Environ()
 		logFile, err := os.OpenFile(sessionSubmitPollerLogPath(cityPath, sessionName), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
@@ -482,6 +485,10 @@ func ensureSessionSubmitPoller(cityPath, agentName, sessionName string) error {
 		}
 		return cmd.Process.Release()
 	})
+}
+
+func isGoTestBinary(exe string) bool {
+	return strings.HasSuffix(filepath.Base(exe), ".test")
 }
 
 func sessionSubmitPollerPIDPath(cityPath, sessionName string) string {

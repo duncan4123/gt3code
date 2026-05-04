@@ -89,11 +89,12 @@ func newControllerState(
 	return cs
 }
 
-// wrapWithCachingStore wraps a BdStore with a CachingStore that primes
-// and starts a background reconciler. Non-BdStore stores are returned as-is.
+// wrapWithCachingStore wraps bd-backed stores with a CachingStore that primes
+// and starts a background reconciler. Other stores are returned as-is.
 func wrapWithCachingStore(ctx context.Context, store beads.Store, ep events.Provider) beads.Store {
-	bdStore, ok := store.(*beads.BdStore)
-	if !ok {
+	switch store.(type) {
+	case *beads.BdStore, *beads.DoltliteReadStore:
+	default:
 		return store
 	}
 	if ctx == nil {
@@ -113,7 +114,7 @@ func wrapWithCachingStore(ctx context.Context, store beads.Store, ep events.Prov
 			})
 		}
 	}
-	cs := beads.NewCachingStore(bdStore, onChange)
+	cs := beads.NewCachingStore(store, onChange)
 	// Pre-prime active beads synchronously (~1-2s, indexed queries).
 	// Loads open + in_progress beads — enough for the startup path
 	// (adoption, session snapshot, desired state) so the city can
@@ -195,7 +196,11 @@ func (cs *controllerState) openRigStore(provider, rigName, rigPath, prefix strin
 		}
 		return store
 	default: // "bd" or unrecognized
-		return bdStoreForRig(scopeRoot, cs.cityPath, cs.cfg)
+		store := bdStoreForRig(scopeRoot, cs.cityPath, cs.cfg)
+		if direct, err := beads.NewDoltliteReadStore(scopeRoot, store); err == nil {
+			return direct
+		}
+		return store
 	}
 }
 

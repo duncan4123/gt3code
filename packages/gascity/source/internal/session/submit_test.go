@@ -2,7 +2,9 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/gastownhall/gascity/internal/beads"
@@ -393,6 +395,16 @@ func TestSubmitFollowUpQueuesDeferredMessageAndStartsCodexPoller(t *testing.T) {
 	}
 	if pollerCalls != 1 {
 		t.Fatalf("pollerCalls = %d, want 1", pollerCalls)
+	}
+}
+
+func TestEnsureSessionSubmitPollerDoesNotSpawnGoTestBinary(t *testing.T) {
+	dir := t.TempDir()
+	if err := ensureSessionSubmitPoller(dir, "worker", "sess-worker"); err != nil {
+		t.Fatalf("ensureSessionSubmitPoller: %v", err)
+	}
+	if _, err := os.Stat(sessionSubmitPollerPIDPath(dir, "sess-worker")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("poller pid file after test-binary guard = %v, want not exist", err)
 	}
 }
 

@@ -9,7 +9,7 @@ import (
 )
 
 var statusProviderCallTimeout = 50 * time.Millisecond
-var statusProviderBridgeCallTimeout = 10 * time.Second
+var statusProviderBridgeCallTimeout = 250 * time.Millisecond
 var statusProviderDegradeWindow = 30 * time.Second
 
 type statusProvider struct {

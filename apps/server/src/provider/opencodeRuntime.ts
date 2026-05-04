@@ -34,8 +34,10 @@ import { collectStreamAsString } from "./providerSnapshot.ts";
 import { NetService } from "@t3tools/shared/Net";
 
 const OPENCODE_SERVER_READY_PREFIX = "opencode server listening";
-const DEFAULT_OPENCODE_SERVER_TIMEOUT_MS = 5_000;
+const DEFAULT_OPENCODE_SERVER_TIMEOUT_MS = 20_000;
 const DEFAULT_HOSTNAME = "127.0.0.1";
+const OPENCODE_SERVER_HTTP_POLL_INTERVAL_MS = 100;
+const OPENCODE_SERVER_HTTP_POLL_TIMEOUT_MS = 500;
 
 export interface OpenCodeServerProcess {
   readonly url: string;
@@ -149,6 +151,20 @@ function parseServerUrlFromOutput(output: string): string | null {
     return match?.[1] ?? null;
   }
   return null;
+}
+
+async function waitForHttpServer(url: string, timeoutMs: number): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const signal = AbortSignal.timeout(OPENCODE_SERVER_HTTP_POLL_TIMEOUT_MS);
+      await fetch(url, { method: "GET", signal });
+      return url;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, OPENCODE_SERVER_HTTP_POLL_INTERVAL_MS));
+    }
+  }
+  throw new Error(`Timed out waiting for HTTP server at ${url}.`);
 }
 
 export function parseOpenCodeModelSlug(
@@ -327,6 +343,7 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
         ));
       const timeoutMs = input.timeoutMs ?? DEFAULT_OPENCODE_SERVER_TIMEOUT_MS;
       const args = ["serve", `--hostname=${hostname}`, `--port=${port}`];
+      const fallbackServerUrl = `http://${hostname}:${String(port)}`;
 
       const child = yield* spawner
         .spawn(
@@ -375,6 +392,19 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
         Effect.ignore,
         Effect.forkIn(runtimeScope),
       );
+      const httpReadyFiber = yield* Effect.tryPromise({
+        try: () => waitForHttpServer(fallbackServerUrl, timeoutMs),
+        catch: (cause) =>
+          new OpenCodeRuntimeError({
+            operation: "startOpenCodeServerProcess",
+            detail: openCodeRuntimeErrorDetail(cause),
+            cause,
+          }),
+      }).pipe(
+        Effect.flatMap((url) => Deferred.succeed(readyDeferred, url)),
+        Effect.ignore,
+        Effect.forkIn(runtimeScope),
+      );
 
       const exitFiber = yield* child.exitCode.pipe(
         Effect.flatMap((code) =>
@@ -411,6 +441,7 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
       // the caller's `exitCode` effect observable until the scope closes.
       yield* Fiber.interrupt(stdoutFiber).pipe(Effect.ignore);
       yield* Fiber.interrupt(stderrFiber).pipe(Effect.ignore);
+      yield* Fiber.interrupt(httpReadyFiber).pipe(Effect.ignore);
 
       if (Exit.isFailure(readyExit)) {
         yield* Fiber.interrupt(exitFiber).pipe(Effect.ignore);

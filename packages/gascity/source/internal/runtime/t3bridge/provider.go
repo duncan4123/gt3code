@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -915,18 +916,14 @@ func (p *Provider) threadSessionStatus(threadID string) string {
 		return ""
 	}
 
+	threads := snapshotThreads(snapshot)
 	cache := make(map[string]string)
-	for _, raw := range snapshotItems(snapshot, "threads") {
-		thread, _ := raw.(map[string]interface{})
-		if thread == nil {
+	for _, thread := range threads {
+		id, _ := thread["id"].(string)
+		if id == "" {
 			continue
 		}
-		id, _ := thread["id"].(string)
-		session, _ := thread["session"].(map[string]interface{})
-		if session != nil {
-			st, _ := session["status"].(string)
-			cache[id] = st
-		}
+		cache[id] = threadSessionStatus(snapshot, id)
 	}
 
 	p.mu.Lock()
@@ -934,7 +931,10 @@ func (p *Provider) threadSessionStatus(threadID string) string {
 	p.snapshotCacheAt = time.Now()
 	p.mu.Unlock()
 
-	return cache[threadID]
+	if status, ok := cache[threadID]; ok {
+		return status
+	}
+	return "gone"
 }
 
 func (p *Provider) cacheSnapshot(snapshot map[string]interface{}) {
@@ -1046,7 +1046,25 @@ func (p *Provider) rpcUpdateThreadMeta(threadID, branch, worktreePath string) er
 	return err
 }
 
-func (p *Provider) dispatchProjectCreate(projectID, title, workspaceRoot, provider, model string) error {
+func t3ModelSelection(provider, model, agent, variant string) map[string]interface{} {
+	selection := map[string]interface{}{
+		"provider": provider,
+		"model":    model,
+	}
+	if provider == "opencode" && (agent != "" || variant != "") {
+		options := map[string]interface{}{}
+		if agent != "" {
+			options["agent"] = agent
+		}
+		if variant != "" {
+			options["variant"] = variant
+		}
+		selection["options"] = options
+	}
+	return selection
+}
+
+func (p *Provider) dispatchProjectCreate(projectID, title, workspaceRoot, provider, model, agent, variant string) error {
 	command := map[string]interface{}{
 		"type":          "project.create",
 		"commandId":     p.nextCommandID("t3bridge-project"),
@@ -1056,10 +1074,7 @@ func (p *Provider) dispatchProjectCreate(projectID, title, workspaceRoot, provid
 		"createdAt":     time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
 	}
 	if provider != "" || model != "" {
-		command["defaultModelSelection"] = map[string]interface{}{
-			"provider": provider,
-			"model":    model,
-		}
+		command["defaultModelSelection"] = t3ModelSelection(provider, model, agent, variant)
 	}
 	return p.rpcDispatchCommand(command)
 }
@@ -1070,6 +1085,8 @@ func (p *Provider) dispatchThreadCreate(
 	title,
 	provider,
 	model,
+	agent,
+	variant,
 	branch,
 	worktreePath string,
 	customMetadata map[string]interface{},
@@ -1080,7 +1097,7 @@ func (p *Provider) dispatchThreadCreate(
 		"threadId":        threadID,
 		"projectId":       projectID,
 		"title":           title,
-		"modelSelection":  map[string]interface{}{"provider": provider, "model": model},
+		"modelSelection":  t3ModelSelection(provider, model, agent, variant),
 		"runtimeMode":     "full-access",
 		"interactionMode": "default",
 		"branch":          nil,
@@ -1128,15 +1145,12 @@ func (p *Provider) dispatchThreadMeta(threadID string, customMetadata map[string
 	return p.rpcDispatchCommand(command)
 }
 
-func (p *Provider) dispatchThreadModelSelection(threadID, provider, model string) error {
+func (p *Provider) dispatchThreadModelSelection(threadID, provider, model, agent, variant string) error {
 	return p.rpcDispatchCommand(map[string]interface{}{
-		"type":      "thread.meta.update",
-		"commandId": p.nextCommandID("t3bridge-model"),
-		"threadId":  threadID,
-		"modelSelection": map[string]interface{}{
-			"provider": provider,
-			"model":    model,
-		},
+		"type":           "thread.meta.update",
+		"commandId":      p.nextCommandID("t3bridge-model"),
+		"threadId":       threadID,
+		"modelSelection": t3ModelSelection(provider, model, agent, variant),
 	})
 }
 
@@ -1159,7 +1173,7 @@ func (p *Provider) dispatchActivity(threadID, kind, summary, tone string, payloa
 	})
 }
 
-func (p *Provider) dispatchTurnStart(threadID, text, provider, model string) error {
+func (p *Provider) dispatchTurnStart(threadID, text, provider, model, agent, variant string) error {
 	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	return p.rpcDispatchCommand(map[string]interface{}{
 		"type":      "thread.turn.start",
@@ -1171,10 +1185,7 @@ func (p *Provider) dispatchTurnStart(threadID, text, provider, model string) err
 			"text":        text,
 			"attachments": []interface{}{},
 		},
-		"modelSelection": map[string]interface{}{
-			"provider": provider,
-			"model":    model,
-		},
+		"modelSelection":  t3ModelSelection(provider, model, agent, variant),
 		"runtimeMode":     "full-access",
 		"interactionMode": "default",
 		"createdAt":       now,
@@ -1437,6 +1448,12 @@ func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state string, se
 		if port := sessionEnv["GC_DOLT_PORT"]; port != "" {
 			meta["gc.doltPort"] = port
 		}
+		if agent := strings.TrimSpace(sessionEnv["GC_OPENCODE_AGENT"]); agent != "" {
+			meta["gc.openCodeAgent"] = agent
+		}
+		if variant := strings.TrimSpace(sessionEnv["GC_OPENCODE_VARIANT"]); variant != "" {
+			meta["gc.openCodeVariant"] = variant
+		}
 	}
 	for key, value := range meta {
 		if str, ok := value.(string); ok && str == "" {
@@ -1581,12 +1598,26 @@ func resolveProviderModel(cfg runtime.Config, envelope StartupEnvelope) (string,
 	return provider, model
 }
 
+func resolveOpenCodeModelOptions(cfg runtime.Config) (string, string) {
+	agent := strings.TrimSpace(cfg.Env["GC_OPENCODE_AGENT"])
+	if agent == "" {
+		agent = strings.TrimSpace(cfg.Env["OPENCODE_AGENT"])
+	}
+	variant := strings.TrimSpace(cfg.Env["GC_OPENCODE_VARIANT"])
+	if variant == "" {
+		variant = strings.TrimSpace(cfg.Env["OPENCODE_VARIANT"])
+	}
+	return agent, variant
+}
+
 func normalizeT3Provider(provider string) string {
 	switch strings.TrimSpace(provider) {
 	case "claude", "claudeAgent":
 		return "claudeAgent"
 	case "codex":
 		return "codex"
+	case "opencode", "kimi-for-coding":
+		return "opencode"
 	default:
 		return strings.TrimSpace(provider)
 	}
@@ -1654,6 +1685,9 @@ func resolveConfigProviderModel(cfg *execStartConfig) (string, string, bool) {
 
 func beadStoreForWatcher(workDir string, env map[string]string) *beads.CachingStore {
 	bd := beads.NewBdStore(workDir, beads.ExecCommandRunnerWithEnv(env))
+	if direct, err := beads.NewDoltliteReadStore(workDir, bd); err == nil {
+		return beads.NewCachingStore(direct, nil)
+	}
 	return beads.NewCachingStore(bd, nil)
 }
 
@@ -1881,12 +1915,12 @@ func (p *Provider) IsRunning(name string) bool {
 		debugf("t3bridge: IsRunning(%s) — no snapshot binding\n", name)
 		return false
 	}
-	status := p.threadSessionStatus(binding.ThreadID)
+	status := threadSessionStatus(snapshot, binding.ThreadID)
 	if (status == "none" || status == "gone") && p.withinRecentStart(name, 30*time.Second) {
 		debugf("t3bridge: IsRunning(%s) threadID=%s — startup grace period → true\n", name, binding.ThreadID)
 		return true
 	}
-	result := status == "running" || status == "ready"
+	result := status != "gone"
 	debugf("t3bridge: IsRunning(%s) threadID=%s status=%q → %v\n", name, binding.ThreadID, status, result)
 	return result
 }
@@ -2078,8 +2112,9 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	}
 
 	providerName, modelName := resolveProviderModel(cfg, envelope)
-	fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) resolved provider=%s model=%s workdir=%s projectRoot=%s agent=%s template=%s\n", //nolint:errcheck
-		name, providerName, modelName, cfg.WorkDir, deriveProjectWorkspaceRoot(cfg.WorkDir, envelope), envelope.GC.Agent, envelope.GC.Template)
+	openCodeAgent, openCodeVariant := resolveOpenCodeModelOptions(cfg)
+	fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) resolved provider=%s model=%s opencode_agent=%s workdir=%s projectRoot=%s agent=%s template=%s\n", //nolint:errcheck
+		name, providerName, modelName, openCodeAgent, cfg.WorkDir, deriveProjectWorkspaceRoot(cfg.WorkDir, envelope), envelope.GC.Agent, envelope.GC.Template)
 	if envelope.Runtime.Provider == "" {
 		envelope.Runtime.Provider = providerName
 	}
@@ -2124,6 +2159,10 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 		}
 	}
 
+	if err := runPreStart(ctx, name, cfg, 30*time.Second); err != nil {
+		return fail(fmt.Errorf("t3bridge: running pre_start: %w", err))
+	}
+
 	envelopeJSON, err := json.Marshal(envelope)
 	if err != nil {
 		if worktreePath != "" {
@@ -2166,7 +2205,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 			projectID = existingBinding.ProjectID
 			threadID = existingBinding.ThreadID
 			if reuse.Decision == ReuseDecisionRebind {
-				_ = p.dispatchThreadModelSelection(threadID, providerName, modelName)
+				_ = p.dispatchThreadModelSelection(threadID, providerName, modelName, openCodeAgent, openCodeVariant)
 			}
 			if p.threadSessionStatus(threadID) != "running" {
 				_ = p.dispatchThreadSessionStop(threadID)
@@ -2212,7 +2251,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	if projectID == "" {
 		projectID = uuid.NewString()
 		fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) creating project id=%s title=%s root=%s\n", name, projectID, projectTitle, projectWorkspaceRoot) //nolint:errcheck
-		if err := p.dispatchProjectCreate(projectID, projectTitle, projectWorkspaceRoot, providerName, modelName); err != nil {
+		if err := p.dispatchProjectCreate(projectID, projectTitle, projectWorkspaceRoot, providerName, modelName, openCodeAgent, openCodeVariant); err != nil {
 			return fail(err)
 		}
 	}
@@ -2233,6 +2272,8 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 		threadTitle,
 		providerName,
 		modelName,
+		openCodeAgent,
+		openCodeVariant,
 		createBranch,
 		createWorktreePath,
 		initialGCMetadata,
@@ -2270,7 +2311,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 
 	if prompt := strings.TrimSpace(envelope.Startup.StartupPrompt); prompt != "" {
 		fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) sending startup prompt thread=%s len=%d\n", name, threadID, len(prompt)) //nolint:errcheck
-		if err := p.dispatchTurnStart(threadID, prompt, providerName, modelName); err != nil {
+		if err := p.dispatchTurnStart(threadID, prompt, providerName, modelName, openCodeAgent, openCodeVariant); err != nil {
 			return fail(err)
 		}
 		_ = p.dispatchActivity(threadID, "gc.prompt.sent", "GC startup prompt sent", "info", map[string]interface{}{
@@ -2283,7 +2324,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	}
 	if nudgeText != "" {
 		fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) sending nudge thread=%s len=%d\n", name, threadID, len(nudgeText)) //nolint:errcheck
-		if err := p.dispatchTurnStart(threadID, nudgeText, providerName, modelName); err != nil {
+		if err := p.dispatchTurnStart(threadID, nudgeText, providerName, modelName, openCodeAgent, openCodeVariant); err != nil {
 			return fail(err)
 		}
 		_ = p.dispatchActivity(threadID, "gc.nudge.sent", "GC nudge sent", "info", map[string]interface{}{
@@ -2298,6 +2339,40 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	}
 	p.clearSnapshotCache()
 	return nil
+}
+
+func runPreStart(ctx context.Context, name string, cfg runtime.Config, setupTimeout time.Duration) error {
+	if len(cfg.PreStart) == 0 {
+		return nil
+	}
+	setupEnv := make(map[string]string, len(cfg.Env)+1)
+	for k, v := range cfg.Env {
+		setupEnv[k] = v
+	}
+	setupEnv["GC_SESSION"] = name
+	if setupEnv["GC_DIR"] == "" && cfg.WorkDir != "" {
+		setupEnv["GC_DIR"] = cfg.WorkDir
+	}
+	for i, cmd := range cfg.PreStart {
+		if err := runSetupCommand(ctx, cmd, setupEnv, setupTimeout); err != nil {
+			return fmt.Errorf("pre_start[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func runSetupCommand(ctx context.Context, cmd string, env map[string]string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	c := exec.CommandContext(ctx, "sh", "-c", cmd)
+	if workDir := strings.TrimSpace(env["GC_DIR"]); workDir != "" {
+		c.Dir = workDir
+	}
+	c.Env = os.Environ()
+	for k, v := range env {
+		c.Env = append(c.Env, k+"="+v)
+	}
+	return c.Run()
 }
 
 func (p *Provider) Stop(name string) error {
@@ -2421,7 +2496,7 @@ func (p *Provider) Nudge(name string, content []runtime.ContentBlock) error {
 	if model == "" {
 		model = binding.Model
 	}
-	return p.dispatchTurnStart(binding.ThreadID, text, provider, model)
+	return p.dispatchTurnStart(binding.ThreadID, text, provider, model, meta["gc.openCodeAgent"], meta["gc.openCodeVariant"])
 }
 
 func (p *Provider) SetMeta(name, key, value string) error {

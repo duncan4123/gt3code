@@ -1388,6 +1388,16 @@ func TestAcquireNudgePollerLeaseAllowsBootstrapPID(t *testing.T) {
 	}
 }
 
+func TestEnsureNudgePollerDoesNotSpawnGoTestBinary(t *testing.T) {
+	dir := t.TempDir()
+	if err := ensureNudgePoller(dir, "worker", "sess-worker"); err != nil {
+		t.Fatalf("ensureNudgePoller: %v", err)
+	}
+	if _, err := os.Stat(nudgePollerPIDPath(dir, "sess-worker")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("poller pid file after test-binary guard = %v, want not exist", err)
+	}
+}
+
 func TestSplitQueuedNudgesForTarget_RejectsFencedNudgesWithoutResolvedSession(t *testing.T) {
 	items := []queuedNudge{
 		{ID: "n1", SessionID: "gc-1", ContinuationEpoch: "2"},

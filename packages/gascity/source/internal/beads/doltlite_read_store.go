@@ -1,6 +1,7 @@
 package beads
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -10,8 +11,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
 // DoltliteReadStore serves hot read paths in-process for bd/doltlite stores.
@@ -41,17 +40,12 @@ func NewDoltliteReadStore(dir string, backing *BdStore) (*DoltliteReadStore, err
 	if dbName == "" || dbName == "doltlite" {
 		dbName = "hq"
 	}
-	dbPath := filepath.Join(dir, ".beads", "doltlite", dbName+".db")
-	if _, err := os.Stat(dbPath); err != nil {
+	dbDir := filepath.Join(dir, ".beads", "doltlite")
+	if _, err := os.Stat(filepath.Join(dbDir, dbName+".db")); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite3", dbPath+"?_busy_timeout=10000")
+	db, err := openDoltliteSQL(context.Background(), dbDir, dbName, "main")
 	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	if err := db.Ping(); err != nil {
-		_ = db.Close()
 		return nil, err
 	}
 	return &DoltliteReadStore{BdStore: backing, db: db}, nil

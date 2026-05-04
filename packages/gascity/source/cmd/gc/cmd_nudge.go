@@ -915,6 +915,9 @@ func ensureNudgePoller(cityPath, agentName, sessionName string) error {
 		if err != nil {
 			return err
 		}
+		if isGoTestBinary(exe) {
+			return nil
+		}
 		cmd := exec.Command(exe, "nudge", "poll", "--city", cityPath, "--session", sessionName, agentName)
 		cmd.Env = os.Environ()
 		cmd.Stdout = io.Discard
@@ -930,6 +933,10 @@ func ensureNudgePoller(cityPath, agentName, sessionName string) error {
 		}
 		return cmd.Process.Release()
 	})
+}
+
+func isGoTestBinary(exe string) bool {
+	return strings.HasSuffix(filepath.Base(exe), ".test")
 }
 
 func formatNudgeInjectOutput(items []queuedNudge) string {

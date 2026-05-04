@@ -1,0 +1,4 @@
+name = "context-mode"
+description = "Context-mode MCP server"
+command = "/usr/bin/node"
+args = ["/data/projects/claude-context-mode/start.mjs"]

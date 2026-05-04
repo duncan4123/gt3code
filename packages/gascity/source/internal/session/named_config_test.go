@@ -234,7 +234,7 @@ func TestResolveNamedSessionSpecForConfigTarget_BareNameResolvesV2BoundSession(t
 	}
 }
 
-func TestNamedSessionBackingTemplate_UsesTemplatePatchIdentity(t *testing.T) {
+func TestNamedSessionBackingTemplate_UsesQualifiedTemplateIdentity(t *testing.T) {
 	spec := NamedSessionSpec{
 		Named: &config.NamedSession{
 			Template:    "witness",
@@ -249,8 +249,8 @@ func TestNamedSessionBackingTemplate_UsesTemplatePatchIdentity(t *testing.T) {
 		Identity: "demo/gastown.witness",
 	}
 
-	if got := NamedSessionBackingTemplate(spec); got != "witness" {
-		t.Fatalf("NamedSessionBackingTemplate() = %q, want template patch key %q", got, "witness")
+	if got := NamedSessionBackingTemplate(spec); got != "demo/gastown.witness" {
+		t.Fatalf("NamedSessionBackingTemplate() = %q, want qualified template identity %q", got, "demo/gastown.witness")
 	}
 }
 

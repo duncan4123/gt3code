@@ -536,28 +536,12 @@ func TestBuildDesiredState_RoutedQueueDoesNotCreateOneSessionPerBead(t *testing.
 }
 
 func TestBuildDesiredState_MinZeroDefaultScaleCheckRoutedWorkCreatesPoolSession(t *testing.T) {
-	bdPath, err := findPreferredBinary("bd", "/home/ubuntu/.local/bin/bd")
-	if err != nil {
-		t.Skip("bd not installed")
-	}
-	jqPath, err := findPreferredBinary("jq")
-	if err != nil {
-		t.Skip("jq not installed")
-	}
-
 	cityPath := t.TempDir()
-	beadsDir := filepath.Join(cityPath, ".beads")
-	t.Setenv("PATH", strings.Join([]string{filepath.Dir(bdPath), filepath.Dir(jqPath), os.Getenv("PATH")}, string(os.PathListSeparator)))
-	t.Setenv("BEADS_DIR", beadsDir)
 	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte("[workspace]\nname = \"test-city\"\n"), 0o644); err != nil {
 		t.Fatalf("write city.toml: %v", err)
 	}
-	runExternal(t, cityPath, bdPath, "init", "-p", "ct", "--skip-hooks", "-q")
-	runExternal(t, cityPath, bdPath, "config", "set", "types.custom", "session")
 
-	store := beads.NewBdStore(cityPath, beads.ExecCommandRunnerWithEnv(map[string]string{
-		"BEADS_DIR": beadsDir,
-	}))
+	store := beads.NewMemStore()
 	if _, err := store.Create(beads.Bead{
 		Title:  "queued polecat work",
 		Type:   "task",
@@ -627,10 +611,17 @@ func TestBuildDesiredState_OnDemandNamedSession_RoutedMetadataAloneDoesNotMateri
 	}
 
 	dsResult := buildDesiredState("test-city", cityPath, time.Now().UTC(), cfg, runtime.NewFake(), store, io.Discard)
+	ephemeral := 0
 	for _, tp := range dsResult.State {
 		if tp.TemplateName == "mayor" {
-			t.Fatalf("routed metadata alone should not materialize on-demand named session: %+v", tp)
+			ephemeral++
+			if tp.ConfiguredNamedIdentity != "" {
+				t.Fatalf("routed metadata materialized configured named session: %+v", tp)
+			}
 		}
+	}
+	if ephemeral != 1 {
+		t.Fatalf("routed metadata should create one ephemeral mayor session, got %d", ephemeral)
 	}
 }
 
@@ -1085,7 +1076,7 @@ func TestBuildDesiredState_OnDemandNamedSession_ScaleCheckNonIntegerDoesNotFallT
 	}
 }
 
-func TestBuildDesiredState_OnDemandNamedSession_WorkQueryUsesExplicitRigPassword(t *testing.T) {
+func TestBuildDesiredState_OnDemandNamedSession_WorkQueryDoesNotMaterializeRigNamedSession(t *testing.T) {
 	t.Setenv("GC_BEADS", "bd")
 	t.Setenv("GC_DOLT_USER", "")
 	t.Setenv("GC_DOLT_PASSWORD", "")
@@ -1142,15 +1133,10 @@ func TestBuildDesiredState_OnDemandNamedSession_WorkQueryUsesExplicitRigPassword
 	}
 
 	dsResult := buildDesiredState("test-city", cityPath, time.Now().UTC(), cfg, runtime.NewFake(), store, io.Discard)
-	found := false
 	for _, tp := range dsResult.State {
 		if tp.TemplateName == "demo/worker" {
-			found = true
-			break
+			t.Fatalf("work_query materialized on-demand rig named session: %+v", tp)
 		}
-	}
-	if !found {
-		t.Fatal("on-demand rig named session should materialize when work_query sees rig-scoped password")
 	}
 }
 
@@ -1882,7 +1868,7 @@ func TestBuildDesiredState_StoreBackedPoolUsesQualifiedInstanceNameForBindings(t
 	}
 }
 
-func TestBuildDesiredState_BoundNamedSessionUsesTemplatePatchIdentity(t *testing.T) {
+func TestBuildDesiredState_BoundNamedSessionUsesQualifiedTemplateIdentity(t *testing.T) {
 	cityPath := t.TempDir()
 	cfg := &config.City{
 		Workspace: config.Workspace{Name: "test-city"},
@@ -1906,18 +1892,18 @@ func TestBuildDesiredState_BoundNamedSessionUsesTemplatePatchIdentity(t *testing
 	if !ok {
 		t.Fatalf("desired state missing named session: keys=%v", mapKeys(dsResult.State))
 	}
-	if tp.TemplateName != "witness" {
-		t.Fatalf("TemplateName = %q, want template patch key %q", tp.TemplateName, "witness")
+	if tp.TemplateName != "demo/gastown.witness" {
+		t.Fatalf("TemplateName = %q, want qualified template identity %q", tp.TemplateName, "demo/gastown.witness")
 	}
-	if got := tp.Env["GC_TEMPLATE"]; got != "witness" {
-		t.Fatalf("GC_TEMPLATE = %q, want template patch key %q", got, "witness")
+	if got := tp.Env["GC_TEMPLATE"]; got != "demo/gastown.witness" {
+		t.Fatalf("GC_TEMPLATE = %q, want qualified template identity %q", got, "demo/gastown.witness")
 	}
 	if got := tp.Alias; got != "demo/gastown.witness" {
 		t.Fatalf("Alias = %q, want named identity %q", got, "demo/gastown.witness")
 	}
 }
 
-func TestBuildDesiredState_StoreBackedNamedSessionReappliesTemplatePatchIdentity(t *testing.T) {
+func TestBuildDesiredState_StoreBackedNamedSessionReappliesQualifiedTemplateIdentity(t *testing.T) {
 	cityPath := t.TempDir()
 	store := beads.NewMemStore()
 	cfg := &config.City{
@@ -1962,11 +1948,11 @@ func TestBuildDesiredState_StoreBackedNamedSessionReappliesTemplatePatchIdentity
 	if !ok {
 		t.Fatalf("desired state missing named session: keys=%v", mapKeys(dsResult.State))
 	}
-	if tp.TemplateName != "witness" {
-		t.Fatalf("TemplateName = %q, want template patch key %q", tp.TemplateName, "witness")
+	if tp.TemplateName != "demo/gastown.witness" {
+		t.Fatalf("TemplateName = %q, want qualified template identity %q", tp.TemplateName, "demo/gastown.witness")
 	}
-	if got := tp.Env["GC_TEMPLATE"]; got != "witness" {
-		t.Fatalf("GC_TEMPLATE = %q, want template patch key %q", got, "witness")
+	if got := tp.Env["GC_TEMPLATE"]; got != "demo/gastown.witness" {
+		t.Fatalf("GC_TEMPLATE = %q, want qualified template identity %q", got, "demo/gastown.witness")
 	}
 	if got := tp.ConfiguredNamedIdentity; got != "demo/gastown.witness" {
 		t.Fatalf("ConfiguredNamedIdentity = %q, want %q", got, "demo/gastown.witness")
@@ -3142,10 +3128,8 @@ func TestBuildDesiredState_NamedSessionWorkQueryExpandsRigTemplate(t *testing.T)
 			StartCommand:      "true",
 			MinActiveSessions: intPtr(0),
 			MaxActiveSessions: intPtr(1),
-			// work_query must produce non-empty output for on_demand demand.
-			// When {{.Rig}} is expanded the echo yields "alpha", which is
-			// treated as ready work. Unexpanded, the literal "{{.Rig}}" is
-			// still non-empty — so to discriminate, use a grep filter.
+			// work_query remains valid session-local introspection, but should
+			// not materialize on-demand named sessions controller-side.
 			WorkQuery: "echo {{.Rig}} | grep alpha",
 		}},
 		NamedSessions: []config.NamedSession{{
@@ -3156,7 +3140,7 @@ func TestBuildDesiredState_NamedSessionWorkQueryExpandsRigTemplate(t *testing.T)
 
 	dsResult := buildDesiredState("test-city", cityPath, time.Now().UTC(), cfg, runtime.NewFake(), store, io.Discard)
 
-	if !dsResult.NamedSessionDemand["alpha/dog"] {
-		t.Errorf("NamedSessionDemand[alpha/dog] = false, want true (work_query {{.Rig}} should expand to alpha and grep match)")
+	if dsResult.NamedSessionDemand["alpha/dog"] {
+		t.Errorf("NamedSessionDemand[alpha/dog] = true, want false from controller-side work_query")
 	}
 }

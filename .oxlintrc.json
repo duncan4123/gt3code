@@ -7,6 +7,8 @@
     "bun.lock",
     "*.tsbuildinfo",
     "**/routeTree.gen.ts",
+    "packages/doltlite/source",
+    "packages/doltlite/source/**",
     "packages/beads-doltlite/doltlite"
   ],
   "plugins": ["eslint", "oxc", "react", "unicorn", "typescript"],

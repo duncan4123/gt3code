@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/gastownhall/gascity/internal/beads"
 	"github.com/gastownhall/gascity/internal/config"
 	"github.com/gastownhall/gascity/internal/runtime"
 )
@@ -50,8 +52,22 @@ func (p *blockingStatusProvider) GetLastActivity(name string) (time.Time, error)
 
 func TestDoCityStatusTimesOutSlowProvider(t *testing.T) {
 	oldTimeout := statusProviderCallTimeout
+	oldBackend := os.Getenv("GC_BEADS_BACKEND")
 	statusProviderCallTimeout = 20 * time.Millisecond
-	t.Cleanup(func() { statusProviderCallTimeout = oldTimeout })
+	t.Setenv("GC_BEADS_BACKEND", "file")
+	oldOpen := openCityStoreAtForStatus
+	openCityStoreAtForStatus = func(string) (beads.Store, error) {
+		return nil, nil
+	}
+	t.Cleanup(func() {
+		statusProviderCallTimeout = oldTimeout
+		openCityStoreAtForStatus = oldOpen
+		if oldBackend == "" {
+			os.Unsetenv("GC_BEADS_BACKEND")
+		} else {
+			os.Setenv("GC_BEADS_BACKEND", oldBackend)
+		}
+	})
 
 	base := newBlockingStatusProvider(200 * time.Millisecond)
 	if err := base.Start(context.Background(), "mayor", runtime.Config{Command: "echo"}); err != nil {
