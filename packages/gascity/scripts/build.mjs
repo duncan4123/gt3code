@@ -1,5 +1,13 @@
 #!/usr/bin/env node
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -18,6 +26,7 @@ const doltliteLibrary =
       : "libdoltlite.so";
 const outputPath = path.join(packageRoot, "bin", `${platform}-${arch}`, executable);
 const outputLibraryPath = path.join(packageRoot, "bin", `${platform}-${arch}`, doltliteLibrary);
+const stampPath = path.join(packageRoot, "bin", `${platform}-${arch}`, ".t3-gascity-build-stamp.json");
 const sourceRoot = resolveSourceRoot();
 const doltliteBuildDir = resolveDoltliteBuildDir();
 
@@ -28,6 +37,35 @@ const cgoLdFlags = appendFlag(
   process.env.CGO_LDFLAGS,
   `-L${doltliteBuildDir} ${rpathFlag} -ldoltlite -lz`,
 );
+
+const stamp = {
+  platform,
+  arch,
+  goos,
+  goarch,
+  cgoFlags,
+  cgoLdFlags,
+  goflags: appendFlag(process.env.GOFLAGS, "-tags=libsqlite3"),
+  sourceRoot,
+  doltliteBuildDir,
+};
+if (
+  isFresh({
+    outputs: [outputPath, outputLibraryPath],
+    stampPath,
+    stamp,
+    inputRoots: [sourceRoot],
+    extraInputs: [
+      import.meta.url,
+      path.join(doltliteBuildDir, doltliteLibrary),
+      path.join(doltliteBuildDir, "sqlite3.h"),
+    ],
+  })
+) {
+  console.log("[gascity build] outputs are current; skipping.");
+  process.exit(0);
+}
+
 const result = spawnSync("go", ["build", "-o", outputPath, "./cmd/gc"], {
   cwd: sourceRoot,
   env: {
@@ -44,6 +82,7 @@ const result = spawnSync("go", ["build", "-o", outputPath, "./cmd/gc"], {
 
 if ((result.status ?? 1) === 0) {
   copyFileSync(path.join(doltliteBuildDir, doltliteLibrary), outputLibraryPath);
+  writeFileSync(stampPath, JSON.stringify({ ...stamp, builtAt: new Date().toISOString() }) + "\n");
   console.log(`copied ${outputLibraryPath}`);
 }
 
@@ -97,4 +136,47 @@ function hasDoltliteBuildArtifacts(buildDir) {
 
 function appendFlag(existing, value) {
   return [existing, value].filter(Boolean).join(" ");
+}
+
+function isFresh({ outputs, stampPath, stamp, inputRoots, extraInputs }) {
+  if (!outputs.every((output) => existsSync(output)) || !existsSync(stampPath)) return false;
+  try {
+    const previous = JSON.parse(readFileSync(stampPath, "utf8"));
+    for (const [key, value] of Object.entries(stamp)) {
+      if (previous[key] !== value) return false;
+    }
+    const newestInput = Math.max(
+      ...inputRoots.map((root) => newestSourceMtime(root)),
+      ...extraInputs.map((input) => statSync(fileURLToPathSafe(input)).mtimeMs),
+    );
+    return statSync(stampPath).mtimeMs >= newestInput;
+  } catch {
+    return false;
+  }
+}
+
+function newestSourceMtime(root) {
+  let newest = 0;
+  const stack = [root];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    const stat = statSync(current);
+    if (stat.isDirectory()) {
+      const base = path.basename(current);
+      if (base === ".git" || base === "dist" || base === "bin") continue;
+      for (const entry of readdirSync(current)) stack.push(path.join(current, entry));
+      continue;
+    }
+    if (isGoBuildInput(current)) newest = Math.max(newest, stat.mtimeMs);
+  }
+  return newest;
+}
+
+function isGoBuildInput(file) {
+  const base = path.basename(file);
+  return base === "go.mod" || base === "go.sum" || /\.(go|c|h|s|S)$/.test(base);
+}
+
+function fileURLToPathSafe(value) {
+  return value.startsWith("file:") ? fileURLToPath(value) : value;
 }
