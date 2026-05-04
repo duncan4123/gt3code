@@ -210,6 +210,9 @@ func doDoctor(fix, verbose bool, stdout, stderr io.Writer) int {
 	if cfgErr == nil {
 		d.Register(doctor.NewBDSplitStoreCheck(cityPath))
 		d.Register(doctor.NewBeadsStoreCheck(cityPath, storeFactory))
+		if cityUsesDoltliteBeadsBackend(cityPath) {
+			d.Register(doctor.NewDoltliteStoreCheck(cityPath))
+		}
 		d.Register(&sessionModelDoctorCheck{cfg: cfg, cityPath: cityPath, newStore: storeFactory})
 	}
 	skipCityDoltCheck := os.Getenv("GC_DOLT") == "skip" || cityUsesDoltliteBeadsBackend(cityPath) || (!scopeUsesManagedBdStoreContract(cityPath, cityPath) && !workspaceNeedsCityDoltCheck(cityPath, cfg))
@@ -243,6 +246,9 @@ func doDoctor(fix, verbose bool, stdout, stderr io.Writer) int {
 			d.Register(doctor.NewRigGitCheck(rig))
 			d.Register(doctor.NewRigBDSplitStoreCheck(cityPath, rig))
 			d.Register(doctor.NewRigBeadsCheck(cityPath, rig, storeFactory))
+			if cityUsesDoltliteBeadsBackend(cityPath) {
+				d.Register(doctor.NewRigDoltliteStoreCheck(cityPath, rig))
+			}
 			d.Register(newDoctorRigDoltServerCheck(cityPath, rig, !rigUsesManagedBdStoreContract(cityPath, rig) || os.Getenv("GC_DOLT") == "skip" || cityUsesDoltliteBeadsBackend(cityPath)))
 			// Custom types check — rig store.
 			d.Register(doctor.NewCustomTypesCheck(rig.Path, rig.Name))

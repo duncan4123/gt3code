@@ -691,6 +691,150 @@ func (c *BeadsStoreCheck) CanFix() bool { return false }
 // Fix is a no-op.
 func (c *BeadsStoreCheck) Fix(_ *CheckContext) error { return nil }
 
+// DoltliteStoreCheck verifies doltlite-specific store metadata and hot paths.
+type DoltliteStoreCheck struct {
+	cityPath string
+	name     string
+	scope    string
+	runProbe func(scope string) (string, error)
+}
+
+// NewDoltliteStoreCheck creates a city-level doltlite store check.
+func NewDoltliteStoreCheck(cityPath string) *DoltliteStoreCheck {
+	return &DoltliteStoreCheck{
+		cityPath: cityPath,
+		name:     "doltlite-store",
+		scope:    cityPath,
+		runProbe: runDoltliteBDProbe,
+	}
+}
+
+// NewRigDoltliteStoreCheck creates a rig-level doltlite store check.
+func NewRigDoltliteStoreCheck(cityPath string, rig config.Rig) *DoltliteStoreCheck {
+	return &DoltliteStoreCheck{
+		cityPath: cityPath,
+		name:     "rig:" + rig.Name + ":doltlite-store",
+		scope:    rig.Path,
+		runProbe: runDoltliteBDProbe,
+	}
+}
+
+func (c *DoltliteStoreCheck) Name() string { return c.name }
+
+func (c *DoltliteStoreCheck) Run(_ *CheckContext) *CheckResult {
+	r := &CheckResult{Name: c.Name()}
+	scope := resolveDoctorScopePath(c.cityPath, c.scope)
+	if !scopeUsesBDDoltliteStore(c.cityPath, scope) {
+		r.Status = StatusOK
+		r.Message = "skipped (not doltlite backend)"
+		return r
+	}
+
+	metaPath := filepath.Join(scope, ".beads", "metadata.json")
+	data, err := os.ReadFile(metaPath) //nolint:gosec // scope comes from city/rig config.
+	if err != nil {
+		r.Status = StatusError
+		r.Message = fmt.Sprintf("read doltlite metadata: %v", err)
+		return r
+	}
+	var meta struct {
+		Backend      string `json:"backend"`
+		Database     string `json:"database"`
+		DoltDatabase string `json:"dolt_database"`
+		DoltMode     string `json:"dolt_mode"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		r.Status = StatusError
+		r.Message = fmt.Sprintf("parse doltlite metadata: %v", err)
+		return r
+	}
+
+	var issues []string
+	if strings.TrimSpace(meta.Backend) != "doltlite" {
+		issues = append(issues, `metadata.backend != "doltlite"`)
+	}
+	if strings.TrimSpace(meta.Database) != "doltlite" {
+		issues = append(issues, `metadata.database != "doltlite"`)
+	}
+	dbName := strings.TrimSpace(meta.DoltDatabase)
+	if dbName == "" {
+		issues = append(issues, "metadata.dolt_database is empty")
+	}
+	if strings.TrimSpace(meta.DoltMode) == "" {
+		issues = append(issues, "metadata.dolt_mode is empty")
+	}
+	if len(issues) > 0 {
+		r.Status = StatusError
+		r.Message = "invalid doltlite metadata"
+		r.Details = issues
+		return r
+	}
+
+	dbPath := filepath.Join(scope, ".beads", "doltlite", dbName+".db")
+	if info, err := os.Stat(dbPath); err != nil {
+		r.Status = StatusError
+		r.Message = fmt.Sprintf("doltlite database %q not found: %v", dbName, err)
+		return r
+	} else if info.IsDir() {
+		r.Status = StatusError
+		r.Message = fmt.Sprintf("doltlite database path %q is a directory", dbPath)
+		return r
+	}
+
+	readStore, err := beads.NewDoltliteReadStore(scope, nil)
+	if err != nil {
+		r.Status = StatusError
+		r.Message = fmt.Sprintf("open doltlite read store: %v", err)
+		return r
+	}
+	if err := readStore.CloseStore(); err != nil {
+		r.Status = StatusWarning
+		r.Message = fmt.Sprintf("close doltlite read store: %v", err)
+		return r
+	}
+
+	probe := c.runProbe
+	if probe == nil {
+		probe = runDoltliteBDProbe
+	}
+	if _, err := probe(scope); err != nil {
+		r.Status = StatusWarning
+		r.Message = fmt.Sprintf("bd doltlite probe failed: %v", err)
+		r.FixHint = "capture diagnostics before restarting the controller or recovering the store"
+		return r
+	}
+
+	r.Status = StatusOK
+	r.Message = fmt.Sprintf("doltlite metadata and database %q accessible", dbName)
+	return r
+}
+
+func (c *DoltliteStoreCheck) CanFix() bool { return false }
+
+func (c *DoltliteStoreCheck) Fix(_ *CheckContext) error { return nil }
+
+func runDoltliteBDProbe(scope string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bd", "list", "--json", "--limit=1")
+	cmd.Dir = scope
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return string(out), fmt.Errorf("bd list --json --limit=1 timed out after 5s")
+	}
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if len(msg) > 300 {
+			msg = msg[:300] + "..."
+		}
+		if msg != "" {
+			return string(out), fmt.Errorf("%w: %s", err, msg)
+		}
+		return string(out), err
+	}
+	return string(out), nil
+}
+
 // BDSplitStoreCheck warns when legacy bd embedded/server store directories
 // coexist and the inactive store still contains Dolt data.
 type BDSplitStoreCheck struct {
