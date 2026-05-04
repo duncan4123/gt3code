@@ -1802,6 +1802,12 @@ func (a *Agent) EffectiveWorkQuery() string {
 	if a.PoolName != "" {
 		target = a.PoolName
 	}
+	allowedGenericOrigins := `ephemeral|""`
+	if a.SupportsMultipleSessions() {
+		// Manual pool sessions should still see the shared routed queue on
+		// startup; otherwise `gc hook` cannot surface pooled work for them.
+		allowedGenericOrigins = `ephemeral|manual|""`
+	}
 	legacyTarget := legacyWorkflowControlQualifiedName(target)
 	if legacyTarget == "" {
 		return `sh -c '` +
@@ -1818,9 +1824,10 @@ func (a *Agent) EffectiveWorkQuery() string {
 			`[ -n "$r" ] && [ "$r" != "[]" ] && printf "%s" "$r" && exit 0; ` +
 			`done; ` +
 			// Tier 3: ready unassigned routed to this config (shared routed queue).
-			// Only ephemeral sessions and controller probes consume generic config demand.
+			// Only controller probes plus ephemeral/manual pool sessions
+			// consume generic config demand.
 			`case "$GC_SESSION_ORIGIN" in ` +
-			`ephemeral|"") ;; ` +
+			allowedGenericOrigins + `) ;; ` +
 			`*) exit 0 ;; ` +
 			`esac; ` +
 			`r=$(bd ready --metadata-field gc.routed_to=` + target +
@@ -1856,9 +1863,10 @@ func (a *Agent) EffectiveWorkQuery() string {
 		`done; ` +
 		// Tier 3: ready unassigned routed to this config (shared routed queue),
 		// then the legacy workflow-control route for pre-rename graphs.
-		// Only ephemeral sessions and controller probes consume generic config demand.
+		// Only controller probes plus ephemeral/manual pool sessions
+		// consume generic config demand.
 		`case "$GC_SESSION_ORIGIN" in ` +
-		`ephemeral|"") ;; ` +
+		allowedGenericOrigins + `) ;; ` +
 		`*) exit 0 ;; ` +
 		`esac; ` +
 		`r=$(bd ready --metadata-field gc.routed_to=` + target +

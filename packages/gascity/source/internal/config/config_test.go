@@ -1386,6 +1386,39 @@ func TestEffectiveWorkQueryPoolNoPoolName(t *testing.T) {
 	}
 }
 
+func TestEffectiveWorkQueryManualPoolSessionClaimsGenericQueue(t *testing.T) {
+	a := Agent{Name: "dog", Dir: "hello-world", MinActiveSessions: ptrInt(0), MaxActiveSessions: ptrInt(3)}
+	out := runEffectiveWorkQuery(t, a, map[string]string{
+		"GC_SESSION_ORIGIN": "manual",
+	}, `#!/bin/sh
+set -eu
+case "$*" in
+  "ready --metadata-field gc.routed_to=hello-world/dog --unassigned --json --limit=1")
+    printf '[{"id":"ga-manual-pool"}]'
+    ;;
+  *)
+    printf '[]'
+    ;;
+esac
+`)
+	if got, want := strings.TrimSpace(out), `[{"id":"ga-manual-pool"}]`; got != want {
+		t.Fatalf("manual pool work query output = %q, want %q", got, want)
+	}
+}
+
+func TestEffectiveWorkQueryManualSingleSessionSkipsGenericQueue(t *testing.T) {
+	a := Agent{Name: "worker", Dir: "hello-world", MaxActiveSessions: ptrInt(1)}
+	out := runEffectiveWorkQuery(t, a, map[string]string{
+		"GC_SESSION_ORIGIN": "manual",
+	}, `#!/bin/sh
+set -eu
+printf '[]'
+`)
+	if got := strings.TrimSpace(out); got != "" {
+		t.Fatalf("manual single-session work query output = %q, want empty", got)
+	}
+}
+
 func TestEffectiveWorkQueryControlDispatcherIncludesLegacyWorkflowControlRoute(t *testing.T) {
 	a := Agent{Name: ControlDispatcherAgentName, Dir: "gascity"}
 	got := a.EffectiveWorkQuery()
