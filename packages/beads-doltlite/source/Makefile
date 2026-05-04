@@ -21,6 +21,22 @@ INSTALL_DIR := $(USERPROFILE)/.local/bin
 else
 INSTALL_DIR := $(HOME)/.local/bin
 endif
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+DOLTLITE_SHARED_EXT := dylib
+else
+DOLTLITE_SHARED_EXT := so
+endif
+
+# Doltlite linkage: prefer a sibling packaged checkout, then the shared
+# workspace repo. If present, link bd against libdoltlite so mattn/go-sqlite3
+# exposes doltlite SQL functions (e.g. dolt_checkout()) instead of plain SQLite.
+DOLTLITE_ROOT := $(firstword \
+	$(foreach dir,../../doltlite/source /data/projects/doltlite,\
+		$(if $(or $(wildcard $(dir)/libdoltlite.a),$(wildcard $(dir)/build/libdoltlite.a)),$(dir),)))
+DOLTLITE_INCLUDE_DIR := $(firstword $(wildcard $(DOLTLITE_ROOT)/build) $(wildcard $(DOLTLITE_ROOT)))
+DOLTLITE_STATIC_LIB := $(firstword $(wildcard $(DOLTLITE_ROOT)/libdoltlite.a) $(wildcard $(DOLTLITE_ROOT)/build/libdoltlite.a))
+DOLTLITE_SHARED_LIB := $(firstword $(wildcard $(DOLTLITE_ROOT)/libdoltlite.$(DOLTLITE_SHARED_EXT)) $(wildcard $(DOLTLITE_ROOT)/build/libdoltlite.$(DOLTLITE_SHARED_EXT)))
 
 # Dolt backend requires CGO for embedded database support.
 # Without CGO, builds will fail with "dolt backend requires CGO".
@@ -30,6 +46,10 @@ endif
 #     and gms_pure_go tag tells go-mysql-server to use pure-Go regex too.
 #   - CGO_ENABLED=1 needs a C compiler (MinGW/MSYS2) but does NOT need ICU.
 export CGO_ENABLED := 1
+ifneq ($(DOLTLITE_STATIC_LIB),)
+export CGO_CFLAGS := $(CGO_CFLAGS) -I$(DOLTLITE_INCLUDE_DIR)
+export CGO_LDFLAGS := $(CGO_LDFLAGS) $(DOLTLITE_STATIC_LIB) -lz -lpthread -lm
+endif
 
 # When go.mod requires a newer Go version than the locally installed one,
 # GOTOOLCHAIN=auto downloads the right compiler but coverage instrumentation
@@ -46,10 +66,16 @@ endif
 # ICU flags are only needed for scripts/test-icu-path.sh (which exercises the
 # opt-in ICU regex path).
 BUILD_TAGS := gms_pure_go
+ifneq ($(DOLTLITE_STATIC_LIB),)
+BUILD_TAGS += libsqlite3
+endif
 
 # Build the bd binary
 build:
 	@echo "Building bd..."
+ifneq ($(DOLTLITE_STATIC_LIB),)
+	@echo "Using doltlite static lib: $(DOLTLITE_STATIC_LIB)"
+endif
 ifeq ($(OS),Windows_NT)
 	go build -tags "$(BUILD_TAGS)" -ldflags="-X main.Build=$(GIT_BUILD)" -o $(BUILD_DIR)/bd.exe ./cmd/bd
 else
@@ -155,6 +181,10 @@ else
 	@rm -f $(INSTALL_DIR)/bd
 	@cp $(BUILD_DIR)/bd $(INSTALL_DIR)/bd
 	@echo "Installed bd to $(INSTALL_DIR)/bd"
+ifneq ($(DOLTLITE_SHARED_LIB),)
+	@cp $(DOLTLITE_SHARED_LIB) $(INSTALL_DIR)/libdoltlite.$(DOLTLITE_SHARED_EXT)
+	@echo "Installed libdoltlite.$(DOLTLITE_SHARED_EXT) to $(INSTALL_DIR)"
+endif
 	@rm -f $(INSTALL_DIR)/beads
 	@ln -s bd $(INSTALL_DIR)/beads
 	@echo "Created 'beads' alias -> bd"
