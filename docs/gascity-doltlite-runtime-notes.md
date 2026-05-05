@@ -69,6 +69,14 @@ GC_CITY_PATH=/data/projects/t3code/packages/gascity-config/config
 GC_BIN=/home/ubuntu/.local/state/t3code/gascity/current/bin/gc
 ```
 
+Direct shell commands inside a polecat worktree can also inherit stale managed
+Dolt variables from the parent process. If `GC_CITY_PATH` is empty but ambient
+`GC_DOLT_PORT`, `BEADS_DOLT_PORT`, or `BEADS_DOLT_SERVER_*` are still set,
+plain `bd ...` can dial a dead Dolt server instead of using the city's
+doltlite store. Prefer `node scripts/gascity-runner.ts ...` or `gc bd ...`
+when validating the packaged runtime, and make sure startup helpers strip stale
+`GC_DOLT_*`, `BEADS_DOLT_*`, and `DOLT_*` variables.
+
 ## Binary Version Skew
 
 `gc status` and `gc session list` can disagree if the materialized runtime is

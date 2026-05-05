@@ -72,20 +72,28 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
     Effect.gen(function* () {
       const env = yield* createBundledGascityProcessEnv({
         baseEnv: {
+          GC_DOLT_DATABASE: "hq",
           GC_DOLT_PORT: "3307",
           GC_DOLT_HOST: "127.0.0.1",
           BEADS_DOLT_PORT: "3307",
           BEADS_DOLT_SERVER_HOST: "127.0.0.1",
+          BEADS_DOLT_SERVER_MODE: "1",
+          BEADS_DOLT_SERVER_PASSWORD: "secret",
           BEADS_DOLT_SHARED_SERVER: "true",
+          DOLT_PORT: "3307",
         },
         t3Home: undefined,
       });
 
+      assert.equal(env.GC_DOLT_DATABASE, undefined);
       assert.equal(env.GC_DOLT_PORT, undefined);
       assert.equal(env.GC_DOLT_HOST, undefined);
       assert.equal(env.BEADS_DOLT_PORT, undefined);
       assert.equal(env.BEADS_DOLT_SERVER_HOST, undefined);
+      assert.equal(env.BEADS_DOLT_SERVER_MODE, undefined);
+      assert.equal(env.BEADS_DOLT_SERVER_PASSWORD, undefined);
       assert.equal(env.BEADS_DOLT_SHARED_SERVER, undefined);
+      assert.equal(env.DOLT_PORT, undefined);
       assert.equal(env.GC_BEADS_BACKEND, "doltlite");
       assert.equal(env.BEADS_BACKEND, "doltlite");
     }),

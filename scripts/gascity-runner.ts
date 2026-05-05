@@ -484,22 +484,30 @@ function prependPathEnv(env: NodeJS.ProcessEnv, key: string, value: string): voi
   env[actualKey] = [value, env[actualKey]].filter(Boolean).join(separator);
 }
 
+const STALE_DOLT_ENV_KEYS = [
+  "BEADS_DOLT_AUTO_START",
+  "BEADS_DOLT_DATABASE",
+  "BEADS_DOLT_SHARED_SERVER",
+  "BEADS_DOLT_PORT",
+  "BEADS_DOLT_SERVER_DATABASE",
+  "BEADS_DOLT_SERVER_HOST",
+  "BEADS_DOLT_SERVER_MODE",
+  "BEADS_DOLT_SERVER_PASSWORD",
+  "BEADS_DOLT_SERVER_PORT",
+  "BEADS_DOLT_SERVER_USER",
+  "DOLT_HOST",
+  "DOLT_PASSWORD",
+  "DOLT_PORT",
+  "DOLT_USER",
+  "GC_DOLT_DATABASE",
+  "GC_DOLT_HOST",
+  "GC_DOLT_PASSWORD",
+  "GC_DOLT_PORT",
+  "GC_DOLT_USER",
+] as const;
+
 function clearDoltServerEnv(env: NodeJS.ProcessEnv): void {
-  for (const key of [
-    "BEADS_DOLT_AUTO_START",
-    "BEADS_DOLT_DATABASE",
-    "BEADS_DOLT_SHARED_SERVER",
-    "BEADS_DOLT_PORT",
-    "BEADS_DOLT_SERVER_DATABASE",
-    "BEADS_DOLT_SERVER_HOST",
-    "BEADS_DOLT_SERVER_MODE",
-    "BEADS_DOLT_SERVER_PORT",
-    "GC_DOLT_DATABASE",
-    "GC_DOLT_HOST",
-    "GC_DOLT_PASSWORD",
-    "GC_DOLT_PORT",
-    "GC_DOLT_USER",
-  ]) {
+  for (const key of STALE_DOLT_ENV_KEYS) {
     delete env[key];
   }
 }
