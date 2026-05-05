@@ -71,7 +71,7 @@ var (
 	serverMode      bool               // True when using external dolt sql-server (dolt_mode=server)
 	readonlyMode    bool               // Read-only mode: block write operations (for worker sandboxes)
 	storeIsReadOnly bool               // Track if store was opened read-only (for staleness checks)
-	lockTimeout     = 30 * time.Second // Dolt open timeout (fixed default)
+	lockTimeout     = 30 * time.Second // Store open timeout (fixed default)
 	profileEnabled  bool
 	profileFile     *os.File
 	traceFile       *os.File
@@ -984,10 +984,12 @@ var rootCmd = &cobra.Command{
 		// Removing them WILL cause unrecoverable data corruption and data loss.
 		// Dolt manages these files itself; external interference is never safe.
 
+		openCtx, openCancel := context.WithTimeout(rootCtx, lockTimeout)
+		defer openCancel()
 		if cfg != nil && cfg.IsDoltliteBackend() {
-			store, err = newDoltliteStore(rootCtx, beadsDir, doltCfg.Database)
+			store, err = newDoltliteStore(openCtx, beadsDir, doltCfg.Database)
 		} else {
-			store, err = newDoltStore(rootCtx, doltCfg)
+			store, err = newDoltStore(openCtx, doltCfg)
 		}
 
 		// Track final read-only state for staleness checks (GH#1089)

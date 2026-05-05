@@ -87,7 +87,12 @@ func WaitLock(ctx context.Context, dataDir string) (*Lock, error) {
 	if err != nil {
 		_ = f.Close()
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("doltlite: waiting for lock on %s: %w", dataDir, ctx.Err())
+			return nil, fmt.Errorf(
+				"doltlite: timed out waiting for startup lock on %s: %w\n\n"+
+					"Another process may be holding the bootstrap/schema lock. "+
+					"Capture diagnostics before recovery.",
+				dataDir, ctx.Err(),
+			)
 		}
 		return nil, fmt.Errorf("doltlite: acquiring lock: %w", err)
 	}
