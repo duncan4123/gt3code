@@ -1,0 +1,596 @@
+description = """
+Gas City upstream merge formula with fork-work preservation gates.
+
+Use this formula for every merge, rebase, or rollout that brings upstream Gas
+City code into this fork. The goal is to stay current with upstream fixes while
+proving that fork-owned work survives the merge.
+
+This formula is intentionally evidence-heavy. A Gas City merge is not complete
+until the agent has:
+
+1. Audited upstream changes since the previous sync.
+2. Enumerated every fork-owned Gas City, T3 bridge, beads, Dolt, and doltlite
+   feature before merging.
+3. Mapped each fork feature onto the post-merge source tree.
+4. Proved beads still supports both Dolt and doltlite backends.
+5. Proved generated/runtime config still resolves the expected backend.
+6. Rejected the merge if fork behavior disappeared without an explicit
+   replacement and audit note.
+
+Never rely on conflict resolution alone. Upstream refactors can delete fork
+behavior without a conflict. The gates below exist to catch silent loss.
+"""
+formula = "mol-gascity-upstream-merge"
+version = 1
+
+[vars]
+[vars.issue]
+description = "The merge/audit bead driving this upstream sync"
+required = true
+
+[vars.upstream_ref]
+description = "Upstream branch or ref to merge from"
+default = "upstream/main"
+
+[vars.target_branch]
+description = "Fork branch that must preserve all fork features"
+default = "ship"
+
+[vars.runtime_city]
+description = "Bundled T3Code GC city path"
+default = "/data/projects/t3code/packages/gascity-config/config"
+
+[vars.feature_ledger]
+description = "Durable fork feature ledger to maintain during the merge"
+default = "docs/gascity-fork-feature-ledger.md"
+
+[vars.audit_report]
+description = "Per-merge audit report path"
+default = "docs/gascity-upstream-merge-audit.md"
+
+[vars.run_tests]
+description = "Whether this merge is allowed to run configured project tests"
+default = "true"
+
+[vars.test_command]
+description = "Quality gate command for this repo"
+default = "bun fmt && bun lint && bun typecheck"
+
+[[steps]]
+id = "prime-and-load"
+title = "Prime context and read assignment"
+description = """
+Restore Gas City context and load the merge bead.
+
+```bash
+gc prime
+bd prime
+bd show {{issue}}
+bd show {{issue}} --json | jq '.metadata'
+```
+
+Use bead metadata if it overrides `upstream_ref`, `target_branch`,
+`runtime_city`, `feature_ledger`, `audit_report`, `run_tests`, or
+`test_command`.
+
+Exit criteria:
+- target branch, upstream ref, and prior sync point are known
+- audit report path is known
+- current GC session identity is recorded
+"""
+
+[[steps]]
+id = "snapshot-before"
+title = "Capture pre-merge fork and runtime state"
+needs = ["prime-and-load"]
+description = """
+Before fetching or merging upstream, capture the current fork state.
+
+Required snapshot:
+```bash
+git status --short --branch
+git remote -v
+git rev-parse HEAD
+git log --left-right --cherry-pick --oneline {{upstream_ref}}...{{target_branch}}
+bun gascity:path
+sha256sum {{runtime_city}}/city.toml {{runtime_city}}/.gc/site.toml
+bun gc -- status
+bun gc -- config show
+bun gc -- session list
+```
+
+Also capture relevant source inventory:
+```bash
+find packages/gascity -maxdepth 5 -type f | sort
+find packages/beads-doltlite -maxdepth 5 -type f | sort
+find packages/doltlite -maxdepth 4 -type f | sort
+rg -n "dolt|doltlite|beads|backend|libdoltlite|DatabaseSync|bd " packages apps scripts
+```
+
+Write the snapshot into `{{audit_report}}`. Do not keep it only in terminal
+scrollback.
+
+Exit criteria:
+- pre-merge source/runtime/config state is written
+- current Dolt/doltlite references are captured
+- dirty user changes are classified as in-scope or must-not-touch
+"""
+
+[[steps]]
+id = "build-feature-ledger"
+title = "Build or update the Gas City fork ledger"
+needs = ["snapshot-before"]
+description = """
+Create or update `{{feature_ledger}}` before merging upstream.
+
+Every fork-owned feature must have:
+- feature name
+- owning package/files
+- user-visible commands, flags, config keys, env vars, APIs, or UI fields
+- first known commit or branch
+- latest known good commit
+- expected runtime config markers
+- required smoke check
+- status: `on-target`, `side-branch-only`, `retired-explicitly`, or `missing`
+
+The ledger must include at least:
+- bundled `packages/gascity-config/config` city and pack behavior
+- sidebar-visible GC config metadata consumed by T3
+- controller/supervisor lifecycle behavior used by T3
+- opencode provider config and Kimi coding-provider defaults
+- beads CLI integration from Gas City
+- Dolt backend support for beads
+- doltlite backend support for beads
+- libdoltlite build/link/install paths
+- attached SQLite/projection-sidecar behavior in T3 when relevant
+- config patch/override semantics for agents, rigs, named sessions, pools, and
+  wake mode
+
+Backend rule:
+- Dolt and doltlite are both product requirements.
+- Do not simplify code by deleting one backend.
+- Do not rename a backend, command, config key, or env var without a migration
+  and a ledger entry.
+
+Exit criteria:
+- ledger exists and names every fork-owned behavior
+- Dolt and doltlite backend contracts are explicit
+- side-branch-only work is distinguished from target-branch work
+"""
+
+[[steps]]
+id = "inventory-t3bridge-contract"
+title = "Inventory every T3 bridge integration part"
+needs = ["build-feature-ledger"]
+description = """
+Build a complete T3 bridge contract inventory before auditing upstream deltas.
+This is mandatory. Do not summarize the bridge as one feature. List every
+source file, config key, env var, API method, metadata field, database table,
+runtime command, UI surface, and smoke check that participates in the bridge.
+
+Write a table to `{{audit_report}}` with columns:
+- Part
+- Direction: `GC -> T3`, `T3 -> GC`, `bidirectional`, or `shared config`
+- Source files
+- Runtime/config marker
+- Failure mode if lost
+- Smoke check
+- Post-merge status
+
+The inventory must include every item below.
+
+Config and environment:
+- `{{runtime_city}}/city.toml` provider entries where `provider = "t3bridge"`.
+- `{{runtime_city}}/city.toml` and pack provider entries for
+  `kimi-for-coding`, `base = "builtin:opencode"`, `GC_PROVIDER`,
+  `GC_MODEL`, and `GC_OPENCODE_AGENT`.
+- `scripts/gascity-runner.ts` env setup: `GC_CITY_PATH`, `GC_CITY`,
+  `GC_BIN`, `GC_API_URL`, `GC_BEADS_BACKEND`, `GC_WORKTREES_DIR`, and Dolt
+  env stripping/passthrough behavior.
+- `scripts/lib/bundled-gascity-env.ts` bundled env defaults and tests.
+- `packages/gascity-config/config/pack.toml`, `packs/gastown/pack.toml`, and
+  every agent TOML that selects `t3bridge`, `kimi-for-coding`, or opencode.
+
+Gas City session and runtime model:
+- `packages/gascity/source/internal/session/lifecycle.go` GC session env:
+  `GC_SESSION_ID`, `GC_SESSION_NAME`, `GC_RUNTIME_EPOCH`,
+  `GC_CONTINUATION_EPOCH`, `GC_INSTANCE_TOKEN`, `GC_ALIAS`, `GC_TEMPLATE`,
+  `GC_SESSION_ORIGIN`, and `GC_AGENT`.
+- `packages/gascity/source/internal/session/names.go` configured named-session
+  reservation/reuse behavior.
+- `packages/gascity/source/internal/session/resolve*` and session lifecycle
+  tests that prove named sessions, pools, and closed sessions resolve
+  correctly.
+- `packages/gascity/source/cmd/gc/session_model_phase0_hook_spec_test.go`
+  work-query/hook env boundaries.
+- `packages/gascity/source/cmd/gc/order_dispatch.go` and `cmd_order.go`
+  provider-aware order/bd subprocess environment forwarding.
+- `packages/gascity/source/internal/workdir/workdir.go` work_dir resolution and
+  `GC_WORKTREES_DIR` / `T3CODE_WORKTREES_DIR` handling.
+- `packages/gascity/source/internal/testenv` GC env leak scrubbing for tests.
+
+Gas City API and generated client:
+- `packages/gascity/source/internal/api` endpoints and OpenAPI generation that
+  expose config, sessions, lifecycle, controller/supervisor, events, convoys,
+  formulas, beads, and city state.
+- `packages/gascity/source/cmd/genspec` and `cmd/gen-client` generated schema
+  drift checks.
+- `apps/server/src/gc/Services/GcApiClient.ts` service method contract:
+  `getBead`, `getConvoy`, `getFormula`, `getConfig`, `submitSession`,
+  `stopSession`, `respondToPending`, `start`, `getLifecycleStatus`,
+  `setSupervisorRunning`, `setControllerRunning`, `setAgentSuspended`,
+  `setAgentMaxActiveSessions`, `setAgentMinActiveSessions`,
+  `setAgentWakeMode`, `setAgentSessionMode`, `setCitySuspended`,
+  `setRigSuspended`, `addRig`, `findThreadBinding`, and `isAvailable`.
+- `apps/server/src/gc/Layers/GcApiClient.ts` implementation: API URL discovery,
+  CLI fallback, config normalization, CLI-expanded config merge, city TOML
+  patch writers, lifecycle process detection, and doltlite env forcing.
+- `apps/server/src/gc/http.ts`, `apps/server/src/gc/index.ts`, and
+  `apps/server/src/server.ts` layer wiring so `/ws` has both `GcApiClientLive`
+  and `GcContextProviderLive`.
+
+T3 thread/session binding and metadata:
+- `apps/server/src/gc/peek.ts` and `peek.test.ts` lookup by `gc.agent` and
+  `gc.sessionName`.
+- `apps/server/src/gc/folderMetadata.ts` and tests for
+  `gc.groupKind`, `gc.groupId`, `gc.groupLabel`, `gc.agentQualified`, and
+  `gc.agentLabel`.
+- `apps/server/src/orchestration/decider.gcMetadata.test.ts` creation and
+  preservation of `gc.agent`, `gc.rig`, `gc.sessionName`, folder metadata, and
+  custom metadata.
+- `apps/server/src/gc/Layers/GcContextProvider.ts` and service contract:
+  metadata parsing, `gc.sessionEnv` parsing, agent label, bead/formula/convoy
+  context lookup.
+- `scripts/backfill-gc-folder-metadata.cjs` bridge websocket token use and
+  metadata backfill behavior.
+- `scripts/audit-gc-session-env.cjs` expected metadata/env audit:
+  `gc.sessionName`, `gc.sessionEnv`, `gc.agent`, `gc.rig`, `GC_SESSION_NAME`,
+  `GC_AGENT`, `GC_ALIAS`, `GC_CITY`, `GC_CITY_PATH`, `GC_TEMPLATE`,
+  `GC_RIG`, and `GC_RIG_ROOT`.
+
+T3 persistence and projection:
+- `apps/server/src/orchestration/Layers/ProjectionPipeline.ts` propagation of
+  `providerInstanceId`.
+- `apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts` reads of
+  `provider_instance_id` and session/read-model fields.
+- `apps/server/src/persistence/Services/ProviderSessionRuntime.ts` and
+  `ProjectionThreadSessions.ts`.
+- `apps/server/src/persistence/NodeSqliteClient.ts`,
+  `packages/doltlite/index.ts`, and projection sidecar migrations when the
+  bridge is inspected through database state.
+- Rule: use the linked doltlite client path for doltlite-backed DBs; plain
+  `sqlite3` is not valid proof.
+
+Provider/opencode bridge path:
+- `apps/server/src/provider/opencodeRuntime.ts` startup, health check timeout,
+  server URL/password, and configured-server reuse.
+- `apps/server/src/provider/Drivers/OpenCodeDriver.ts` provider driver
+  registration.
+- `apps/server/src/provider/Layers/OpenCodeAdapter.ts` session startup and
+  provider runtime events.
+- `apps/server/src/textGeneration/OpenCodeTextGeneration.ts` for opencode text
+  generation reuse.
+- `apps/server/src/serverSettings.test.ts`,
+  `packages/shared/src/serverSettings.ts`, and web settings code for opencode
+  binary path, server URL, server password, provider instances, and env rows.
+- `apps/web/src/components/chat/*Provider*`, model picker, composer, and
+  locked-provider behavior using `providerInstanceId`.
+
+Frontend GC surfaces:
+- `apps/web/src/components/Sidebar.tsx` GC config fetch, FTS thread search,
+  virtual GC folders, lifecycle buttons, start-pending watch, config mutation
+  handlers, project grouping, and thread route integration.
+- `apps/web/src/components/SidebarGcFolders.tsx` agent/rig/city controls,
+  named-session controls, pool min/max, wake mode, status badges, convoy/formula
+  thread groups, and thread rendering.
+- `apps/web/src/components/sidebar/gcSidebarControls.ts` runtime-state labels,
+  start binding polling, and summary labels.
+- `apps/web/src/components/GcContextSidebar.tsx` GC context panel.
+- `apps/web/src/components/settings/SettingsPanels.tsx` Gas City settings:
+  `GC_BIN`, `GC_API_URL`, provider/opencode fields, runtime/env details.
+- `apps/web/src/localApi.ts`, `apps/web/src/rpc/wsRpcClient.ts`, and
+  `apps/web/src/rpc/protocol` GC RPC method exposure.
+- `apps/web/src/lib/orchestrationReactQuery.ts` FTS5-backed thread search used
+  by the sidebar.
+
+T3 bridge smoke checks:
+- `bun gc -- config show` includes t3bridge provider agents and Kimi/opencode
+  defaults.
+- `bun gc -- status` returns quickly and reports controller/supervisor state.
+- `bun gc -- session list` plus T3 read model shows matching session/thread
+  rows for configured named sessions.
+- `findThreadBinding` resolves a live session name to the expected T3 thread.
+- Sidebar shows every configured agent, correct named-session mode, pool
+  controls only for pools, wake mode, provider/model/work_dir, lifecycle state,
+  and GC thread rows.
+- FTS5 sidebar search finds message text through the T3 orchestration search
+  path.
+- OpenCode health check starts or reuses the intended configured server.
+- No doltlite-configured bridge path starts an external `dolt` process.
+
+Exit criteria:
+- `{{audit_report}}` contains the complete T3 bridge table
+- every listed part has a source marker and smoke check
+- any missing part blocks the merge before upstream is integrated
+"""
+
+[[steps]]
+id = "audit-upstream-delta"
+title = "Audit upstream changes before integrating"
+needs = ["inventory-t3bridge-contract"]
+description = """
+Fetch upstream, then classify every upstream change since the prior sync.
+
+```bash
+git fetch --prune --all
+git log --oneline --decorate {{target_branch}}..{{upstream_ref}}
+git diff --stat {{target_branch}}..{{upstream_ref}} -- packages/gascity packages/beads-doltlite packages/doltlite packages/gascity-config apps/server apps/web scripts
+git diff --name-status {{target_branch}}..{{upstream_ref}}
+```
+
+For every upstream change touching Gas City, beads, storage, config loading,
+session lifecycle, generated clients, CLI wrappers, or T3 integration, record:
+- commit hash and subject
+- files changed
+- behavior category: bug fix, refactor, config change, generated code, tests,
+  docs, runtime startup, storage/backend
+- overlap with fork ledger entries
+- silent-regression risk
+
+Hard rule: storage/backend changes are high risk until proven otherwise.
+
+Exit criteria:
+- `{{audit_report}}` has an upstream delta section
+- every relevant upstream change has an overlap/risk note
+- Dolt/doltlite impact is explicitly classified
+"""
+
+[[steps]]
+id = "merge-with-feature-map"
+title = "Merge or rebase upstream with a fork-feature map"
+needs = ["audit-upstream-delta"]
+description = """
+Integrate upstream only after the ledger and upstream delta audit exist.
+
+During conflict resolution, never choose a whole side for files that define:
+- beads backend selection
+- Dolt or doltlite command execution
+- libdoltlite linking or discovery
+- GC config merge/patch/override behavior
+- supervisor/controller lifecycle
+- T3 bridge or provider integration
+- generated API clients or contracts
+
+For each conflict, write the mapping into `{{audit_report}}`:
+- upstream intent
+- fork-owned behavior at risk
+- final resolution
+- smoke check proving the resolution
+
+After conflicts are resolved, scan for non-conflicting drops:
+```bash
+git diff --name-status ORIG_HEAD..HEAD
+git diff ORIG_HEAD..HEAD -- packages/gascity packages/beads-doltlite packages/doltlite packages/gascity-config apps/server apps/web scripts
+```
+
+Exit criteria:
+- upstream is integrated locally
+- every fork ledger item has a post-merge source mapping
+- no backend or T3 bridge behavior is assumed preserved without evidence
+"""
+
+[[steps]]
+id = "backend-contract-audit"
+title = "Audit beads backend contracts"
+needs = ["merge-with-feature-map"]
+description = """
+Prove both beads backends still exist and are routed correctly.
+
+Create a backend matrix in `{{audit_report}}` with:
+- backend name: `dolt` and `doltlite`
+- config key(s) selecting the backend
+- CLI command path used by Gas City
+- binary/library discovery path
+- package/source files implementing it
+- tests or smoke checks proving it
+- known limitations
+
+Required source checks:
+```bash
+rg -n "backend.*dolt|dolt.*backend|backend.*doltlite|doltlite.*backend|libdoltlite|findBuiltDoltliteLibraryPath|findBuiltBdBinaryPath" packages apps scripts
+rg -n "beads|bd " packages/gascity packages/gascity-config scripts
+rg -n "backend = \\"dolt\\"|backend = \\"doltlite\\"" {{runtime_city}} packages/gascity-config
+```
+
+Hard gates:
+- `dolt` support must still be selectable.
+- `doltlite` support must still be selectable.
+- Gas City must not hardcode only one backend.
+- T3 runners must not accidentally launch external `dolt` when configured for
+  `doltlite`.
+- doltlite code must not remove Dolt compatibility paths.
+- Dolt code must not assume doltlite-only sidecar behavior.
+
+Exit criteria:
+- backend matrix is complete
+- both backends have source/config/runtime evidence
+- any missing backend path blocks the merge
+"""
+
+[[steps]]
+id = "runtime-config-audit"
+title = "Audit bundled runtime config and generated paths"
+needs = ["backend-contract-audit"]
+description = """
+Verify the bundled T3Code city still resolves the intended runtime behavior.
+
+Capture:
+```bash
+bun gascity:path
+bun gc -- config show
+bun gc -- status
+bun gc -- runtime drain-check
+git diff -- {{runtime_city}} scripts/gascity-runner.ts packages/gascity-config apps/server/src/gc packages/contracts/src/gc.ts apps/web/src/components/Sidebar.tsx apps/web/src/components/SidebarGcFolders.tsx
+```
+
+Check specifically:
+- `{{runtime_city}}/city.toml` keeps the expected backend setting.
+- `pack.toml` and included packs do not drop fork agents or formulas.
+- `patches.agent`, `patches.named_session`, and `rigs.overrides` still merge.
+- generated config/runtime files are not committed accidentally.
+- machine-local `.gc/site.toml` is not rewritten by config generation.
+- T3 runner still uses the installed/built Gas City binary expected for this
+  checkout.
+
+Exit criteria:
+- resolved config matches source config intent
+- no generated or machine-local churn is staged
+- any config drift has an explicit explanation
+"""
+
+[[steps]]
+id = "smoke-dolt-backend"
+title = "Smoke-check beads with Dolt backend"
+needs = ["runtime-config-audit"]
+description = """
+Run a minimal, isolated Dolt backend smoke check. Use a temporary directory or a
+dedicated test rig. Do not mutate production beads unless the bead explicitly
+requires it.
+
+Required proof:
+- backend can initialize/open
+- bead create/list/show works
+- bead metadata write/read works
+- backend commit/status path works where supported
+- no doltlite-only command is required on the Dolt path
+
+Record exact commands and output summary in `{{audit_report}}`.
+
+If Dolt is unavailable on the machine, the merge is not complete. Either install
+the prerequisite, move the smoke to a runner that has Dolt, or explicitly block
+the merge.
+
+Exit criteria:
+- Dolt backend smoke passes
+- evidence is written to the audit report
+"""
+
+[[steps]]
+id = "smoke-doltlite-backend"
+title = "Smoke-check beads with doltlite backend"
+needs = ["runtime-config-audit"]
+description = """
+Run a minimal, isolated doltlite backend smoke check. Use the libdoltlite-linked
+client path, not plain `sqlite3`.
+
+Required proof:
+- libdoltlite library discovery succeeds
+- backend can initialize/open
+- bead create/list/show works
+- bead metadata write/read works
+- compact/health commands use the doltlite path when configured
+- no external Dolt binary is required on the doltlite path
+
+Use project wrappers where available:
+```bash
+bun gascity:config
+bun gc -- status
+node -e 'import("./packages/doltlite/index.ts").then(...)'
+```
+
+Do not use plain `sqlite3` as proof for a doltlite database. It may read the
+wrong file format or report false corruption.
+
+Exit criteria:
+- doltlite backend smoke passes through the linked client path
+- evidence is written to the audit report
+"""
+
+[[steps]]
+id = "t3-integration-smoke"
+title = "Smoke-check T3 and Gas City integration"
+needs = ["smoke-dolt-backend", "smoke-doltlite-backend"]
+description = """
+Run the smallest T3 integration smoke that proves upstream did not break fork
+behavior.
+
+Required checks:
+- `bun gc -- status` returns without hanging.
+- `bun gc -- config show` includes expected workspace and rig agents.
+- controller/supervisor lifecycle commands still work or report the correct
+  authority state.
+- opencode/Kimi provider defaults still resolve in config.
+- T3 sidebar data contracts still include pool min/max, named-session mode,
+  wake mode, provider/model/work_dir, and lifecycle state.
+- no direct `dolt` process starts for a doltlite-configured city.
+
+If frontend/sidebar behavior is touched, run or reference
+`mol-t3-sidebar-live-audit` before landing.
+
+Exit criteria:
+- T3/GC smoke passes
+- provider/backend/session assumptions are recorded
+- sidebar audit is triggered when relevant
+"""
+
+[[steps]]
+id = "quality-gates"
+title = "Run configured checks"
+needs = ["t3-integration-smoke"]
+description = """
+Respect the bead policy.
+
+If `run_tests` is `"true"`, run:
+```bash
+{{test_command}}
+```
+
+Default repo gate is `bun fmt && bun lint && bun typecheck`.
+
+Do not run `bun test`; this repository requires `bun run test` for tests. If
+targeted tests are needed, record the exact package/script.
+
+If `run_tests` is not `"true"`, record that checks were skipped by policy and
+why. Skipping quality gates does not waive backend smoke checks.
+
+Exit criteria:
+- configured quality checks pass, or failures are classified and the merge is
+  blocked
+"""
+
+[[steps]]
+id = "block-or-land"
+title = "Block, repair, or land the merge"
+needs = ["quality-gates"]
+description = """
+Decide based on evidence, not optimism.
+
+Block the merge if any of these are true:
+- a fork ledger feature is missing
+- Dolt backend smoke fails or is skipped without an explicit blocker
+- doltlite backend smoke fails or uses plain sqlite as proof
+- T3 integration smoke fails
+- generated/runtime config drift is unexplained
+- a backend, config key, command, or env var disappears without migration
+- source/runtime behavior disagrees
+- audit report lacks evidence for a feature decision
+
+If blocked:
+1. Repair the missing behavior in the merge branch, or revert the upstream
+   merge.
+2. Update `{{feature_ledger}}` and `{{audit_report}}` with cause and fix.
+3. Re-run the affected steps.
+4. Leave the bead open with blocker metadata.
+
+If clean:
+1. Commit merge and audit artifacts.
+2. Push the branch.
+3. Update the work bead with `upstream_ref`, `target_branch`, final commit,
+   audit report path, Dolt status, doltlite status, and T3 smoke status.
+4. Close the bead only after the pushed branch matches the audited commit.
+
+Exit criteria:
+- merge is landed with durable evidence or explicitly blocked
+- no fork-owned work was silently lost
+- both Dolt and doltlite backend status are recorded
+"""
