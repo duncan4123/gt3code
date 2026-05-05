@@ -563,6 +563,7 @@ func doStartStandalone(args []string, controllerMode bool, stdout, stderr io.Wri
 	runPoolOnBoot(cfg, cityPath, shellRunHook, stderr)
 
 	var oneShotStore beads.Store
+	rigStores := buildStandaloneRigStores(cfg, cityPath, stderr)
 	if store, err := openCityStoreAt(cityPath); err == nil {
 		oneShotStore = store
 
@@ -586,7 +587,7 @@ func doStartStandalone(args []string, controllerMode bool, stdout, stderr io.Wri
 		fmt.Fprintf(stderr, "gc start: loading session beads: %v\n", err) //nolint:errcheck
 		sessionBeads = nil
 	}
-	dsResult := buildDesiredStateWithSessionBeads(cityName, cityPath, beaconTime, cfg, sp, oneShotStore, nil, sessionBeads, nil, stderr)
+	dsResult := buildDesiredStateWithSessionBeads(cityName, cityPath, beaconTime, cfg, sp, oneShotStore, rigStores, sessionBeads, nil, stderr)
 	ds := dsResult.State
 	cfgNames := configuredSessionNamesWithSnapshot(cfg, cityName, sessionBeads)
 	_, sessionBeads = syncSessionBeadsWithSnapshot(
@@ -596,16 +597,17 @@ func doStartStandalone(args []string, controllerMode bool, stdout, stderr io.Wri
 	open := sessionBeads.Open()
 	dt := newDrainTracker()
 	poolDesired := PoolDesiredCounts(ComputePoolDesiredStates(
-		cfg, nil, sessionBeads.Open(), dsResult.ScaleCheckCounts))
+		cfg, dsResult.AssignedWorkBeads, sessionBeads.Open(), dsResult.ScaleCheckCounts))
 	if poolDesired == nil {
 		poolDesired = make(map[string]int)
 	}
 	mergeNamedSessionDemand(poolDesired, dsResult.NamedSessionDemand, cfg)
+	workSet := computeWorkSetWithStores(cfg, shellScaleCheck, cityName, cityPath, oneShotStore, rigStores, sessionBeads, stderr)
 	reconcileSessionBeadsAtPath(
 		sigCtx, cityPath, open, ds, cfgNames, cfg, sp, oneShotStore,
-		nil, nil, nil, nil, dt, poolDesired,
+		nil, dsResult.AssignedWorkBeads, rigStores, nil, dt, poolDesired,
 		dsResult.StoreQueryPartial,
-		nil, cityName,
+		workSet, cityName,
 		nil, clock.Real{}, recorder, cfg.Session.StartupTimeoutDuration(), 0,
 		stdout, stderr,
 	)
@@ -616,7 +618,7 @@ func doStartStandalone(args []string, controllerMode bool, stdout, stderr io.Wri
 		fmt.Fprintf(stderr, "gc start: loading session beads: %v\n", err) //nolint:errcheck
 		sessionBeads = nil
 	}
-	dsResult = buildDesiredStateWithSessionBeads(cityName, cityPath, beaconTime, cfg, sp, oneShotStore, nil, sessionBeads, nil, stderr)
+	dsResult = buildDesiredStateWithSessionBeads(cityName, cityPath, beaconTime, cfg, sp, oneShotStore, rigStores, sessionBeads, nil, stderr)
 	ds = dsResult.State
 	cfgNames = configuredSessionNamesWithSnapshot(cfg, cityName, sessionBeads)
 	syncSessionBeadsWithSnapshot(cityPath, oneShotStore, ds, sp, cfgNames, cfg, clock.Real{}, stderr, false, sessionBeads)
