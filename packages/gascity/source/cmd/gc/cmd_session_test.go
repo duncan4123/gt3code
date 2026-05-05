@@ -1173,6 +1173,39 @@ func TestCmdSessionNew_AutoTitleFromMessage(t *testing.T) {
 	}
 }
 
+func TestCmdSessionNew_NoAttachDoesNotWaitForSlowAutoTitle(t *testing.T) {
+	t.Setenv("GC_BEADS", "file")
+	t.Setenv("GC_SESSION", "fake")
+
+	cityDir := t.TempDir()
+	t.Setenv("GC_CITY", cityDir)
+	writeNamedSessionCityTOML(t, cityDir)
+
+	binDir := t.TempDir()
+	scriptPath := filepath.Join(binDir, "codex")
+	script := "#!/bin/sh\nsleep 2\nprintf 'slow generated title\\n'\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile(codex): %v", err)
+	}
+	t.Setenv("PATH", binDir)
+
+	var stdout, stderr bytes.Buffer
+	start := time.Now()
+	code := cmdSessionNew([]string{"mayor"}, "mayor", "", "fix the login redirect loop", true, &stdout, &stderr)
+	elapsed := time.Since(start)
+	if code != 0 {
+		t.Fatalf("cmdSessionNew = %d, want 0; stderr=%s", code, stderr.String())
+	}
+	if elapsed >= time.Second {
+		t.Fatalf("cmdSessionNew elapsed = %s, want < 1s", elapsed)
+	}
+
+	b := onlySessionBead(t, cityDir)
+	if !strings.Contains(b.Title, "fix the login redirect loop") {
+		t.Fatalf("title = %q, want immediate truncated title", b.Title)
+	}
+}
+
 func TestCmdSessionNew_ExplicitTitlePreserved(t *testing.T) {
 	t.Setenv("GC_BEADS", "file")
 	t.Setenv("GC_SESSION", "fake")

@@ -289,7 +289,6 @@ func cmdSessionNew(args []string, alias, title, titleHint string, noAttach bool,
 			}
 
 			titleDone := maybeAutoTitle(store, info.ID, title, titleHint, titleProvider, info.WorkDir, stderr)
-			defer func() { <-titleDone }() // ensure title goroutine completes on all exit paths
 
 			// Poke again after bead creation to trigger immediate reconciler tick.
 			_ = pokeController(cityPath)
@@ -302,6 +301,10 @@ func cmdSessionNew(args []string, alias, title, titleHint string, noAttach bool,
 				}
 				return 0
 			}
+
+			// Attach path stays foreground anyway, so wait for any one-shot title
+			// generation before handing control to the live session.
+			<-titleDone
 
 			// Wait for the reconciler to start the session before attaching.
 			fmt.Fprintln(stdout, "Waiting for session to start...") //nolint:errcheck // best-effort stdout
@@ -372,7 +375,6 @@ func cmdSessionNew(args []string, alias, title, titleHint string, noAttach bool,
 	}
 
 	titleDone := maybeAutoTitle(store, info.ID, title, titleHint, titleProvider, info.WorkDir, stderr)
-	defer func() { <-titleDone }() // ensure title goroutine completes on all exit paths
 
 	fmt.Fprintf(stdout, "Session %s created from template %q.\n", info.ID, canonicalTemplate) //nolint:errcheck // best-effort stdout
 
@@ -382,6 +384,10 @@ func cmdSessionNew(args []string, alias, title, titleHint string, noAttach bool,
 		}
 		return 0
 	}
+
+	// Attach path stays foreground anyway, so wait for any one-shot title
+	// generation before handing control to the live session.
+	<-titleDone
 
 	fmt.Fprintln(stdout, "Attaching...") //nolint:errcheck // best-effort stdout
 	if err := handle.Attach(context.Background()); err != nil {
@@ -394,8 +400,9 @@ func cmdSessionNew(args []string, alias, title, titleHint string, noAttach bool,
 // maybeAutoTitle runs the auto-title flow for a newly created session.
 // The provider should already be resolved by the caller. It returns a
 // channel that is closed when background title generation completes.
-// Short-lived CLI paths (e.g. --no-attach) should block on it before
-// exiting to ensure the model-refined title is persisted.
+// Attach paths may block on the returned channel before handing control to the
+// live session. Detached CLI paths intentionally skip that wait so session
+// creation can return promptly after persisting the immediate fallback title.
 func maybeAutoTitle(store beads.Store, beadID, userTitle, titleHint string, provider *config.ResolvedProvider, workDir string, stderr io.Writer) <-chan struct{} {
 	return api.MaybeGenerateTitleAsync(store, beadID, userTitle, titleHint, provider, workDir, func(format string, args ...any) {
 		fmt.Fprintf(stderr, "session %s: "+format+"\n", append([]any{beadID}, args...)...) //nolint:errcheck // best-effort stderr
