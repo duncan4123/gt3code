@@ -45,6 +45,9 @@ We are very very early in this project. Expect bugs.
 
 We are not accepting contributions yet.
 
+The desktop and web flows are still moving quickly, so screenshots and minor
+UX details may drift between releases.
+
 Observability guide: [docs/observability.md](./docs/observability.md)
 
 ## Bundled Gas City on `ship`
