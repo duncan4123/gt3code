@@ -22,7 +22,7 @@ events (drain, restart) between agents and the controller. They are
 designed to be called from within running agent sessions, not by humans.`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
+			if len(args) == 0 || isHelpArg(args[0]) {
 				return cmd.Help()
 			}
 			known := []string{"drain", "undrain", "drain-check", "drain-ack", "request-restart"}
@@ -38,4 +38,8 @@ designed to be called from within running agent sessions, not by humans.`,
 		newRuntimeRequestRestartCmd(stdout, stderr),
 	)
 	return cmd
+}
+
+func isHelpArg(arg string) bool {
+	return arg == "help" || arg == "-h" || arg == "--help"
 }
