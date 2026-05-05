@@ -267,7 +267,9 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   // no longer transitively provides it. Exposing it at the runtime level
   // keeps a single Live for all opencode consumers.
   Layer.provideMerge(OpenCodeRuntimeLive),
-  Layer.provideMerge(GcContextProviderLive.pipe(Layer.provide(GcApiClientLive))),
+  Layer.provideMerge(
+    Layer.mergeAll(GcApiClientLive, GcContextProviderLive.pipe(Layer.provide(GcApiClientLive))),
+  ),
   Layer.provideMerge(ServerSettingsLive),
   Layer.provideMerge(WorkspaceLayerLive),
   Layer.provideMerge(ProjectFaviconResolverLive),

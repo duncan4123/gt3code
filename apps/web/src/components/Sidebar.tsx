@@ -4,8 +4,11 @@ import {
   ChevronRightIcon,
   CloudIcon,
   FolderPlusIcon,
+  LoaderCircleIcon,
+  PlayIcon,
   SearchIcon,
   SettingsIcon,
+  SquareIcon,
   SquarePenIcon,
   TerminalIcon,
   TriangleAlertIcon,
@@ -19,8 +22,17 @@ import {
 } from "./ThreadStatusIndicators";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { autoAnimate } from "@formkit/auto-animate";
-import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  memo,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useShallow } from "zustand/react/shallow";
+import { useQuery } from "@tanstack/react-query";
 import {
   DndContext,
   type DragCancelEvent,
@@ -39,7 +51,10 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   type ContextMenuItem,
   type DesktopUpdateState,
+  type GcConfigResult,
+  parseGcMeta,
   ProjectId,
+  ProviderInstanceId,
   type ScopedThreadRef,
   type SidebarProjectGroupingMode,
   type ThreadEnvMode,
@@ -61,7 +76,7 @@ import { usePrimaryEnvironmentId } from "../environments/primary";
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { isMacPlatform, newCommandId } from "../lib/utils";
+import { isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
 import {
   selectProjectByRef,
   selectProjectsAcrossEnvironments,
@@ -149,9 +164,13 @@ import { useThreadSelectionStore } from "../threadSelectionStore";
 import { useCommandPaletteStore } from "../commandPaletteStore";
 import {
   getSidebarThreadIdsToPrewarm,
+  normalizeThreadSearchQuery,
+  resolveMissingGcRigProjects,
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
+  partitionProjectThreadsForSidebar,
   resolveProjectStatusIndicator,
+  resolveSidebarThreadSearch,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
@@ -162,7 +181,20 @@ import {
   useThreadJumpHintVisibility,
   ThreadStatusPill,
 } from "./Sidebar.logic";
+import { orchestrationSearchThreadMessagesQueryOptions } from "../lib/orchestrationReactQuery";
 import { sortThreads } from "../lib/threadSort";
+import {
+  SidebarGcFolders,
+  type SidebarGcAgentGroup,
+  type SidebarGcRigGroup,
+  type SidebarGcThreadGroup,
+} from "./SidebarGcFolders";
+import {
+  resolveGcAgentRuntimeState,
+  type GcAgentActionState,
+  type GcWakeMode,
+  waitForGcAgentBinding,
+} from "./sidebar/gcSidebarControls";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { CommandDialogTrigger } from "./ui/command";
@@ -205,6 +237,73 @@ const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> =
   repository_path: "Group by repository path",
   separate: "Keep separate",
 };
+
+function formatGcConvoyProgress(meta: ReturnType<typeof parseGcMeta>): string | undefined {
+  const closed = meta.convoyClosedCount ? Number(meta.convoyClosedCount) : null;
+  const total = meta.convoyTotalCount ? Number(meta.convoyTotalCount) : null;
+  if (!Number.isFinite(closed) || !Number.isFinite(total) || total === null || total <= 0) {
+    return undefined;
+  }
+  return `${closed}/${total}`;
+}
+
+function buildGcThreadGroups(
+  threads: readonly SidebarThreadSummary[],
+): readonly SidebarGcThreadGroup[] {
+  const groups = new Map<string, SidebarGcThreadGroup>();
+
+  for (const thread of threads) {
+    const meta = parseGcMeta(thread.customMetadata);
+    const convoyId = meta.convoy?.trim();
+    const formulaName = meta.formula?.trim();
+    const molecule = meta.molecule?.trim();
+    const groupId = convoyId
+      ? `convoy:${convoyId}`
+      : formulaName
+        ? `formula:${formulaName}:${molecule ?? ""}`
+        : null;
+    if (!groupId) {
+      continue;
+    }
+
+    const existing = groups.get(groupId);
+    if (existing) {
+      groups.set(groupId, {
+        ...existing,
+        threadIds: [...existing.threadIds, thread.id],
+      });
+      continue;
+    }
+
+    if (convoyId) {
+      const convoyStatus = meta.convoyStatus?.trim();
+      const convoyProgressLabel = formatGcConvoyProgress(meta);
+      groups.set(groupId, {
+        id: groupId,
+        label: meta.convoyTitle?.trim() || convoyId,
+        kind: "convoy",
+        ...(convoyStatus ? { status: convoyStatus } : {}),
+        ...(convoyProgressLabel ? { progressLabel: convoyProgressLabel } : {}),
+        threadIds: [thread.id],
+      });
+      continue;
+    }
+
+    groups.set(groupId, {
+      id: groupId,
+      label: molecule ? `${formulaName} · ${molecule}` : (formulaName ?? "formula"),
+      kind: "formula",
+      threadIds: [thread.id],
+    });
+  }
+
+  return [...groups.values()].toSorted((left, right) => {
+    if (left.kind !== right.kind) {
+      return left.kind === "convoy" ? -1 : 1;
+    }
+    return left.label.localeCompare(right.label);
+  });
+}
 
 function formatProjectMemberActionLabel(
   member: SidebarProjectGroupMember,
@@ -263,6 +362,7 @@ interface SidebarThreadRowProps {
   projectCwd: string | null;
   orderedProjectThreadKeys: readonly string[];
   isActive: boolean;
+  indentClassName?: string;
   jumpLabel: string | null;
   appSettingsConfirmThreadArchive: boolean;
   renamingThreadKey: string | null;
@@ -299,6 +399,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   const {
     orderedProjectThreadKeys,
     isActive,
+    indentClassName,
     jumpLabel,
     appSettingsConfirmThreadArchive,
     renamingThreadKey,
@@ -542,7 +643,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         className={`${resolveThreadRowClassName({
           isActive,
           isSelected,
-        })} relative isolate`}
+        })} ${indentClassName ?? ""} relative isolate`}
         onClick={handleRowClick}
         onKeyDown={handleRowKeyDown}
         onContextMenu={handleRowContextMenu}
@@ -713,7 +814,9 @@ interface SidebarProjectThreadListProps {
   hasOverflowingThreads: boolean;
   hiddenThreadStatus: ThreadStatusPill | null;
   orderedProjectThreadKeys: readonly string[];
+  folderThreads: readonly SidebarThreadSummary[];
   renderedThreads: readonly SidebarThreadSummary[];
+  rigGroups: readonly SidebarGcRigGroup[];
   showEmptyThreadState: boolean;
   shouldShowThreadPanel: boolean;
   isThreadListExpanded: boolean;
@@ -752,6 +855,31 @@ interface SidebarProjectThreadListProps {
   openPrLink: (event: React.MouseEvent<HTMLElement>, prUrl: string) => void;
   expandThreadListForProject: (projectKey: string) => void;
   collapseThreadListForProject: (projectKey: string) => void;
+  gcAgentMutationsInFlight: ReadonlySet<string>;
+  gcAgentStartsInFlight: ReadonlySet<string>;
+  gcRigMutationsInFlight: ReadonlySet<string>;
+  gcCityMutationInFlight: boolean;
+  gcAgentActionStateByAgent: ReadonlyMap<string, GcAgentActionState>;
+  gcRigActionStateByRig: ReadonlyMap<string, "resume" | "suspend">;
+  gcCityActionState: "resume" | "suspend" | null;
+  onToggleGcRigSuspended: (
+    rig: string,
+    suspended: boolean,
+    affectedAgents: readonly SidebarGcAgentGroup[],
+  ) => void;
+  onToggleGcCitySuspended: (
+    suspended: boolean,
+    affectedAgents: readonly SidebarGcAgentGroup[],
+  ) => void;
+  onToggleGcAgentSuspended: (
+    agent: string,
+    suspended: boolean,
+    agentGroup: SidebarGcAgentGroup,
+  ) => void;
+  onAdjustGcAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
+  onAdjustGcAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onToggleGcAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
+  onToggleGcAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
 
 const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
@@ -763,7 +891,9 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     hasOverflowingThreads,
     hiddenThreadStatus,
     orderedProjectThreadKeys,
+    folderThreads,
     renderedThreads,
+    rigGroups,
     showEmptyThreadState,
     shouldShowThreadPanel,
     isThreadListExpanded,
@@ -791,9 +921,26 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     openPrLink,
     expandThreadListForProject,
     collapseThreadListForProject,
+    gcAgentMutationsInFlight,
+    gcAgentStartsInFlight,
+    gcRigMutationsInFlight,
+    gcCityMutationInFlight,
+    gcAgentActionStateByAgent,
+    gcRigActionStateByRig,
+    gcCityActionState,
+    onToggleGcRigSuspended,
+    onToggleGcCitySuspended,
+    onToggleGcAgentSuspended,
+    onAdjustGcAgentMinActiveSessions,
+    onAdjustGcAgentMaxActiveSessions,
+    onToggleGcAgentWakeMode,
+    onToggleGcAgentSessionMode,
   } = props;
   const showMoreButtonRender = useMemo(() => <button type="button" />, []);
   const showLessButtonRender = useMemo(() => <button type="button" />, []);
+  const folderThreadById = useMemo(() => {
+    return new Map(folderThreads.map((thread) => [thread.id, thread] as const));
+  }, [folderThreads]);
 
   return (
     <SidebarMenuSub
@@ -809,6 +956,63 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
             <span>No threads yet</span>
           </div>
         </SidebarMenuSubItem>
+      ) : null}
+      {shouldShowThreadPanel && rigGroups.length > 0 ? (
+        <SidebarGcFolders
+          rigGroups={rigGroups}
+          gcAgentMutationsInFlight={gcAgentMutationsInFlight}
+          gcAgentStartsInFlight={gcAgentStartsInFlight}
+          gcRigMutationsInFlight={gcRigMutationsInFlight}
+          gcCityMutationInFlight={gcCityMutationInFlight}
+          gcAgentActionStateByAgent={gcAgentActionStateByAgent}
+          gcRigActionStateByRig={gcRigActionStateByRig}
+          gcCityActionState={gcCityActionState}
+          onToggleCitySuspended={onToggleGcCitySuspended}
+          onToggleRigSuspended={onToggleGcRigSuspended}
+          onToggleAgentSuspended={onToggleGcAgentSuspended}
+          onAdjustAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
+          onAdjustAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+          onToggleAgentWakeMode={onToggleGcAgentWakeMode}
+          onToggleAgentSessionMode={onToggleGcAgentSessionMode}
+          renderThreadRows={(threadIds, indentClassName) =>
+            threadIds.flatMap((threadId) => {
+              const thread = folderThreadById.get(threadId);
+              if (!thread) {
+                return [];
+              }
+              const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+              return [
+                <SidebarThreadRow
+                  key={threadKey}
+                  thread={thread}
+                  projectCwd={projectCwd}
+                  orderedProjectThreadKeys={orderedProjectThreadKeys}
+                  isActive={activeRouteThreadKey === threadKey}
+                  {...(indentClassName ? { indentClassName } : {})}
+                  jumpLabel={threadJumpLabelByKey.get(threadKey) ?? null}
+                  appSettingsConfirmThreadArchive={appSettingsConfirmThreadArchive}
+                  renamingThreadKey={renamingThreadKey}
+                  renamingTitle={renamingTitle}
+                  setRenamingTitle={setRenamingTitle}
+                  renamingInputRef={renamingInputRef}
+                  renamingCommittedRef={renamingCommittedRef}
+                  confirmingArchiveThreadKey={confirmingArchiveThreadKey}
+                  setConfirmingArchiveThreadKey={setConfirmingArchiveThreadKey}
+                  confirmArchiveButtonRefs={confirmArchiveButtonRefs}
+                  handleThreadClick={handleThreadClick}
+                  navigateToThread={navigateToThread}
+                  handleMultiSelectContextMenu={handleMultiSelectContextMenu}
+                  handleThreadContextMenu={handleThreadContextMenu}
+                  clearSelection={clearSelection}
+                  commitRename={commitRename}
+                  cancelRename={cancelRename}
+                  attemptArchiveThread={attemptArchiveThread}
+                  openPrLink={openPrLink}
+                />,
+              ];
+            })
+          }
+        />
       ) : null}
       {shouldShowThreadPanel &&
         renderedThreads.map((thread) => {
@@ -885,6 +1089,14 @@ interface SidebarProjectItemProps {
   isThreadListExpanded: boolean;
   activeRouteThreadKey: string | null;
   newThreadShortcutLabel: string | null;
+  gcConfig: GcConfigResult | null;
+  gcAgentMutationsInFlight: ReadonlySet<string>;
+  gcAgentStartsInFlight: ReadonlySet<string>;
+  gcRigMutationsInFlight: ReadonlySet<string>;
+  gcCityMutationInFlight: boolean;
+  gcAgentActionStateByAgent: ReadonlyMap<string, GcAgentActionState>;
+  gcRigActionStateByRig: ReadonlyMap<string, "resume" | "suspend">;
+  gcCityActionState: "resume" | "suspend" | null;
   handleNewThread: ReturnType<typeof useNewThreadHandler>["handleNewThread"];
   archiveThread: ReturnType<typeof useThreadActions>["archiveThread"];
   deleteThread: ReturnType<typeof useThreadActions>["deleteThread"];
@@ -897,6 +1109,24 @@ interface SidebarProjectItemProps {
   suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
   isManualProjectSorting: boolean;
   dragHandleProps: SortableProjectHandleProps | null;
+  onToggleGcRigSuspended: (
+    rig: string,
+    suspended: boolean,
+    affectedAgents: readonly SidebarGcAgentGroup[],
+  ) => void;
+  onToggleGcCitySuspended: (
+    suspended: boolean,
+    affectedAgents: readonly SidebarGcAgentGroup[],
+  ) => void;
+  onToggleGcAgentSuspended: (
+    agent: string,
+    suspended: boolean,
+    agentGroup: SidebarGcAgentGroup,
+  ) => void;
+  onAdjustGcAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
+  onAdjustGcAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onToggleGcAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
+  onToggleGcAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
 
 const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjectItemProps) {
@@ -905,6 +1135,14 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     isThreadListExpanded,
     activeRouteThreadKey,
     newThreadShortcutLabel,
+    gcConfig,
+    gcAgentMutationsInFlight,
+    gcAgentStartsInFlight,
+    gcRigMutationsInFlight,
+    gcCityMutationInFlight,
+    gcAgentActionStateByAgent,
+    gcRigActionStateByRig,
+    gcCityActionState,
     handleNewThread,
     archiveThread,
     deleteThread,
@@ -917,6 +1155,13 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     suppressProjectClickForContextMenuRef,
     isManualProjectSorting,
     dragHandleProps,
+    onToggleGcRigSuspended,
+    onToggleGcCitySuspended,
+    onToggleGcAgentSuspended,
+    onAdjustGcAgentMinActiveSessions,
+    onAdjustGcAgentMaxActiveSessions,
+    onToggleGcAgentWakeMode,
+    onToggleGcAgentSessionMode,
   } = props;
   const threadSortOrder = useSettings<SidebarThreadSortOrder>(
     (settings) => settings.sidebarThreadSortOrder,
@@ -1135,9 +1380,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   }, [activeRouteThreadKey, projectExpanded, visibleProjectThreads]);
 
   const {
+    folderThreads,
     hasOverflowingThreads,
     hiddenThreadStatus,
     renderedThreads,
+    rigGroups,
     showEmptyThreadState,
     shouldShowThreadPanel,
   } = useMemo(() => {
@@ -1158,37 +1405,103 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         },
       });
     };
-    const hasOverflowingThreads = visibleProjectThreads.length > THREAD_PREVIEW_LIMIT;
-    const previewThreads =
-      isThreadListExpanded || !hasOverflowingThreads
-        ? visibleProjectThreads
-        : visibleProjectThreads.slice(0, THREAD_PREVIEW_LIMIT);
-    const visibleThreadKeys = new Set(
-      [...previewThreads, ...(pinnedCollapsedThread ? [pinnedCollapsedThread] : [])].map((thread) =>
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-      ),
-    );
-    const renderedThreads = pinnedCollapsedThread
-      ? [pinnedCollapsedThread]
-      : visibleProjectThreads.filter((thread) =>
-          visibleThreadKeys.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
-        );
-    const hiddenThreads = visibleProjectThreads.filter(
-      (thread) =>
-        !visibleThreadKeys.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
-    );
+    const folderThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : visibleProjectThreads;
+    const {
+      rigGroups,
+      visibleStandaloneThreads,
+      hiddenStandaloneThreads,
+      hasHiddenStandaloneThreads,
+    } = partitionProjectThreadsForSidebar({
+      threads: folderThreads,
+      activeThreadId: pinnedCollapsedThread?.id,
+      isThreadListExpanded,
+      previewLimit: THREAD_PREVIEW_LIMIT,
+      gcConfig,
+      projectCwd: project.cwd,
+      projectName: project.displayName,
+      projectMembers: project.memberProjects,
+    });
+    const hasVirtualAgentFolders = rigGroups.some((rigGroup) => rigGroup.agentGroups.length > 0);
     return {
-      hasOverflowingThreads,
+      folderThreads,
+      hasOverflowingThreads: hasHiddenStandaloneThreads,
       hiddenThreadStatus: resolveProjectStatusIndicator(
-        hiddenThreads.map((thread) => resolveProjectThreadStatus(thread)),
+        hiddenStandaloneThreads.map((thread) => resolveProjectThreadStatus(thread)),
       ),
-      renderedThreads,
-      showEmptyThreadState: projectExpanded && visibleProjectThreads.length === 0,
+      renderedThreads: visibleStandaloneThreads,
+      rigGroups: rigGroups.map(
+        (rigGroup): SidebarGcRigGroup => ({
+          id: rigGroup.id,
+          label: rigGroup.label,
+          kind: rigGroup.kind,
+          isSuspended: rigGroup.isSuspended,
+          agentGroups: rigGroup.agentGroups.map((agentGroup) => {
+            const hasPoolControls =
+              agentGroup.isPool || typeof agentGroup.minActiveSessions === "number";
+            return {
+              id: agentGroup.id,
+              label: agentGroup.label,
+              qualifiedName: agentGroup.qualifiedName,
+              isSuspended: agentGroup.isSuspended,
+              isPool: hasPoolControls,
+              ...(typeof agentGroup.minActiveSessions === "number"
+                ? { minActiveSessions: agentGroup.minActiveSessions }
+                : {}),
+              ...(typeof agentGroup.maxActiveSessions === "number"
+                ? { maxActiveSessions: agentGroup.maxActiveSessions }
+                : {}),
+              ...(agentGroup.wakeMode ? { wakeMode: agentGroup.wakeMode } : {}),
+              ...(agentGroup.namedSessionMode
+                ? { namedSessionMode: agentGroup.namedSessionMode }
+                : {}),
+              ...(agentGroup.scope ? { scope: agentGroup.scope } : {}),
+              ...(agentGroup.provider ? { provider: agentGroup.provider } : {}),
+              ...(agentGroup.description ? { description: agentGroup.description } : {}),
+              ...(agentGroup.workDir ? { workDir: agentGroup.workDir } : {}),
+              ...(agentGroup.promptTemplate ? { promptTemplate: agentGroup.promptTemplate } : {}),
+              ...(agentGroup.startCommand ? { startCommand: agentGroup.startCommand } : {}),
+              ...(agentGroup.defaultSlingFormula
+                ? { defaultSlingFormula: agentGroup.defaultSlingFormula }
+                : {}),
+              runtimeState: resolveGcAgentRuntimeState({
+                isPool: hasPoolControls,
+                isSuspended: agentGroup.isSuspended,
+                ...(agentGroup.namedSessionMode
+                  ? { namedSessionMode: agentGroup.namedSessionMode }
+                  : {}),
+                ...(gcAgentActionStateByAgent.get(agentGroup.qualifiedName)
+                  ? { actionState: gcAgentActionStateByAgent.get(agentGroup.qualifiedName) }
+                  : {}),
+                ...(gcAgentStartsInFlight.has(agentGroup.qualifiedName)
+                  ? { startPending: true }
+                  : {}),
+                threads: agentGroup.threads.map((thread) => ({
+                  latestTurn: thread.latestTurn ?? null,
+                  session: thread.session ?? null,
+                })),
+              }),
+              threadIds: agentGroup.threads.map((thread) => thread.id),
+              threadGroups: buildGcThreadGroups(agentGroup.threads),
+            };
+          }),
+        }),
+      ),
+      showEmptyThreadState:
+        projectExpanded &&
+        visibleProjectThreads.length === 0 &&
+        visibleStandaloneThreads.length === 0 &&
+        !hasVirtualAgentFolders,
       shouldShowThreadPanel: projectExpanded || pinnedCollapsedThread !== null,
     };
   }, [
+    gcConfig,
+    gcAgentActionStateByAgent,
+    gcAgentStartsInFlight,
     isThreadListExpanded,
     pinnedCollapsedThread,
+    project.cwd,
+    project.displayName,
+    project.memberProjects,
     projectExpanded,
     projectThreads,
     threadLastVisitedAts,
@@ -2068,7 +2381,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         hasOverflowingThreads={hasOverflowingThreads}
         hiddenThreadStatus={hiddenThreadStatus}
         orderedProjectThreadKeys={orderedProjectThreadKeys}
+        folderThreads={folderThreads}
         renderedThreads={renderedThreads}
+        rigGroups={rigGroups}
         showEmptyThreadState={showEmptyThreadState}
         shouldShowThreadPanel={shouldShowThreadPanel}
         isThreadListExpanded={isThreadListExpanded}
@@ -2096,6 +2411,20 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         openPrLink={openPrLink}
         expandThreadListForProject={expandThreadListForProject}
         collapseThreadListForProject={collapseThreadListForProject}
+        gcAgentMutationsInFlight={gcAgentMutationsInFlight}
+        gcAgentStartsInFlight={gcAgentStartsInFlight}
+        gcRigMutationsInFlight={gcRigMutationsInFlight}
+        gcCityMutationInFlight={gcCityMutationInFlight}
+        gcAgentActionStateByAgent={gcAgentActionStateByAgent}
+        gcRigActionStateByRig={gcRigActionStateByRig}
+        gcCityActionState={gcCityActionState}
+        onToggleGcCitySuspended={onToggleGcCitySuspended}
+        onToggleGcRigSuspended={onToggleGcRigSuspended}
+        onToggleGcAgentSuspended={onToggleGcAgentSuspended}
+        onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
+        onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+        onToggleGcAgentWakeMode={onToggleGcAgentWakeMode}
+        onToggleGcAgentSessionMode={onToggleGcAgentSessionMode}
       />
 
       <Dialog
@@ -2477,7 +2806,20 @@ interface SidebarProjectsContentProps {
   routeThreadKey: string | null;
   newThreadShortcutLabel: string | null;
   commandPaletteShortcutLabel: string | null;
+  threadSearchQuery: string;
+  isThreadSearchActive: boolean;
+  matchingThreadCount: number;
   threadJumpLabelByKey: ReadonlyMap<string, string>;
+  gcConfig: GcConfigResult | null;
+  gcSupervisorMutationInFlight: boolean;
+  gcControllerMutationInFlight: boolean;
+  gcAgentMutationsInFlight: ReadonlySet<string>;
+  gcAgentStartsInFlight: ReadonlySet<string>;
+  gcRigMutationsInFlight: ReadonlySet<string>;
+  gcCityMutationInFlight: boolean;
+  gcAgentActionStateByAgent: ReadonlyMap<string, GcAgentActionState>;
+  gcRigActionStateByRig: ReadonlyMap<string, "resume" | "suspend">;
+  gcCityActionState: "resume" | "suspend" | null;
   attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
   expandThreadListForProject: (projectKey: string) => void;
   collapseThreadListForProject: (projectKey: string) => void;
@@ -2486,6 +2828,27 @@ interface SidebarProjectsContentProps {
   suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
   attachProjectListAutoAnimateRef: (node: HTMLElement | null) => void;
   projectsLength: number;
+  onThreadSearchQueryChange: (query: string) => void;
+  onSetGcSupervisorRunning: (running: boolean) => void;
+  onSetGcControllerRunning: (running: boolean) => void;
+  onToggleGcRigSuspended: (
+    rig: string,
+    suspended: boolean,
+    affectedAgents: readonly SidebarGcAgentGroup[],
+  ) => void;
+  onToggleGcCitySuspended: (
+    suspended: boolean,
+    affectedAgents: readonly SidebarGcAgentGroup[],
+  ) => void;
+  onToggleGcAgentSuspended: (
+    agent: string,
+    suspended: boolean,
+    agentGroup: SidebarGcAgentGroup,
+  ) => void;
+  onAdjustGcAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
+  onAdjustGcAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onToggleGcAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
+  onToggleGcAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
 
 const SidebarProjectsContent = memo(function SidebarProjectsContent(
@@ -2517,7 +2880,20 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     routeThreadKey,
     newThreadShortcutLabel,
     commandPaletteShortcutLabel,
+    threadSearchQuery,
+    isThreadSearchActive,
+    matchingThreadCount,
     threadJumpLabelByKey,
+    gcConfig,
+    gcSupervisorMutationInFlight,
+    gcControllerMutationInFlight,
+    gcAgentMutationsInFlight,
+    gcAgentStartsInFlight,
+    gcRigMutationsInFlight,
+    gcCityMutationInFlight,
+    gcAgentActionStateByAgent,
+    gcRigActionStateByRig,
+    gcCityActionState,
     attachThreadListAutoAnimateRef,
     expandThreadListForProject,
     collapseThreadListForProject,
@@ -2526,7 +2902,26 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     suppressProjectClickForContextMenuRef,
     attachProjectListAutoAnimateRef,
     projectsLength,
+    onThreadSearchQueryChange,
+    onSetGcSupervisorRunning,
+    onSetGcControllerRunning,
+    onToggleGcRigSuspended,
+    onToggleGcCitySuspended,
+    onToggleGcAgentSuspended,
+    onAdjustGcAgentMinActiveSessions,
+    onAdjustGcAgentMaxActiveSessions,
+    onToggleGcAgentWakeMode,
+    onToggleGcAgentSessionMode,
   } = props;
+  const supervisorTooltip = gcConfig?.lifecycle?.supervisorRunning
+    ? `Stop Gas City supervisor${
+        typeof gcConfig.lifecycle.supervisorPort === "number"
+          ? ` · port ${gcConfig.lifecycle.supervisorPort}`
+          : gcConfig.lifecycle.supervisorUrl
+            ? ` · ${gcConfig.lifecycle.supervisorUrl}`
+            : ""
+      }`
+    : "Start Gas City supervisor";
 
   const handleProjectSortOrderChange = useCallback(
     (sortOrder: SidebarProjectSortOrder) => {
@@ -2614,6 +3009,67 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 render={
                   <button
                     type="button"
+                    aria-label={supervisorTooltip}
+                    title={supervisorTooltip}
+                    data-testid="sidebar-start-gc-trigger"
+                    disabled={gcSupervisorMutationInFlight}
+                    className="inline-flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 hover:text-emerald-800 disabled:cursor-wait disabled:opacity-60 dark:text-emerald-300"
+                    onClick={() =>
+                      onSetGcSupervisorRunning(!(gcConfig?.lifecycle?.supervisorRunning ?? false))
+                    }
+                  />
+                }
+              >
+                {gcSupervisorMutationInFlight ? (
+                  <LoaderCircleIcon className="size-3 animate-spin" />
+                ) : gcConfig?.lifecycle?.supervisorRunning ? (
+                  <SquareIcon className="size-3" />
+                ) : (
+                  <PlayIcon className="size-3" />
+                )}
+                <span>Sup</span>
+              </TooltipTrigger>
+              <TooltipPopup side="right">{supervisorTooltip}</TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={
+                      gcConfig?.lifecycle?.controllerRunning
+                        ? "Stop Gas City controller"
+                        : "Start Gas City controller"
+                    }
+                    data-testid="sidebar-gc-controller-trigger"
+                    disabled={gcControllerMutationInFlight}
+                    className="inline-flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-sky-700 transition-colors hover:bg-sky-500/10 hover:text-sky-800 disabled:cursor-wait disabled:opacity-60 dark:text-sky-300"
+                    onClick={() =>
+                      onSetGcControllerRunning(!(gcConfig?.lifecycle?.controllerRunning ?? false))
+                    }
+                  />
+                }
+              >
+                {gcControllerMutationInFlight ? (
+                  <LoaderCircleIcon className="size-3 animate-spin" />
+                ) : gcConfig?.lifecycle?.controllerRunning ? (
+                  <SquareIcon className="size-3" />
+                ) : (
+                  <PlayIcon className="size-3" />
+                )}
+                <span>Ctl</span>
+              </TooltipTrigger>
+              <TooltipPopup side="right">
+                {gcConfig?.lifecycle?.controllerRunning
+                  ? "Stop Gas City controller"
+                  : "Start Gas City controller"}
+              </TooltipPopup>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
                     aria-label="Add project"
                     data-testid="sidebar-add-project-trigger"
                     className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
@@ -2626,6 +3082,25 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               <TooltipPopup side="right">Add project</TooltipPopup>
             </Tooltip>
           </div>
+        </div>
+
+        <div className="mb-2 px-1">
+          <Input
+            nativeInput
+            type="search"
+            size="sm"
+            value={threadSearchQuery}
+            placeholder="Search threads..."
+            className="h-7 rounded-lg text-xs"
+            onChange={(event) => onThreadSearchQueryChange(event.currentTarget.value)}
+          />
+          {isThreadSearchActive ? (
+            <div className="mt-1 px-1 text-[10px] text-muted-foreground/60">
+              {matchingThreadCount === 0
+                ? "No matching threads"
+                : `${matchingThreadCount} matching thread${matchingThreadCount === 1 ? "" : "s"}`}
+            </div>
+          ) : null}
         </div>
 
         {isManualProjectSorting ? (
@@ -2652,6 +3127,14 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                           activeRouteProjectKey === project.projectKey ? routeThreadKey : null
                         }
                         newThreadShortcutLabel={newThreadShortcutLabel}
+                        gcConfig={gcConfig}
+                        gcAgentMutationsInFlight={gcAgentMutationsInFlight}
+                        gcAgentStartsInFlight={gcAgentStartsInFlight}
+                        gcRigMutationsInFlight={gcRigMutationsInFlight}
+                        gcCityMutationInFlight={gcCityMutationInFlight}
+                        gcAgentActionStateByAgent={gcAgentActionStateByAgent}
+                        gcRigActionStateByRig={gcRigActionStateByRig}
+                        gcCityActionState={gcCityActionState}
                         handleNewThread={handleNewThread}
                         archiveThread={archiveThread}
                         deleteThread={deleteThread}
@@ -2666,6 +3149,13 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                         }
                         isManualProjectSorting={isManualProjectSorting}
                         dragHandleProps={dragHandleProps}
+                        onToggleGcCitySuspended={onToggleGcCitySuspended}
+                        onToggleGcRigSuspended={onToggleGcRigSuspended}
+                        onToggleGcAgentSuspended={onToggleGcAgentSuspended}
+                        onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
+                        onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+                        onToggleGcAgentWakeMode={onToggleGcAgentWakeMode}
+                        onToggleGcAgentSessionMode={onToggleGcAgentSessionMode}
                       />
                     )}
                   </SortableProjectItem>
@@ -2684,6 +3174,14 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                   activeRouteProjectKey === project.projectKey ? routeThreadKey : null
                 }
                 newThreadShortcutLabel={newThreadShortcutLabel}
+                gcConfig={gcConfig}
+                gcAgentMutationsInFlight={gcAgentMutationsInFlight}
+                gcAgentStartsInFlight={gcAgentStartsInFlight}
+                gcRigMutationsInFlight={gcRigMutationsInFlight}
+                gcCityMutationInFlight={gcCityMutationInFlight}
+                gcAgentActionStateByAgent={gcAgentActionStateByAgent}
+                gcRigActionStateByRig={gcRigActionStateByRig}
+                gcCityActionState={gcCityActionState}
                 handleNewThread={handleNewThread}
                 archiveThread={archiveThread}
                 deleteThread={deleteThread}
@@ -2696,6 +3194,13 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
                 isManualProjectSorting={isManualProjectSorting}
                 dragHandleProps={null}
+                onToggleGcCitySuspended={onToggleGcCitySuspended}
+                onToggleGcRigSuspended={onToggleGcRigSuspended}
+                onToggleGcAgentSuspended={onToggleGcAgentSuspended}
+                onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
+                onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+                onToggleGcAgentWakeMode={onToggleGcAgentWakeMode}
+                onToggleGcAgentSessionMode={onToggleGcAgentSessionMode}
               />
             ))}
           </SidebarMenu>
@@ -2741,11 +3246,38 @@ export default function Sidebar() {
   const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
     ReadonlySet<string>
   >(() => new Set());
+  const [threadSearchQuery, setThreadSearchQuery] = useState("");
   const { showThreadJumpHints, updateThreadJumpHintsVisibility } = useThreadJumpHintVisibility();
   const dragInProgressRef = useRef(false);
   const suppressProjectClickAfterDragRef = useRef(false);
   const suppressProjectClickForContextMenuRef = useRef(false);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
+  const [gcConfig, setGcConfig] = useState<GcConfigResult | null>(null);
+  const [gcSupervisorMutationInFlight, setGcSupervisorMutationInFlight] = useState(false);
+  const [gcControllerMutationInFlight, setGcControllerMutationInFlight] = useState(false);
+  const [gcAgentActionStateByAgent, setGcAgentActionStateByAgent] = useState<
+    ReadonlyMap<string, GcAgentActionState>
+  >(() => new Map());
+  const [gcRigActionStateByRig, setGcRigActionStateByRig] = useState<
+    ReadonlyMap<string, "resume" | "suspend">
+  >(() => new Map());
+  const [gcCityActionState, setGcCityActionState] = useState<"resume" | "suspend" | null>(null);
+  const [gcAgentStartsInFlight, setGcAgentStartsInFlight] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const gcAgentStartAbortControllersRef = useRef(new Map<string, AbortController>());
+  const gcAgentMutationsInFlight = useMemo(
+    () => new Set(gcAgentActionStateByAgent.keys()),
+    [gcAgentActionStateByAgent],
+  );
+  const gcRigMutationsInFlight = useMemo(
+    () => new Set(gcRigActionStateByRig.keys()),
+    [gcRigActionStateByRig],
+  );
+  const gcCityMutationInFlight = gcCityActionState !== null;
+  const pendingGcRigProjectCwdsRef = useRef(new Set<string>());
+  const sidebarThreadsRef = useRef(sidebarThreads);
+  sidebarThreadsRef.current = sidebarThreads;
   const selectedThreadCount = useThreadSelectionStore((s) => s.selectedThreadKeys.size);
   const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
@@ -2755,6 +3287,137 @@ export default function Sidebar() {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const savedEnvironmentRegistry = useSavedEnvironmentRegistryStore((s) => s.byId);
   const savedEnvironmentRuntimeById = useSavedEnvironmentRuntimeStore((s) => s.byId);
+  const setGcAgentActionState = useCallback((agent: string, actionState: GcAgentActionState) => {
+    setGcAgentActionStateByAgent((current) => {
+      const next = new Map(current);
+      next.set(agent, actionState);
+      return next;
+    });
+  }, []);
+  const clearGcAgentActionState = useCallback((agent: string) => {
+    setGcAgentActionStateByAgent((current) => {
+      const next = new Map(current);
+      next.delete(agent);
+      return next;
+    });
+  }, []);
+  const setGcRigActionState = useCallback((rig: string, action: "resume" | "suspend") => {
+    setGcRigActionStateByRig((current) => {
+      const next = new Map(current);
+      next.set(rig, action);
+      return next;
+    });
+  }, []);
+  const clearGcRigActionState = useCallback((rig: string) => {
+    setGcRigActionStateByRig((current) => {
+      const next = new Map(current);
+      next.delete(rig);
+      return next;
+    });
+  }, []);
+  const setAgentStartPending = useCallback((agent: string, pending: boolean) => {
+    setGcAgentStartsInFlight((current) => {
+      const next = new Set(current);
+      if (pending) {
+        next.add(agent);
+      } else {
+        next.delete(agent);
+      }
+      return next;
+    });
+  }, []);
+  const stopWatchingGcAgentStart = useCallback(
+    (agent: string) => {
+      gcAgentStartAbortControllersRef.current.get(agent)?.abort();
+      gcAgentStartAbortControllersRef.current.delete(agent);
+      setAgentStartPending(agent, false);
+    },
+    [setAgentStartPending],
+  );
+  const refreshGcConfig = useCallback(async (): Promise<GcConfigResult | null> => {
+    const api = readLocalApi();
+    if (!api?.gc?.getConfig) {
+      return null;
+    }
+    const config = await api.gc.getConfig({});
+    setGcConfig(config);
+    return config;
+  }, []);
+  const handleSetGcSupervisorRunning = useCallback(
+    async (running: boolean) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setSupervisorRunning) {
+        return;
+      }
+      setGcSupervisorMutationInFlight(true);
+      try {
+        setGcConfig(await api.gc.setSupervisorRunning({ running }));
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: running ? "Failed to start supervisor" : "Failed to stop supervisor",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        setGcSupervisorMutationInFlight(false);
+      }
+    },
+    [refreshGcConfig],
+  );
+  const handleSetGcControllerRunning = useCallback(
+    async (running: boolean) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setControllerRunning) {
+        return;
+      }
+      setGcControllerMutationInFlight(true);
+      try {
+        setGcConfig(await api.gc.setControllerRunning({ running }));
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: running ? "Failed to start controller" : "Failed to stop controller",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        setGcControllerMutationInFlight(false);
+      }
+    },
+    [refreshGcConfig],
+  );
+  const waitForAgentStart = useCallback(
+    async (agent: string) => {
+      const api = readLocalApi();
+      if (!api?.gc?.findThreadBinding) {
+        return;
+      }
+
+      stopWatchingGcAgentStart(agent);
+      const controller = new AbortController();
+      gcAgentStartAbortControllersRef.current.set(agent, controller);
+      setAgentStartPending(agent, true);
+
+      try {
+        await waitForGcAgentBinding({
+          agent,
+          findThreadBinding: (sessionName) => api.gc!.findThreadBinding({ sessionName }),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          console.warn("[gc-sidebar] failed to watch agent start", { agent, error });
+        }
+      } finally {
+        if (gcAgentStartAbortControllersRef.current.get(agent) === controller) {
+          gcAgentStartAbortControllersRef.current.delete(agent);
+        }
+        setAgentStartPending(agent, false);
+      }
+    },
+    [setAgentStartPending, stopWatchingGcAgentStart],
+  );
   const orderedProjects = useMemo(() => {
     return orderItemsByPreferredIds({
       items: projects,
@@ -2762,6 +3425,99 @@ export default function Sidebar() {
       getId: getProjectOrderKey,
     });
   }, [projectOrder, projects]);
+
+  useEffect(() => {
+    const abortControllers = gcAgentStartAbortControllersRef.current;
+    return () => {
+      for (const controller of abortControllers.values()) {
+        controller.abort();
+      }
+      abortControllers.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let retryTimeout: number | null = null;
+
+    const fetchConfig = async (): Promise<void> => {
+      try {
+        await refreshGcConfig();
+      } catch {
+        if (!cancelled && retryTimeout == null) {
+          retryTimeout = window.setTimeout(() => {
+            retryTimeout = null;
+            void fetchConfig();
+          }, 5_000);
+        }
+      }
+    };
+
+    void fetchConfig();
+    return () => {
+      cancelled = true;
+      if (retryTimeout != null) {
+        window.clearTimeout(retryTimeout);
+      }
+    };
+  }, [refreshGcConfig]);
+
+  useEffect(() => {
+    const existingProjectCwds = new Set(
+      projects
+        .map((project) => project.cwd.trim().replace(/\/+$/, ""))
+        .filter((cwd) => cwd.length > 0),
+    );
+    for (const pendingCwd of pendingGcRigProjectCwdsRef.current) {
+      if (existingProjectCwds.has(pendingCwd)) {
+        pendingGcRigProjectCwdsRef.current.delete(pendingCwd);
+      }
+    }
+  }, [projects]);
+
+  useEffect(() => {
+    const api = readLocalApi();
+    if (!api || !gcConfig) {
+      return;
+    }
+
+    const missingRigs = resolveMissingGcRigProjects({
+      projects,
+      gcConfig,
+      pendingCwds: pendingGcRigProjectCwdsRef.current,
+    });
+    for (const rig of missingRigs) {
+      const normalizedRigPath = rig.path.trim().replace(/\/+$/, "");
+      if (!normalizedRigPath) {
+        continue;
+      }
+      pendingGcRigProjectCwdsRef.current.add(normalizedRigPath);
+      void api.orchestration
+        .dispatchCommand({
+          type: "project.create",
+          commandId: newCommandId(),
+          projectId: newProjectId(),
+          title: rig.name,
+          workspaceRoot: rig.path,
+          defaultModelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5.5",
+          },
+          createdAt: new Date().toISOString(),
+        })
+        .catch((error) => {
+          pendingGcRigProjectCwdsRef.current.delete(normalizedRigPath);
+          toastManager.add({
+            type: "error",
+            title: `Failed to add GC rig "${rig.name}"`,
+            description:
+              error instanceof Error
+                ? error.message
+                : `An error occurred while creating the ${rig.name} project.`,
+          });
+        });
+    }
+  }, [gcConfig, projects]);
 
   // Build a mapping from physical project key → logical project key for
   // cross-environment grouping.  Projects that share a repositoryIdentity
@@ -2894,6 +3650,248 @@ export default function Sidebar() {
     [clearSelection, isMobile, navigate, setOpenMobile, setSelectionAnchor],
   );
 
+  const filterAutoStartAgents = useCallback(
+    (agents: readonly SidebarGcAgentGroup[]) =>
+      agents.filter(
+        (agent) => !agent.isPool && agent.namedSessionMode === "always" && agent.qualifiedName,
+      ),
+    [],
+  );
+
+  const handleGcAgentSuspendedChange = useCallback(
+    async (agent: string, suspended: boolean, agentGroup: SidebarGcAgentGroup) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setAgentSuspended) {
+        return;
+      }
+      const toastId = toastManager.add({
+        type: "loading",
+        title: suspended ? `Suspending ${agent}` : `Resuming ${agent}`,
+        description: suspended
+          ? "Gas City is stopping the agent in the background."
+          : "Gas City is updating the agent and reconciling the named session.",
+        timeout: 0,
+      });
+      if (suspended) {
+        stopWatchingGcAgentStart(agent);
+      }
+      setGcAgentActionState(agent, suspended ? { kind: "suspend" } : { kind: "resume" });
+
+      try {
+        const nextConfig = await api.gc.setAgentSuspended({ agent, suspended });
+        setGcConfig(nextConfig);
+        if (!suspended && !agentGroup.isPool && agentGroup.namedSessionMode === "always") {
+          void waitForAgentStart(agent);
+        }
+        toastManager.update(toastId, {
+          type: "success",
+          title: suspended ? `${agent} suspended` : `${agent} resumed`,
+          description: "Gas City accepted the config change.",
+          timeout: 0,
+          data: { dismissAfterVisibleMs: 6_000 },
+        });
+      } catch (error) {
+        toastManager.update(toastId, {
+          type: "error",
+          title: `Failed to update ${agent}`,
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        clearGcAgentActionState(agent);
+      }
+    },
+    [
+      clearGcAgentActionState,
+      refreshGcConfig,
+      setGcAgentActionState,
+      stopWatchingGcAgentStart,
+      waitForAgentStart,
+    ],
+  );
+
+  const handleGcAgentMinActiveSessionsChange = useCallback(
+    async (agent: string, minActiveSessions: number) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setAgentMinActiveSessions) {
+        return;
+      }
+      setGcAgentActionState(agent, { kind: "pool-min", minActiveSessions });
+      try {
+        setGcConfig(await api.gc.setAgentMinActiveSessions({ agent, minActiveSessions }));
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to scale ${agent}`,
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        clearGcAgentActionState(agent);
+      }
+    },
+    [clearGcAgentActionState, refreshGcConfig, setGcAgentActionState],
+  );
+
+  const handleGcAgentMaxActiveSessionsChange = useCallback(
+    async (agent: string, maxActiveSessions: number) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setAgentMaxActiveSessions) {
+        return;
+      }
+      setGcAgentActionState(agent, { kind: "pool-size", maxActiveSessions });
+      try {
+        setGcConfig(await api.gc.setAgentMaxActiveSessions({ agent, maxActiveSessions }));
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to scale ${agent}`,
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        clearGcAgentActionState(agent);
+      }
+    },
+    [clearGcAgentActionState, refreshGcConfig, setGcAgentActionState],
+  );
+
+  const handleGcAgentWakeModeChange = useCallback(
+    async (agent: string, wakeMode: GcWakeMode) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setAgentWakeMode) {
+        return;
+      }
+      setGcAgentActionState(agent, { kind: "wake-mode", wakeMode });
+      try {
+        setGcConfig(await api.gc.setAgentWakeMode({ agent, wakeMode }));
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to update ${agent}`,
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        clearGcAgentActionState(agent);
+      }
+    },
+    [clearGcAgentActionState, refreshGcConfig, setGcAgentActionState],
+  );
+
+  const handleGcAgentSessionModeChange = useCallback(
+    async (agent: string, mode: "always" | "on_demand") => {
+      const api = readLocalApi();
+      if (!api?.gc?.setAgentSessionMode) {
+        return;
+      }
+      if (mode === "on_demand") {
+        stopWatchingGcAgentStart(agent);
+      }
+      setGcAgentActionState(agent, { kind: "session-mode", targetMode: mode });
+      try {
+        const nextConfig = await api.gc.setAgentSessionMode({ agent, mode });
+        setGcConfig(nextConfig);
+        const updatedAgent = nextConfig.agents.find((entry) => {
+          const qualifiedName = entry.dir ? `${entry.dir}/${entry.name}` : entry.name;
+          return qualifiedName === agent;
+        });
+        if (mode === "always" && updatedAgent && !updatedAgent.is_pool && !updatedAgent.suspended) {
+          void waitForAgentStart(agent);
+        }
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to update ${agent}`,
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        clearGcAgentActionState(agent);
+      }
+    },
+    [
+      clearGcAgentActionState,
+      refreshGcConfig,
+      setGcAgentActionState,
+      stopWatchingGcAgentStart,
+      waitForAgentStart,
+    ],
+  );
+
+  const handleGcRigSuspendedChange = useCallback(
+    async (rig: string, suspended: boolean, affectedAgents: readonly SidebarGcAgentGroup[]) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setRigSuspended) {
+        return;
+      }
+      if (suspended) {
+        for (const agent of affectedAgents) {
+          stopWatchingGcAgentStart(agent.qualifiedName);
+        }
+      }
+      setGcRigActionState(rig, suspended ? "suspend" : "resume");
+      try {
+        setGcConfig(await api.gc.setRigSuspended({ rig, suspended }));
+        if (!suspended) {
+          for (const agent of filterAutoStartAgents(affectedAgents)) {
+            void waitForAgentStart(agent.qualifiedName);
+          }
+        }
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to update ${rig}`,
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        clearGcRigActionState(rig);
+      }
+    },
+    [
+      clearGcRigActionState,
+      filterAutoStartAgents,
+      refreshGcConfig,
+      setGcRigActionState,
+      stopWatchingGcAgentStart,
+      waitForAgentStart,
+    ],
+  );
+
+  const handleGcCitySuspendedChange = useCallback(
+    async (suspended: boolean, affectedAgents: readonly SidebarGcAgentGroup[]) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setCitySuspended) {
+        return;
+      }
+      if (suspended) {
+        for (const agent of affectedAgents) {
+          stopWatchingGcAgentStart(agent.qualifiedName);
+        }
+      }
+      setGcCityActionState(suspended ? "suspend" : "resume");
+      try {
+        setGcConfig(await api.gc.setCitySuspended({ suspended }));
+        if (!suspended) {
+          for (const agent of filterAutoStartAgents(affectedAgents)) {
+            void waitForAgentStart(agent.qualifiedName);
+          }
+        }
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to update city",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        setGcCityActionState(null);
+      }
+    },
+    [filterAutoStartAgents, refreshGcConfig, stopWatchingGcAgentStart, waitForAgentStart],
+  );
+
   const projectDnDSensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
@@ -2966,6 +3964,28 @@ export default function Sidebar() {
     () => sidebarThreads.filter((thread) => thread.archivedAt === null),
     [sidebarThreads],
   );
+  const deferredThreadSearchQuery = useDeferredValue(threadSearchQuery);
+  const normalizedThreadSearchQuery = useMemo(
+    () => normalizeThreadSearchQuery(deferredThreadSearchQuery),
+    [deferredThreadSearchQuery],
+  );
+  const threadSearchResult = useQuery(
+    orchestrationSearchThreadMessagesQueryOptions({
+      query: normalizedThreadSearchQuery,
+      enabled: normalizedThreadSearchQuery !== null,
+    }),
+  );
+  const threadSearchState = useMemo(
+    () =>
+      resolveSidebarThreadSearch({
+        query: deferredThreadSearchQuery,
+        threads: visibleThreads,
+        ftsHits: threadSearchResult.data?.results ?? [],
+      }),
+    [deferredThreadSearchQuery, threadSearchResult.data?.results, visibleThreads],
+  );
+  const isThreadSearchActive = threadSearchState.isFiltering;
+  const matchingThreadCount = threadSearchState.matchingThreadIds.size;
   const sortedProjects = useMemo(() => {
     const sortableProjects = sidebarProjects.map((project) => ({
       ...project,
@@ -2981,7 +4001,7 @@ export default function Sidebar() {
         projectId: (physicalToLogicalKey.get(physicalKey) ?? physicalKey) as ProjectId,
       };
     });
-    return sortProjectsForSidebar(
+    const projectsForSidebar = sortProjectsForSidebar(
       sortableProjects,
       sortableThreads,
       sidebarProjectSortOrder,
@@ -2989,12 +4009,20 @@ export default function Sidebar() {
       const resolvedProject = sidebarProjectByKey.get(project.id);
       return resolvedProject ? [resolvedProject] : [];
     });
+    if (!isThreadSearchActive) {
+      return projectsForSidebar;
+    }
+    return projectsForSidebar.filter((project) =>
+      project.memberProjects.some((member) => threadSearchState.matchingProjectIds.has(member.id)),
+    );
   }, [
+    isThreadSearchActive,
     sidebarProjectSortOrder,
     physicalToLogicalKey,
     projectPhysicalKeyByScopedRef,
     sidebarProjectByKey,
     sidebarProjects,
+    threadSearchState.matchingProjectIds,
     visibleThreads,
   ]);
   const isManualProjectSorting = sidebarProjectSortOrder === "manual";
@@ -3003,7 +4031,9 @@ export default function Sidebar() {
       sortedProjects.flatMap((project) => {
         const projectThreads = sortThreads(
           (threadsByProjectKey.get(project.projectKey) ?? []).filter(
-            (thread) => thread.archivedAt === null,
+            (thread) =>
+              thread.archivedAt === null &&
+              (!isThreadSearchActive || threadSearchState.matchingThreadIds.has(thread.id)),
           ),
           sidebarThreadSortOrder,
         );
@@ -3018,26 +4048,44 @@ export default function Sidebar() {
               ) ?? null)
             : null;
         const shouldShowThreadPanel = projectExpanded || pinnedCollapsedThread !== null;
-        if (!shouldShowThreadPanel) {
+        const shouldShowThreadPanelForSearch = isThreadSearchActive || shouldShowThreadPanel;
+        if (!shouldShowThreadPanelForSearch) {
           return [];
         }
         const isThreadListExpanded = expandedThreadListsByProject.has(project.projectKey);
-        const hasOverflowingThreads = projectThreads.length > THREAD_PREVIEW_LIMIT;
-        const previewThreads =
-          isThreadListExpanded || !hasOverflowingThreads
-            ? projectThreads
-            : projectThreads.slice(0, THREAD_PREVIEW_LIMIT);
-        const renderedThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : previewThreads;
-        return renderedThreads.map((thread) =>
-          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-        );
+        const folderThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : projectThreads;
+        const { rigGroups, visibleStandaloneThreads } = partitionProjectThreadsForSidebar({
+          threads: folderThreads,
+          activeThreadId: pinnedCollapsedThread?.id,
+          isThreadListExpanded: isThreadSearchActive || isThreadListExpanded,
+          previewLimit: THREAD_PREVIEW_LIMIT,
+          gcConfig,
+          projectCwd: project.cwd,
+          projectName: project.displayName,
+          projectMembers: project.memberProjects,
+        });
+        return [
+          ...rigGroups.flatMap((rigGroup) =>
+            rigGroup.agentGroups.flatMap((agentGroup) =>
+              agentGroup.threads.map((thread) =>
+                scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+              ),
+            ),
+          ),
+          ...visibleStandaloneThreads.map((thread) =>
+            scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+          ),
+        ];
       }),
     [
+      gcConfig,
       sidebarThreadSortOrder,
       expandedThreadListsByProject,
+      isThreadSearchActive,
       projectExpandedById,
       routeThreadKey,
       sortedProjects,
+      threadSearchState.matchingThreadIds,
       threadsByProjectKey,
     ],
   );
@@ -3373,7 +4421,20 @@ export default function Sidebar() {
             routeThreadKey={routeThreadKey}
             newThreadShortcutLabel={newThreadShortcutLabel}
             commandPaletteShortcutLabel={commandPaletteShortcutLabel}
+            threadSearchQuery={threadSearchQuery}
+            isThreadSearchActive={isThreadSearchActive}
+            matchingThreadCount={matchingThreadCount}
             threadJumpLabelByKey={visibleThreadJumpLabelByKey}
+            gcConfig={gcConfig}
+            gcSupervisorMutationInFlight={gcSupervisorMutationInFlight}
+            gcControllerMutationInFlight={gcControllerMutationInFlight}
+            gcAgentMutationsInFlight={gcAgentMutationsInFlight}
+            gcAgentStartsInFlight={gcAgentStartsInFlight}
+            gcRigMutationsInFlight={gcRigMutationsInFlight}
+            gcCityMutationInFlight={gcCityMutationInFlight}
+            gcAgentActionStateByAgent={gcAgentActionStateByAgent}
+            gcRigActionStateByRig={gcRigActionStateByRig}
+            gcCityActionState={gcCityActionState}
             attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
             expandThreadListForProject={expandThreadListForProject}
             collapseThreadListForProject={collapseThreadListForProject}
@@ -3382,6 +4443,16 @@ export default function Sidebar() {
             suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
             attachProjectListAutoAnimateRef={attachProjectListAutoAnimateRef}
             projectsLength={projects.length}
+            onThreadSearchQueryChange={setThreadSearchQuery}
+            onSetGcSupervisorRunning={handleSetGcSupervisorRunning}
+            onSetGcControllerRunning={handleSetGcControllerRunning}
+            onToggleGcCitySuspended={handleGcCitySuspendedChange}
+            onToggleGcRigSuspended={handleGcRigSuspendedChange}
+            onToggleGcAgentSuspended={handleGcAgentSuspendedChange}
+            onAdjustGcAgentMinActiveSessions={handleGcAgentMinActiveSessionsChange}
+            onAdjustGcAgentMaxActiveSessions={handleGcAgentMaxActiveSessionsChange}
+            onToggleGcAgentWakeMode={handleGcAgentWakeModeChange}
+            onToggleGcAgentSessionMode={handleGcAgentSessionModeChange}
           />
 
           <SidebarSeparator />

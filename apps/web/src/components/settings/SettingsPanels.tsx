@@ -51,6 +51,7 @@ import { formatRelativeTime, formatRelativeTimeLabel } from "../../timestampForm
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { DraftInput } from "../ui/draft-input";
+import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
@@ -496,6 +497,7 @@ export function GeneralSettingsPanel() {
           provider.instanceId === defaultInstanceIdForDriver(ProviderDriverKind.make("cursor")),
       ),
   );
+  const gcSettings = settings.providers.gc;
   const logsDirectoryPath = observability?.logsDirectoryPath ?? null;
   const diagnosticsDescription = (() => {
     const exports: string[] = [];
@@ -575,6 +577,20 @@ export function GeneralSettingsPanel() {
   const openDiagnosticsError = openPathErrorByTarget.logsDirectory ?? null;
   const isOpeningKeybindings = openingPathByTarget.keybindings;
   const isOpeningLogsDirectory = openingPathByTarget.logsDirectory;
+  const updateGcSettings = useCallback(
+    (patch: Partial<(typeof settings.providers)["gc"]>) => {
+      updateSettings({
+        providers: {
+          ...settings.providers,
+          gc: {
+            ...settings.providers.gc,
+            ...patch,
+          },
+        },
+      });
+    },
+    [settings.providers, updateSettings],
+  );
 
   const lastCheckedAt =
     serverProviders.length > 0
@@ -1298,6 +1314,136 @@ export function GeneralSettingsPanel() {
       />
 
       <SettingsSection title="Advanced">
+        <SettingsRow
+          title="Gas City runtime home"
+          description="T3CODE_GASCITY_HOME. Bundled GC config, binary, and city state live under this directory."
+          resetAction={
+            gcSettings.runtimeHome !== DEFAULT_UNIFIED_SETTINGS.providers.gc.runtimeHome ? (
+              <SettingResetButton
+                label="Gas City runtime home"
+                onClick={() =>
+                  updateGcSettings({
+                    runtimeHome: DEFAULT_UNIFIED_SETTINGS.providers.gc.runtimeHome,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Input
+              className="w-full sm:w-96"
+              value={gcSettings.runtimeHome}
+              onChange={(event) => updateGcSettings({ runtimeHome: event.target.value })}
+              placeholder={DEFAULT_UNIFIED_SETTINGS.providers.gc.runtimeHome}
+              spellCheck={false}
+              aria-label="Gas City runtime home"
+            />
+          }
+        />
+        <SettingsRow
+          title="Gas City city path"
+          description="GC_CITY_PATH. This controls where the bundled city .gc and .beads state are created."
+          resetAction={
+            gcSettings.cityPath !== DEFAULT_UNIFIED_SETTINGS.providers.gc.cityPath ? (
+              <SettingResetButton
+                label="Gas City city path"
+                onClick={() =>
+                  updateGcSettings({
+                    cityPath: DEFAULT_UNIFIED_SETTINGS.providers.gc.cityPath,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Input
+              className="w-full sm:w-96"
+              value={gcSettings.cityPath}
+              onChange={(event) => updateGcSettings({ cityPath: event.target.value })}
+              placeholder={DEFAULT_UNIFIED_SETTINGS.providers.gc.cityPath}
+              spellCheck={false}
+              aria-label="Gas City city path"
+            />
+          }
+        />
+        <SettingsRow
+          title="Gas City binary"
+          description="GC_BIN. T3 uses this binary for bundled city CLI mutations such as adding rigs."
+          resetAction={
+            gcSettings.binaryPath !== DEFAULT_UNIFIED_SETTINGS.providers.gc.binaryPath ? (
+              <SettingResetButton
+                label="Gas City binary"
+                onClick={() =>
+                  updateGcSettings({
+                    binaryPath: DEFAULT_UNIFIED_SETTINGS.providers.gc.binaryPath,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Input
+              className="w-full sm:w-96"
+              value={gcSettings.binaryPath}
+              onChange={(event) => updateGcSettings({ binaryPath: event.target.value })}
+              placeholder={DEFAULT_UNIFIED_SETTINGS.providers.gc.binaryPath}
+              spellCheck={false}
+              aria-label="Gas City binary"
+            />
+          }
+        />
+        <SettingsRow
+          title="Gas City API URL"
+          description="GC_API_URL. Use the bundled supervisor API unless you intentionally run another city."
+          resetAction={
+            gcSettings.apiUrl !== DEFAULT_UNIFIED_SETTINGS.providers.gc.apiUrl ? (
+              <SettingResetButton
+                label="Gas City API URL"
+                onClick={() =>
+                  updateGcSettings({
+                    apiUrl: DEFAULT_UNIFIED_SETTINGS.providers.gc.apiUrl,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Input
+              className="w-full sm:w-72"
+              value={gcSettings.apiUrl}
+              onChange={(event) => updateGcSettings({ apiUrl: event.target.value })}
+              placeholder={DEFAULT_UNIFIED_SETTINGS.providers.gc.apiUrl}
+              spellCheck={false}
+              aria-label="Gas City API URL"
+            />
+          }
+        />
+        <SettingsRow
+          title="Gas City name"
+          description="GC_CITY_NAME. Leave empty to let the API resolve the current bundled city."
+          resetAction={
+            gcSettings.cityName !== DEFAULT_UNIFIED_SETTINGS.providers.gc.cityName ? (
+              <SettingResetButton
+                label="Gas City name"
+                onClick={() =>
+                  updateGcSettings({
+                    cityName: DEFAULT_UNIFIED_SETTINGS.providers.gc.cityName,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Input
+              className="w-full sm:w-48"
+              value={gcSettings.cityName}
+              onChange={(event) => updateGcSettings({ cityName: event.target.value })}
+              placeholder="auto"
+              spellCheck={false}
+              aria-label="Gas City name"
+            />
+          }
+        />
         <SettingsRow
           title="Keybindings"
           description="Open the persisted `keybindings.json` file to edit advanced bindings directly."

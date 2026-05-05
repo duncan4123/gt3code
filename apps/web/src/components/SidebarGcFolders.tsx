@@ -338,7 +338,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               agentGroup.qualifiedName,
               agentGroup.isSuspended,
             );
-            const showNamedSessionModeControl = !agentGroup.isPool;
+            const hasPoolControls =
+              agentGroup.isPool || typeof agentGroup.minActiveSessions === "number";
+            const showNamedSessionModeControl = !hasPoolControls;
             const nextNamedSessionMode = !showNamedSessionModeControl
               ? null
               : agentGroup.namedSessionMode === "always"
@@ -354,9 +356,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                   ? "demand"
                   : null;
             const canAdjustPoolSize =
-              agentGroup.isPool && typeof agentGroup.maxActiveSessions === "number";
+              hasPoolControls && typeof agentGroup.maxActiveSessions === "number";
             const canAdjustPoolMinimum =
-              agentGroup.isPool && typeof agentGroup.minActiveSessions === "number";
+              hasPoolControls && typeof agentGroup.minActiveSessions === "number";
             const nextWakeMode =
               agentGroup.wakeMode === "resume"
                 ? "fresh"
