@@ -1,12 +1,14 @@
 # Gas Town — domain-specific coding workflow pack.
 #
 # Gastown roles: mayor (coordinator), deacon (patrol), boot (watchdog),
-# plus rig-scoped agents (witness, refinery, crew, polecat).
+# workspace-scoped HQ agents, plus rig-scoped agents (witness, refinery, crew,
+# polecat).
 # Dog (utility pool) is defined here with tmux theming; maintenance provides
 # the fallback (unthemed) dog. Mechanical housekeeping lives in maintenance.
 #
 # Referenced by both workspace.pack and rigs[].pack:
-#   workspace.pack → expands city-scoped agents only (mayor, deacon, boot)
+#   workspace.pack → expands city-scoped agents only (mayor, deacon, boot,
+#                     hq-witness, hq-polecat, hq-refinery)
 #   rigs[].pack    → expands rig agents only (witness, refinery, crew, polecat)
 
 [pack]
@@ -49,6 +51,16 @@ mode = "always"
 template = "boot"
 scope = "city"
 mode = "always"
+
+[[named_session]]
+template = "hq-witness"
+scope = "city"
+mode = "always"
+
+[[named_session]]
+template = "hq-refinery"
+scope = "city"
+mode = "on_demand"
 
 [[named_session]]
 template = "witness"

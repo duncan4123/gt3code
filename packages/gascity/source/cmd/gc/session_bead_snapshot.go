@@ -97,6 +97,22 @@ func (s *sessionBeadSnapshot) add(bead beads.Bead) {
 	s.replaceOpen(open)
 }
 
+func (s *sessionBeadSnapshot) update(bead beads.Bead) {
+	if s == nil || bead.ID == "" {
+		return
+	}
+	open := s.Open()
+	for i := range open {
+		if open[i].ID == bead.ID {
+			open[i] = bead
+			s.replaceOpen(open)
+			return
+		}
+	}
+	open = append(open, bead)
+	s.replaceOpen(open)
+}
+
 func (s *sessionBeadSnapshot) Open() []beads.Bead {
 	if s == nil {
 		return nil

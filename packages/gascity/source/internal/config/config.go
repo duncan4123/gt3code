@@ -1818,9 +1818,10 @@ func (a *Agent) EffectiveWorkQuery() string {
 			`[ -n "$r" ] && [ "$r" != "[]" ] && printf "%s" "$r" && exit 0; ` +
 			`done; ` +
 			// Tier 3: ready unassigned routed to this config (shared routed queue).
-			// Only ephemeral sessions and controller probes consume generic config demand.
-			`case "$GC_SESSION_ORIGIN" in ` +
-			`ephemeral|"") ;; ` +
+			// Pool sessions can be created manually during recovery; they still
+			// need to see the routed queue when their alias matches the pool.
+			`case "$GC_SESSION_ORIGIN:$GC_ALIAS:$GC_TEMPLATE:$GC_AGENT" in ` +
+			`ephemeral:*|:*|manual:` + target + `:*|manual:*:` + target + `:*|manual:*:*:` + target + `) ;; ` +
 			`*) exit 0 ;; ` +
 			`esac; ` +
 			`r=$(bd ready --metadata-field gc.routed_to=` + target +
@@ -1856,9 +1857,10 @@ func (a *Agent) EffectiveWorkQuery() string {
 		`done; ` +
 		// Tier 3: ready unassigned routed to this config (shared routed queue),
 		// then the legacy workflow-control route for pre-rename graphs.
-		// Only ephemeral sessions and controller probes consume generic config demand.
-		`case "$GC_SESSION_ORIGIN" in ` +
-		`ephemeral|"") ;; ` +
+		// Pool sessions can be created manually during recovery; they still
+		// need to see the routed queue when their alias matches the pool.
+		`case "$GC_SESSION_ORIGIN:$GC_ALIAS:$GC_TEMPLATE:$GC_AGENT" in ` +
+		`ephemeral:*|:*|manual:` + target + `:*|manual:*:` + target + `:*|manual:*:*:` + target + `) ;; ` +
 		`*) exit 0 ;; ` +
 		`esac; ` +
 		`r=$(bd ready --metadata-field gc.routed_to=` + target +

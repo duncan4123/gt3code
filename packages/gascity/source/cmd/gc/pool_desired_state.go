@@ -90,6 +90,9 @@ func computePoolDesiredStates(
 		if sb.Status == "closed" {
 			continue
 		}
+		if isNamedSessionBead(sb) {
+			continue
+		}
 		template := strings.TrimSpace(sb.Metadata["template"])
 		if template != "" {
 			sessionBeadTemplate[sb.ID] = template
@@ -97,9 +100,6 @@ func computePoolDesiredStates(
 		assigneeToSessionBeadID[sb.ID] = sb.ID
 		if sn := strings.TrimSpace(sb.Metadata["session_name"]); sn != "" {
 			assigneeToSessionBeadID[sn] = sb.ID
-		}
-		if ni := strings.TrimSpace(sb.Metadata["configured_named_identity"]); ni != "" {
-			assigneeToSessionBeadID[ni] = sb.ID
 		}
 	}
 

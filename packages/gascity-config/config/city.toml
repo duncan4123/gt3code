@@ -12,6 +12,11 @@ GC_OPENCODE_AGENT = "build"
 GC_PROVIDER = "opencode"
 
 [[named_session]]
+name = "crew"
+template = "gastown.hq-polecat"
+mode = "always"
+
+[[named_session]]
 name = "crew-mcp"
 template = "crew"
 dir = "context-mode"
@@ -42,17 +47,37 @@ suspended = false
 
 [[rigs.overrides]]
 agent = "refinery"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "witness"
-suspended = false
+suspended = true
 
 [[rigs]]
 name = "beads-doltlite"
 prefix = "bd"
 suspended = false
 includes = ["packs/gastown"]
+
+[[rigs.overrides]]
+agent = "convoymaster"
+suspended = false
+
+[[rigs.overrides]]
+agent = "crew"
+suspended = false
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = false
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = false
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = false
 
 [[rigs]]
 name = "context-mode"
@@ -120,7 +145,7 @@ suspended = false
 [[patches.agent]]
 dir = "context-mode"
 name = "crew"
-max_active_sessions = 3
+max_active_sessions = 2
 
 [[patches.agent]]
 dir = "context-mode"
@@ -142,6 +167,32 @@ dir = "context-mode"
 name = "convoymaster"
 suspended = false
 
+[[patches.agent]]
+dir = ""
+name = "gastown.hq-polecat"
+suspended = false
+wake_mode = "fresh"
+
+[[patches.agent]]
+dir = ""
+name = "gastown.hq-refinery"
+suspended = false
+
+[[patches.agent]]
+dir = ""
+name = "gastown.hq-witness"
+suspended = false
+
+[[patches.agent]]
+dir = "gascity"
+name = "refinery"
+suspended = false
+
+[[patches.agent]]
+dir = "gascity"
+name = "witness"
+suspended = false
+
 [[patches.named_session]]
 template = "mayor"
 mode = "always"
@@ -156,6 +207,11 @@ mode = "always"
 
 [[patches.named_session]]
 dir = "gascity"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
+dir = "beads-doltlite"
 template = "refinery"
 mode = "always"
 
@@ -179,3 +235,9 @@ skip = ["spawn-storm-detect", "orphan-sweep", "cross-rig-deps", "gate-sweep", "w
 
 [api]
 port = 8372
+
+
+[[patches.named_session]]
+dir = "context-mode"
+template = "refinery"
+mode = "always"

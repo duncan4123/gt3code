@@ -1068,6 +1068,27 @@ func syncSessionBeadsWithSnapshot(
 		applyBatch()
 	}
 
+	// Pool session beads can be created while building desiredState. Refresh the
+	// open-bead snapshot before slot stamping / close classification so those
+	// freshly-created beads participate in the same tick instead of looking like
+	// unmatched "creating" garbage and getting closed immediately.
+	refreshedOpen, refreshErr := loadSessionBeads(store)
+	if refreshErr != nil {
+		fmt.Fprintf(stderr, "session beads: refreshing open snapshot: %v\n", refreshErr) //nolint:errcheck
+	} else {
+		openBeads = make([]beads.Bead, len(refreshedOpen))
+		copy(openBeads, refreshedOpen)
+		indexBySessionName = make(map[string]int, len(openBeads))
+		for i, b := range openBeads {
+			if b.Status == "closed" {
+				continue
+			}
+			if sn := strings.TrimSpace(b.Metadata["session_name"]); sn != "" {
+				indexBySessionName[sn] = i
+			}
+		}
+	}
+
 	openBeads = syncDesiredPoolSlots(store, desiredState, openBeads, indexBySessionName, cfg, now, stderr)
 	// Classify and close beads with no matching desired entry.
 	if !skipClose {

@@ -2370,14 +2370,23 @@ func runSetupCommand(ctx context.Context, cmd string, env map[string]string, tim
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	c := exec.CommandContext(ctx, "sh", "-c", cmd)
-	if workDir := strings.TrimSpace(env["GC_DIR"]); workDir != "" {
+	workDir := strings.TrimSpace(env["GC_DIR"])
+	if workDir != "" {
 		c.Dir = workDir
 	}
 	c.Env = os.Environ()
 	for k, v := range env {
 		c.Env = append(c.Env, k+"="+v)
 	}
-	return c.Run()
+	output, err := c.CombinedOutput()
+	if err != nil {
+		detail := strings.TrimSpace(string(output))
+		if detail == "" {
+			return fmt.Errorf("%w (cmd=%q cwd=%q)", err, cmd, workDir)
+		}
+		return fmt.Errorf("%w (cmd=%q cwd=%q output=%q)", err, cmd, workDir, detail)
+	}
+	return nil
 }
 
 func (p *Provider) Stop(name string) error {

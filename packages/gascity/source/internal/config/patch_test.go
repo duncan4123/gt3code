@@ -225,6 +225,25 @@ func TestApplyPatches_NamedSessionMode(t *testing.T) {
 	}
 }
 
+func TestApplyPatches_NamedSessionQualifiedTemplate(t *testing.T) {
+	cfg := &City{
+		NamedSessions: []NamedSession{
+			{BindingName: "gastown", Template: "hq-refinery", Mode: "on_demand"},
+		},
+	}
+	err := ApplyPatches(cfg, Patches{
+		NamedSessions: []NamedSessionPatch{
+			{Template: "gastown.hq-refinery", Mode: ptrStr("always")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ApplyPatches: %v", err)
+	}
+	if got := cfg.NamedSessions[0].Mode; got != "always" {
+		t.Errorf("mode = %q, want always", got)
+	}
+}
+
 func TestApplyPatches_NamedSessionNotFound(t *testing.T) {
 	cfg := &City{
 		NamedSessions: []NamedSession{{Template: "mayor", Mode: "always"}},

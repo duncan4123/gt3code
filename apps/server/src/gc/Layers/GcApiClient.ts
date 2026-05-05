@@ -883,7 +883,8 @@ function ensureDefaultGcBeadsConfig(
       "issue-prefix": issuePrefix,
       "dolt.auto-start": "false",
       "export.auto": "false",
-      "types.custom": '"session,wait,convoy,molecule,formula"',
+      "types.custom":
+        '"molecule,convoy,message,event,gate,merge-request,agent,role,rig,session,spec,convergence"',
     }),
   );
   const metadataPath = path.join(beadsDir, "metadata.json");

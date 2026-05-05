@@ -699,6 +699,45 @@ includes = ["packs/gt"]
 	}
 }
 
+func TestLoadWithIncludes_PatchesImplicitControlDispatcher(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "city.toml", `
+[workspace]
+name = "test-city"
+
+[providers.codex]
+base = "builtin:codex"
+
+[[rigs]]
+name = "gascity"
+
+[daemon]
+formula_v2 = true
+
+[[patches.agent]]
+dir = "gascity"
+name = "control-dispatcher"
+suspended = true
+`)
+
+	cfg, _, err := LoadWithIncludes(fsys.OSFS{}, filepath.Join(dir, "city.toml"))
+	if err != nil {
+		t.Fatalf("LoadWithIncludes: %v", err)
+	}
+	var found bool
+	for _, agent := range cfg.Agents {
+		if agent.QualifiedName() == "gascity/control-dispatcher" {
+			found = true
+			if !agent.Suspended {
+				t.Fatal("gascity/control-dispatcher should be patched suspended")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("gascity/control-dispatcher not found")
+	}
+}
+
 func TestExpandPacks_OverrideEnv(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "packs/gt/pack.toml", `

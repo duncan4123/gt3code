@@ -256,6 +256,10 @@ func applyNamedSessionPatch(cfg *City, patch *NamedSessionPatch) error {
 	}
 	for i := range cfg.NamedSessions {
 		s := &cfg.NamedSessions[i]
+		if s.TemplateQualifiedName() == target || s.QualifiedName() == target {
+			applyNamedSessionPatchFields(s, patch)
+			return nil
+		}
 		if s.Dir == patch.Dir && s.Template == patch.Template {
 			applyNamedSessionPatchFields(s, patch)
 			return nil

@@ -47,6 +47,16 @@ sync_worktree() {
     git -C "$WT" pull --rebase 2>/dev/null || true
 }
 
+ensure_codex_runtime_dir() {
+    # Codex expects .codex to be a runtime directory. Some repos historically
+    # tracked an empty .codex file, which makes fresh worktree startup fail
+    # with a file-vs-directory collision before the provider can boot.
+    if [ -f "$WT/.codex" ] && [ ! -d "$WT/.codex" ]; then
+        rm -f "$WT/.codex"
+    fi
+    mkdir -p "$WT/.codex"
+}
+
 branch_name() {
     # Namescape worktree branches by target path so multiple cities or rigs
     # can share one underlying repo without colliding on global refs like
@@ -57,6 +67,7 @@ branch_name() {
 
 # Idempotent: skip if worktree already exists.
 if [ -d "$WT/.git" ] || [ -f "$WT/.git" ]; then
+    ensure_codex_runtime_dir
     sync_worktree
     exit 0
 fi
@@ -134,6 +145,8 @@ trap - EXIT HUP INT TERM
 # Bead redirect for filesystem beads.
 mkdir -p "$WT/.beads"
 echo "$RIG_ROOT/.beads" > "$WT/.beads/redirect"
+
+ensure_codex_runtime_dir
 
 # Submodule init (best-effort).
 git -C "$WT" submodule init 2>/dev/null || true

@@ -367,7 +367,8 @@ function writeDefaultBeadsConfig(cityDir: string, issuePrefix: string, doltDatab
       "dolt.auto-start": "false",
       "dolt.shared-server": "false",
       "export.auto": "false",
-      "types.custom": '"session,wait,convoy,molecule,formula"',
+      "types.custom":
+        '"molecule,convoy,message,event,gate,merge-request,agent,role,rig,session,spec,convergence"',
     }),
   );
   const metadataPath = join(beadsDir, "metadata.json");

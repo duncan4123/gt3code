@@ -26,7 +26,12 @@ const doltliteLibrary =
       : "libdoltlite.so";
 const outputPath = path.join(packageRoot, "bin", `${platform}-${arch}`, executable);
 const outputLibraryPath = path.join(packageRoot, "bin", `${platform}-${arch}`, doltliteLibrary);
-const stampPath = path.join(packageRoot, "bin", `${platform}-${arch}`, ".t3-beads-build-stamp.json");
+const stampPath = path.join(
+  packageRoot,
+  "bin",
+  `${platform}-${arch}`,
+  ".t3-beads-build-stamp.json",
+);
 const sourceRoot = resolveSourceRoot();
 const doltliteBuildDir = resolveDoltliteBuildDir();
 

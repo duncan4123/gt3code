@@ -32,7 +32,9 @@ const stamp = {
   command: "make doltlite-lib",
 };
 
-if (isFresh({ outputs, stampPath, stamp, inputRoots: [sourceRoot], extraInputs: [import.meta.url] })) {
+if (
+  isFresh({ outputs, stampPath, stamp, inputRoots: [sourceRoot], extraInputs: [import.meta.url] })
+) {
   console.log("[doltlite build] outputs are current; skipping.");
   process.exit(0);
 }

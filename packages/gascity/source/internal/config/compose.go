@@ -421,15 +421,6 @@ func LoadWithIncludesOptions(fs fsys.FS, path string, opts LoadOptions, extraInc
 		}
 	}
 
-	// Apply patches after all fragments and all pack expansion so both
-	// city-scoped and rig-scoped resources exist in the merged config.
-	if !root.Patches.IsEmpty() {
-		if err := ApplyPatches(root, root.Patches); err != nil {
-			return nil, nil, fmt.Errorf("applying patches: %w", err)
-		}
-		root.Patches = Patches{} // clear after application
-	}
-
 	// Apply [global] sections from packs to agents in scope.
 	root.PackGlobals = append(root.PackGlobals, rootPackGlobals...)
 	applyPackGlobals(root)
@@ -447,9 +438,19 @@ func LoadWithIncludesOptions(fs fsys.FS, path string, opts LoadOptions, extraInc
 		cityTopoFormulas, cityLocalFormulas, rigFormulaDirs, root.Rigs, cityRoot)
 
 	// Inject implicit agents for built-in providers not already defined.
-	// Must happen after all composition (fragments, packs, patches) so
-	// explicit agents always take precedence.
+	// Must happen after all composition (fragments and packs) so explicit
+	// agents always take precedence. Root-level patches are applied after this
+	// so cities can tune generated built-ins such as control-dispatcher.
 	InjectImplicitAgents(root)
+
+	// Apply root-level patches after all fragments, pack expansion, and
+	// implicit built-ins exist in the merged config.
+	if !root.Patches.IsEmpty() {
+		if err := ApplyPatches(root, root.Patches); err != nil {
+			return nil, nil, fmt.Errorf("applying patches: %w", err)
+		}
+		root.Patches = Patches{} // clear after application
+	}
 
 	// Apply [agent_defaults] values to all agents (explicit and implicit)
 	// that don't set their own override. Deprecated [agents] aliases are

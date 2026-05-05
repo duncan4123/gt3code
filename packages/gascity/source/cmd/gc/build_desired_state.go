@@ -981,6 +981,16 @@ func realizePoolDesiredSessions(
 		slot := claimPoolSlot(cfgAgent, sessionBead, usedSlots)
 		instanceName := poolInstanceName(cfgAgent.Name, slot, cfgAgent)
 		qualifiedInstance := cfgAgent.QualifiedInstanceName(instanceName)
+		stampPoolSlotIdentity(bp.beadStore, sessionBead, slot, qualifiedInstance, stderr)
+		if sessionBead.Metadata == nil {
+			sessionBead.Metadata = map[string]string{}
+		}
+		sessionBead.Metadata["pool_slot"] = strconv.Itoa(slot)
+		sessionBead.Metadata["agent_name"] = qualifiedInstance
+		sessionBead.Metadata["alias"] = qualifiedInstance
+		if bp.sessionBeads != nil {
+			bp.sessionBeads.update(sessionBead)
+		}
 		instanceAgent := deepCopyAgent(cfgAgent, instanceName, cfgAgent.Dir)
 		fpExtra := buildFingerprintExtra(&instanceAgent)
 		tp, err := resolveTemplateForSessionBead(bp, &instanceAgent, qualifiedInstance, fpExtra, sessionBead)
@@ -994,6 +1004,29 @@ func realizePoolDesiredSessions(
 		setTemplateEnvIdentity(&tp, qualifiedInstance)
 		installAgentSideEffects(bp, &instanceAgent, tp, stderr)
 		desired[tp.SessionName] = tp
+	}
+}
+
+func stampPoolSlotIdentity(store beads.Store, sessionBead beads.Bead, slot int, qualifiedInstance string, stderr io.Writer) {
+	if store == nil || sessionBead.ID == "" || slot <= 0 || strings.TrimSpace(qualifiedInstance) == "" {
+		return
+	}
+	wantSlot := strconv.Itoa(slot)
+	batch := map[string]string{}
+	if sessionBead.Metadata["pool_slot"] != wantSlot {
+		batch["pool_slot"] = wantSlot
+	}
+	if sessionBead.Metadata["agent_name"] != qualifiedInstance {
+		batch["agent_name"] = qualifiedInstance
+	}
+	if sessionBead.Metadata["alias"] != qualifiedInstance {
+		batch["alias"] = qualifiedInstance
+	}
+	if len(batch) == 0 {
+		return
+	}
+	if err := store.SetMetadataBatch(sessionBead.ID, batch); err != nil && stderr != nil {
+		fmt.Fprintf(stderr, "buildDesiredState: stamping pool identity on %s: %v\n", sessionBead.ID, err) //nolint:errcheck
 	}
 }
 

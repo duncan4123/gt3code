@@ -1,0 +1,7 @@
+packages/gascity-config/config/.beads/doltlite
+/data/projects/gascity/.beads/doltlite
+/data/projects/beads-doltlite/.beads/doltlite
+/data/projects/claude-context-mode/.beads/doltlite
+/data/projects/beads-doltlite/beads.db
+/data/projects/claude-context-mode/docs/pipeline.sqlite
+/data/projects/gascity/.beads/dolt/.doltcfg/privileges.db
