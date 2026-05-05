@@ -105,11 +105,20 @@ export const ensureProjectionSidecarSchema = Effect.gen(function* () {
       provider_name TEXT,
       provider_session_id TEXT,
       provider_thread_id TEXT,
+      provider_instance_id TEXT,
       active_turn_id TEXT,
       last_error TEXT,
       updated_at TEXT NOT NULL,
       runtime_mode TEXT NOT NULL DEFAULT 'full-access'
     )
+  `);
+  yield* sql`
+    ALTER TABLE proj.projection_thread_sessions
+    ADD COLUMN provider_instance_id TEXT
+  `.pipe(Effect.catch(() => Effect.void));
+  yield* sql.unsafe(`
+    CREATE INDEX IF NOT EXISTS proj.idx_projection_thread_sessions_instance
+    ON projection_thread_sessions(provider_instance_id)
   `);
 
   yield* sql.unsafe(`
@@ -186,10 +195,15 @@ export const ensureProjectionSidecarSchema = Effect.gen(function* () {
       runtime_mode TEXT NOT NULL DEFAULT 'full-access',
       status TEXT NOT NULL,
       last_seen_at TEXT NOT NULL,
+      provider_instance_id TEXT,
       resume_cursor_json TEXT,
       runtime_payload_json TEXT
     )
   `);
+  yield* sql`
+    ALTER TABLE proj.provider_session_runtime
+    ADD COLUMN provider_instance_id TEXT
+  `.pipe(Effect.catch(() => Effect.void));
 
   // ── Indexes on proj tables ───────────────────────────────────────────
 
@@ -240,6 +254,9 @@ export const ensureProjectionSidecarSchema = Effect.gen(function* () {
   );
   yield* sql.unsafe(
     `CREATE INDEX IF NOT EXISTS proj.idx_proj_runtime_provider ON provider_session_runtime(provider_name)`,
+  );
+  yield* sql.unsafe(
+    `CREATE INDEX IF NOT EXISTS proj.idx_provider_session_runtime_instance ON provider_session_runtime(provider_instance_id)`,
   );
 });
 

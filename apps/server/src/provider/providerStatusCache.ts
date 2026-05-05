@@ -5,12 +5,42 @@ import {
   ServerProvider as ServerProviderSchema,
 } from "@t3tools/contracts";
 import { Cause, Effect, FileSystem, Path, Schema } from "effect";
+import { basename, extname } from "node:path";
 
 import { writeFileStringAtomically } from "../atomicWrite.ts";
 
 const decodeProviderStatusCache = Schema.decodeUnknownEffect(
   Schema.fromJsonString(ServerProviderSchema),
 );
+
+const legacyProviderIdentityFromPath = (filePath: string) => {
+  const fileName = basename(filePath);
+  const extension = extname(fileName);
+  return extension.length > 0 ? fileName.slice(0, -extension.length) : fileName;
+};
+
+const decodeProviderStatusCacheWithLegacyIdentity = (filePath: string, raw: string) =>
+  decodeProviderStatusCache(raw).pipe(
+    Effect.catchCause((cause) =>
+      Effect.try({
+        try: () => {
+          const parsed = JSON.parse(raw) as Record<string, unknown>;
+          const legacyIdentity = legacyProviderIdentityFromPath(filePath);
+          return JSON.stringify({
+            instanceId: parsed.instanceId ?? legacyIdentity,
+            driver: parsed.driver ?? parsed.provider ?? legacyIdentity,
+            ...parsed,
+          });
+        },
+        catch: () => undefined,
+      }).pipe(
+        Effect.flatMap((legacyRaw) =>
+          legacyRaw === undefined ? Effect.failCause(cause) : decodeProviderStatusCache(legacyRaw),
+        ),
+        Effect.catchCause(() => Effect.failCause(cause)),
+      ),
+    ),
+  );
 
 const mergeProviderModels = (
   fallbackModels: ReadonlyArray<ServerProvider["models"][number]>,
@@ -125,7 +155,7 @@ export const readProviderStatusCache = (filePath: string) =>
       return undefined;
     }
 
-    return yield* decodeProviderStatusCache(trimmed).pipe(
+    return yield* decodeProviderStatusCacheWithLegacyIdentity(filePath, trimmed).pipe(
       Effect.matchCauseEffect({
         onFailure: (cause) =>
           Effect.logWarning("failed to parse provider status cache, ignoring", {

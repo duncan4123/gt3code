@@ -12,13 +12,19 @@ layer("027_028_ProviderInstanceIdColumns", (it) => {
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
 
-      yield* runMigrations({ toMigrationInclusive: 26 });
-      yield* sql`
-        ALTER TABLE provider_session_runtime
-        ADD COLUMN provider_instance_id TEXT
+      yield* sql`ATTACH DATABASE ':memory:' AS proj`;
+      yield* runMigrations({ toMigrationInclusive: 32 });
+      const preColumns = yield* sql<{ readonly name: string }>`
+        PRAGMA proj.table_info(provider_session_runtime)
       `;
+      if (!preColumns.some((column) => column.name === "provider_instance_id")) {
+        yield* sql`
+          ALTER TABLE proj.provider_session_runtime
+          ADD COLUMN provider_instance_id TEXT
+        `;
+      }
 
-      yield* runMigrations({ toMigrationInclusive: 28 });
+      yield* runMigrations({ toMigrationInclusive: 35 });
 
       const migrations = yield* sql<{
         readonly migration_id: number;
@@ -26,34 +32,34 @@ layer("027_028_ProviderInstanceIdColumns", (it) => {
       }>`
         SELECT migration_id, name
         FROM effect_sql_migrations
-        WHERE migration_id IN (27, 28)
+        WHERE migration_id IN (33, 34)
         ORDER BY migration_id
       `;
       assert.deepStrictEqual(migrations, [
         {
-          migration_id: 27,
+          migration_id: 33,
           name: "ProviderSessionRuntimeInstanceId",
         },
         {
-          migration_id: 28,
+          migration_id: 34,
           name: "ProjectionThreadSessionInstanceId",
         },
       ]);
 
       const providerSessionColumns = yield* sql<{ readonly name: string }>`
-        PRAGMA table_info(provider_session_runtime)
+        PRAGMA proj.table_info(provider_session_runtime)
       `;
       assert.ok(providerSessionColumns.some((column) => column.name === "provider_instance_id"));
 
       const projectionThreadSessionColumns = yield* sql<{ readonly name: string }>`
-        PRAGMA table_info(projection_thread_sessions)
+        PRAGMA proj.table_info(projection_thread_sessions)
       `;
       assert.ok(
         projectionThreadSessionColumns.some((column) => column.name === "provider_instance_id"),
       );
 
       const providerSessionIndexes = yield* sql<{ readonly name: string }>`
-        PRAGMA index_list(provider_session_runtime)
+        PRAGMA proj.index_list(provider_session_runtime)
       `;
       assert.ok(
         providerSessionIndexes.some(
@@ -62,7 +68,7 @@ layer("027_028_ProviderInstanceIdColumns", (it) => {
       );
 
       const projectionThreadSessionIndexes = yield* sql<{ readonly name: string }>`
-        PRAGMA index_list(projection_thread_sessions)
+        PRAGMA proj.index_list(projection_thread_sessions)
       `;
       assert.ok(
         projectionThreadSessionIndexes.some(
