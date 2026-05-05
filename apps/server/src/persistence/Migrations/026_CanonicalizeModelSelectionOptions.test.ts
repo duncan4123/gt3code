@@ -12,7 +12,8 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
 
-      yield* runMigrations({ toMigrationInclusive: 25 });
+      yield* sql`ATTACH DATABASE ':memory:' AS proj`;
+      yield* runMigrations({ toMigrationInclusive: 31 });
 
       yield* sql`
           INSERT INTO projection_projects (
@@ -276,7 +277,7 @@ layer("026_CanonicalizeModelSelectionOptions", (it) => {
             )
         `;
 
-      yield* runMigrations({ toMigrationInclusive: 26 });
+      yield* runMigrations({ toMigrationInclusive: 32 });
 
       // Projection projects
       const projectRows = yield* sql<{

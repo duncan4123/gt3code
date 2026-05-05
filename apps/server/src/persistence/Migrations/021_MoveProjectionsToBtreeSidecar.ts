@@ -204,6 +204,12 @@ export const ensureProjectionSidecarSchema = Effect.gen(function* () {
     ALTER TABLE proj.provider_session_runtime
     ADD COLUMN provider_instance_id TEXT
   `.pipe(Effect.catch(() => Effect.void));
+  yield* sql.unsafe(`
+    UPDATE proj.provider_session_runtime
+    SET provider_instance_id = provider_name
+    WHERE provider_instance_id IS NULL
+      AND provider_name IS NOT NULL
+  `);
 
   // ── Indexes on proj tables ───────────────────────────────────────────
 
@@ -254,9 +260,6 @@ export const ensureProjectionSidecarSchema = Effect.gen(function* () {
   );
   yield* sql.unsafe(
     `CREATE INDEX IF NOT EXISTS proj.idx_proj_runtime_provider ON provider_session_runtime(provider_name)`,
-  );
-  yield* sql.unsafe(
-    `CREATE INDEX IF NOT EXISTS proj.idx_provider_session_runtime_instance ON provider_session_runtime(provider_instance_id)`,
   );
 });
 

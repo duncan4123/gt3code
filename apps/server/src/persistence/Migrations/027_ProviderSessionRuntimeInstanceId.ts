@@ -32,7 +32,9 @@ export default Effect.gen(function* () {
   }
 
   yield* sql.unsafe(`
-    CREATE INDEX IF NOT EXISTS proj.idx_provider_session_runtime_instance
-    ON provider_session_runtime(provider_instance_id)
+    UPDATE proj.provider_session_runtime
+    SET provider_instance_id = provider_name
+    WHERE provider_instance_id IS NULL
+      AND provider_name IS NOT NULL
   `);
 });

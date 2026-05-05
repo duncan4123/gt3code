@@ -28,8 +28,8 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
-  yield* sql`
-    UPDATE projection_threads
+  yield* sql.unsafe(`
+    UPDATE proj.projection_threads
     SET model_selection_json = json_set(
       model_selection_json,
       '$.options',
@@ -52,10 +52,10 @@ export default Effect.gen(function* () {
     )
     WHERE model_selection_json IS NOT NULL
       AND json_type(model_selection_json, '$.options') = 'object'
-  `;
+  `);
 
-  yield* sql`
-    UPDATE projection_projects
+  yield* sql.unsafe(`
+    UPDATE proj.projection_projects
     SET default_model_selection_json = json_set(
       default_model_selection_json,
       '$.options',
@@ -78,10 +78,10 @@ export default Effect.gen(function* () {
     )
     WHERE default_model_selection_json IS NOT NULL
       AND json_type(default_model_selection_json, '$.options') = 'object'
-  `;
+  `);
 
-  yield* sql`
-    UPDATE orchestration_events
+  yield* sql.unsafe(`
+    UPDATE proj.orchestration_events
     SET payload_json = json_set(
       payload_json,
       '$.modelSelection.options',
@@ -108,10 +108,10 @@ export default Effect.gen(function* () {
       'thread.turn-start-requested'
     )
       AND json_type(payload_json, '$.modelSelection.options') = 'object'
-  `;
+  `);
 
-  yield* sql`
-    UPDATE orchestration_events
+  yield* sql.unsafe(`
+    UPDATE proj.orchestration_events
     SET payload_json = json_set(
       payload_json,
       '$.defaultModelSelection.options',
@@ -134,5 +134,5 @@ export default Effect.gen(function* () {
     )
     WHERE event_type IN ('project.created', 'project.meta-updated')
       AND json_type(payload_json, '$.defaultModelSelection.options') = 'object'
-  `;
+  `);
 });

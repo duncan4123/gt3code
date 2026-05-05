@@ -15,7 +15,9 @@ export default Effect.gen(function* () {
   }
 
   yield* sql.unsafe(`
-    CREATE INDEX IF NOT EXISTS proj.idx_projection_thread_sessions_instance
-    ON projection_thread_sessions(provider_instance_id)
+    UPDATE proj.projection_thread_sessions
+    SET provider_instance_id = provider_name
+    WHERE provider_instance_id IS NULL
+      AND provider_name IS NOT NULL
   `);
 });

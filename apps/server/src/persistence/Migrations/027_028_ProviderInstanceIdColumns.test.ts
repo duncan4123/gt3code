@@ -23,7 +23,24 @@ layer("027_028_ProviderInstanceIdColumns", (it) => {
           ADD COLUMN provider_instance_id TEXT
         `;
       }
-
+      yield* sql`
+        INSERT INTO proj.provider_session_runtime (
+          thread_id,
+          provider_name,
+          adapter_key,
+          runtime_mode,
+          status,
+          last_seen_at
+        )
+        VALUES (
+          'thread-legacy-runtime',
+          'opencode',
+          'opencode',
+          'full-access',
+          'ready',
+          '2026-01-01T00:00:00.000Z'
+        )
+      `;
       yield* runMigrations({ toMigrationInclusive: 35 });
 
       const migrations = yield* sql<{
@@ -58,23 +75,12 @@ layer("027_028_ProviderInstanceIdColumns", (it) => {
         projectionThreadSessionColumns.some((column) => column.name === "provider_instance_id"),
       );
 
-      const providerSessionIndexes = yield* sql<{ readonly name: string }>`
-        PRAGMA proj.index_list(provider_session_runtime)
+      const legacyRuntime = yield* sql<{ readonly providerInstanceId: string | null }>`
+        SELECT provider_instance_id AS "providerInstanceId"
+        FROM proj.provider_session_runtime
+        WHERE thread_id = 'thread-legacy-runtime'
       `;
-      assert.ok(
-        providerSessionIndexes.some(
-          (index) => index.name === "idx_provider_session_runtime_instance",
-        ),
-      );
-
-      const projectionThreadSessionIndexes = yield* sql<{ readonly name: string }>`
-        PRAGMA proj.index_list(projection_thread_sessions)
-      `;
-      assert.ok(
-        projectionThreadSessionIndexes.some(
-          (index) => index.name === "idx_projection_thread_sessions_instance",
-        ),
-      );
+      assert.strictEqual(legacyRuntime[0]?.providerInstanceId, "opencode");
     }),
   );
 });
