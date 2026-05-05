@@ -3,18 +3,22 @@ Gas City upstream merge formula with fork-work preservation gates.
 
 Use this formula for every merge, rebase, or rollout that brings upstream Gas
 City code into this fork. The goal is to stay current with upstream fixes while
-proving that fork-owned work survives the merge.
+proving that fork-owned work survives the merge. This is a reasoned merge, not
+a mechanical merge: every difference between the packaged Gas City source, this
+T3Code repo integration, and upstream latest commits must be explained before
+code is landed.
 
 This formula is intentionally evidence-heavy. A Gas City merge is not complete
 until the agent has:
 
 1. Audited upstream changes since the previous sync.
-2. Enumerated every fork-owned Gas City, T3 bridge, beads, Dolt, and doltlite
+2. Compared the packaged source, repo integration, and upstream latest commits.
+3. Enumerated every fork-owned Gas City, T3 bridge, beads, Dolt, and doltlite
    feature before merging.
-3. Mapped each fork feature onto the post-merge source tree.
-4. Proved beads still supports both Dolt and doltlite backends.
-5. Proved generated/runtime config still resolves the expected backend.
-6. Rejected the merge if fork behavior disappeared without an explicit
+4. Mapped each fork feature onto the post-merge source tree.
+5. Proved beads still supports both Dolt and doltlite backends.
+6. Proved generated/runtime config still resolves the expected backend.
+7. Rejected the merge if fork behavior disappeared without an explicit
    replacement and audit note.
 
 Never rely on conflict resolution alone. Upstream refactors can delete fork
@@ -39,6 +43,18 @@ default = "ship"
 [vars.runtime_city]
 description = "Bundled T3Code GC city path"
 default = "/data/projects/t3code/packages/gascity-config/config"
+
+[vars.package_source_dir]
+description = "Vendored/package Gas City source tree inside T3Code"
+default = "packages/gascity/source"
+
+[vars.package_wrapper_dir]
+description = "T3 package wrapper around the Gas City source"
+default = "packages/gascity"
+
+[vars.repo_integration_paths]
+description = "Space-separated repo paths that integrate Gas City with T3"
+default = "packages/gascity packages/gascity-config packages/beads-doltlite packages/doltlite apps/server/src/gc apps/web/src/components/Sidebar.tsx apps/web/src/components/SidebarGcFolders.tsx apps/web/src/components/GcContextSidebar.tsx apps/web/src/components/settings/SettingsPanels.tsx scripts/gascity-runner.ts scripts/lib/bundled-gascity-env.ts"
 
 [vars.feature_ledger]
 description = "Durable fork feature ledger to maintain during the merge"
@@ -70,7 +86,8 @@ bd show {{issue}} --json | jq '.metadata'
 ```
 
 Use bead metadata if it overrides `upstream_ref`, `target_branch`,
-`runtime_city`, `feature_ledger`, `audit_report`, `run_tests`, or
+`runtime_city`, `package_source_dir`, `package_wrapper_dir`,
+`repo_integration_paths`, `feature_ledger`, `audit_report`, `run_tests`, or
 `test_command`.
 
 Exit criteria:
@@ -117,9 +134,59 @@ Exit criteria:
 """
 
 [[steps]]
+id = "establish-source-triad"
+title = "Establish package, repo, and upstream sources"
+needs = ["snapshot-before"]
+description = """
+Establish the three sources that must be reconciled:
+
+1. **Package source**: `{{package_source_dir}}` and `{{package_wrapper_dir}}`.
+   This is the vendored/package Gas City code that T3 actually builds and
+   installs.
+2. **Repo integration**: every path in `{{repo_integration_paths}}`. This is
+   where T3, scripts, bundled config, providers, sidecars, and UI integrate
+   with the package.
+3. **Upstream latest commits**: `{{upstream_ref}}` after `git fetch --all`.
+   These are the changes we want to learn from and incorporate where they
+   improve the codebase.
+
+Capture exact refs and merge bases:
+```bash
+git fetch --prune --all
+git rev-parse {{target_branch}}
+git rev-parse {{upstream_ref}}
+git merge-base {{target_branch}} {{upstream_ref}}
+git log --oneline --decorate --reverse $(git merge-base {{target_branch}} {{upstream_ref}})..{{upstream_ref}} -- {{package_source_dir}} {{repo_integration_paths}}
+git log --oneline --decorate --reverse $(git merge-base {{target_branch}} {{upstream_ref}})..{{target_branch}} -- {{package_source_dir}} {{repo_integration_paths}}
+```
+
+If `{{package_source_dir}}` is a vendored copy rather than a nested git repo,
+record that explicitly. Do not assume it has its own remote. If it is a nested
+repo, also capture:
+```bash
+git -C {{package_source_dir}} remote -v
+git -C {{package_source_dir}} status --short --branch
+git -C {{package_source_dir}} log --oneline --decorate -n 20
+```
+
+Write a "source triad" section to `{{audit_report}}` with:
+- target branch commit
+- upstream latest commit
+- merge base
+- whether the package source is vendored or a nested repo
+- every repo integration path considered in scope
+- any path intentionally excluded, with reason
+
+Exit criteria:
+- package, repo integration, and upstream refs are all identified
+- latest upstream commits are fetched and listed
+- no merge starts until the exact comparison inputs are written
+"""
+
+[[steps]]
 id = "build-feature-ledger"
 title = "Build or update the Gas City fork ledger"
-needs = ["snapshot-before"]
+needs = ["establish-source-triad"]
 description = """
 Create or update `{{feature_ledger}}` before merging upstream.
 
@@ -346,11 +413,80 @@ Exit criteria:
 """
 
 [[steps]]
-id = "merge-with-feature-map"
-title = "Merge or rebase upstream with a fork-feature map"
+id = "complete-difference-ledger"
+title = "List every difference and decide the merge strategy"
 needs = ["audit-upstream-delta"]
 description = """
-Integrate upstream only after the ledger and upstream delta audit exist.
+Create a complete difference ledger before touching the working tree. This is
+the core of the reasoned merge.
+
+Diff all three surfaces:
+```bash
+BASE=$(git merge-base {{target_branch}} {{upstream_ref}})
+git diff --name-status "$BASE"..{{target_branch}} -- {{package_source_dir}} {{repo_integration_paths}}
+git diff --name-status "$BASE"..{{upstream_ref}} -- {{package_source_dir}} {{repo_integration_paths}}
+git diff --name-status {{target_branch}}..{{upstream_ref}} -- {{package_source_dir}} {{repo_integration_paths}}
+git diff "$BASE"..{{target_branch}} -- {{package_source_dir}} {{repo_integration_paths}}
+git diff "$BASE"..{{upstream_ref}} -- {{package_source_dir}} {{repo_integration_paths}}
+```
+
+For large diffs, summarize with structured tools, but the final ledger must be
+complete. Every changed file must have an entry. Every changed symbol,
+function, command, config key, env var, API endpoint, generated type, migration,
+or runtime behavior inside an in-scope file must have a decision when it affects
+behavior.
+
+Write a table to `{{audit_report}}` with columns:
+- Path
+- Unit: file, function, command, config key, env var, endpoint, schema field,
+  generated artifact, test, doc, or runtime behavior
+- Changed in package/fork since base
+- Changed in upstream since base
+- Conflict type: textual, semantic, generated drift, behavior overlap, no
+  overlap
+- Fork feature affected
+- Upstream improvement or fix
+- Merge decision: `take-upstream`, `keep-fork`, `synthesize`, `move-fork-to-new-upstream-layer`,
+  `retire-with-migration`, or `defer-blocked`
+- Reason
+- Verification command
+- Follow-up bead if not fully resolved
+
+Decision rules:
+- Prefer upstream fixes when they improve correctness, performance,
+  maintainability, or simplify obsolete fork code.
+- Preserve fork behavior when users depend on it, especially T3 bridge,
+  doltlite, Dolt compatibility, bundled config, provider routing, sidebar
+  contracts, and session metadata.
+- Synthesize when both sides are valuable. Do not keep duplicate parallel
+  implementations unless the audit explains why.
+- If upstream moved architecture, port fork behavior into the new architecture
+  instead of restoring obsolete files.
+- Generated files are regenerated from the winning source of truth; never hand
+  edit them as the primary resolution.
+- Tests/docs should be updated to describe the final behavior, not just made to
+  pass.
+
+Hard gates:
+- No in-scope changed file may be omitted from the ledger.
+- No behavioral difference may be marked "resolved by merge" without a reason.
+- No fork-owned feature may be dropped because conflict resolution was easier.
+- No upstream bug fix may be discarded without explaining why it is invalid for
+  this fork.
+
+Exit criteria:
+- `{{audit_report}}` contains the complete difference ledger
+- every difference has a merge decision and verification command
+- blocked/deferred decisions have beads or explicit stop conditions
+"""
+
+[[steps]]
+id = "merge-with-feature-map"
+title = "Merge or rebase upstream with a fork-feature map"
+needs = ["complete-difference-ledger"]
+description = """
+Integrate upstream only after the feature ledger, upstream delta audit, T3
+bridge inventory, and complete difference ledger exist.
 
 During conflict resolution, never choose a whole side for files that define:
 - beads backend selection
@@ -366,6 +502,7 @@ For each conflict, write the mapping into `{{audit_report}}`:
 - fork-owned behavior at risk
 - final resolution
 - smoke check proving the resolution
+- corresponding difference-ledger row
 
 After conflicts are resolved, scan for non-conflicting drops:
 ```bash
@@ -376,6 +513,7 @@ git diff ORIG_HEAD..HEAD -- packages/gascity packages/beads-doltlite packages/do
 Exit criteria:
 - upstream is integrated locally
 - every fork ledger item has a post-merge source mapping
+- every difference-ledger row has its decision applied or is blocked
 - no backend or T3 bridge behavior is assumed preserved without evidence
 """
 
@@ -566,6 +704,9 @@ description = """
 Decide based on evidence, not optimism.
 
 Block the merge if any of these are true:
+- package source, repo integration, and upstream latest were not all compared
+- an in-scope package/repo/upstream difference lacks a decision row
+- a decision row says `defer-blocked`
 - a fork ledger feature is missing
 - Dolt backend smoke fails or is skipped without an explicit blocker
 - doltlite backend smoke fails or uses plain sqlite as proof
@@ -574,6 +715,8 @@ Block the merge if any of these are true:
 - a backend, config key, command, or env var disappears without migration
 - source/runtime behavior disagrees
 - audit report lacks evidence for a feature decision
+- the merge applies upstream mechanically without explaining why each
+  difference was taken, preserved, synthesized, or rejected
 
 If blocked:
 1. Repair the missing behavior in the merge branch, or revert the upstream
