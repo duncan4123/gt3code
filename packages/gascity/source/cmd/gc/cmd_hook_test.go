@@ -242,6 +242,57 @@ max = 5
 	}
 }
 
+func TestCmdHookManualSessionTemplateSkipsRoutedPoolWork(t *testing.T) {
+	clearGCEnv(t)
+	cityDir := t.TempDir()
+	fakeBin := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(cityDir, ".gc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cityToml := `[workspace]
+name = "test-city"
+
+[[agent]]
+name = "polecat"
+`
+	if err := os.WriteFile(filepath.Join(cityDir, "city.toml"), []byte(cityToml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fakeBD := filepath.Join(fakeBin, "bd")
+	script := `#!/bin/sh
+case "$*" in
+  *"--metadata-field gc.routed_to=polecat"*)
+    printf '[{"id":"ROUTED"}]'
+    ;;
+  *)
+    printf '[]'
+    ;;
+esac
+`
+	if err := os.WriteFile(fakeBD, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+origPath)
+	t.Setenv("GC_CITY", cityDir)
+	t.Setenv("GC_SESSION_NAME", "test-city--manual")
+	t.Setenv("GC_AGENT", "polecat-live-1")
+	t.Setenv("GC_TEMPLATE", "polecat")
+	t.Setenv("GC_SESSION_ORIGIN", "manual")
+
+	var stdout, stderr bytes.Buffer
+	code := cmdHook(nil, false, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("cmdHook() = %d, want 1; stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty manual-session result", stdout.String())
+	}
+}
+
 // TestCmdHookOverridesInheritedCityBeadsDir is a regression test for #514:
 // when the gc hook process inherits a city-scoped BEADS_DIR from its parent,
 // the work query subprocess must still run against the rig-scoped bead store

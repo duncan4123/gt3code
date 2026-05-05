@@ -77,6 +77,41 @@ doltlite store. Prefer `node scripts/gascity-runner.ts ...` or `gc bd ...`
 when validating the packaged runtime, and make sure startup helpers strip stale
 `GC_DOLT_*`, `BEADS_DOLT_*`, and `DOLT_*` variables.
 
+## 2026-05-06 HQ Polecat Audit
+
+Manual-origin HQ polecat work discovery has two separate failure modes, and the
+shell you audit from matters:
+
+- Tool shells in a polecat worktree may expose stale Dolt coordinates without
+  the live session identity. In this audit, the shell only had
+  `GC_WORKTREES_DIR` plus a dead `GC_DOLT_PORT`, so plain `bd list` tried to
+  dial an unreachable Dolt server.
+- `gc session audit-env` showed the live projected session metadata for
+  `gastown__hq-polecat-t3-5o199vjs` still carried
+  `GC_SESSION_NAME=gastown__hq-polecat-t3-5o199vjs`,
+  `GC_AGENT=gastown.hq-polecat-2`, and
+  `GC_TEMPLATE=gastown.hq-polecat`.
+
+Repro notes:
+
+```bash
+env GC_SESSION_NAME='gastown__hq-polecat-t3-5o199vjs' \
+    GC_AGENT='gastown.hq-polecat-2' \
+    gc hook
+# -> gc hook: agent "gastown.hq-polecat-2" not found in config
+
+env GC_SESSION_NAME='gastown__hq-polecat-t3-5o199vjs' \
+    GC_AGENT='gastown.hq-polecat-2' \
+    GC_TEMPLATE='gastown.hq-polecat' \
+    gc hook
+# -> routed pool work becomes visible again
+```
+
+That confirms manual or projected sessions with instance-style `GC_AGENT`
+values depend on `GC_TEMPLATE` for config lookup. Current source already has a
+regression test for the intended manual-session behavior in
+`packages/gascity/source/cmd/gc/cmd_hook_test.go`.
+
 ## Binary Version Skew
 
 `gc status` and `gc session list` can disagree if the materialized runtime is
