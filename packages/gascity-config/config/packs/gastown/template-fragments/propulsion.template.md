@@ -181,7 +181,10 @@ When you were spawned, work was assigned to you:
 
 If you were nudged rather than freshly spawned, run `gc hook` or
 `{{ .WorkQuery }}`. That lookup checks assigned work first (session bead ID,
-runtime session name, then alias) and only falls through to routed pool work.
+runtime session name, then alias). It only falls through to generic routed
+pool work for `GC_SESSION_ORIGIN=ephemeral` sessions or explicit controller
+probes. `named` and `manual` sessions stop at exact ownership/continuity and
+must inspect the routed pool explicitly if recovery requires it.
 
 You were spawned with work. There is no extra decision to make. Run it.
 

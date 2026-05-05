@@ -47,6 +47,48 @@ The active city Beads metadata currently selects doltlite:
 Patch `packages/gascity-config/config` for city behavior. The runtime home is
 for binaries, supervisor/process state, and other machine-local files.
 
+## HQ Polecat Manual-Origin Routed Work Audit
+
+On 2026-05-06, `t3-arx.4` audited how HQ polecats discover routed work from a
+manual shell. The result is: generic routed pool discovery is intentionally
+blocked for `GC_SESSION_ORIGIN=manual`.
+
+Relevant code paths:
+
+- `packages/gascity/source/internal/config/config.go`:
+  `Agent.EffectiveWorkQuery()` checks exact continuity first
+  (`GC_SESSION_ID`, `GC_SESSION_NAME`, `GC_ALIAS`), then only enters the
+  generic `gc.routed_to=<target>` tier when `GC_SESSION_ORIGIN` is
+  `ephemeral` or empty.
+- `packages/gascity/source/cmd/gc/cmd_hook.go`:
+  `gc hook` preserves `GC_SESSION_ORIGIN` for session-context execution, so a
+  manual-origin session keeps `origin=manual` all the way into the work query.
+- `packages/gascity/source/engdocs/design/session-model-unification.md`:
+  manual sessions are not generic capacity. They resume only through exact
+  continuity handles or direct targeting.
+
+Practical consequence for HQ polecats:
+
+- A manual session shell should not expect plain `gc hook` to expose unassigned
+  `gc.routed_to=gastown.hq-polecat` work.
+- Recovery and operator probes should inspect the pool explicitly from the city
+  config root, for example:
+
+```bash
+bd ready --metadata-field gc.routed_to=gastown.hq-polecat --unassigned --json --limit=1
+```
+
+Observed local wrinkle during the audit:
+
+- `bd` from the polecat worktree attempted to use a stale Dolt endpoint and
+  failed with `Dolt server unreachable at 127.0.0.1:35819`.
+- The same `bd` query from `/data/projects/t3code/packages/gascity-config/config`
+  succeeded, and `gc doctor` reported the HQ and rig stores healthy.
+
+This means the manual-origin work-discovery question is separate from the
+worktree-local Beads runtime mismatch: routed work exists, but manual sessions
+still do not consume generic pool demand through `gc hook`.
+
 ## Running the Bundled Runtime
 
 Use T3Code's runner for the packaged city:
