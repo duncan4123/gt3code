@@ -17,7 +17,6 @@ import { Command } from "effect/unstable/cli";
 
 import { cli } from "./cli.ts";
 import { deriveServerPaths, ServerConfig, type ServerConfigShape } from "./config.ts";
-import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
 import {
@@ -38,7 +37,7 @@ const CliRuntimeLayer = Layer.mergeAll(NodeServices.layer, NetService.layer);
 
 const runCli = (args: ReadonlyArray<string>) => Command.runWith(cli, { version: "0.0.0" })(args);
 const runCliWithRuntime = (args: ReadonlyArray<string>) =>
-  runCli(args).pipe(Effect.provide(CliRuntimeLayer));
+  runCli(args).pipe(Effect.provide(CliRuntimeLayer)) as Effect.Effect<void, any, never>;
 
 const captureStdout = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
@@ -47,7 +46,11 @@ const captureStdout = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       (yield* TestConsole.logLines).findLast((line): line is string => typeof line === "string") ??
       "";
     return { result, output };
-  }).pipe(Effect.provide(Layer.mergeAll(CliRuntimeLayer, TestConsole.layer)));
+  }).pipe(Effect.provide(Layer.mergeAll(CliRuntimeLayer, TestConsole.layer))) as Effect.Effect<
+    { readonly result: A; readonly output: string },
+    E,
+    never
+  >;
 
 const makeCliTestServerConfig = (baseDir: string) =>
   Effect.gen(function* () {
@@ -76,6 +79,8 @@ const makeCliTestServerConfig = (baseDir: string) =>
       desktopBootstrapToken: undefined,
       autoBootstrapProjectFromCwd: false,
       logWebSocketEvents: false,
+      tailscaleServeEnabled: false,
+      tailscaleServePort: 443,
     } satisfies ServerConfigShape;
   });
 
@@ -314,8 +319,8 @@ it.layer(NodeServices.layer)("cli log-level parsing", (it) => {
             "--base-dir",
             baseDir,
           ]);
-          const orchestrationEngine = yield* OrchestrationEngineService;
-          const readModel = yield* orchestrationEngine.getReadModel();
+          const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
+          const readModel = yield* projectionSnapshotQuery.getSnapshot();
           const addedProject = readModel.projects.find(
             (project) => project.workspaceRoot === workspaceRoot && project.deletedAt === null,
           );

@@ -14,16 +14,53 @@ import {
   recordWsConnectionClosed,
   recordWsConnectionErrored,
   recordWsConnectionOpened,
+  type WsConnectionMetadata,
   WS_RECONNECT_MAX_RETRIES,
 } from "./wsConnectionState";
 
+const RpcClientCompat = RpcClient as unknown as {
+  readonly RequestHooks?: {
+    readonly of: (hooks: unknown) => unknown;
+  };
+  readonly ConnectionHooks: {
+    readonly of: (hooks: unknown) => unknown;
+  };
+};
+
+export interface WsProtocolCloseContext {
+  readonly intentional: boolean;
+}
+
 export interface WsProtocolLifecycleHandlers {
-  readonly onAttempt?: (socketUrl: string, connectionId?: number) => void;
-  readonly onOpen?: (connectionId?: number) => void;
-  readonly onError?: (message: string, connectionId?: number) => void;
+  readonly getConnectionLabel?: () => string | null;
+  readonly getVersionMismatchHint?: () => string | null;
+  readonly isCloseIntentional?: () => boolean;
+  readonly isActive?: () => boolean;
+  readonly onAttempt?: (socketUrl: string) => void;
+  readonly onOpen?: () => void;
+  readonly onHeartbeatPing?: () => void;
+  readonly onHeartbeatPong?: () => void;
+  readonly onHeartbeatTimeout?: () => void;
+  readonly onRequestStart?: (info: {
+    readonly id: string;
+    readonly tag: string;
+    readonly stream: boolean;
+  }) => void;
+  readonly onRequestChunk?: (info: {
+    readonly id: string;
+    readonly tag: string;
+    readonly chunkCount: number;
+  }) => void;
+  readonly onRequestExit?: (info: {
+    readonly id: string;
+    readonly tag: string;
+    readonly stream: boolean;
+  }) => void;
+  readonly onRequestInterrupt?: (info: { readonly id: string; readonly tag?: string }) => void;
+  readonly onError?: (message: string) => void;
   readonly onClose?: (
     details: { readonly code: number; readonly reason: string },
-    connectionId?: number,
+    context: WsProtocolCloseContext,
   ) => void;
 }
 
@@ -40,8 +77,6 @@ function formatSocketErrorMessage(error: unknown): string {
   return String(error);
 }
 
-let nextWsConnectionId = 0;
-
 function resolveWsRpcSocketUrl(rawUrl: string): string {
   const resolved = new URL(rawUrl);
   if (resolved.protocol !== "ws:" && resolved.protocol !== "wss:") {
@@ -52,45 +87,77 @@ function resolveWsRpcSocketUrl(rawUrl: string): string {
   return resolved.toString();
 }
 
-function defaultLifecycleHandlers(): Required<WsProtocolLifecycleHandlers> {
+function resolveConnectionMetadata(handlers?: WsProtocolLifecycleHandlers): WsConnectionMetadata {
   return {
-    onAttempt: recordWsConnectionAttempt,
-    onOpen: recordWsConnectionOpened,
-    onError: (message, connectionId) => {
-      clearAllTrackedRpcRequests();
-      recordWsConnectionErrored(message, connectionId);
+    connectionLabel: handlers?.getConnectionLabel?.() ?? null,
+    versionMismatchHint: handlers?.getVersionMismatchHint?.() ?? null,
+  };
+}
+
+type ComposedWsProtocolLifecycleHandlers = Required<
+  Pick<WsProtocolLifecycleHandlers, "isActive" | "onAttempt" | "onOpen" | "onError" | "onClose">
+>;
+
+function defaultLifecycleHandlers(
+  handlers?: WsProtocolLifecycleHandlers,
+): ComposedWsProtocolLifecycleHandlers {
+  return {
+    isActive: () => true,
+    onAttempt: (socketUrl) => {
+      recordWsConnectionAttempt(socketUrl, resolveConnectionMetadata(handlers));
     },
-    onClose: (details, connectionId) => {
+    onOpen: () => {
+      recordWsConnectionOpened(resolveConnectionMetadata(handlers));
+    },
+    onError: (message) => {
       clearAllTrackedRpcRequests();
-      recordWsConnectionClosed({
-        ...details,
-        ...(connectionId !== undefined ? { connectionId } : {}),
-      });
+      recordWsConnectionErrored(message, resolveConnectionMetadata(handlers));
+    },
+    onClose: (details, context) => {
+      clearAllTrackedRpcRequests();
+      if (context.intentional) {
+        return;
+      }
+      recordWsConnectionClosed(details, resolveConnectionMetadata(handlers));
     },
   };
 }
 
 function composeLifecycleHandlers(
   handlers?: WsProtocolLifecycleHandlers,
-): Required<WsProtocolLifecycleHandlers> {
-  const defaults = defaultLifecycleHandlers();
+): ComposedWsProtocolLifecycleHandlers {
+  const defaults = defaultLifecycleHandlers(handlers);
+  const isActive = handlers?.isActive ?? defaults.isActive;
 
   return {
-    onAttempt: (socketUrl, connectionId) => {
-      defaults.onAttempt(socketUrl, connectionId);
-      handlers?.onAttempt?.(socketUrl, connectionId);
+    isActive,
+    onAttempt: (socketUrl) => {
+      if (!isActive()) {
+        return;
+      }
+      defaults.onAttempt(socketUrl);
+      handlers?.onAttempt?.(socketUrl);
     },
-    onOpen: (connectionId) => {
-      defaults.onOpen(connectionId);
-      handlers?.onOpen?.(connectionId);
+    onOpen: () => {
+      if (!isActive()) {
+        return;
+      }
+      defaults.onOpen();
+      handlers?.onOpen?.();
     },
-    onError: (message, connectionId) => {
-      defaults.onError(message, connectionId);
-      handlers?.onError?.(message, connectionId);
+    onError: (message) => {
+      if (!isActive()) {
+        return;
+      }
+      defaults.onError(message);
+      handlers?.onError?.(message);
     },
-    onClose: (details, connectionId) => {
-      defaults.onClose(details, connectionId);
-      handlers?.onClose?.(details, connectionId);
+    onClose: (details, context) => {
+      if (!isActive()) {
+        return;
+      }
+      defaults.onClose(details, context);
+      handlers?.onClose?.(details, context);
     },
   };
 }
@@ -116,21 +183,20 @@ export function createWsRpcProtocolLayer(
   const trackingWebSocketConstructorLayer = Layer.succeed(
     Socket.WebSocketConstructor,
     (socketUrl, protocols) => {
-      const connectionId = (nextWsConnectionId += 1);
-      lifecycle.onAttempt(socketUrl, connectionId);
+      lifecycle.onAttempt(socketUrl);
       const socket = new globalThis.WebSocket(socketUrl, protocols);
 
       socket.addEventListener(
         "open",
         () => {
-          lifecycle.onOpen(connectionId);
+          lifecycle.onOpen();
         },
         { once: true },
       );
       socket.addEventListener(
         "error",
         () => {
-          lifecycle.onError("Unable to connect to the T3 server WebSocket.", connectionId);
+          lifecycle.onError("Unable to connect to the T3 server WebSocket.");
         },
         { once: true },
       );
@@ -142,7 +208,9 @@ export function createWsRpcProtocolLayer(
               code: event.code,
               reason: event.reason,
             },
-            connectionId,
+            {
+              intentional: handlers?.isCloseIntentional?.() ?? false,
+            },
           );
         },
         { once: true },
@@ -168,22 +236,101 @@ export function createWsRpcProtocolLayer(
         ...protocol,
         run: (clientId, writeResponse) =>
           protocol.run(clientId, (response) => {
-            if (response._tag === "Chunk" || response._tag === "Exit") {
-              acknowledgeRpcRequest(response.requestId);
-            } else if (response._tag === "ClientProtocolError" || response._tag === "Defect") {
+            if (response._tag === "ClientProtocolError" || response._tag === "Defect") {
               clearAllTrackedRpcRequests();
             }
             return writeResponse(response);
           }),
-        send: (clientId, request, transferables) => {
-          if (request._tag === "Request") {
-            trackRpcRequestSent(request.id, request.tag);
-          }
-          return protocol.send(clientId, request, transferables);
-        },
       }),
     ),
   );
+  const requestHooksLayer = RpcClientCompat.RequestHooks
+    ? Layer.succeed(
+        RpcClientCompat.RequestHooks as never,
+        RpcClientCompat.RequestHooks.of({
+          onRequestStart: (info: { id: unknown; tag: string; stream: boolean }) =>
+            Effect.sync(() => {
+              if (!lifecycle.isActive()) {
+                return;
+              }
+              handlers?.onRequestStart?.({
+                id: String(info.id),
+                tag: info.tag,
+                stream: info.stream,
+              });
+              trackRpcRequestSent(String(info.id), info.tag);
+            }),
+          onRequestChunk: (info: { id: unknown; tag: string; chunkCount: number }) =>
+            Effect.sync(() => {
+              if (!lifecycle.isActive()) {
+                return;
+              }
+              handlers?.onRequestChunk?.({
+                id: String(info.id),
+                tag: info.tag,
+                chunkCount: info.chunkCount,
+              });
+              acknowledgeRpcRequest(String(info.id));
+            }),
+          onRequestExit: (info: { id: unknown; tag: string; stream: boolean }) =>
+            Effect.sync(() => {
+              if (!lifecycle.isActive()) {
+                return;
+              }
+              handlers?.onRequestExit?.({
+                id: String(info.id),
+                tag: info.tag,
+                stream: info.stream,
+              });
+              acknowledgeRpcRequest(String(info.id));
+            }),
+          onRequestInterrupt: (info: { id: unknown; tag?: string }) =>
+            Effect.sync(() => {
+              if (!lifecycle.isActive()) {
+                return;
+              }
+              handlers?.onRequestInterrupt?.({
+                id: String(info.id),
+                ...(info.tag === undefined ? {} : { tag: info.tag }),
+              });
+              acknowledgeRpcRequest(String(info.id));
+            }),
+        }),
+      )
+    : Layer.empty;
+  const connectionHooksLayer = Layer.succeed(
+    RpcClient.ConnectionHooks,
+    RpcClientCompat.ConnectionHooks.of({
+      onConnect: Effect.void,
+      onDisconnect: Effect.void,
+      onPing: Effect.sync(() => {
+        if (lifecycle.isActive()) {
+          handlers?.onHeartbeatPing?.();
+        }
+      }),
+      onPong: Effect.sync(() => {
+        if (lifecycle.isActive()) {
+          handlers?.onHeartbeatPong?.();
+        }
+      }),
+      onPingTimeout: Effect.sync(() => {
+        if (lifecycle.isActive()) {
+          clearAllTrackedRpcRequests();
+          recordWsConnectionErrored(
+            "WebSocket heartbeat timed out.",
+            resolveConnectionMetadata(handlers),
+          );
+          handlers?.onHeartbeatTimeout?.();
+        }
+      }),
+    } as never) as never,
+  );
 
-  return protocolLayer.pipe(Layer.provide(Layer.mergeAll(socketLayer, RpcSerialization.layerJson)));
+  return Layer.mergeAll(
+    protocolLayer.pipe(
+      Layer.provide(Layer.mergeAll(socketLayer, RpcSerialization.layerJson, connectionHooksLayer)),
+    ),
+    requestHooksLayer,
+    connectionHooksLayer,
+  );
 }

@@ -13,5 +13,5 @@ const CliRuntimeLayer = Layer.mergeAll(NodeServices.layer, NetService.layer);
 Command.run(cli, { version: packageJson.version }).pipe(
   Effect.scoped,
   Effect.provide(CliRuntimeLayer),
-  NodeRuntime.runMain,
+  (effect) => NodeRuntime.runMain(effect as Effect.Effect<void, unknown, never>),
 );

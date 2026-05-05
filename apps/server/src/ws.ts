@@ -12,32 +12,13 @@ import {
   type OrchestrationShellStreamEvent,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetSnapshotError,
-  OrchestrationSearchThreadMessagesError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_WS_METHODS,
+  parseGcMeta,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   OrchestrationReplayEventsError,
   FilesystemBrowseError,
-  ProjectId,
-  GcGetConfigError,
-  GcFindThreadBindingError,
-  GcGetThreadContextError,
-  GcAddRigError,
-  GcStartError,
-  GcRespondToPendingError,
-  GcSetAgentMaxActiveSessionsError,
-  GcSetAgentMinActiveSessionsError,
-  GcSetAgentSessionModeError,
-  GcSetAgentSuspendedError,
-  GcSetAgentWakeModeError,
-  GcSetCitySuspendedError,
-  GcSetControllerRunningError,
-  GcSetRigSuspendedError,
-  GcSetSupervisorRunningError,
-  GcStopSessionError,
-  GcSubmitSessionError,
-  parseGcMeta,
   ThreadId,
   type TerminalEvent,
   WS_METHODS,
@@ -49,9 +30,6 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery.ts";
 import { ServerConfig } from "./config.ts";
-import { GitCore } from "./git/Services/GitCore.ts";
-import { GitManager } from "./git/Services/GitManager.ts";
-import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster.ts";
 import { Keybindings } from "./keybindings.ts";
 import { Open, resolveAvailableEditors } from "./open.ts";
 import { normalizeDispatchCommand } from "./orchestration/Normalizer.ts";
@@ -65,21 +43,29 @@ import {
 import { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents.ts";
 import { ServerRuntimeStartup } from "./serverRuntimeStartup.ts";
-import { ServerSettingsLive, ServerSettingsService } from "./serverSettings.ts";
+import { redactServerSettingsForClient, ServerSettingsService } from "./serverSettings.ts";
 import { TerminalManager } from "./terminal/Services/Manager.ts";
 import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem.ts";
 import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePaths.ts";
+import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
+import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
+import { GitWorkflowService } from "./git/GitWorkflowService.ts";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { RepositoryIdentityResolver } from "./project/Services/RepositoryIdentityResolver.ts";
 import { ServerEnvironment } from "./environment/Services/ServerEnvironment.ts";
 import { ServerAuth } from "./auth/Services/ServerAuth.ts";
-import {
-  GcApiClient,
-  GcApiClientLive,
-  GcContextProvider,
-  GcContextProviderLive,
-} from "./gc/index.ts";
+import * as SourceControlDiscoveryLayer from "./sourceControl/SourceControlDiscovery.ts";
+import { SourceControlRepositoryService } from "./sourceControl/SourceControlRepositoryService.ts";
+import * as AzureDevOpsCli from "./sourceControl/AzureDevOpsCli.ts";
+import * as BitbucketApi from "./sourceControl/BitbucketApi.ts";
+import * as GitHubCli from "./sourceControl/GitHubCli.ts";
+import * as GitLabCli from "./sourceControl/GitLabCli.ts";
+import * as SourceControlProviderRegistry from "./sourceControl/SourceControlProviderRegistry.ts";
+import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
+import * as VcsDriverRegistry from "./vcs/VcsDriverRegistry.ts";
+import * as VcsProjectConfig from "./vcs/VcsProjectConfig.ts";
+import * as VcsProcess from "./vcs/VcsProcess.ts";
 import {
   BootstrapCredentialService,
   type BootstrapCredentialChange,
@@ -89,6 +75,7 @@ import {
   type SessionCredentialChange,
 } from "./auth/Services/SessionCredentialService.ts";
 import { respondToAuthError } from "./auth/http.ts";
+import { GcApiClient, GcContextProvider } from "./gc/index.ts";
 
 function isThreadDetailEvent(event: OrchestrationEvent): event is Extract<
   OrchestrationEvent,
@@ -162,9 +149,9 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const checkpointDiffQuery = yield* CheckpointDiffQuery;
       const keybindings = yield* Keybindings;
       const open = yield* Open;
-      const gitManager = yield* GitManager;
-      const git = yield* GitCore;
-      const gitStatusBroadcaster = yield* GitStatusBroadcaster;
+      const gitWorkflow = yield* GitWorkflowService;
+      const vcsProvisioning = yield* VcsProvisioningService;
+      const vcsStatusBroadcaster = yield* VcsStatusBroadcaster;
       const terminalManager = yield* TerminalManager;
       const providerRegistry = yield* ProviderRegistry;
       const config = yield* ServerConfig;
@@ -177,9 +164,12 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const repositoryIdentityResolver = yield* RepositoryIdentityResolver;
       const serverEnvironment = yield* ServerEnvironment;
       const serverAuth = yield* ServerAuth;
+      const sourceControlDiscovery = yield* SourceControlDiscoveryLayer.SourceControlDiscovery;
+      const sourceControlRepositories = yield* SourceControlRepositoryService;
       const bootstrapCredentials = yield* BootstrapCredentialService;
       const sessions = yield* SessionCredentialService;
-      const projectAliasMap = yield* Ref.make(new Map<string, string>());
+      const gcApi = yield* GcApiClient;
+      const gcContext = yield* GcContextProvider;
       const serverCommandId = (tag: string) =>
         CommandId.make(`server:${tag}:${crypto.randomUUID()}`);
 
@@ -232,44 +222,6 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             });
       };
 
-      const rewriteAliasedProjectIds = (command: OrchestrationCommand) =>
-        Effect.gen(function* () {
-          const aliases = yield* Ref.get(projectAliasMap);
-          const resolveProjectId = (projectId: ProjectId): ProjectId =>
-            ProjectId.make(aliases.get(projectId) ?? projectId);
-
-          switch (command.type) {
-            case "project.create":
-            case "project.meta.update":
-            case "project.delete":
-              return {
-                ...command,
-                projectId: resolveProjectId(command.projectId),
-              } satisfies OrchestrationCommand;
-            case "thread.create":
-              return {
-                ...command,
-                projectId: resolveProjectId(command.projectId),
-              } satisfies OrchestrationCommand;
-            case "thread.turn.start":
-              if (!command.bootstrap?.createThread) {
-                return command;
-              }
-              return {
-                ...command,
-                bootstrap: {
-                  ...command.bootstrap,
-                  createThread: {
-                    ...command.bootstrap.createThread,
-                    projectId: resolveProjectId(command.bootstrap.createThread.projectId),
-                  },
-                },
-              } satisfies OrchestrationCommand;
-            default:
-              return command;
-          }
-        });
-
       const enrichProjectEvent = (
         event: OrchestrationEvent,
       ): Effect.Effect<OrchestrationEvent, never, never> => {
@@ -288,9 +240,13 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             return Effect.gen(function* () {
               const workspaceRoot =
                 event.payload.workspaceRoot ??
-                (yield* orchestrationEngine.getReadModel()).projects.find(
-                  (project) => project.id === event.payload.projectId,
-                )?.workspaceRoot ??
+                Option.match(
+                  yield* projectionSnapshotQuery.getProjectShellById(event.payload.projectId),
+                  {
+                    onNone: () => null,
+                    onSome: (project) => project.workspaceRoot,
+                  },
+                ) ??
                 null;
               if (workspaceRoot === null) {
                 return event;
@@ -304,7 +260,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                   repositoryIdentity,
                 },
               } satisfies OrchestrationEvent;
-            });
+            }).pipe(Effect.catch(() => Effect.succeed(event)));
           default:
             return Effect.succeed(event);
         }
@@ -518,10 +474,10 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             }
 
             if (bootstrap?.prepareWorktree) {
-              const worktree = yield* git.createWorktree({
+              const worktree = yield* gitWorkflow.createWorktree({
                 cwd: bootstrap.prepareWorktree.projectCwd,
-                branch: bootstrap.prepareWorktree.baseBranch,
-                newBranch: bootstrap.prepareWorktree.branch,
+                refName: bootstrap.prepareWorktree.baseBranch,
+                newRefName: bootstrap.prepareWorktree.branch,
                 path: null,
               });
               targetWorktreePath = worktree.worktree.path;
@@ -529,7 +485,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 type: "thread.meta.update",
                 commandId: serverCommandId("bootstrap-thread-meta-update"),
                 threadId: command.threadId,
-                branch: worktree.worktree.branch,
+                branch: worktree.worktree.refName,
                 worktreePath: targetWorktreePath,
               });
               yield* refreshGitStatus(targetWorktreePath);
@@ -554,47 +510,16 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const dispatchNormalizedCommand = (
         normalizedCommand: OrchestrationCommand,
       ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> => {
-        const dispatchEffect = Effect.gen(function* () {
-          if (normalizedCommand.type === "project.create") {
-            const existingProject = yield* projectionSnapshotQuery
-              .getActiveProjectByWorkspaceRoot(normalizedCommand.workspaceRoot)
-              .pipe(
-                Effect.mapError((cause) =>
-                  toDispatchCommandError(cause, "Failed to inspect existing project"),
-                ),
-              );
-            if (
-              Option.isSome(existingProject) &&
-              existingProject.value.id !== normalizedCommand.projectId
-            ) {
-              yield* Ref.update(projectAliasMap, (aliases) => {
-                const next = new Map(aliases);
-                next.set(normalizedCommand.projectId, existingProject.value.id);
-                return next;
-              });
-              const readModel = yield* orchestrationEngine
-                .getReadModel()
+        const dispatchEffect =
+          normalizedCommand.type === "thread.turn.start" && normalizedCommand.bootstrap
+            ? dispatchBootstrapTurnStart(normalizedCommand)
+            : orchestrationEngine
+                .dispatch(normalizedCommand)
                 .pipe(
                   Effect.mapError((cause) =>
-                    toDispatchCommandError(cause, "Failed to inspect orchestration snapshot"),
+                    toDispatchCommandError(cause, "Failed to dispatch orchestration command"),
                   ),
                 );
-              return { sequence: readModel.snapshotSequence };
-            }
-          }
-
-          const effectiveCommand = yield* rewriteAliasedProjectIds(normalizedCommand);
-          if (effectiveCommand.type === "thread.turn.start" && effectiveCommand.bootstrap) {
-            return yield* dispatchBootstrapTurnStart(effectiveCommand);
-          }
-          return yield* orchestrationEngine
-            .dispatch(effectiveCommand)
-            .pipe(
-              Effect.mapError((cause) =>
-                toDispatchCommandError(cause, "Failed to dispatch orchestration command"),
-              ),
-            );
-        });
 
         return startup
           .enqueueCommand(dispatchEffect)
@@ -608,7 +533,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const loadServerConfig = Effect.gen(function* () {
         const keybindingsConfig = yield* keybindings.loadConfigState;
         const providers = yield* providerRegistry.getProviders;
-        const settings = yield* serverSettings.getSettings;
+        const settings = redactServerSettingsForClient(yield* serverSettings.getSettings);
         const environment = yield* serverEnvironment.getDescriptor;
         const auth = yield* serverAuth.getDescriptor();
 
@@ -636,9 +561,41 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       });
 
       const refreshGitStatus = (cwd: string) =>
-        gitStatusBroadcaster
+        vcsStatusBroadcaster
           .refreshStatus(cwd)
           .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid);
+
+      const requireGcConfig = gcApi
+        .getConfig()
+        .pipe(
+          Effect.flatMap((config) =>
+            config
+              ? Effect.succeed(config)
+              : Effect.fail(new Error("Gas City configuration is unavailable.")),
+          ),
+        );
+      const gcConfigAfter = <A>(effect: Effect.Effect<A, Error>) =>
+        effect.pipe(Effect.flatMap(() => requireGcConfig));
+      const observeGcRpcEffect = (
+        method: string,
+        effect: Effect.Effect<unknown, unknown, unknown>,
+      ) => observeRpcEffect(method as never, effect as never) as never;
+      const getGcSessionNameForThread = (threadId: ThreadId) =>
+        projectionSnapshotQuery.getThreadDetailById(threadId).pipe(
+          Effect.flatMap(
+            Option.match({
+              onNone: () => Effect.fail(new Error(`Thread not found: ${threadId}`)),
+              onSome: (thread) => {
+                const sessionName = parseGcMeta(thread.customMetadata).sessionName;
+                return sessionName
+                  ? Effect.succeed(sessionName)
+                  : Effect.fail(
+                      new Error(`Thread is not bound to a Gas City session: ${threadId}`),
+                    );
+              },
+            }),
+          ),
+        );
 
       return WsRpcGroup.of({
         [ORCHESTRATION_WS_METHODS.dispatchCommand]: (command) =>
@@ -707,19 +664,132 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ),
             { "rpc.aggregate": "orchestration" },
           ),
-        [ORCHESTRATION_WS_METHODS.getSnapshot]: (_input) =>
+        [ORCHESTRATION_WS_METHODS.searchThreadMessages]: (input) =>
           observeRpcEffect(
-            ORCHESTRATION_WS_METHODS.getSnapshot,
-            projectionSnapshotQuery.getSnapshot().pipe(
-              Effect.mapError(
-                (cause) =>
-                  new OrchestrationGetSnapshotError({
-                    message: "Failed to load orchestration snapshot",
-                    cause,
-                  }),
+            ORCHESTRATION_WS_METHODS.searchThreadMessages as never,
+            (projectionSnapshotQuery.searchThreadMessages
+              ? projectionSnapshotQuery.searchThreadMessages(input.query, input.limit)
+              : Effect.succeed({ results: [] })) as never,
+          ) as never,
+        [WS_METHODS.gcGetConfig]: () => observeGcRpcEffect(WS_METHODS.gcGetConfig, requireGcConfig),
+        [WS_METHODS.gcStart]: () =>
+          observeGcRpcEffect(WS_METHODS.gcStart, gcConfigAfter(gcApi.start)),
+        [WS_METHODS.gcSetSupervisorRunning]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcSetSupervisorRunning,
+            gcConfigAfter(gcApi.setSupervisorRunning(input.running)),
+          ),
+        [WS_METHODS.gcSetControllerRunning]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcSetControllerRunning,
+            gcConfigAfter(gcApi.setControllerRunning(input.running)),
+          ),
+        [WS_METHODS.gcSetAgentSuspended]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcSetAgentSuspended,
+            gcConfigAfter(gcApi.setAgentSuspended(input.agent, input.suspended)),
+          ),
+        [WS_METHODS.gcSetAgentMaxActiveSessions]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcSetAgentMaxActiveSessions,
+            gcConfigAfter(gcApi.setAgentMaxActiveSessions(input.agent, input.maxActiveSessions)),
+          ),
+        [WS_METHODS.gcSetAgentMinActiveSessions]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcSetAgentMinActiveSessions,
+            gcConfigAfter(gcApi.setAgentMinActiveSessions(input.agent, input.minActiveSessions)),
+          ),
+        [WS_METHODS.gcSetAgentWakeMode]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcSetAgentWakeMode,
+            gcConfigAfter(gcApi.setAgentWakeMode(input.agent, input.wakeMode)),
+          ),
+        [WS_METHODS.gcSetAgentSessionMode]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcSetAgentSessionMode,
+            gcConfigAfter(gcApi.setAgentSessionMode(input.agent, input.mode)),
+          ),
+        [WS_METHODS.gcSetCitySuspended]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcSetCitySuspended,
+            gcConfigAfter(gcApi.setCitySuspended(input.suspended)),
+          ),
+        [WS_METHODS.gcSetRigSuspended]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcSetRigSuspended,
+            gcConfigAfter(gcApi.setRigSuspended(input.rig, input.suspended)),
+          ),
+        [WS_METHODS.gcAddRig]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcAddRig,
+            gcConfigAfter(
+              gcApi.addRig({
+                path: input.path,
+                ...(input.name !== undefined ? { name: input.name } : {}),
+                ...(input.startSuspended !== undefined
+                  ? { startSuspended: input.startSuspended }
+                  : {}),
+                ...(input.includeGastown !== undefined
+                  ? { includeGastown: input.includeGastown }
+                  : {}),
+              }),
+            ),
+          ),
+        [WS_METHODS.gcFindThreadBinding]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcFindThreadBinding,
+            projectionSnapshotQuery.getActiveThreadBindingByGcSessionName
+              ? projectionSnapshotQuery
+                  .getActiveThreadBindingByGcSessionName(input.sessionName)
+                  .pipe(
+                    Effect.map(
+                      Option.match({
+                        onNone: () => null,
+                        onSome: (binding) => ({ ...binding, sessionName: input.sessionName }),
+                      }),
+                    ),
+                  )
+              : Effect.succeed(null),
+          ),
+        [WS_METHODS.gcGetThreadContext]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcGetThreadContext,
+            projectionSnapshotQuery.getThreadDetailById(ThreadId.make(input.threadId)).pipe(
+              Effect.flatMap(
+                Option.match({
+                  onNone: () => Effect.fail(new Error(`Thread not found: ${input.threadId}`)),
+                  onSome: (thread) => gcContext.getThreadContext(thread.customMetadata ?? {}),
+                }),
               ),
             ),
-            { "rpc.aggregate": "orchestration" },
+          ),
+        [WS_METHODS.gcSubmitSession]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcSubmitSession,
+            getGcSessionNameForThread(input.threadId).pipe(
+              Effect.flatMap((sessionName) => gcApi.submitSession(sessionName, input.message)),
+            ),
+          ),
+        [WS_METHODS.gcStopSession]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcStopSession,
+            getGcSessionNameForThread(input.threadId).pipe(
+              Effect.flatMap((sessionName) => gcApi.stopSession(sessionName)),
+            ),
+          ),
+        [WS_METHODS.gcRespondToPending]: (input) =>
+          observeGcRpcEffect(
+            WS_METHODS.gcRespondToPending,
+            getGcSessionNameForThread(input.threadId).pipe(
+              Effect.flatMap((sessionName) =>
+                gcApi.respondToPending(sessionName, {
+                  action: input.action,
+                  ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
+                  ...(input.text !== undefined ? { text: input.text } : {}),
+                  ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+                }),
+              ),
+            ),
           ),
         [ORCHESTRATION_WS_METHODS.getTurnDiff]: (input) =>
           observeRpcEffect(
@@ -772,28 +842,14 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ),
             { "rpc.aggregate": "orchestration" },
           ),
-        [ORCHESTRATION_WS_METHODS.searchThreadMessages]: (input) =>
-          observeRpcEffect(
-            ORCHESTRATION_WS_METHODS.searchThreadMessages,
-            (projectionSnapshotQuery.searchThreadMessages
-              ? projectionSnapshotQuery.searchThreadMessages(input.query, input.limit)
-              : Effect.succeed({ results: [] })
-            ).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new OrchestrationSearchThreadMessagesError({
-                    message: "Failed to search thread messages",
-                    cause,
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "orchestration" },
-          ),
         [ORCHESTRATION_WS_METHODS.subscribeShell]: (_input) =>
           observeRpcStreamEffect(
             ORCHESTRATION_WS_METHODS.subscribeShell,
             Effect.gen(function* () {
               const snapshot = yield* projectionSnapshotQuery.getShellSnapshot().pipe(
+                Effect.tapError((cause) =>
+                  Effect.logError("orchestration shell snapshot load failed", { cause }),
+                ),
                 Effect.mapError(
                   (cause) =>
                     new OrchestrationGetSnapshotError({
@@ -834,9 +890,16 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                       }),
                   ),
                 ),
-                orchestrationEngine
-                  .getReadModel()
-                  .pipe(Effect.map((readModel) => readModel.snapshotSequence)),
+                projectionSnapshotQuery.getSnapshotSequence().pipe(
+                  Effect.map(({ snapshotSequence }) => snapshotSequence),
+                  Effect.mapError(
+                    (cause) =>
+                      new OrchestrationGetSnapshotError({
+                        message: "Failed to load orchestration snapshot sequence",
+                        cause,
+                      }),
+                  ),
+                ),
               ]);
 
               if (Option.isNone(threadDetail)) {
@@ -876,10 +939,13 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcEffect(WS_METHODS.serverGetConfig, loadServerConfig, {
             "rpc.aggregate": "server",
           }),
-        [WS_METHODS.serverRefreshProviders]: (_input) =>
+        [WS_METHODS.serverRefreshProviders]: (input) =>
           observeRpcEffect(
             WS_METHODS.serverRefreshProviders,
-            providerRegistry.refresh().pipe(Effect.map((providers) => ({ providers }))),
+            (input.instanceId !== undefined
+              ? providerRegistry.refreshInstance(input.instanceId)
+              : providerRegistry.refresh()
+            ).pipe(Effect.map((providers) => ({ providers }))),
             { "rpc.aggregate": "server" },
           ),
         [WS_METHODS.serverUpsertKeybinding]: (rule) =>
@@ -892,13 +958,55 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             { "rpc.aggregate": "server" },
           ),
         [WS_METHODS.serverGetSettings]: (_input) =>
-          observeRpcEffect(WS_METHODS.serverGetSettings, serverSettings.getSettings, {
-            "rpc.aggregate": "server",
-          }),
+          observeRpcEffect(
+            WS_METHODS.serverGetSettings,
+            serverSettings.getSettings.pipe(Effect.map(redactServerSettingsForClient)),
+            {
+              "rpc.aggregate": "server",
+            },
+          ),
         [WS_METHODS.serverUpdateSettings]: ({ patch }) =>
-          observeRpcEffect(WS_METHODS.serverUpdateSettings, serverSettings.updateSettings(patch), {
-            "rpc.aggregate": "server",
-          }),
+          observeRpcEffect(
+            WS_METHODS.serverUpdateSettings,
+            serverSettings.updateSettings(patch).pipe(Effect.map(redactServerSettingsForClient)),
+            {
+              "rpc.aggregate": "server",
+            },
+          ),
+        [WS_METHODS.serverDiscoverSourceControl]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.serverDiscoverSourceControl,
+            sourceControlDiscovery.discover,
+            {
+              "rpc.aggregate": "server",
+            },
+          ),
+        [WS_METHODS.sourceControlLookupRepository]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.sourceControlLookupRepository,
+            sourceControlRepositories.lookupRepository(input),
+            {
+              "rpc.aggregate": "source-control",
+            },
+          ),
+        [WS_METHODS.sourceControlCloneRepository]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.sourceControlCloneRepository,
+            sourceControlRepositories.cloneRepository(input),
+            {
+              "rpc.aggregate": "source-control",
+            },
+          ),
+        [WS_METHODS.sourceControlPublishRepository]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.sourceControlPublishRepository,
+            sourceControlRepositories
+              .publishRepository(input)
+              .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            {
+              "rpc.aggregate": "source-control",
+            },
+          ),
         [WS_METHODS.projectsSearchEntries]: (input) =>
           observeRpcEffect(
             WS_METHODS.projectsSearchEntries,
@@ -947,26 +1055,26 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ),
             { "rpc.aggregate": "workspace" },
           ),
-        [WS_METHODS.subscribeGitStatus]: (input) =>
+        [WS_METHODS.subscribeVcsStatus]: (input) =>
           observeRpcStream(
-            WS_METHODS.subscribeGitStatus,
-            gitStatusBroadcaster.streamStatus(input),
+            WS_METHODS.subscribeVcsStatus,
+            vcsStatusBroadcaster.streamStatus(input),
             {
-              "rpc.aggregate": "git",
+              "rpc.aggregate": "vcs",
             },
           ),
-        [WS_METHODS.gitRefreshStatus]: (input) =>
+        [WS_METHODS.vcsRefreshStatus]: (input) =>
           observeRpcEffect(
-            WS_METHODS.gitRefreshStatus,
-            gitStatusBroadcaster.refreshStatus(input.cwd),
+            WS_METHODS.vcsRefreshStatus,
+            vcsStatusBroadcaster.refreshStatus(input.cwd),
             {
-              "rpc.aggregate": "git",
+              "rpc.aggregate": "vcs",
             },
           ),
-        [WS_METHODS.gitPull]: (input) =>
+        [WS_METHODS.vcsPull]: (input) =>
           observeRpcEffect(
-            WS_METHODS.gitPull,
-            git.pullCurrentBranch(input.cwd).pipe(
+            WS_METHODS.vcsPull,
+            gitWorkflow.pullCurrentBranch(input.cwd).pipe(
               Effect.matchCauseEffect({
                 onFailure: (cause) => Effect.failCause(cause),
                 onSuccess: (result) =>
@@ -979,7 +1087,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcStream(
             WS_METHODS.gitRunStackedAction,
             Stream.callback<GitActionProgressEvent, GitManagerServiceError>((queue) =>
-              gitManager
+              gitWorkflow
                 .runStackedAction(input, {
                   actionId: input.actionId,
                   progressReporter: {
@@ -996,55 +1104,59 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                   }),
                 ),
             ),
-            { "rpc.aggregate": "git" },
+            { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.gitResolvePullRequest]: (input) =>
-          observeRpcEffect(WS_METHODS.gitResolvePullRequest, gitManager.resolvePullRequest(input), {
-            "rpc.aggregate": "git",
-          }),
+          observeRpcEffect(
+            WS_METHODS.gitResolvePullRequest,
+            gitWorkflow.resolvePullRequest(input),
+            {
+              "rpc.aggregate": "git",
+            },
+          ),
         [WS_METHODS.gitPreparePullRequestThread]: (input) =>
           observeRpcEffect(
             WS_METHODS.gitPreparePullRequestThread,
-            gitManager
+            gitWorkflow
               .preparePullRequestThread(input)
               .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "git" },
           ),
-        [WS_METHODS.gitListBranches]: (input) =>
-          observeRpcEffect(WS_METHODS.gitListBranches, git.listBranches(input), {
-            "rpc.aggregate": "git",
+        [WS_METHODS.vcsListRefs]: (input) =>
+          observeRpcEffect(WS_METHODS.vcsListRefs, gitWorkflow.listRefs(input), {
+            "rpc.aggregate": "vcs",
           }),
-        [WS_METHODS.gitCreateWorktree]: (input) =>
+        [WS_METHODS.vcsCreateWorktree]: (input) =>
           observeRpcEffect(
-            WS_METHODS.gitCreateWorktree,
-            git.createWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-            { "rpc.aggregate": "git" },
+            WS_METHODS.vcsCreateWorktree,
+            gitWorkflow.createWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "vcs" },
           ),
-        [WS_METHODS.gitRemoveWorktree]: (input) =>
+        [WS_METHODS.vcsRemoveWorktree]: (input) =>
           observeRpcEffect(
-            WS_METHODS.gitRemoveWorktree,
-            git.removeWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-            { "rpc.aggregate": "git" },
+            WS_METHODS.vcsRemoveWorktree,
+            gitWorkflow.removeWorktree(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "vcs" },
           ),
-        [WS_METHODS.gitCreateBranch]: (input) =>
+        [WS_METHODS.vcsCreateRef]: (input) =>
           observeRpcEffect(
-            WS_METHODS.gitCreateBranch,
-            git.createBranch(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-            { "rpc.aggregate": "git" },
+            WS_METHODS.vcsCreateRef,
+            gitWorkflow.createRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "vcs" },
           ),
-        [WS_METHODS.gitCheckout]: (input) =>
+        [WS_METHODS.vcsSwitchRef]: (input) =>
           observeRpcEffect(
-            WS_METHODS.gitCheckout,
-            Effect.scoped(git.checkoutBranch(input)).pipe(
-              Effect.tap(() => refreshGitStatus(input.cwd)),
-            ),
-            { "rpc.aggregate": "git" },
+            WS_METHODS.vcsSwitchRef,
+            gitWorkflow.switchRef(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "vcs" },
           ),
-        [WS_METHODS.gitInit]: (input) =>
+        [WS_METHODS.vcsInit]: (input) =>
           observeRpcEffect(
-            WS_METHODS.gitInit,
-            git.initRepo(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
-            { "rpc.aggregate": "git" },
+            WS_METHODS.vcsInit,
+            vcsProvisioning
+              .initRepository(input)
+              .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "vcs" },
           ),
         [WS_METHODS.terminalOpen]: (input) =>
           observeRpcEffect(WS_METHODS.terminalOpen, terminalManager.open(input), {
@@ -1090,6 +1202,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                   version: 1 as const,
                   type: "keybindingsUpdated" as const,
                   payload: {
+                    keybindings: event.keybindings,
                     issues: event.issues,
                   },
                 })),
@@ -1103,6 +1216,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 Stream.debounce(Duration.millis(PROVIDER_STATUS_DEBOUNCE_MS)),
               );
               const settingsUpdates = serverSettings.streamChanges.pipe(
+                Stream.map((settings) => redactServerSettingsForClient(settings)),
                 Stream.map((settings) => ({
                   version: 1 as const,
                   type: "settingsUpdated" as const,
@@ -1110,13 +1224,9 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 })),
               );
 
-              yield* Effect.all(
-                [providerRegistry.refresh("codex"), providerRegistry.refresh("claudeAgent")],
-                {
-                  concurrency: "unbounded",
-                  discard: true,
-                },
-              ).pipe(Effect.ignoreCause({ log: true }), Effect.forkScoped);
+              yield* providerRegistry
+                .refresh()
+                .pipe(Effect.ignoreCause({ log: true }), Effect.forkScoped);
 
               const liveUpdates = Stream.merge(
                 keybindingsUpdates,
@@ -1181,412 +1291,6 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             }),
             { "rpc.aggregate": "auth" },
           ),
-        [WS_METHODS.gcGetConfig]: (_input) =>
-          observeRpcEffect(
-            WS_METHODS.gcGetConfig,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              const config = yield* gcApi.getConfig();
-              if (!config) {
-                return yield* Effect.fail(new Error("GC config unavailable"));
-              }
-              return config;
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcGetConfigError({
-                    message: error instanceof Error ? error.message : "Failed to get GC config",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcStart]: (_input) =>
-          observeRpcEffect(
-            WS_METHODS.gcStart,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              yield* gcApi.start;
-              const config = yield* gcApi.getConfig();
-              if (!config) {
-                return yield* Effect.fail(new Error("GC started, but config is unavailable"));
-              }
-              return config;
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcStartError({
-                    message: error instanceof Error ? error.message : "Failed to start GC",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcSetSupervisorRunning]: ({ running }) =>
-          observeRpcEffect(
-            WS_METHODS.gcSetSupervisorRunning,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              yield* gcApi.setSupervisorRunning(running);
-              const config = yield* gcApi.getConfig();
-              if (!config) {
-                return yield* Effect.fail(new Error("GC config unavailable"));
-              }
-              return config;
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcSetSupervisorRunningError({
-                    message:
-                      error instanceof Error
-                        ? error.message
-                        : "Failed to update GC supervisor state",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcSetControllerRunning]: ({ running }) =>
-          observeRpcEffect(
-            WS_METHODS.gcSetControllerRunning,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              yield* gcApi.setControllerRunning(running);
-              const config = yield* gcApi.getConfig();
-              if (!config) {
-                return yield* Effect.fail(new Error("GC config unavailable"));
-              }
-              return config;
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcSetControllerRunningError({
-                    message:
-                      error instanceof Error
-                        ? error.message
-                        : "Failed to update GC controller state",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcFindThreadBinding]: ({ sessionName }) =>
-          observeRpcEffect(
-            WS_METHODS.gcFindThreadBinding,
-            Effect.gen(function* () {
-              const binding = projectionSnapshotQuery.getActiveThreadBindingByGcSessionName
-                ? yield* projectionSnapshotQuery.getActiveThreadBindingByGcSessionName(sessionName)
-                : Option.none();
-              if (Option.isNone(binding)) {
-                return null;
-              }
-
-              return {
-                sessionName,
-                threadId: binding.value.threadId,
-                projectId: binding.value.projectId,
-              };
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcFindThreadBindingError({
-                    message:
-                      error instanceof Error ? error.message : "Failed to find GC thread binding",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcGetThreadContext]: ({ threadId }) =>
-          observeRpcEffect(
-            WS_METHODS.gcGetThreadContext,
-            Effect.gen(function* () {
-              const snapshot = yield* projectionSnapshotQuery.getSnapshot();
-              const thread = snapshot.threads.find((candidate) => candidate.id === threadId);
-              if (!thread?.customMetadata) {
-                return { bead: null, convoy: null, formula: null };
-              }
-              const gcContextProvider = yield* GcContextProvider;
-              return yield* gcContextProvider.getThreadContext(thread.customMetadata);
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcGetThreadContextError({
-                    message: error instanceof Error ? error.message : "Failed to get GC context",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcSubmitSession]: ({ threadId, message }) =>
-          observeRpcEffect(
-            WS_METHODS.gcSubmitSession,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              const snapshot = yield* projectionSnapshotQuery.getSnapshot();
-              const thread = snapshot.threads.find((candidate) => candidate.id === threadId);
-              const sessionName = parseGcMeta(thread?.customMetadata).sessionName;
-              if (!sessionName) {
-                return yield* Effect.fail(new Error("GC session binding unavailable"));
-              }
-              return yield* gcApi.submitSession(sessionName, message);
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcSubmitSessionError({
-                    message: error instanceof Error ? error.message : "Failed to submit GC session",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcStopSession]: ({ threadId }) =>
-          observeRpcEffect(
-            WS_METHODS.gcStopSession,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              const snapshot = yield* projectionSnapshotQuery.getSnapshot();
-              const thread = snapshot.threads.find((candidate) => candidate.id === threadId);
-              const sessionName = parseGcMeta(thread?.customMetadata).sessionName;
-              if (!sessionName) {
-                return yield* Effect.fail(new Error("GC session binding unavailable"));
-              }
-              return yield* gcApi.stopSession(sessionName);
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcStopSessionError({
-                    message: error instanceof Error ? error.message : "Failed to stop GC session",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcRespondToPending]: ({ threadId, action, requestId, text, metadata }) =>
-          observeRpcEffect(
-            WS_METHODS.gcRespondToPending,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              const snapshot = yield* projectionSnapshotQuery.getSnapshot();
-              const thread = snapshot.threads.find((candidate) => candidate.id === threadId);
-              const sessionName = parseGcMeta(thread?.customMetadata).sessionName;
-              if (!sessionName) {
-                return yield* Effect.fail(new Error("GC session binding unavailable"));
-              }
-              const response = {
-                action,
-                ...(requestId !== undefined ? { requestId } : {}),
-                ...(text !== undefined ? { text } : {}),
-                ...(metadata !== undefined ? { metadata } : {}),
-              };
-              return yield* gcApi.respondToPending(sessionName, response);
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcRespondToPendingError({
-                    message:
-                      error instanceof Error ? error.message : "Failed to respond to GC request",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcSetAgentSuspended]: ({ agent, suspended }) =>
-          observeRpcEffect(
-            WS_METHODS.gcSetAgentSuspended,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              yield* gcApi.setAgentSuspended(agent, suspended);
-              const config = yield* gcApi.getConfig();
-              if (!config) {
-                return yield* Effect.fail(new Error("GC config unavailable after agent update"));
-              }
-              return config;
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcSetAgentSuspendedError({
-                    message:
-                      error instanceof Error ? error.message : "Failed to update GC agent state",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcSetAgentMaxActiveSessions]: ({ agent, maxActiveSessions }) =>
-          observeRpcEffect(
-            WS_METHODS.gcSetAgentMaxActiveSessions,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              yield* gcApi.setAgentMaxActiveSessions(agent, maxActiveSessions);
-              const config = yield* gcApi.getConfig();
-              if (!config) {
-                return yield* Effect.fail(
-                  new Error("GC config unavailable after agent pool-size update"),
-                );
-              }
-              return config;
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcSetAgentMaxActiveSessionsError({
-                    message:
-                      error instanceof Error
-                        ? error.message
-                        : "Failed to update GC agent pool size",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcSetAgentMinActiveSessions]: ({ agent, minActiveSessions }) =>
-          observeRpcEffect(
-            WS_METHODS.gcSetAgentMinActiveSessions,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              yield* gcApi.setAgentMinActiveSessions(agent, minActiveSessions);
-              const config = yield* gcApi.getConfig();
-              if (!config) {
-                return yield* Effect.fail(
-                  new Error("GC config unavailable after agent min-session update"),
-                );
-              }
-              return config;
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcSetAgentMinActiveSessionsError({
-                    message:
-                      error instanceof Error
-                        ? error.message
-                        : "Failed to update GC agent minimum sessions",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcSetAgentWakeMode]: ({ agent, wakeMode }) =>
-          observeRpcEffect(
-            WS_METHODS.gcSetAgentWakeMode,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              yield* gcApi.setAgentWakeMode(agent, wakeMode);
-              const config = yield* gcApi.getConfig();
-              if (!config) {
-                return yield* Effect.fail(
-                  new Error("GC config unavailable after agent wake-mode update"),
-                );
-              }
-              return config;
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcSetAgentWakeModeError({
-                    message:
-                      error instanceof Error
-                        ? error.message
-                        : "Failed to update GC agent wake mode",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcSetAgentSessionMode]: ({ agent, mode }) =>
-          observeRpcEffect(
-            WS_METHODS.gcSetAgentSessionMode,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              yield* gcApi.setAgentSessionMode(agent, mode);
-              const config = yield* gcApi.getConfig();
-              if (!config) {
-                return yield* Effect.fail(
-                  new Error("GC config unavailable after agent session mode update"),
-                );
-              }
-              return config;
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcSetAgentSessionModeError({
-                    message:
-                      error instanceof Error
-                        ? error.message
-                        : "Failed to update GC agent session mode",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcSetRigSuspended]: ({ rig, suspended }) =>
-          observeRpcEffect(
-            WS_METHODS.gcSetRigSuspended,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              yield* gcApi.setRigSuspended(rig, suspended);
-              const config = yield* gcApi.getConfig();
-              if (!config) {
-                return yield* Effect.fail(new Error("GC config unavailable after rig update"));
-              }
-              return config;
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcSetRigSuspendedError({
-                    message:
-                      error instanceof Error ? error.message : "Failed to update GC rig state",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcAddRig]: ({ path, name, startSuspended, includeGastown }) =>
-          observeRpcEffect(
-            WS_METHODS.gcAddRig,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              yield* gcApi.addRig({
-                path,
-                ...(name !== undefined ? { name } : {}),
-                ...(startSuspended !== undefined ? { startSuspended } : {}),
-                ...(includeGastown !== undefined ? { includeGastown } : {}),
-              });
-              const config = yield* gcApi.getConfig();
-              if (!config) {
-                return yield* Effect.fail(new Error("GC config unavailable after rig add"));
-              }
-              return config;
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcAddRigError({
-                    message: error instanceof Error ? error.message : "Failed to add GC rig",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
-        [WS_METHODS.gcSetCitySuspended]: ({ suspended }) =>
-          observeRpcEffect(
-            WS_METHODS.gcSetCitySuspended,
-            Effect.gen(function* () {
-              const gcApi = yield* GcApiClient;
-              yield* gcApi.setCitySuspended(suspended);
-              const config = yield* gcApi.getConfig();
-              if (!config) {
-                return yield* Effect.fail(new Error("GC config unavailable after city update"));
-              }
-              return config;
-            }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new GcSetCitySuspendedError({
-                    message:
-                      error instanceof Error ? error.message : "Failed to update GC city state",
-                  }),
-              ),
-            ),
-            { "rpc.aggregate": "gc" },
-          ),
       });
     }),
   );
@@ -1611,18 +1315,30 @@ export const websocketRpcRouteLayer = Layer.unwrap(
           Effect.provide(
             makeWsRpcLayer(session.sessionId).pipe(
               Layer.provideMerge(RpcSerialization.layerJson),
-              Layer.provideMerge(GcApiClientLive.pipe(Layer.provide(ServerSettingsLive))),
-              Layer.provideMerge(
-                GcContextProviderLive.pipe(
-                  Layer.provide(GcApiClientLive.pipe(Layer.provide(ServerSettingsLive))),
+              Layer.provide(
+                SourceControlDiscoveryLayer.layer.pipe(
+                  Layer.provide(
+                    SourceControlProviderRegistry.layer.pipe(
+                      Layer.provide(
+                        Layer.mergeAll(
+                          AzureDevOpsCli.layer,
+                          BitbucketApi.layer,
+                          GitHubCli.layer,
+                          GitLabCli.layer,
+                        ),
+                      ),
+                      Layer.provideMerge(GitVcsDriver.layer),
+                      Layer.provide(
+                        VcsDriverRegistry.layer.pipe(Layer.provide(VcsProjectConfig.layer)),
+                      ),
+                    ),
+                  ),
+                  Layer.provide(VcsProcess.layer),
                 ),
               ),
             ),
           ),
         );
-        if (session.sessionId === "local-gc-bridge") {
-          return yield* rpcWebSocketHttpEffect;
-        }
         return yield* Effect.acquireUseRelease(
           sessions.markConnected(session.sessionId),
           () => rpcWebSocketHttpEffect,

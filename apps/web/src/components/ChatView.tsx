@@ -1,15 +1,14 @@
 import {
-  parseGcMeta,
   type ApprovalRequestId,
-  DEFAULT_MODEL_BY_PROVIDER,
-  type ClaudeAgentEffort,
+  DEFAULT_MODEL,
+  defaultInstanceIdForDriver,
   type EnvironmentId,
   type MessageId,
   type ModelSelection,
   type ProjectScript,
-  type ProviderKind,
   type ProjectId,
   type ProviderApprovalDecision,
+  ProviderInstanceId,
   type ServerProvider,
   type ResolvedKeybindingsConfig,
   type ScopedThreadRef,
@@ -18,8 +17,10 @@ import {
   type KeybindingCommand,
   OrchestrationThreadActivity,
   ProviderInteractionMode,
+  ProviderDriverKind,
   RuntimeMode,
   TerminalOpenInput,
+  parseGcMeta,
 } from "@t3tools/contracts";
 import {
   parseScopedThreadKey,
@@ -27,7 +28,11 @@ import {
   scopeProjectRef,
   scopeThreadRef,
 } from "@t3tools/client-runtime";
-import { applyClaudePromptEffortPrefix, createModelSelection } from "@t3tools/shared/model";
+import {
+  applyClaudePromptEffortPrefix,
+  createModelSelection,
+  resolvePromptInjectedEffort,
+} from "@t3tools/shared/model";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { truncate } from "@t3tools/shared/String";
 import { Debouncer } from "@tanstack/react-pacer";
@@ -100,7 +105,7 @@ import { BranchToolbar } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, TriangleAlertIcon, WifiOffIcon } from "lucide-react";
 import { cn, randomUUID } from "~/lib/utils";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { decodeProjectScriptKeybindingRule } from "~/lib/projectScriptKeybindings";
@@ -113,10 +118,11 @@ import {
 import { newCommandId, newDraftId, newMessageId, newThreadId } from "~/lib/utils";
 import { getProviderModelCapabilities, resolveSelectableProvider } from "../providerModels";
 import { useSettings } from "../hooks/useSettings";
-import { resolveAppModelSelection } from "../modelSelection";
+import { resolveAppModelSelectionForInstance } from "../modelSelection";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { deriveLogicalProjectKeyFromSettings } from "../logicalProject";
 import {
+  reconnectSavedEnvironment,
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
 } from "../environments/runtime";
@@ -144,6 +150,7 @@ import { NoActiveThreadState } from "./NoActiveThreadState";
 import { resolveEffectiveEnvMode, resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { ProviderStatusBanner } from "./chat/ProviderStatusBanner";
 import { ThreadErrorBanner } from "./chat/ThreadErrorBanner";
+import { ComposerBannerStack, type ComposerBannerStackItem } from "./chat/ComposerBannerStack";
 import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
   buildExpiredTerminalContextToastCopy,
@@ -176,6 +183,13 @@ import {
 import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
 import { retainThreadDetailSubscription } from "../environments/runtime/service";
 import { RightPanelSheet } from "./RightPanelSheet";
+import { Button } from "./ui/button";
+import {
+  buildVersionMismatchDismissalKey,
+  dismissVersionMismatch,
+  isVersionMismatchDismissed,
+  resolveServerConfigVersionMismatch,
+} from "../versionSkew";
 
 const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
@@ -183,6 +197,11 @@ const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_PROPOSED_PLANS: Thread["proposedPlans"] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
+type EnvironmentUnavailableState = {
+  readonly environmentId: EnvironmentId;
+  readonly label: string;
+  readonly connectionState: "connecting" | "disconnected" | "error";
+};
 
 type ThreadPlanCatalogEntry = Pick<Thread, "id" | "proposedPlans">;
 
@@ -300,17 +319,15 @@ function useThreadPlanCatalog(threadIds: readonly ThreadId[]): ThreadPlanCatalog
 }
 
 function formatOutgoingPrompt(params: {
-  provider: ProviderKind;
+  provider: ProviderDriverKind;
   model: string | null;
   models: ReadonlyArray<ServerProvider["models"][number]>;
   effort: string | null;
   text: string;
 }): string {
   const caps = getProviderModelCapabilities(params.models, params.model, params.provider);
-  if (params.effort && caps.promptInjectedEffortLevels.includes(params.effort)) {
-    return applyClaudePromptEffortPrefix(params.text, params.effort as ClaudeAgentEffort | null);
-  }
-  return params.text;
+  const promptEffort = resolvePromptInjectedEffort(caps, params.effort);
+  return applyClaudePromptEffortPrefix(params.text, promptEffort);
 }
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
@@ -594,6 +611,8 @@ export default function ChatView(props: ChatViewProps) {
     threadId,
     routeKind,
     onDiffPanelOpen,
+    gcOpen = false,
+    onToggleGc,
     reserveTitleBarControlInset = true,
   } = props;
   const draftId = routeKind === "draft" ? props.draftId : null;
@@ -620,6 +639,7 @@ export default function ChatView(props: ChatViewProps) {
     (store) => store.setStickyModelSelection,
   );
   const timestampFormat = settings.timestampFormat;
+  const autoOpenPlanSidebar = settings.autoOpenPlanSidebar;
   const navigate = useNavigate();
   const rawSearch = useSearch({
     strict: false,
@@ -780,8 +800,8 @@ export default function ChatView(props: ChatViewProps) {
             threadId,
             draftThread,
             fallbackDraftProject?.defaultModelSelection ?? {
-              provider: "codex",
-              model: DEFAULT_MODEL_BY_PROVIDER.codex,
+              instanceId: ProviderInstanceId.make("codex"),
+              model: DEFAULT_MODEL,
             },
             localDraftError,
           )
@@ -790,6 +810,7 @@ export default function ChatView(props: ChatViewProps) {
   );
   const isServerThread = routeKind === "server" && serverThread !== undefined;
   const activeThread = isServerThread ? serverThread : localDraftThread;
+  const gcAvailable = parseGcMeta(activeThread?.customMetadata).isGcManaged;
   const runtimeMode = composerRuntimeMode ?? activeThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE;
   const interactionMode =
     composerInteractionMode ?? activeThread?.interactionMode ?? DEFAULT_INTERACTION_MODE;
@@ -856,17 +877,82 @@ export default function ChatView(props: ChatViewProps) {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const savedEnvironmentRegistry = useSavedEnvironmentRegistryStore((s) => s.byId);
   const savedEnvironmentRuntimeById = useSavedEnvironmentRuntimeStore((s) => s.byId);
-  const sidebarProjectGroupingMode = useSettings((settings) => settings.sidebarProjectGroupingMode);
-  const sidebarProjectGroupingOverrides = useSettings(
-    (settings) => settings.sidebarProjectGroupingOverrides,
+  const activeSavedEnvironmentRecord =
+    activeThread && activeThread.environmentId !== primaryEnvironmentId
+      ? (savedEnvironmentRegistry[activeThread.environmentId] ?? null)
+      : null;
+  const activeSavedEnvironmentRuntime = activeSavedEnvironmentRecord
+    ? (savedEnvironmentRuntimeById[activeSavedEnvironmentRecord.environmentId] ?? null)
+    : null;
+  const activeSavedEnvironmentConnectionState = activeSavedEnvironmentRecord
+    ? (activeSavedEnvironmentRuntime?.connectionState ?? "disconnected")
+    : "connected";
+  const activeEnvironmentUnavailable =
+    activeSavedEnvironmentRecord !== null && activeSavedEnvironmentConnectionState !== "connected";
+  const activeSavedEnvironmentId = activeSavedEnvironmentRecord?.environmentId ?? null;
+  const activeEnvironmentUnavailableLabel = activeSavedEnvironmentRecord
+    ? resolveEnvironmentOptionLabel({
+        isPrimary: false,
+        environmentId: activeSavedEnvironmentRecord.environmentId,
+        runtimeLabel: activeSavedEnvironmentRuntime?.descriptor?.label ?? null,
+        savedLabel: activeSavedEnvironmentRecord.label,
+      })
+    : null;
+  const activeEnvironmentUnavailableState = useMemo<EnvironmentUnavailableState | null>(() => {
+    if (
+      !activeEnvironmentUnavailable ||
+      !activeEnvironmentUnavailableLabel ||
+      !activeSavedEnvironmentId
+    ) {
+      return null;
+    }
+
+    return {
+      environmentId: activeSavedEnvironmentId,
+      label: activeEnvironmentUnavailableLabel,
+      connectionState:
+        activeSavedEnvironmentConnectionState === "connecting" ||
+        activeSavedEnvironmentConnectionState === "error"
+          ? activeSavedEnvironmentConnectionState
+          : "disconnected",
+    };
+  }, [
+    activeEnvironmentUnavailable,
+    activeEnvironmentUnavailableLabel,
+    activeSavedEnvironmentConnectionState,
+    activeSavedEnvironmentId,
+  ]);
+  const [reconnectingEnvironmentId, setReconnectingEnvironmentId] = useState<EnvironmentId | null>(
+    null,
   );
-  const projectGroupingSettings = useMemo(
-    () => ({
-      sidebarProjectGroupingMode,
-      sidebarProjectGroupingOverrides,
-    }),
-    [sidebarProjectGroupingMode, sidebarProjectGroupingOverrides],
+  const handleReconnectActiveEnvironment = useCallback(
+    async (environmentId: EnvironmentId, label: string) => {
+      setReconnectingEnvironmentId(environmentId);
+      try {
+        await reconnectSavedEnvironment(environmentId);
+        toastManager.add({
+          type: "success",
+          title: "Environment reconnected",
+          description: `${label} is ready.`,
+        });
+      } catch (error) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Could not reconnect environment",
+            description: error instanceof Error ? error.message : "Failed to reconnect.",
+          }),
+        );
+      } finally {
+        setReconnectingEnvironmentId(null);
+      }
+    },
+    [],
   );
+  const projectGroupingSettings = useSettings((settings) => ({
+    sidebarProjectGroupingMode: settings.sidebarProjectGroupingMode,
+    sidebarProjectGroupingOverrides: settings.sidebarProjectGroupingOverrides,
+  }));
   const logicalProjectEnvironments = useMemo(() => {
     if (!activeProject) return [];
     const logicalKey = deriveLogicalProjectKeyFromSettings(activeProject, projectGroupingSettings);
@@ -1044,7 +1130,9 @@ export default function ChatView(props: ChatViewProps) {
 
   const selectedProviderByThreadId = composerActiveProvider ?? null;
   const threadProvider =
-    activeThread?.modelSelection.provider ?? activeProject?.defaultModelSelection?.provider ?? null;
+    activeThread?.modelSelection.instanceId ??
+    activeProject?.defaultModelSelection?.instanceId ??
+    null;
   const lockedProvider = deriveLockedProvider({
     thread: activeThread,
     selectedProvider: selectedProviderByThreadId,
@@ -1061,12 +1149,126 @@ export default function ChatView(props: ChatViewProps) {
     primaryEnvironmentId && activeThread?.environmentId === primaryEnvironmentId
       ? primaryServerConfig
       : (activeEnvRuntimeState?.serverConfig ?? primaryServerConfig);
+  const versionMismatch = resolveServerConfigVersionMismatch(serverConfig);
+  const versionMismatchDismissKey =
+    versionMismatch && activeThread
+      ? buildVersionMismatchDismissalKey(activeThread.environmentId, versionMismatch)
+      : null;
+  const [dismissedVersionMismatchKey, setDismissedVersionMismatchKey] = useState<string | null>(
+    null,
+  );
+  const versionMismatchDismissed =
+    versionMismatchDismissKey === dismissedVersionMismatchKey ||
+    isVersionMismatchDismissed(versionMismatchDismissKey);
+  const showVersionMismatchBanner =
+    versionMismatch !== null && versionMismatchDismissKey !== null && !versionMismatchDismissed;
+  const hasMultipleRegisteredEnvironments = Object.keys(savedEnvironmentRegistry).length > 0;
+  const versionMismatchServerLabel = useMemo(() => {
+    if (!hasMultipleRegisteredEnvironments || !activeThread) {
+      return "server";
+    }
+
+    const isPrimary = activeThread.environmentId === primaryEnvironmentId;
+    const savedRecord = savedEnvironmentRegistry[activeThread.environmentId];
+    const runtimeState = savedEnvironmentRuntimeById[activeThread.environmentId];
+    return `${resolveEnvironmentOptionLabel({
+      isPrimary,
+      environmentId: activeThread.environmentId,
+      runtimeLabel: runtimeState?.descriptor?.label ?? serverConfig?.environment.label ?? null,
+      savedLabel: savedRecord?.label ?? null,
+    })} server`;
+  }, [
+    activeThread,
+    hasMultipleRegisteredEnvironments,
+    primaryEnvironmentId,
+    savedEnvironmentRegistry,
+    savedEnvironmentRuntimeById,
+    serverConfig?.environment.label,
+  ]);
+  const composerBannerItems = useMemo<ComposerBannerStackItem[]>(() => {
+    const items: ComposerBannerStackItem[] = [];
+    if (activeEnvironmentUnavailableState) {
+      items.push({
+        id: `environment-unavailable:${activeEnvironmentUnavailableState.environmentId}`,
+        variant:
+          activeEnvironmentUnavailableState.connectionState === "error" ? "error" : "warning",
+        icon: <WifiOffIcon />,
+        title: (
+          <>
+            {activeEnvironmentUnavailableState.label} is{" "}
+            {activeEnvironmentUnavailableState.connectionState === "connecting"
+              ? "connecting"
+              : "disconnected"}
+          </>
+        ),
+        description: "Reconnect this environment before sending messages or running actions.",
+        actions: (
+          <>
+            <Button
+              size="xs"
+              disabled={
+                activeEnvironmentUnavailableState.connectionState === "connecting" ||
+                reconnectingEnvironmentId === activeEnvironmentUnavailableState.environmentId
+              }
+              onClick={() =>
+                void handleReconnectActiveEnvironment(
+                  activeEnvironmentUnavailableState.environmentId,
+                  activeEnvironmentUnavailableState.label,
+                )
+              }
+            >
+              {activeEnvironmentUnavailableState.connectionState === "connecting" ||
+              reconnectingEnvironmentId === activeEnvironmentUnavailableState.environmentId
+                ? "Reconnecting..."
+                : "Reconnect"}
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => void navigate({ to: "/settings/connections" })}
+            >
+              Connections
+            </Button>
+          </>
+        ),
+      });
+    }
+    if (showVersionMismatchBanner && versionMismatch && versionMismatchDismissKey) {
+      items.push({
+        id: `version-mismatch:${versionMismatchDismissKey}`,
+        variant: "warning",
+        icon: <TriangleAlertIcon />,
+        title: "Client and server versions differ",
+        description: (
+          <>
+            Client {versionMismatch.clientVersion} is connected to {versionMismatchServerLabel}{" "}
+            {versionMismatch.serverVersion}. Sync them if RPC calls or reconnects fail.
+          </>
+        ),
+        dismissLabel: "Dismiss version mismatch warning",
+        onDismiss: () => {
+          dismissVersionMismatch(versionMismatchDismissKey);
+          setDismissedVersionMismatchKey(versionMismatchDismissKey);
+        },
+      });
+    }
+    return items;
+  }, [
+    activeEnvironmentUnavailableState,
+    handleReconnectActiveEnvironment,
+    navigate,
+    reconnectingEnvironmentId,
+    showVersionMismatchBanner,
+    versionMismatch,
+    versionMismatchDismissKey,
+    versionMismatchServerLabel,
+  ]);
   const providerStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
   const unlockedSelectedProvider = resolveSelectableProvider(
     providerStatuses,
-    selectedProviderByThreadId ?? threadProvider ?? "codex",
+    selectedProviderByThreadId ?? threadProvider ?? ProviderDriverKind.make("codex"),
   );
-  const selectedProvider: ProviderKind = lockedProvider ?? unlockedSelectedProvider;
+  const selectedProvider: ProviderDriverKind = lockedProvider ?? unlockedSelectedProvider;
   const phase = derivePhase(activeThread?.session ?? null);
   const threadActivities = activeThread?.activities ?? EMPTY_ACTIVITIES;
   const workLogEntries = useMemo(
@@ -1436,16 +1638,26 @@ export default function ChatView(props: ChatViewProps) {
       })
     : null;
   const gitStatusQuery = useGitStatus({ environmentId, cwd: gitCwd });
-  const gcAvailable = useMemo(
-    () => parseGcMeta(activeThread?.customMetadata).isGcManaged,
-    [activeThread?.customMetadata],
-  );
   const keybindings = useServerKeybindings();
   const availableEditors = useServerAvailableEditors();
-  const activeProviderStatus = useMemo(
-    () => providerStatuses.find((status) => status.provider === selectedProvider) ?? null,
-    [selectedProvider, providerStatuses],
-  );
+  // Prefer an instance-id match so a custom Codex instance (e.g.
+  // `codex_personal`) surfaces its own status/message in the banner rather
+  // than the default Codex's. Falls back to first-match-by-kind when no
+  // saved instance id is available or the instance no longer exists.
+  const activeProviderInstanceId =
+    activeThread?.session?.providerInstanceId ??
+    activeThread?.modelSelection.instanceId ??
+    activeProject?.defaultModelSelection?.instanceId ??
+    null;
+  const activeProviderStatus = useMemo(() => {
+    if (activeProviderInstanceId) {
+      return (
+        providerStatuses.find((status) => status.instanceId === activeProviderInstanceId) ?? null
+      );
+    }
+    const defaultInstanceId = defaultInstanceIdForDriver(selectedProvider);
+    return providerStatuses.find((status) => status.instanceId === defaultInstanceId) ?? null;
+  }, [activeProviderInstanceId, providerStatuses, selectedProvider]);
   const activeProjectCwd = activeProject?.cwd ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
@@ -1962,7 +2174,7 @@ export default function ChatView(props: ChatViewProps) {
       if (
         input.modelSelection !== undefined &&
         (input.modelSelection.model !== serverThread.modelSelection.model ||
-          input.modelSelection.provider !== serverThread.modelSelection.provider ||
+          input.modelSelection.instanceId !== serverThread.modelSelection.instanceId ||
           JSON.stringify(input.modelSelection.options ?? null) !==
             JSON.stringify(serverThread.modelSelection.options ?? null))
       ) {
@@ -2028,6 +2240,7 @@ export default function ChatView(props: ChatViewProps) {
       planSidebarOpenOnNextThreadRef.current = false;
       setPlanSidebarOpen(true);
     } else {
+      planSidebarOpenOnNextThreadRef.current = false;
       setPlanSidebarOpen(false);
     }
     planSidebarDismissedForTurnRef.current = null;
@@ -2036,6 +2249,7 @@ export default function ChatView(props: ChatViewProps) {
   // Auto-open the plan sidebar when plan/todo steps arrive for the current turn.
   // Don't auto-open for plans carried over from a previous turn (the user can open manually).
   useEffect(() => {
+    if (!autoOpenPlanSidebar) return;
     if (!activePlan) return;
     if (planSidebarOpen) return;
     const latestTurnId = activeLatestTurn?.turnId ?? null;
@@ -2043,7 +2257,13 @@ export default function ChatView(props: ChatViewProps) {
     const turnKey = activePlan.turnId ?? sidebarProposedPlan?.turnId ?? "__dismissed__";
     if (planSidebarDismissedForTurnRef.current === turnKey) return;
     setPlanSidebarOpen(true);
-  }, [activePlan, activeLatestTurn?.turnId, planSidebarOpen, sidebarProposedPlan?.turnId]);
+  }, [
+    activePlan,
+    activeLatestTurn?.turnId,
+    autoOpenPlanSidebar,
+    planSidebarOpen,
+    sidebarProposedPlan?.turnId,
+  ]);
 
   useEffect(() => {
     setIsRevertingCheckpoint(false);
@@ -2254,10 +2474,7 @@ export default function ChatView(props: ChatViewProps) {
       const shortcutContext = {
         terminalFocus: isTerminalFocused(),
         terminalOpen: Boolean(terminalState.terminalOpen),
-        modelPickerOpen:
-          typeof composerRef.current?.isModelPickerOpen === "function"
-            ? composerRef.current.isModelPickerOpen()
-            : false,
+        modelPickerOpen: composerRef.current?.isModelPickerOpen() ?? false,
       };
 
       const command = resolveShortcutCommand(event, keybindings, {
@@ -2310,9 +2527,7 @@ export default function ChatView(props: ChatViewProps) {
       if (command === "modelPicker.toggle") {
         event.preventDefault();
         event.stopPropagation();
-        if (typeof composerRef.current?.toggleModelPicker === "function") {
-          composerRef.current.toggleModelPicker();
-        }
+        composerRef.current?.toggleModelPicker();
         return;
       }
 
@@ -2347,6 +2562,13 @@ export default function ChatView(props: ChatViewProps) {
       const localApi = readLocalApi();
       if (!api || !localApi || !activeThread || isRevertingCheckpoint) return;
 
+      if (activeEnvironmentUnavailable && activeEnvironmentUnavailableLabel) {
+        setThreadError(
+          activeThread.id,
+          `Reconnect ${activeEnvironmentUnavailableLabel} before reverting checkpoints.`,
+        );
+        return;
+      }
       if (phase === "running" || isSendBusy || isConnecting) {
         setThreadError(activeThread.id, "Interrupt the current turn before reverting checkpoints.");
         return;
@@ -2382,6 +2604,8 @@ export default function ChatView(props: ChatViewProps) {
     },
     [
       activeThread,
+      activeEnvironmentUnavailable,
+      activeEnvironmentUnavailableLabel,
       environmentId,
       isConnecting,
       isRevertingCheckpoint,
@@ -2394,7 +2618,15 @@ export default function ChatView(props: ChatViewProps) {
   const onSend = async (e?: { preventDefault: () => void }) => {
     e?.preventDefault();
     const api = readEnvironmentApi(environmentId);
-    if (!api || !activeThread || isSendBusy || isConnecting || sendInFlightRef.current) return;
+    if (
+      !api ||
+      !activeThread ||
+      isSendBusy ||
+      isConnecting ||
+      activeEnvironmentUnavailable ||
+      sendInFlightRef.current
+    )
+      return;
     if (activePendingProgress) {
       onAdvanceActivePendingUserInput();
       return;
@@ -2573,10 +2805,8 @@ export default function ChatView(props: ChatViewProps) {
       }
       const title = truncate(titleSeed);
       const threadCreateModelSelection = createModelSelection(
-        ctxSelectedProvider,
-        ctxSelectedModel ||
-          activeProject.defaultModelSelection?.model ||
-          DEFAULT_MODEL_BY_PROVIDER.codex,
+        ctxSelectedModelSelection.instanceId,
+        ctxSelectedModel || activeProject.defaultModelSelection?.model || DEFAULT_MODEL,
         ctxSelectedModelSelection.options,
       );
 
@@ -2973,7 +3203,7 @@ export default function ChatView(props: ChatViewProps) {
         // Optimistically open the plan sidebar when implementing (not refining).
         // "default" mode here means the agent is executing the plan, which produces
         // step-tracking activities that the sidebar will display.
-        if (nextInteractionMode === "default") {
+        if (nextInteractionMode === "default" && autoOpenPlanSidebar) {
           planSidebarDismissedForTurnRef.current = null;
           setPlanSidebarOpen(true);
         }
@@ -3002,6 +3232,7 @@ export default function ChatView(props: ChatViewProps) {
       runtimeMode,
       setComposerDraftInteractionMode,
       setThreadError,
+      autoOpenPlanSidebar,
       environmentId,
     ],
   );
@@ -3016,6 +3247,7 @@ export default function ChatView(props: ChatViewProps) {
       !isServerThread ||
       isSendBusy ||
       isConnecting ||
+      activeEnvironmentUnavailable ||
       sendInFlightRef.current
     ) {
       return;
@@ -3094,8 +3326,8 @@ export default function ChatView(props: ChatViewProps) {
         return waitForStartedServerThread(scopeThreadRef(activeThread.environmentId, nextThreadId));
       })
       .then(() => {
-        // Signal that the plan sidebar should open on the new thread.
-        planSidebarOpenOnNextThreadRef.current = true;
+        // Signal that the plan sidebar should open on the new thread when enabled.
+        planSidebarOpenOnNextThreadRef.current = autoOpenPlanSidebar;
         return navigate({
           to: "/$environmentId/$threadId",
           params: {
@@ -3130,31 +3362,58 @@ export default function ChatView(props: ChatViewProps) {
     activeThreadBranch,
     activeThread,
     beginLocalDispatch,
+    activeEnvironmentUnavailable,
     isConnecting,
     isSendBusy,
     isServerThread,
     navigate,
     resetLocalDispatch,
     runtimeMode,
+    autoOpenPlanSidebar,
     environmentId,
   ]);
 
   const onProviderModelSelect = useCallback(
-    (provider: ProviderKind, model: string) => {
+    (instanceId: ProviderInstanceId, model: string) => {
       if (!activeThread) return;
-      if (lockedProvider !== null && provider !== lockedProvider) {
+      // Look up the configured instance so model normalization and custom
+      // model lookup stay scoped to that exact instance. Unknown instance ids
+      // are rejected by returning early; the server remains authoritative too.
+      const entry = providerStatuses.find((snapshot) => snapshot.instanceId === instanceId);
+      const resolvedDriverKind = entry?.driver ?? null;
+      if (
+        lockedProvider !== null &&
+        resolvedDriverKind !== null &&
+        resolvedDriverKind !== lockedProvider
+      ) {
         scheduleComposerFocus();
         return;
       }
-      const resolvedProvider = resolveSelectableProvider(providerStatuses, provider);
-      const resolvedModel = resolveAppModelSelection(
-        resolvedProvider,
+      if (lockedProvider !== null && activeThread.session?.providerInstanceId) {
+        const currentEntry = providerStatuses.find(
+          (snapshot) => snapshot.instanceId === activeThread.session?.providerInstanceId,
+        );
+        if (
+          currentEntry?.continuation?.groupKey &&
+          entry?.continuation?.groupKey &&
+          currentEntry.continuation.groupKey !== entry.continuation.groupKey
+        ) {
+          scheduleComposerFocus();
+          return;
+        }
+      }
+      const resolvedModel = resolveAppModelSelectionForInstance(
+        instanceId,
         settings,
         providerStatuses,
         model,
       );
+      if (!resolvedModel) {
+        scheduleComposerFocus();
+        return;
+      }
       const nextModelSelection: ModelSelection = {
-        provider: resolvedProvider,
+        instanceId,
         model: resolvedModel,
       };
       setComposerDraftModelSelection(
@@ -3249,14 +3508,14 @@ export default function ChatView(props: ChatViewProps) {
       {/* Top bar */}
       <header
         className={cn(
-          "border-b border-border px-3 sm:px-5",
+          "border-b border-border",
           isElectron
             ? cn(
-                "drag-region flex h-[52px] items-center wco:h-[env(titlebar-area-height)]",
+                "drag-region flex h-[52px] items-center px-3 sm:px-5 wco:h-[env(titlebar-area-height)]",
                 reserveTitleBarControlInset &&
                   "wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]",
               )
-            : "py-2 sm:py-3",
+            : "pb-2 pl-[calc(env(safe-area-inset-left)+0.75rem)] pr-[calc(env(safe-area-inset-right)+0.75rem)] pt-2 sm:pb-3 sm:pl-[calc(env(safe-area-inset-left)+1.25rem)] sm:pr-[calc(env(safe-area-inset-right)+1.25rem)] sm:pt-3",
         )}
       >
         <ChatHeader
@@ -3279,15 +3538,15 @@ export default function ChatView(props: ChatViewProps) {
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
           diffOpen={diffOpen}
-          gcOpen={props.gcOpen ?? false}
-          gcAvailable={gcAvailable}
           onRunProjectScript={runProjectScript}
           onAddProjectScript={saveProjectScript}
           onUpdateProjectScript={updateProjectScript}
           onDeleteProjectScript={deleteProjectScript}
           onToggleTerminal={toggleTerminalVisibility}
           onToggleDiff={onToggleDiff}
-          onToggleGc={props.onToggleGc ?? (() => {})}
+          gcOpen={gcOpen}
+          gcAvailable={gcAvailable}
+          onToggleGc={onToggleGc ?? (() => {})}
         />
       </header>
 
@@ -3345,103 +3604,114 @@ export default function ChatView(props: ChatViewProps) {
           </div>
 
           {/* Input bar */}
-          <div className={cn("px-3 pt-1.5 sm:px-5 sm:pt-2", isGitRepo ? "pb-1" : "pb-3 sm:pb-4")}>
-            <ChatComposer
-              ref={composerRef}
-              composerDraftTarget={composerDraftTarget}
-              environmentId={environmentId}
-              routeKind={routeKind}
-              routeThreadRef={routeThreadRef}
-              draftId={draftId}
-              activeThreadId={activeThreadId}
-              activeThreadEnvironmentId={activeThread?.environmentId}
-              activeThread={activeThread}
-              isServerThread={isServerThread}
-              isLocalDraftThread={isLocalDraftThread}
-              phase={phase}
-              isConnecting={isConnecting}
-              isSendBusy={isSendBusy}
-              isPreparingWorktree={isPreparingWorktree}
-              activePendingApproval={activePendingApproval}
-              pendingApprovals={pendingApprovals}
-              pendingUserInputs={pendingUserInputs}
-              activePendingProgress={activePendingProgress}
-              activePendingResolvedAnswers={activePendingResolvedAnswers}
-              activePendingIsResponding={activePendingIsResponding}
-              activePendingDraftAnswers={activePendingDraftAnswers}
-              activePendingQuestionIndex={activePendingQuestionIndex}
-              respondingRequestIds={respondingRequestIds}
-              showPlanFollowUpPrompt={showPlanFollowUpPrompt}
-              activeProposedPlan={activeProposedPlan}
-              activePlan={activePlan as { turnId?: TurnId } | null}
-              sidebarProposedPlan={sidebarProposedPlan as { turnId?: TurnId } | null}
-              planSidebarLabel={planSidebarLabel}
-              planSidebarOpen={planSidebarOpen}
-              runtimeMode={runtimeMode}
-              interactionMode={interactionMode}
-              lockedProvider={lockedProvider}
-              providerStatuses={providerStatuses as ServerProvider[]}
-              activeProjectDefaultModelSelection={activeProject?.defaultModelSelection}
-              activeThreadModelSelection={activeThread?.modelSelection}
-              activeThreadActivities={activeThread?.activities}
-              resolvedTheme={resolvedTheme}
-              settings={settings}
-              keybindings={keybindings}
-              terminalOpen={Boolean(terminalState.terminalOpen)}
-              gitCwd={gitCwd}
-              promptRef={promptRef}
-              composerImagesRef={composerImagesRef}
-              composerTerminalContextsRef={composerTerminalContextsRef}
-              shouldAutoScrollRef={isAtEndRef}
-              scheduleStickToBottom={scrollToEnd}
-              onSend={onSend}
-              onInterrupt={onInterrupt}
-              onImplementPlanInNewThread={onImplementPlanInNewThread}
-              onRespondToApproval={onRespondToApproval}
-              onSelectActivePendingUserInputOption={onSelectActivePendingUserInputOption}
-              onAdvanceActivePendingUserInput={onAdvanceActivePendingUserInput}
-              onPreviousActivePendingUserInputQuestion={onPreviousActivePendingUserInputQuestion}
-              onChangeActivePendingUserInputCustomAnswer={
-                onChangeActivePendingUserInputCustomAnswer
-              }
-              onProviderModelSelect={onProviderModelSelect}
-              toggleInteractionMode={toggleInteractionMode}
-              handleRuntimeModeChange={handleRuntimeModeChange}
-              handleInteractionModeChange={handleInteractionModeChange}
-              togglePlanSidebar={togglePlanSidebar}
-              focusComposer={focusComposer}
-              scheduleComposerFocus={scheduleComposerFocus}
-              setThreadError={setThreadError}
-              onExpandImage={onExpandTimelineImage}
-            />
+          <div
+            className={cn(
+              "pl-[calc(env(safe-area-inset-left)+0.75rem)] pr-[calc(env(safe-area-inset-right)+0.75rem)] pt-1.5 sm:pl-[calc(env(safe-area-inset-left)+1.25rem)] sm:pr-[calc(env(safe-area-inset-right)+1.25rem)] sm:pt-2",
+              isGitRepo
+                ? "pb-[calc(env(safe-area-inset-bottom)+0.25rem)]"
+                : "pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)]",
+            )}
+          >
+            <div className="relative isolate">
+              <ComposerBannerStack className="relative z-0" items={composerBannerItems} />
+              <div className="relative z-10">
+                <ChatComposer
+                  ref={composerRef}
+                  composerDraftTarget={composerDraftTarget}
+                  environmentId={environmentId}
+                  routeKind={routeKind}
+                  routeThreadRef={routeThreadRef}
+                  draftId={draftId}
+                  activeThreadId={activeThreadId}
+                  activeThreadEnvironmentId={activeThread?.environmentId}
+                  activeThread={activeThread}
+                  isServerThread={isServerThread}
+                  isLocalDraftThread={isLocalDraftThread}
+                  phase={phase}
+                  isConnecting={isConnecting}
+                  isSendBusy={isSendBusy}
+                  isPreparingWorktree={isPreparingWorktree}
+                  environmentUnavailable={activeEnvironmentUnavailableState}
+                  activePendingApproval={activePendingApproval}
+                  pendingApprovals={pendingApprovals}
+                  pendingUserInputs={pendingUserInputs}
+                  activePendingProgress={activePendingProgress}
+                  activePendingResolvedAnswers={activePendingResolvedAnswers}
+                  activePendingIsResponding={activePendingIsResponding}
+                  activePendingDraftAnswers={activePendingDraftAnswers}
+                  activePendingQuestionIndex={activePendingQuestionIndex}
+                  respondingRequestIds={respondingRequestIds}
+                  showPlanFollowUpPrompt={showPlanFollowUpPrompt}
+                  activeProposedPlan={activeProposedPlan}
+                  activePlan={activePlan as { turnId?: TurnId } | null}
+                  sidebarProposedPlan={sidebarProposedPlan as { turnId?: TurnId } | null}
+                  planSidebarLabel={planSidebarLabel}
+                  planSidebarOpen={planSidebarOpen}
+                  runtimeMode={runtimeMode}
+                  interactionMode={interactionMode}
+                  lockedProvider={lockedProvider}
+                  providerStatuses={providerStatuses as ServerProvider[]}
+                  activeProjectDefaultModelSelection={activeProject?.defaultModelSelection}
+                  activeThreadModelSelection={activeThread?.modelSelection}
+                  activeThreadActivities={activeThread?.activities}
+                  resolvedTheme={resolvedTheme}
+                  settings={settings}
+                  keybindings={keybindings}
+                  terminalOpen={Boolean(terminalState.terminalOpen)}
+                  gitCwd={gitCwd}
+                  promptRef={promptRef}
+                  composerImagesRef={composerImagesRef}
+                  composerTerminalContextsRef={composerTerminalContextsRef}
+                  shouldAutoScrollRef={isAtEndRef}
+                  scheduleStickToBottom={scrollToEnd}
+                  onSend={onSend}
+                  onInterrupt={onInterrupt}
+                  onImplementPlanInNewThread={onImplementPlanInNewThread}
+                  onRespondToApproval={onRespondToApproval}
+                  onSelectActivePendingUserInputOption={onSelectActivePendingUserInputOption}
+                  onAdvanceActivePendingUserInput={onAdvanceActivePendingUserInput}
+                  onPreviousActivePendingUserInputQuestion={
+                    onPreviousActivePendingUserInputQuestion
+                  }
+                  onChangeActivePendingUserInputCustomAnswer={
+                    onChangeActivePendingUserInputCustomAnswer
+                  }
+                  onProviderModelSelect={onProviderModelSelect}
+                  toggleInteractionMode={toggleInteractionMode}
+                  handleRuntimeModeChange={handleRuntimeModeChange}
+                  handleInteractionModeChange={handleInteractionModeChange}
+                  togglePlanSidebar={togglePlanSidebar}
+                  focusComposer={focusComposer}
+                  scheduleComposerFocus={scheduleComposerFocus}
+                  setThreadError={setThreadError}
+                  onExpandImage={onExpandTimelineImage}
+                />
+              </div>
+            </div>
+            {isGitRepo && (
+              <BranchToolbar
+                environmentId={activeThread.environmentId}
+                threadId={activeThread.id}
+                {...(routeKind === "draft" && draftId ? { draftId } : {})}
+                onEnvModeChange={onEnvModeChange}
+                {...(canOverrideServerThreadEnvMode ? { effectiveEnvModeOverride: envMode } : {})}
+                {...(canOverrideServerThreadEnvMode
+                  ? {
+                      activeThreadBranchOverride: activeThreadBranch,
+                      onActiveThreadBranchOverrideChange: setPendingServerThreadBranch,
+                    }
+                  : {})}
+                envLocked={envLocked}
+                onComposerFocusRequest={scheduleComposerFocus}
+                {...(canCheckoutPullRequestIntoThread
+                  ? { onCheckoutPullRequestRequest: openPullRequestDialog }
+                  : {})}
+                {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
+                availableEnvironments={logicalProjectEnvironments}
+              />
+            )}
           </div>
 
-          {isGitRepo && (
-            <BranchToolbar
-              environmentId={activeThread.environmentId}
-              threadId={activeThread.id}
-              {...(routeKind === "draft" && draftId ? { draftId } : {})}
-              onEnvModeChange={onEnvModeChange}
-              {...(canOverrideServerThreadEnvMode ? { effectiveEnvModeOverride: envMode } : {})}
-              {...(canOverrideServerThreadEnvMode
-                ? {
-                    activeThreadBranchOverride: activeThreadBranch,
-                    onActiveThreadBranchOverrideChange: setPendingServerThreadBranch,
-                  }
-                : {})}
-              envLocked={envLocked}
-              onComposerFocusRequest={scheduleComposerFocus}
-              {...(canCheckoutPullRequestIntoThread
-                ? { onCheckoutPullRequestRequest: openPullRequestDialog }
-                : {})}
-              {...(hasMultipleEnvironments
-                ? {
-                    availableEnvironments: logicalProjectEnvironments,
-                    onEnvironmentChange,
-                  }
-                : {})}
-            />
-          )}
           {pullRequestDialogState ? (
             <PullRequestThreadDialog
               key={pullRequestDialogState.key}

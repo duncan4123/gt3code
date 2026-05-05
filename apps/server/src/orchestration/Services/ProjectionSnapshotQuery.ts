@@ -29,6 +29,10 @@ export interface ProjectionSnapshotCounts {
   readonly threadCount: number;
 }
 
+export interface ProjectionSnapshotSequence {
+  readonly snapshotSequence: number;
+}
+
 export interface ProjectionThreadCheckpointContext {
   readonly threadId: ThreadId;
   readonly projectId: ProjectId;
@@ -47,6 +51,15 @@ export interface ProjectionGcThreadBinding {
  */
 export interface ProjectionSnapshotQueryShape {
   /**
+   * Read the lightweight command snapshot used to bootstrap the in-memory
+   * orchestration engine without hydrating message/activity/checkpoint bodies.
+   */
+  readonly getCommandReadModel: () => Effect.Effect<
+    OrchestrationReadModel,
+    ProjectionRepositoryError
+  >;
+
+  /**
    * Read the latest orchestration projection snapshot.
    *
    * Rehydrates from projection tables and derives snapshot sequence from
@@ -62,6 +75,15 @@ export interface ProjectionSnapshotQueryShape {
    */
   readonly getShellSnapshot: () => Effect.Effect<
     OrchestrationShellSnapshot,
+    ProjectionRepositoryError
+  >;
+
+  /**
+   * Read the latest projection snapshot sequence without hydrating read-model
+   * entities.
+   */
+  readonly getSnapshotSequence: () => Effect.Effect<
+    ProjectionSnapshotSequence,
     ProjectionRepositoryError
   >;
 

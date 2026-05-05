@@ -7,7 +7,6 @@ import {
   TurnId,
   type OrchestrationEvent,
   type ProviderRuntimeEvent,
-  parseGcMeta,
 } from "@t3tools/contracts";
 import { Cause, Effect, Layer, Option, Stream } from "effect";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
@@ -21,13 +20,13 @@ import { CheckpointStore } from "../../checkpointing/Services/CheckpointStore.ts
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { CheckpointReactor, type CheckpointReactorShape } from "../Services/CheckpointReactor.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
+import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import { RuntimeReceiptBus } from "../Services/RuntimeReceiptBus.ts";
 import type { CheckpointStoreError } from "../../checkpointing/Errors.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import { isGitRepository } from "../../git/Utils.ts";
-import { GitStatusBroadcaster } from "../../git/Services/GitStatusBroadcaster.ts";
+import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
 import { WorkspaceEntries } from "../../workspace/Services/WorkspaceEntries.ts";
-import { GcApiClient } from "../../gc/Services/GcApiClient.ts";
 
 type ReactorInput =
   | {
@@ -66,26 +65,14 @@ function checkpointStatusFromRuntime(status: string | undefined): "ready" | "mis
 const serverCommandId = (tag: string): CommandId =>
   CommandId.make(`server:${tag}:${crypto.randomUUID()}`);
 
-function metadataValue(
-  metadata: Readonly<Record<string, string>> | undefined,
-  keys: readonly string[],
-): string | undefined {
-  if (!metadata) return undefined;
-  for (const key of keys) {
-    const value = metadata[key]?.trim();
-    if (value) return value;
-  }
-  return undefined;
-}
-
 const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
+  const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
   const providerService = yield* ProviderService;
   const checkpointStore = yield* CheckpointStore;
   const receiptBus = yield* RuntimeReceiptBus;
   const workspaceEntries = yield* WorkspaceEntries;
-  const gitStatusBroadcaster = yield* GitStatusBroadcaster;
-  const gcApiOption = yield* Effect.serviceOption(GcApiClient);
+  const vcsStatusBroadcaster = yield* VcsStatusBroadcaster;
 
   const appendRevertFailureActivity = (input: {
     readonly threadId: ThreadId;
@@ -139,84 +126,29 @@ const make = Effect.gen(function* () {
   const resolveSessionRuntimeForThread = Effect.fn("resolveSessionRuntimeForThread")(function* (
     threadId: ThreadId,
   ): Effect.fn.Return<Option.Option<{ readonly threadId: ThreadId; readonly cwd: string }>> {
-    const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry) => entry.id === threadId);
-
     const sessions = yield* providerService.listSessions();
+    const session = sessions.find((entry) => entry.threadId === threadId);
+    return session?.cwd
+      ? Option.some({ threadId: session.threadId, cwd: session.cwd })
+      : Option.none();
+  });
 
-    const findSessionWithCwd = (
-      session: (typeof sessions)[number] | undefined,
-    ): Option.Option<{ readonly threadId: ThreadId; readonly cwd: string }> => {
-      if (!session?.cwd) {
-        return Option.none();
-      }
-      return Option.some({ threadId: session.threadId, cwd: session.cwd });
-    };
+  const resolveThreadDetail = Effect.fn("resolveThreadDetail")(function* (threadId: ThreadId) {
+    return yield* projectionSnapshotQuery
+      .getThreadDetailById(threadId)
+      .pipe(Effect.map(Option.getOrUndefined));
+  });
 
-    if (thread) {
-      const projectedSession = sessions.find((session) => session.threadId === thread.id);
-      const fromProjected = findSessionWithCwd(projectedSession);
-      if (Option.isSome(fromProjected)) {
-        return fromProjected;
-      }
-    }
-
-    return Option.none();
+  const resolveThreadProjects = Effect.fn("resolveThreadProjects")(function* (
+    projectId: ProjectId,
+  ) {
+    const project = yield* projectionSnapshotQuery
+      .getProjectShellById(projectId)
+      .pipe(Effect.map(Option.getOrUndefined));
+    return project ? [project] : [];
   });
 
   const isGitWorkspace = (cwd: string) => isGitRepository(cwd);
-
-  const resolveGcBeadWorkspaceForThread = Effect.fn("resolveGcBeadWorkspaceForThread")(
-    function* (input: {
-      readonly threadId: ThreadId;
-      readonly thread: {
-        readonly branch: string | null;
-        readonly worktreePath: string | null;
-        readonly customMetadata?: Readonly<Record<string, string>> | undefined;
-      };
-    }): Effect.fn.Return<string | undefined> {
-      const gcMeta = parseGcMeta(input.thread.customMetadata);
-      if (!gcMeta.isGcManaged || !gcMeta.bead) {
-        return undefined;
-      }
-      if (Option.isNone(gcApiOption)) {
-        return undefined;
-      }
-
-      const bead = yield* gcApiOption.value
-        .getBead(gcMeta.bead)
-        .pipe(Effect.catchCause(() => Effect.succeed(null)));
-      const worktreePath = metadataValue(bead?.metadata, ["work_dir", "worktree", "worktree_path"]);
-      if (!worktreePath || !isGitWorkspace(worktreePath)) {
-        return undefined;
-      }
-
-      const branch = metadataValue(bead?.metadata, ["branch", "source_branch", "git_branch"]);
-      if (input.thread.worktreePath !== worktreePath || input.thread.branch !== (branch ?? null)) {
-        yield* orchestrationEngine
-          .dispatch({
-            type: "thread.meta.update",
-            commandId: serverCommandId("gc-bead-git-context"),
-            threadId: input.threadId,
-            branch: branch ?? null,
-            worktreePath,
-          })
-          .pipe(
-            Effect.catchCause((cause) =>
-              Effect.logWarning("failed to project GC bead git context onto thread", {
-                threadId: input.threadId,
-                beadId: gcMeta.bead,
-                worktreePath,
-                branch,
-                cause: Cause.pretty(cause),
-              }),
-            ),
-          );
-      }
-
-      return worktreePath;
-    },
-  );
 
   // Resolves the workspace CWD for checkpoint operations, preferring the
   // active provider session CWD and falling back to the thread/project config.
@@ -224,23 +156,10 @@ const make = Effect.gen(function* () {
   // a git repository.
   const resolveCheckpointCwd = Effect.fn("resolveCheckpointCwd")(function* (input: {
     readonly threadId: ThreadId;
-    readonly thread: {
-      readonly projectId: ProjectId;
-      readonly branch: string | null;
-      readonly worktreePath: string | null;
-      readonly customMetadata?: Readonly<Record<string, string>> | undefined;
-    };
+    readonly thread: { readonly projectId: ProjectId; readonly worktreePath: string | null };
     readonly projects: ReadonlyArray<{ readonly id: ProjectId; readonly workspaceRoot: string }>;
     readonly preferSessionRuntime: boolean;
   }): Effect.fn.Return<string | undefined> {
-    const fromGcBead = yield* resolveGcBeadWorkspaceForThread({
-      threadId: input.threadId,
-      thread: input.thread,
-    });
-    if (fromGcBead) {
-      return fromGcBead;
-    }
-
     const fromSession = yield* resolveSessionRuntimeForThread(input.threadId);
     const fromThread = resolveThreadWorkspaceCwd({
       thread: input.thread,
@@ -317,6 +236,7 @@ const make = Effect.gen(function* () {
         fromCheckpointRef,
         toCheckpointRef: targetCheckpointRef,
         fallbackFromToHead: false,
+        ignoreWhitespace: false,
       })
       .pipe(
         Effect.map((diff) =>
@@ -410,8 +330,7 @@ const make = Effect.gen(function* () {
         return;
       }
 
-      const readModel = yield* orchestrationEngine.getReadModel();
-      const thread = readModel.threads.find((entry) => entry.id === event.threadId);
+      const thread = yield* resolveThreadDetail(event.threadId);
       if (!thread) {
         return;
       }
@@ -432,10 +351,11 @@ const make = Effect.gen(function* () {
         return;
       }
 
+      const projects = yield* resolveThreadProjects(thread.projectId);
       const checkpointCwd = yield* resolveCheckpointCwd({
         threadId: thread.id,
         thread,
-        projects: readModel.projects,
+        projects,
         preferSessionRuntime: true,
       });
       if (!checkpointCwd) {
@@ -486,8 +406,7 @@ const make = Effect.gen(function* () {
       return;
     }
 
-    const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry) => entry.id === threadId);
+    const thread = yield* resolveThreadDetail(threadId);
     if (!thread) {
       yield* Effect.logWarning("checkpoint capture from placeholder skipped: thread not found", {
         threadId,
@@ -508,10 +427,11 @@ const make = Effect.gen(function* () {
       return;
     }
 
+    const projects = yield* resolveThreadProjects(thread.projectId);
     const checkpointCwd = yield* resolveCheckpointCwd({
       threadId,
       thread,
-      projects: readModel.projects,
+      projects,
       preferSessionRuntime: true,
     });
     if (!checkpointCwd) {
@@ -537,16 +457,16 @@ const make = Effect.gen(function* () {
         return;
       }
 
-      const readModel = yield* orchestrationEngine.getReadModel();
-      const thread = readModel.threads.find((entry) => entry.id === event.threadId);
+      const thread = yield* resolveThreadDetail(event.threadId);
       if (!thread) {
         return;
       }
 
+      const projects = yield* resolveThreadProjects(thread.projectId);
       const checkpointCwd = yield* resolveCheckpointCwd({
         threadId: thread.id,
         thread,
-        projects: readModel.projects,
+        projects,
         preferSessionRuntime: false,
       });
       if (!checkpointCwd) {
@@ -588,7 +508,7 @@ const make = Effect.gen(function* () {
       return;
     }
 
-    yield* gitStatusBroadcaster.refreshLocalStatus(sessionRuntime.value.cwd).pipe(
+    yield* vcsStatusBroadcaster.refreshLocalStatus(sessionRuntime.value.cwd).pipe(
       Effect.catch((error) =>
         Effect.logWarning("failed to refresh local git status after turn completion", {
           threadId: event.threadId,
@@ -619,16 +539,16 @@ const make = Effect.gen(function* () {
     }
 
     const threadId = event.payload.threadId;
-    const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry) => entry.id === threadId);
+    const thread = yield* resolveThreadDetail(threadId);
     if (!thread) {
       return;
     }
 
+    const projects = yield* resolveThreadProjects(thread.projectId);
     const checkpointCwd = yield* resolveCheckpointCwd({
       threadId,
       thread,
-      projects: readModel.projects,
+      projects,
       preferSessionRuntime: false,
     });
     if (!checkpointCwd) {
@@ -666,8 +586,7 @@ const make = Effect.gen(function* () {
   ) {
     const now = new Date().toISOString();
 
-    const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry) => entry.id === event.payload.threadId);
+    const thread = yield* resolveThreadDetail(event.payload.threadId);
     if (!thread) {
       yield* appendRevertFailureActivity({
         threadId: event.payload.threadId,

@@ -5,10 +5,10 @@ import { shouldAutoReconnect, shouldRestartStalledReconnect } from "./WebSocketC
 
 function makeStatus(overrides: Partial<WsConnectionStatus> = {}): WsConnectionStatus {
   return {
-    activeConnectionId: null,
     attemptCount: 0,
     closeCode: null,
     closeReason: null,
+    connectionLabel: null,
     connectedAt: null,
     disconnectedAt: null,
     hasConnected: false,

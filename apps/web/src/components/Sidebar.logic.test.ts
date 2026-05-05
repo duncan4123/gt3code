@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ProviderDriverKind } from "@t3tools/contracts";
 
 import {
   createThreadJumpHintVisibilityController,
@@ -27,7 +28,13 @@ import {
   sortThreadsForSidebar,
   THREAD_JUMP_HINT_SHOW_DELAY_MS,
 } from "./Sidebar.logic";
-import { EnvironmentId, OrchestrationLatestTurn, ProjectId, ThreadId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  OrchestrationLatestTurn,
+  ProjectId,
+  ProviderInstanceId,
+  ThreadId,
+} from "@t3tools/contracts";
 import {
   DEFAULT_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -600,7 +607,7 @@ describe("resolveThreadStatusPill", () => {
     latestTurn: null,
     lastVisitedAt: undefined,
     session: {
-      provider: "codex" as const,
+      provider: ProviderDriverKind.make("codex"),
       status: "running" as const,
       createdAt: "2026-03-09T10:00:00.000Z",
       updatedAt: "2026-03-09T10:00:00.000Z",
@@ -871,7 +878,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     name: "Project",
     cwd: "/tmp/project",
     defaultModelSelection: {
-      provider: "codex",
+      instanceId: ProviderInstanceId.make("codex"),
       model: "gpt-5.4",
       ...defaultModelSelection,
     },
@@ -890,7 +897,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     projectId: ProjectId.make("project-1"),
     title: "Thread",
     modelSelection: {
-      provider: "codex",
+      instanceId: ProviderInstanceId.make("codex"),
       model: "gpt-5.4",
       ...overrides?.modelSelection,
     },

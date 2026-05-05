@@ -1,10 +1,10 @@
-import { randomUUID } from "node:crypto";
-
 import {
   ApprovalRequestId,
-  DEFAULT_MODEL_BY_PROVIDER,
+  DEFAULT_MODEL,
   EventId,
+  ProviderDriverKind,
   ProviderItemId,
+  type ProviderInstanceId,
   type ProviderApprovalDecision,
   type ProviderEvent,
   type ProviderInteractionMode,
@@ -17,7 +17,7 @@ import {
   TurnId,
 } from "@t3tools/contracts";
 import { normalizeModelSlug } from "@t3tools/shared/model";
-import { Deferred, Effect, Exit, Layer, Queue, Ref, Scope, Schema, Stream } from "effect";
+import { Deferred, Effect, Exit, Layer, Queue, Ref, Scope, Random, Schema, Stream } from "effect";
 import * as SchemaIssue from "effect/SchemaIssue";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as CodexClient from "effect-codex-app-server/client";
@@ -26,13 +26,13 @@ import * as CodexRpc from "effect-codex-app-server/rpc";
 import * as EffectCodexSchema from "effect-codex-app-server/schema";
 
 import { buildCodexInitializeParams } from "./CodexProvider.ts";
+import { expandHomePath } from "../../pathExpansion.ts";
 import {
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
-import { expandHomePath } from "../../pathExpansion.ts";
 
-const PROVIDER = "codex" as const;
+const PROVIDER = ProviderDriverKind.make("codex");
 
 const ANSI_ESCAPE_CHAR = String.fromCharCode(27);
 const ANSI_ESCAPE_REGEX = new RegExp(`${ANSI_ESCAPE_CHAR}\\[[0-9;]*m`, "g");
@@ -76,10 +76,11 @@ type CodexThreadItem =
 
 export interface CodexSessionRuntimeOptions {
   readonly threadId: ThreadId;
+  readonly providerInstanceId?: ProviderInstanceId;
   readonly binaryPath: string;
   readonly homePath?: string;
+  readonly environment?: NodeJS.ProcessEnv;
   readonly cwd: string;
-  readonly env?: Record<string, string>;
   readonly runtimeMode: RuntimeMode;
   readonly model?: string;
   readonly serviceTier?: EffectCodexSchema.V2ThreadStartParams__ServiceTier | undefined;
@@ -88,7 +89,10 @@ export interface CodexSessionRuntimeOptions {
 
 export interface CodexSessionRuntimeSendTurnInput {
   readonly input?: string;
-  readonly attachments?: ReadonlyArray<{ readonly type: "image"; readonly url: string }>;
+  readonly attachments?: ReadonlyArray<{
+    readonly type: "image";
+    readonly url: string;
+  }>;
   readonly model?: string;
   readonly serviceTier?: EffectCodexSchema.V2TurnStartParams__ServiceTier | undefined;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort | undefined;
@@ -209,38 +213,6 @@ type CodexServerNotification = {
   };
 }[CodexRpc.ServerNotificationMethod];
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function normalizeUnknownCodexNotification(
-  method: string,
-  params: unknown,
-): { readonly method: string; readonly payload: unknown } {
-  if (method !== "codex/event" || !isRecord(params)) {
-    return { method, payload: params };
-  }
-
-  const event =
-    params.type === "event_msg" && isRecord(params.payload)
-      ? params.payload
-      : typeof params.type === "string"
-        ? params
-        : undefined;
-  if (!event || typeof event.type !== "string") {
-    return { method, payload: params };
-  }
-
-  const nestedPayload = event.payload;
-  return {
-    method: `codex/event/${event.type}`,
-    payload: {
-      msg: isRecord(nestedPayload) ? nestedPayload : event,
-      raw: params,
-    },
-  };
-}
-
 function makeCodexServerNotification<M extends CodexRpc.ServerNotificationMethod>(
   method: M,
   params: CodexRpc.ServerNotificationParamsByMethod[M],
@@ -336,7 +308,7 @@ function buildCodexCollaborationMode(input: {
   if (input.interactionMode === undefined) {
     return undefined;
   }
-  const model = normalizeCodexModelSlug(input.model) ?? DEFAULT_MODEL_BY_PROVIDER.codex;
+  const model = normalizeCodexModelSlug(input.model) ?? DEFAULT_MODEL;
   return {
     mode: input.interactionMode,
     settings: {
@@ -354,7 +326,10 @@ export function buildTurnStartParams(input: {
   readonly threadId: string;
   readonly runtimeMode: RuntimeMode;
   readonly prompt?: string;
-  readonly attachments?: ReadonlyArray<{ readonly type: "image"; readonly url: string }>;
+  readonly attachments?: ReadonlyArray<{
+    readonly type: "image";
+    readonly url: string;
+  }>;
   readonly model?: string;
   readonly serviceTier?: EffectCodexSchema.V2TurnStartParams__ServiceTier;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
@@ -503,7 +478,6 @@ function readNotificationThreadId(notification: CodexServerNotification): string
     case "item/commandExecution/terminalInteraction":
     case "item/fileChange/outputDelta":
     case "item/fileChange/patchUpdated":
-    case "rawResponseItem/completed":
     case "serverRequest/resolved":
     case "item/mcpToolCall/progress":
     case "item/reasoning/summaryTextDelta":
@@ -560,18 +534,7 @@ function readRouteFields(notification: CodexServerNotification): {
     case "item/completed":
       return {
         turnId: TurnId.make(notification.params.turnId),
-        itemId:
-          "id" in notification.params.item && typeof notification.params.item.id === "string"
-            ? ProviderItemId.make(notification.params.item.id)
-            : undefined,
-      };
-    case "rawResponseItem/completed":
-      return {
-        turnId: TurnId.make(notification.params.turnId),
-        itemId:
-          "id" in notification.params.item && typeof notification.params.item.id === "string"
-            ? ProviderItemId.make(notification.params.item.id)
-            : undefined,
+        itemId: ProviderItemId.make(notification.params.item.id),
       };
     case "item/agentMessage/delta":
     case "item/plan/delta":
@@ -725,15 +688,19 @@ export const makeCodexSessionRuntime = (
     const collabReceiverTurnsRef = yield* Ref.make(new Map<string, TurnId>());
     const closedRef = yield* Ref.make(false);
 
+    // `~` is not shell-expanded when env vars are set via
+    // `child_process.spawn`; `expandHomePath` lets a configured
+    // `CODEX_HOME=~/.codex_work` reach codex as an absolute path.
+    const resolvedHomePath = options.homePath ? expandHomePath(options.homePath) : undefined;
+    const env = {
+      ...(options.environment ?? process.env),
+      ...(resolvedHomePath ? { CODEX_HOME: resolvedHomePath } : {}),
+    };
     const child = yield* spawner
       .spawn(
         ChildProcess.make(options.binaryPath, ["app-server"], {
           cwd: options.cwd,
-          env: {
-            ...process.env,
-            ...(options.homePath ? { CODEX_HOME: expandHomePath(options.homePath) } : {}),
-            ...(options.env ?? {}),
-          },
+          env,
           shell: process.platform === "win32",
         }),
       )
@@ -759,6 +726,7 @@ export const makeCodexSessionRuntime = (
 
     const initialSession = {
       provider: PROVIDER,
+      ...(options.providerInstanceId ? { providerInstanceId: options.providerInstanceId } : {}),
       status: "connecting",
       runtimeMode: options.runtimeMode,
       cwd: options.cwd,
@@ -772,13 +740,15 @@ export const makeCodexSessionRuntime = (
     const offerEvent = (event: ProviderEvent) => Queue.offer(events, event).pipe(Effect.asVoid);
 
     const emitEvent = (event: Omit<ProviderEvent, "id" | "provider" | "createdAt">) =>
-      offerEvent({
-        id: EventId.make(randomUUID()),
-        provider: PROVIDER,
-        createdAt: new Date().toISOString(),
-        ...event,
-      });
-
+      Effect.flatMap(Random.nextUUIDv4, (id) =>
+        offerEvent({
+          id: EventId.make(id),
+          provider: PROVIDER,
+          ...(options.providerInstanceId ? { providerInstanceId: options.providerInstanceId } : {}),
+          createdAt: new Date().toISOString(),
+          ...event,
+        }),
+      );
     const emitSessionEvent = (method: string, message: string) =>
       emitEvent({
         kind: "session",
@@ -938,7 +908,7 @@ export const makeCodexSessionRuntime = (
 
     yield* client.handleServerRequest("item/commandExecution/requestApproval", (payload) =>
       Effect.gen(function* () {
-        const requestId = ApprovalRequestId.make(randomUUID());
+        const requestId = ApprovalRequestId.make(yield* Random.nextUUIDv4);
         const turnId = TurnId.make(payload.turnId);
         const itemId = ProviderItemId.make(payload.itemId);
         const decision = yield* Deferred.make<ProviderApprovalDecision>();
@@ -994,7 +964,7 @@ export const makeCodexSessionRuntime = (
 
     yield* client.handleServerRequest("item/fileChange/requestApproval", (payload) =>
       Effect.gen(function* () {
-        const requestId = ApprovalRequestId.make(randomUUID());
+        const requestId = ApprovalRequestId.make(yield* Random.nextUUIDv4);
         const turnId = TurnId.make(payload.turnId);
         const itemId = ProviderItemId.make(payload.itemId);
         const decision = yield* Deferred.make<ProviderApprovalDecision>();
@@ -1050,7 +1020,7 @@ export const makeCodexSessionRuntime = (
 
     yield* client.handleServerRequest("item/tool/requestUserInput", (payload) =>
       Effect.gen(function* () {
-        const requestId = ApprovalRequestId.make(randomUUID());
+        const requestId = ApprovalRequestId.make(yield* Random.nextUUIDv4);
         const turnId = TurnId.make(payload.turnId);
         const itemId = ProviderItemId.make(payload.itemId);
         const answers = yield* Deferred.make<ProviderUserInputAnswers>();
@@ -1100,17 +1070,6 @@ export const makeCodexSessionRuntime = (
 
     yield* client.handleUnknownServerRequest((method) =>
       Effect.fail(CodexErrors.CodexAppServerRequestError.methodNotFound(method)),
-    );
-    yield* client.handleUnknownServerNotification((method, params) =>
-      Effect.gen(function* () {
-        const normalized = normalizeUnknownCodexNotification(method, params);
-        yield* emitEvent({
-          kind: "notification",
-          threadId: options.threadId,
-          method: normalized.method,
-          payload: normalized.payload,
-        });
-      }),
     );
 
     const registerServerNotification = <M extends CodexRpc.ServerNotificationMethod>(method: M) =>

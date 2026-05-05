@@ -2,8 +2,10 @@ import {
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   EventId,
+  ProviderDriverKind,
   ProjectId,
   ThreadId,
+  defaultInstanceIdForDriver,
   type OrchestrationReadModel,
 } from "@t3tools/contracts";
 import { Effect } from "effect";
@@ -63,7 +65,7 @@ async function seedReadModel(
         projectId: asProjectId("project-gc-meta"),
         title: "GC Meta Thread",
         modelSelection: {
-          provider: "codex",
+          instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make("codex")),
           model: "gpt-5-codex",
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,

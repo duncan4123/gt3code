@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { OrchestrationReadModel } from "@t3tools/contracts";
+import {
+  defaultInstanceIdForDriver,
+  ProviderDriverKind,
+  type OrchestrationReadModel,
+} from "@t3tools/contracts";
 
 import { mergeGcPeekHits, previewGcPeekTargets, resolveGcPeekTargets } from "./peek.ts";
 
 const modelSelection = {
-  provider: "claudeAgent" as const,
+  instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make("claudeAgent")),
   model: "claude-sonnet-4.5",
 };
 
