@@ -89,6 +89,67 @@ This means the manual-origin work-discovery question is separate from the
 worktree-local Beads runtime mismatch: routed work exists, but manual sessions
 still do not consume generic pool demand through `gc hook`.
 
+## T3Bridge Session Bead Lifecycle Audit
+
+On 2026-05-06, `t3-arx.2` audited how T3 bridge session lifecycle behavior
+interacts with the active doltlite Beads backend.
+
+Source paths reviewed:
+
+- `packages/gascity/source/internal/runtime/t3bridge/provider.go`
+- `packages/gascity/source/internal/runtime/t3bridge/provider_test.go`
+- `packages/gascity/source/internal/beads/doltlite_read_store.go`
+- `packages/contracts/src/gc.ts`
+- `docs/convoy-lifecycle-walkthrough.md`
+
+Current lifecycle shape:
+
+- Session beads remain the durable runtime identity in the HQ city store.
+- T3 bridge thread metadata projects session identity via `gc.sessionName`,
+  agent/rig/city identity via `gc.*`, and current work assignment via
+  `gc.bead`, `gc.beadTitle`, convoy counts, molecule, and formula.
+- `Start(...)` emits `gc.session.started` for fresh threads and
+  `gc.session.reused` when rebinding an existing thread.
+- Work-assignment updates do not come from the session bead itself. They come
+  from `runEventWatcher(...)`, which watches Beads events and refreshes thread
+  metadata/activity when the current work bead changes state.
+- In doltlite mode, that watcher prefers
+  `internal/beads.NewDoltliteReadStore(...)` for hot in-process reads and falls
+  back to `BdStore` only if direct doltlite open fails.
+
+Important audit finding:
+
+- `buildThreadEnv(...)` still forwards `GC_DOLT_HOST` / `GC_DOLT_PORT` into
+  `BEADS_DOLT_SERVER_*` thread env keys.
+- In this workspace, running `bd` from the polecat worktree failed with the
+  stale endpoint `127.0.0.1:35819`, while the same query from the city config
+  root succeeded and `gc doctor` reported the HQ and rig stores healthy.
+- That means the thread shell can inherit stale server-era Dolt routing even
+  though the active store metadata is doltlite.
+- The watcher is partly insulated because it first tries
+  `NewDoltliteReadStore(...)`, but if that direct open path ever fails, its
+  fallback `BdStore` path will inherit the same stale env and can miss bead
+  lifecycle updates for claimed/closed work.
+
+Practical consequence:
+
+- Fresh/reused T3 bridge sessions can still bind and surface `gc.session*`
+  lifecycle correctly.
+- The fragile point under doltlite is assignment projection refresh after
+  startup, not initial session creation.
+- Symptoms would look like live session threads that stay open but stop
+  updating `gc.bead`, `gc.beadTitle`, convoy counts, or
+  `gc.bead.claimed` / `gc.bead.closed` activity after work transitions.
+
+Recommended follow-up:
+
+- Treat stale `GC_DOLT_*` / `BEADS_DOLT_SERVER_*` values in T3 bridge thread
+  env as a real doltlite lifecycle risk, not just a shell ergonomics issue.
+- Prefer clearing or ignoring those server-only vars when the discovered Beads
+  store metadata says `backend=doltlite`.
+- If a future fix changes this behavior, update both this note and the
+  migration checklist with the exact direct-open and fallback-read results.
+
 ## Running the Bundled Runtime
 
 Use T3Code's runner for the packaged city:
