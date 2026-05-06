@@ -1021,7 +1021,7 @@ func normalizeCanonicalBdScopeFiles(cityPath string, cfg *config.City) error {
 		return nil
 	}
 	if cityUsesDoltliteBeadsBackend(cityPath) {
-		return nil
+		return seedDoltliteBeadsForConfiguredScopes(cityPath, cfg)
 	}
 	resolveRigPaths(cityPath, cfg.Rigs)
 	if scopeUsesManagedBdStoreContract(cityPath, cityPath) {

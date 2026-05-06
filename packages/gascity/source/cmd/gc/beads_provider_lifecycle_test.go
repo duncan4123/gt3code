@@ -7774,6 +7774,142 @@ func TestNormalizeCanonicalBdScopeFilesMaterializesMissingMetadata(t *testing.T)
 	}
 }
 
+func TestNormalizeCanonicalBdScopeFilesRepairsDoltliteScopeFiles(t *testing.T) {
+	cityPath := t.TempDir()
+	rigPath := filepath.Join(cityPath, "frontend")
+	if err := os.MkdirAll(filepath.Join(cityPath, ".gc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(cityPath, ".beads"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(rigPath, ".beads"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cityToml := `[workspace]
+name = "gascity"
+prefix = "gc"
+
+[beads]
+provider = "bd"
+backend = "doltlite"
+
+[[rigs]]
+name = "frontend"
+path = "frontend"
+prefix = "fr"
+`
+	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte(cityToml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cityPath, ".beads", "metadata.json"), []byte(`{"database":"dolt","backend":"dolt","dolt_mode":"server","dolt_database":"wrong-city"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rigPath, ".beads", "metadata.json"), []byte(`{"database":"dolt","backend":"dolt","dolt_mode":"server","dolt_database":"wrong-rig"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cityPath, ".beads", "config.yaml"), []byte("issue_prefix: stale\ndolt.auto-start: true\ndolt.host: 127.0.0.1\ndolt.port: 35819\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rigPath, ".beads", "config.yaml"), []byte("issue_prefix: stale\ndolt.auto-start: true\ndolt.host: 127.0.0.1\ndolt.port: 35819\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeBD := filepath.Join(binDir, "bd")
+	fakeBDScript := `#!/bin/sh
+set -eu
+case "${1:-}" in
+  init)
+    shift
+    backend=""
+    prefix=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --backend)
+          backend="$2"
+          shift 2
+          ;;
+        --prefix)
+          prefix="$2"
+          shift 2
+          ;;
+        --skip-agents|--skip-hooks|--non-interactive|--quiet)
+          shift
+          ;;
+        *)
+          echo "unexpected arg: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    if [ "$backend" != "doltlite" ]; then
+      echo "unexpected backend: $backend" >&2
+      exit 1
+    fi
+    cat > "$PWD/.beads/config.yaml" <<EOF
+issue_prefix: $prefix
+issue-prefix: $prefix
+dolt.auto-start: false
+EOF
+    ;;
+  *)
+    ;;
+esac
+`
+	if err := os.WriteFile(fakeBD, []byte(fakeBDScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("PATH", strings.Join([]string{binDir, os.Getenv("PATH")}, string(os.PathListSeparator)))
+	cfg := &config.City{
+		Workspace: config.Workspace{Name: "gascity"},
+		Rigs:      []config.Rig{{Name: "frontend", Path: rigPath, Prefix: "fr"}},
+	}
+	if err := normalizeCanonicalBdScopeFiles(cityPath, cfg); err != nil {
+		t.Fatalf("normalizeCanonicalBdScopeFiles: %v", err)
+	}
+
+	cityMeta, err := os.ReadFile(filepath.Join(cityPath, ".beads", "metadata.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"database": "doltlite"`, `"backend": "doltlite"`, `"dolt_mode": "embedded"`, `"dolt_database": "hq"`} {
+		if !strings.Contains(string(cityMeta), want) {
+			t.Fatalf("city metadata missing %q:\n%s", want, string(cityMeta))
+		}
+	}
+
+	rigMeta, err := os.ReadFile(filepath.Join(rigPath, ".beads", "metadata.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"database": "doltlite"`, `"backend": "doltlite"`, `"dolt_mode": "embedded"`, `"dolt_database": "fr"`} {
+		if !strings.Contains(string(rigMeta), want) {
+			t.Fatalf("rig metadata missing %q:\n%s", want, string(rigMeta))
+		}
+	}
+
+	cityCfg, err := os.ReadFile(filepath.Join(cityPath, ".beads", "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(cityCfg); !strings.Contains(got, "issue_prefix: gc") || strings.Contains(got, "dolt.port:") {
+		t.Fatalf("city config not rewritten for doltlite:\n%s", got)
+	}
+
+	rigCfg, err := os.ReadFile(filepath.Join(rigPath, ".beads", "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(rigCfg); !strings.Contains(got, "issue_prefix: fr") || strings.Contains(got, "dolt.port:") {
+		t.Fatalf("rig config not rewritten for doltlite:\n%s", got)
+	}
+}
+
 func TestGcBeadsBdStartFallsBackToShellManagedConfigWriterWhenGCBinUnset(t *testing.T) {
 	cityPath := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(cityPath, ".gc"), 0o755); err != nil {
