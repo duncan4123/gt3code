@@ -19,6 +19,7 @@ import { ProviderInstanceId } from "./providerInstance.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
+  getSnapshot: "orchestration.getSnapshot",
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
   replayEvents: "orchestration.replayEvents",
@@ -1237,6 +1238,10 @@ export const OrchestrationRpcSchemas = {
   dispatchCommand: {
     input: ClientOrchestrationCommand,
     output: DispatchResult,
+  },
+  getSnapshot: {
+    input: Schema.Struct({}),
+    output: OrchestrationReadModel,
   },
   getTurnDiff: {
     input: OrchestrationGetTurnDiffInput,
