@@ -269,6 +269,27 @@ func executeGraphApply(ctx context.Context, plan *GraphApplyPlan) (*GraphApplyRe
 			}
 		}
 
+		type dependencyPair struct {
+			from string
+			to   string
+		}
+		addedDeps := make(map[dependencyPair]types.DependencyType, len(plan.Edges)+len(plan.Nodes))
+		addDependencyOnce := func(dep *types.Dependency, context string) error {
+			pair := dependencyPair{from: dep.IssueID, to: dep.DependsOnID}
+			if existing, ok := addedDeps[pair]; ok {
+				if existing == dep.Type {
+					return nil
+				}
+				return fmt.Errorf("%s: duplicate dependency %s->%s has conflicting types %q and %q",
+					context, dep.IssueID, dep.DependsOnID, existing, dep.Type)
+			}
+			if err := tx.AddDependency(ctx, dep, actor); err != nil {
+				return fmt.Errorf("%s: %w", context, err)
+			}
+			addedDeps[pair] = dep.Type
+			return nil
+		}
+
 		// Add dependencies from edges.
 		for _, edge := range plan.Edges {
 			fromID := resolveEdgeRef(edge.FromKey, edge.FromID, keyToID)
@@ -282,8 +303,8 @@ func executeGraphApply(ctx context.Context, plan *GraphApplyPlan) (*GraphApplyRe
 				DependsOnID: toID,
 				Type:        depType,
 			}
-			if err := tx.AddDependency(ctx, dep, actor); err != nil {
-				return fmt.Errorf("adding edge %s->%s: %w", fromID, toID, err)
+			if err := addDependencyOnce(dep, fmt.Sprintf("adding edge %s->%s", fromID, toID)); err != nil {
+				return err
 			}
 		}
 
@@ -299,8 +320,8 @@ func executeGraphApply(ctx context.Context, plan *GraphApplyPlan) (*GraphApplyRe
 					DependsOnID: parentID,
 					Type:        types.DepParentChild,
 				}
-				if err := tx.AddDependency(ctx, dep, actor); err != nil {
-					return fmt.Errorf("node %q: adding parent-child dep: %w", node.Key, err)
+				if err := addDependencyOnce(dep, fmt.Sprintf("node %q: adding parent-child dep", node.Key)); err != nil {
+					return err
 				}
 			}
 		}

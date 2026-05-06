@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/steveyegge/beads/internal/storage"
 	"github.com/steveyegge/beads/internal/storage/doltlite"
 	"github.com/steveyegge/beads/internal/types"
 )
@@ -155,6 +156,58 @@ func TestSmokeChildIDAndDependencyUseSQLiteDialect(t *testing.T) {
 	}
 	if len(deps) != 1 || deps[0].DependsOnID != parent.ID || deps[0].Type != types.DepParentChild {
 		t.Fatalf("deps = %#v, want parent-child to %s", deps, parent.ID)
+	}
+}
+
+func TestRunInTransactionCreateIssuesAndDependency(t *testing.T) {
+	ctx := t.Context()
+	store, err := doltlite.New(ctx, filepath.Join(t.TempDir(), ".beads"), "beads", "main")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	if err := store.SetConfig(ctx, "issue_prefix", "bd"); err != nil {
+		t.Fatalf("SetConfig: %v", err)
+	}
+
+	now := time.Now().UTC()
+	first := &types.Issue{
+		Title:     "graph first",
+		Status:    types.StatusOpen,
+		Priority:  2,
+		IssueType: types.TypeTask,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	second := &types.Issue{
+		Title:     "graph second",
+		Status:    types.StatusOpen,
+		Priority:  2,
+		IssueType: types.TypeTask,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	if err := store.RunInTransaction(ctx, "test: graph transaction", func(tx storage.Transaction) error {
+		if err := tx.CreateIssues(ctx, []*types.Issue{first, second}, "test"); err != nil {
+			return err
+		}
+		return tx.AddDependency(ctx, &types.Dependency{
+			IssueID:     first.ID,
+			DependsOnID: second.ID,
+			Type:        types.DepBlocks,
+		}, "test")
+	}); err != nil {
+		t.Fatalf("RunInTransaction: %v", err)
+	}
+
+	deps, err := store.GetDependencyRecords(ctx, first.ID)
+	if err != nil {
+		t.Fatalf("GetDependencyRecords: %v", err)
+	}
+	if len(deps) != 1 || deps[0].DependsOnID != second.ID || deps[0].Type != types.DepBlocks {
+		t.Fatalf("deps = %#v, want blocks to %s", deps, second.ID)
 	}
 }
 

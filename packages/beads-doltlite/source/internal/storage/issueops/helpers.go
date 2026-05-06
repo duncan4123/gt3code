@@ -177,6 +177,47 @@ func GenerateIssueIDInTable(ctx context.Context, tx *sql.Tx, table, prefix strin
 	return "", fmt.Errorf("failed to generate unique ID after trying lengths %d-%d with 10 nonces each", baseLength, maxLength)
 }
 
+// GenerateIssueIDInTableFixedLength generates a hash ID without first counting
+// existing prefix-matched rows. That count can be prohibitively expensive on
+// large embedded/doltlite stores; collision checks still use the primary key.
+//
+// Counter mode is preserved for the issues table so configured sequential IDs
+// keep their existing behavior.
+//
+//nolint:gosec // G201: table is a hardcoded constant
+func GenerateIssueIDInTableFixedLength(ctx context.Context, tx *sql.Tx, table, prefix string, issue *types.Issue, actor string, length int) (string, error) {
+	if table == "issues" {
+		counterMode, err := IsCounterModeTx(ctx, tx)
+		if err != nil {
+			return "", err
+		}
+		if counterMode {
+			return NextCounterIDTx(ctx, tx, prefix)
+		}
+	}
+
+	if length < 3 {
+		length = 3
+	}
+	if length > 8 {
+		length = 8
+	}
+	for nonce := 0; nonce < 20; nonce++ {
+		candidate := idgen.GenerateHashID(prefix, issue.Title, issue.Description, actor, issue.CreatedAt, length, nonce)
+
+		var count int
+		err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE id = ?`, table), candidate).Scan(&count)
+		if err != nil {
+			return "", fmt.Errorf("failed to check for ID collision: %w", err)
+		}
+		if count == 0 {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("failed to generate unique ID after trying length %d with 20 nonces", length)
+}
+
 // IsCounterModeTx checks whether issue_id_mode=counter is configured.
 func IsCounterModeTx(ctx context.Context, tx *sql.Tx) (bool, error) {
 	var idMode string

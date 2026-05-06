@@ -21,7 +21,7 @@ func (s *DoltliteStore) RunInTransaction(ctx context.Context, commitMsg string, 
 	var tracker versioncontrolops.DirtyTableTracker
 
 	if err := s.withConn(ctx, true, func(sqlTx *sql.Tx) error {
-		tx := &embeddedTransaction{tx: sqlTx, dirty: &tracker}
+		tx := &embeddedTransaction{tx: sqlTx, dirty: &tracker, created: make(map[string]*types.Issue)}
 		return fn(tx)
 	}); err != nil {
 		return err
@@ -36,8 +36,9 @@ func (s *DoltliteStore) RunInTransaction(ctx context.Context, commitMsg string, 
 
 // embeddedTransaction implements storage.Transaction for DoltliteStore.
 type embeddedTransaction struct {
-	tx    *sql.Tx
-	dirty *versioncontrolops.DirtyTableTracker
+	tx      *sql.Tx
+	dirty   *versioncontrolops.DirtyTableTracker
+	created map[string]*types.Issue
 }
 
 func (t *embeddedTransaction) CreateIssue(ctx context.Context, issue *types.Issue, actor string) error {
@@ -47,7 +48,11 @@ func (t *embeddedTransaction) CreateIssue(ctx context.Context, issue *types.Issu
 	}
 	t.dirty.MarkDirty("issues")
 	t.dirty.MarkDirty("events")
-	return createIssueSQLite(ctx, t.tx, bc, issue, actor)
+	if err := createIssueSQLite(ctx, t.tx, bc, issue, actor); err != nil {
+		return err
+	}
+	t.created[issue.ID] = issue
+	return nil
 }
 
 func (t *embeddedTransaction) CreateIssues(ctx context.Context, issues []*types.Issue, actor string) error {
@@ -96,11 +101,23 @@ func (t *embeddedTransaction) AddDependency(ctx context.Context, dep *types.Depe
 
 func (t *embeddedTransaction) AddDependencyWithOptions(ctx context.Context, dep *types.Dependency, actor string, addOpts storage.DependencyAddOptions) error {
 	t.dirty.MarkDirty("dependencies")
-	return issueops.AddDependencyInTx(ctx, t.tx, dep, actor, issueops.AddDependencyOpts{
+	opts := issueops.AddDependencyOpts{
 		IsCrossPrefix:  types.ExtractPrefix(dep.IssueID) != types.ExtractPrefix(dep.DependsOnID),
 		SkipCycleCheck: addOpts.SkipCycleCheck,
 		Dialect:        issueops.SQLDialectSQLite,
-	})
+	}
+	if source := t.created[dep.IssueID]; source != nil {
+		sourceTable, _, _, writeTable := issueops.WispTableRouting(issueops.IsWisp(source))
+		opts.SourceTable = sourceTable
+		opts.WriteTable = writeTable
+		opts.SourceType = string(source.IssueType)
+	}
+	if target := t.created[dep.DependsOnID]; target != nil {
+		targetTable, _, _, _ := issueops.WispTableRouting(issueops.IsWisp(target))
+		opts.TargetTable = targetTable
+		opts.TargetType = string(target.IssueType)
+	}
+	return issueops.AddDependencyInTx(ctx, t.tx, dep, actor, opts)
 }
 
 func (t *embeddedTransaction) RemoveDependency(ctx context.Context, issueID, dependsOnID string, actor string) error {

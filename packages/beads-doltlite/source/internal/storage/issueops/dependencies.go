@@ -22,6 +22,14 @@ type AddDependencyOpts struct {
 	// TargetTable is the table to validate the target issue exists in.
 	// Auto-detected via wisp routing if empty. Ignored when target validation is skipped.
 	TargetTable string
+	// SourceType is the already-known source issue type. When set, source
+	// existence validation is skipped because the caller has created or loaded
+	// the issue in the same transaction.
+	SourceType string
+	// TargetType is the already-known target issue type. When set, target
+	// existence validation is skipped because the caller has created or loaded
+	// the issue in the same transaction.
+	TargetType string
 	// WriteTable is the dependency table to insert/update/check existing deps in.
 	// Auto-detected from source wisp routing if empty.
 	WriteTable string
@@ -86,18 +94,20 @@ func AddDependencyInTx(ctx context.Context, tx *sql.Tx, dep *types.Dependency, a
 	dialect := opts.Dialect
 
 	// Validate source issue exists and get its type.
-	var sourceType string
-	//nolint:gosec // G201: sourceTable is from WispTableRouting ("issues" or "wisps")
-	if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT issue_type FROM %s WHERE id = ?`, sourceTable), dep.IssueID).Scan(&sourceType); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("issue %s not found", dep.IssueID)
+	sourceType := opts.SourceType
+	if sourceType == "" {
+		//nolint:gosec // G201: sourceTable is from WispTableRouting ("issues" or "wisps")
+		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT issue_type FROM %s WHERE id = ?`, sourceTable), dep.IssueID).Scan(&sourceType); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("issue %s not found", dep.IssueID)
+			}
+			return fmt.Errorf("failed to check issue existence: %w", err)
 		}
-		return fmt.Errorf("failed to check issue existence: %w", err)
 	}
 
 	// Validate target issue exists (skip for external and cross-prefix refs).
-	var targetType string
-	if !strings.HasPrefix(dep.DependsOnID, "external:") && !opts.IsCrossPrefix {
+	targetType := opts.TargetType
+	if targetType == "" && !strings.HasPrefix(dep.DependsOnID, "external:") && !opts.IsCrossPrefix {
 		//nolint:gosec // G201: targetTable is from WispTableRouting ("issues" or "wisps")
 		if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT issue_type FROM %s WHERE id = ?`, targetTable), dep.DependsOnID).Scan(&targetType); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
