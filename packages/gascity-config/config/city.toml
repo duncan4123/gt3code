@@ -1,5 +1,5 @@
 [workspace]
-suspended = false
+suspended = true
 global_fragments = ["command-glossary", "operational-awareness-doltlite"]
 
 [providers]
@@ -30,7 +30,7 @@ mode = "always"
 
 [[rigs]]
 name = "gascity"
-suspended = false
+suspended = true
 includes = ["packs/gastown"]
 
 [[rigs.overrides]]
@@ -56,7 +56,7 @@ suspended = true
 [[rigs]]
 name = "beads-doltlite"
 prefix = "bd"
-suspended = false
+suspended = true
 includes = ["packs/gastown"]
 
 [[rigs.overrides]]
@@ -82,7 +82,7 @@ suspended = false
 [[rigs]]
 name = "context-mode"
 prefix = "ccm"
-suspended = false
+suspended = true
 includes = ["packs/gastown"]
 
 [[rigs.overrides]]
@@ -145,6 +145,7 @@ suspended = false
 [[patches.agent]]
 dir = "context-mode"
 name = "crew"
+suspended = false
 max_active_sessions = 5
 
 [[patches.agent]]
@@ -160,6 +161,7 @@ suspended = false
 [[patches.agent]]
 dir = "beads-doltlite"
 name = "polecat"
+suspended = false
 wake_mode = "resume"
 
 [[patches.agent]]
@@ -192,6 +194,12 @@ suspended = false
 dir = "gascity"
 name = "witness"
 suspended = false
+
+[[patches.agent]]
+dir = ""
+name = "hq-refinery"
+suspended = false
+wake_mode = "resume"
 
 [[patches.named_session]]
 template = "mayor"
@@ -236,30 +244,7 @@ restart_window = "1h"
 shutdown_timeout = "5s"
 
 [orders]
-skip = [
-  "spawn-storm-detect",
-  "orphan-sweep",
-  "cross-rig-deps",
-  "gate-sweep",
-  "wisp-compact",
-  "prune-branches",
-  "mol-dog-jsonl",
-  "mol-dog-reaper",
-  "digest-generate",
-  "dolt-health",
-  "dolt-remotes-patrol",
-  "mol-dog-stale-db",
-  "mol-dog-phantom-db",
-  "mol-dog-compactor",
-  "mol-dog-backup",
-  "mol-dog-doctor",
-  "beads-health",
-]
+skip = ["spawn-storm-detect", "orphan-sweep", "cross-rig-deps", "gate-sweep", "wisp-compact", "prune-branches", "mol-dog-jsonl", "mol-dog-reaper", "digest-generate", "dolt-health", "dolt-remotes-patrol", "mol-dog-stale-db", "mol-dog-phantom-db", "mol-dog-compactor", "mol-dog-backup", "mol-dog-doctor", "beads-health"]
 
 [api]
 port = 8372
-
-
-[[patches.agent]]
-name = "hq-refinery"
-wake_mode = "resume"
