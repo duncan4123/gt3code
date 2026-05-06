@@ -1,0 +1,6 @@
+[order]
+description = "Compact Beads commit history and run storage GC"
+gate = "cooldown"
+interval = "6h"
+timeout = "45m"
+exec = "$PACK_DIR/scripts/doltlite-compact.sh"

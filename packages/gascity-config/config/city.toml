@@ -145,7 +145,7 @@ suspended = false
 [[patches.agent]]
 dir = "context-mode"
 name = "crew"
-max_active_sessions = 2
+max_active_sessions = 5
 
 [[patches.agent]]
 dir = "context-mode"
@@ -215,6 +215,11 @@ dir = "beads-doltlite"
 template = "refinery"
 mode = "always"
 
+[[patches.named_session]]
+dir = "context-mode"
+template = "refinery"
+mode = "always"
+
 [beads]
 provider = "bd"
 backend = "doltlite"
@@ -240,7 +245,6 @@ skip = [
   "prune-branches",
   "mol-dog-jsonl",
   "mol-dog-reaper",
-  "doltlite-compact",
   "digest-generate",
   "dolt-health",
   "dolt-remotes-patrol",
@@ -256,7 +260,6 @@ skip = [
 port = 8372
 
 
-[[patches.named_session]]
-dir = "context-mode"
-template = "refinery"
-mode = "always"
+[[patches.agent]]
+name = "hq-refinery"
+wake_mode = "resume"
