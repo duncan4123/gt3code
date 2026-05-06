@@ -1437,14 +1437,12 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           kind: rigGroup.kind,
           isSuspended: rigGroup.isSuspended,
           agentGroups: rigGroup.agentGroups.map((agentGroup) => {
-            const hasPoolControls =
-              agentGroup.isPool || typeof agentGroup.minActiveSessions === "number";
             return {
               id: agentGroup.id,
               label: agentGroup.label,
               qualifiedName: agentGroup.qualifiedName,
               isSuspended: agentGroup.isSuspended,
-              isPool: hasPoolControls,
+              isPool: agentGroup.isPool,
               ...(typeof agentGroup.minActiveSessions === "number"
                 ? { minActiveSessions: agentGroup.minActiveSessions }
                 : {}),
@@ -1465,7 +1463,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 ? { defaultSlingFormula: agentGroup.defaultSlingFormula }
                 : {}),
               runtimeState: resolveGcAgentRuntimeState({
-                isPool: hasPoolControls,
+                isPool: agentGroup.isPool,
                 isSuspended: agentGroup.isSuspended,
                 ...(agentGroup.namedSessionMode
                   ? { namedSessionMode: agentGroup.namedSessionMode }

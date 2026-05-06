@@ -386,6 +386,19 @@ function threadSessionsEqual(
   );
 }
 
+function customMetadataEqual(
+  left: Readonly<Record<string, string>> | undefined,
+  right: Readonly<Record<string, string>> | undefined,
+): boolean {
+  if (left === right) return true;
+  const leftEntries = Object.entries(left ?? {});
+  const rightEntries = Object.entries(right ?? {});
+  return (
+    leftEntries.length === rightEntries.length &&
+    leftEntries.every(([key, value]) => right?.[key] === value)
+  );
+}
+
 function sidebarThreadSummariesEqual(
   left: SidebarThreadSummary | undefined,
   right: SidebarThreadSummary,
@@ -406,7 +419,8 @@ function sidebarThreadSummariesEqual(
     left.latestUserMessageAt === right.latestUserMessageAt &&
     left.hasPendingApprovals === right.hasPendingApprovals &&
     left.hasPendingUserInput === right.hasPendingUserInput &&
-    left.hasActionableProposedPlan === right.hasActionableProposedPlan
+    left.hasActionableProposedPlan === right.hasActionableProposedPlan &&
+    customMetadataEqual(left.customMetadata, right.customMetadata)
   );
 }
 
@@ -426,7 +440,8 @@ function threadShellsEqual(left: ThreadShell | undefined, right: ThreadShell): b
     left.archivedAt === right.archivedAt &&
     left.updatedAt === right.updatedAt &&
     left.branch === right.branch &&
-    left.worktreePath === right.worktreePath
+    left.worktreePath === right.worktreePath &&
+    customMetadataEqual(left.customMetadata, right.customMetadata)
   );
 }
 
@@ -1305,6 +1320,9 @@ function applyEnvironmentOrchestrationEvent(
         ...(event.payload.branch !== undefined ? { branch: event.payload.branch } : {}),
         ...(event.payload.worktreePath !== undefined
           ? { worktreePath: event.payload.worktreePath }
+          : {}),
+        ...(event.payload.customMetadata !== undefined
+          ? { customMetadata: event.payload.customMetadata }
           : {}),
         updatedAt: event.payload.updatedAt,
       }));

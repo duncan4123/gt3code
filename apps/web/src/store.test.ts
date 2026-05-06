@@ -128,6 +128,7 @@ function makeState(thread: Thread): AppState {
         updatedAt: thread.updatedAt,
         branch: thread.branch,
         worktreePath: thread.worktreePath,
+        ...(thread.customMetadata ? { customMetadata: thread.customMetadata } : {}),
       },
     },
     threadSessionById: {
@@ -459,6 +460,30 @@ describe("incremental orchestration updates", () => {
     );
 
     expect(localEnvironmentStateOf(next).bootstrapComplete).toBe(false);
+  });
+
+  it("applies GC custom metadata from thread meta updates", () => {
+    const threadId = ThreadId.make("thread-1");
+    const state = makeState(makeThread({ id: threadId }));
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("thread.meta-updated", {
+        threadId,
+        customMetadata: {
+          "gc.agent": "t3code/gastown.polecat",
+          "gc.sessionName": "t3code--polecat-1",
+        },
+        updatedAt: "2026-02-27T00:00:01.000Z",
+      }),
+      localEnvironmentId,
+    );
+
+    const updatedThread = selectThreadByRef(next, scopeThreadRef(localEnvironmentId, threadId));
+    expect(updatedThread?.customMetadata).toEqual({
+      "gc.agent": "t3code/gastown.polecat",
+      "gc.sessionName": "t3code--polecat-1",
+    });
   });
 
   it("preserves state identity for no-op project and thread deletes", () => {

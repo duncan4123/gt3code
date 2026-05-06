@@ -362,6 +362,38 @@ interface TerminalLaunchContext {
 
 type PersistentTerminalLaunchContext = Pick<TerminalLaunchContext, "cwd" | "worktreePath">;
 
+function threadGcRuntimeEnv(
+  customMetadata: Readonly<Record<string, string>> | undefined,
+): Record<string, string> | undefined {
+  const sessionEnv = parseGcMeta(customMetadata).sessionEnv;
+  return sessionEnv && Object.keys(sessionEnv).length > 0 ? sessionEnv : undefined;
+}
+
+function threadTerminalRuntimeEnv(input: {
+  project: { cwd: string };
+  worktreePath?: string | null;
+  customMetadata?: Readonly<Record<string, string>>;
+  extraEnv?: Record<string, string>;
+}): Record<string, string> {
+  const projectScriptInput: {
+    project: { cwd: string };
+    worktreePath?: string | null;
+    extraEnv?: Record<string, string>;
+  } = {
+    project: input.project,
+    extraEnv: {
+      ...threadGcRuntimeEnv(input.customMetadata),
+      ...input.extraEnv,
+    },
+  };
+  if (input.worktreePath !== undefined) {
+    projectScriptInput.worktreePath = input.worktreePath;
+  }
+  return projectScriptRuntimeEnv({
+    ...projectScriptInput,
+  });
+}
+
 function useLocalDispatchState(input: {
   activeThread: Thread | undefined;
   activeLatestTurn: Thread["latestTurn"] | null;
@@ -489,16 +521,14 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
         : null),
     [effectiveWorktreePath, launchContext?.cwd, project],
   );
-  const runtimeEnv = useMemo(
-    () =>
-      project
-        ? projectScriptRuntimeEnv({
-            project: { cwd: project.cwd },
-            worktreePath: effectiveWorktreePath,
-          })
-        : {},
-    [effectiveWorktreePath, project],
-  );
+  const runtimeEnv = useMemo(() => {
+    if (!project) return {};
+    return threadTerminalRuntimeEnv({
+      project: { cwd: project.cwd },
+      worktreePath: effectiveWorktreePath,
+      ...(serverThread?.customMetadata ? { customMetadata: serverThread.customMetadata } : {}),
+    });
+  }, [effectiveWorktreePath, project, serverThread?.customMetadata]);
 
   const bumpFocusRequestId = useCallback(() => {
     if (!visible) {
@@ -1906,11 +1936,12 @@ export default function ChatView(props: ChatViewProps) {
       }
       setTerminalFocusRequestId((value) => value + 1);
 
-      const runtimeEnv = projectScriptRuntimeEnv({
+      const runtimeEnv = threadTerminalRuntimeEnv({
         project: {
           cwd: activeProject.cwd,
         },
         worktreePath: targetWorktreePath,
+        ...(activeThread.customMetadata ? { customMetadata: activeThread.customMetadata } : {}),
         ...(options?.env ? { extraEnv: options.env } : {}),
       });
       const openTerminalInput: TerminalOpenInput = shouldCreateNewTerminal
