@@ -445,6 +445,145 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.runtimeMode).toBe("approval-required");
   });
 
+  it("forwards gc.sessionEnv into provider session start", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.meta.update",
+        commandId: CommandId.make("cmd-thread-gc-meta"),
+        threadId: ThreadId.make("thread-1"),
+        customMetadata: {
+          "gc.agent": "t3code/gastown.polecat",
+          "gc.runtimeProvider": "codex",
+          "gc.sessionEnv": JSON.stringify({
+            GC_AGENT: "t3code/gastown.polecat",
+            GC_ALIAS: "t3code/gastown.polecat",
+            GC_TEMPLATE: "polecat",
+            GC_SESSION_NAME: "gastown__polecat-gc-test",
+            GC_RIG: "t3code",
+            GC_PROVIDER: "codex",
+          }),
+        },
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-turn-start-gc-env"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-gc-env"),
+          role: "user",
+          text: "hello reactor",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.startSession.mock.calls.length === 1);
+    expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
+      env: {
+        GC_AGENT: "t3code/gastown.polecat",
+        GC_ALIAS: "t3code/gastown.polecat",
+        GC_TEMPLATE: "polecat",
+        GC_SESSION_NAME: "gastown__polecat-gc-test",
+        GC_RIG: "t3code",
+        GC_PROVIDER: "codex",
+      },
+    });
+  });
+
+  it("restarts an existing provider session when gc.sessionEnv changes", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.meta.update",
+        commandId: CommandId.make("cmd-thread-gc-env-v1"),
+        threadId: ThreadId.make("thread-1"),
+        customMetadata: {
+          "gc.agent": "t3code/gastown.polecat",
+          "gc.runtimeProvider": "codex",
+          "gc.sessionEnv": JSON.stringify({
+            GC_AGENT: "t3code/gastown.polecat",
+            GC_SESSION_NAME: "gastown__polecat-gc-test",
+            GC_BEAD: "gc-old",
+          }),
+        },
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-turn-start-gc-env-v1"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-gc-env-v1"),
+          role: "user",
+          text: "first hook",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.startSession.mock.calls.length === 1);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.meta.update",
+        commandId: CommandId.make("cmd-thread-gc-env-v2"),
+        threadId: ThreadId.make("thread-1"),
+        customMetadata: {
+          "gc.agent": "t3code/gastown.polecat",
+          "gc.runtimeProvider": "codex",
+          "gc.sessionEnv": JSON.stringify({
+            GC_AGENT: "t3code/gastown.polecat",
+            GC_SESSION_NAME: "gastown__polecat-gc-test",
+            GC_BEAD: "gc-new",
+          }),
+        },
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-turn-start-gc-env-v2"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-gc-env-v2"),
+          role: "user",
+          text: "second hook",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.startSession.mock.calls.length === 2);
+    expect(harness.startSession.mock.calls[1]?.[1]).toMatchObject({
+      resumeCursor: { opaque: "resume-1" },
+      env: {
+        GC_AGENT: "t3code/gastown.polecat",
+        GC_SESSION_NAME: "gastown__polecat-gc-test",
+        GC_BEAD: "gc-new",
+      },
+    });
+  });
+
   it("generates a thread title on the first turn", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();

@@ -7,6 +7,7 @@ import {
   ProviderDriverKind,
   type ProjectId,
   type OrchestrationSession,
+  parseGcMeta,
   ThreadId,
   type ProviderSession,
   type RuntimeMode,
@@ -48,6 +49,27 @@ type ProviderIntentEvent = Extract<
 function toNonEmptyProviderInput(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized && normalized.length > 0 ? normalized : undefined;
+}
+
+function toNonEmptyEnv(
+  env: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!env) {
+    return undefined;
+  }
+  const entries = Object.entries(env).filter(([key, value]) => {
+    return key.trim().length > 0 && value.trim().length > 0;
+  });
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function stableEnvSignature(env: Record<string, string> | undefined): string | undefined {
+  if (!env) {
+    return undefined;
+  }
+  return JSON.stringify(
+    Object.entries(env).toSorted(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey)),
+  );
 }
 
 function mapProviderSessionStatusToOrchestrationStatus(
@@ -189,6 +211,7 @@ const make = Effect.gen(function* () {
     );
 
   const threadModelSelections = new Map<string, ModelSelection>();
+  const threadGcSessionEnvSignatures = new Map<string, string>();
 
   const appendProviderFailureActivity = (input: {
     readonly threadId: ThreadId;
@@ -389,20 +412,35 @@ const make = Effect.gen(function* () {
       thread,
       projects: project ? [project] : [],
     });
+    const gcSessionEnv = toNonEmptyEnv(parseGcMeta(thread.customMetadata).sessionEnv);
+    const gcSessionEnvSignature = stableEnvSignature(gcSessionEnv);
 
     const startProviderSession = (input?: {
       readonly resumeCursor?: unknown;
       readonly provider?: ProviderDriverKind;
     }) =>
-      providerService.startSession(threadId, {
-        threadId,
-        ...(preferredProvider ? { provider: preferredProvider } : {}),
-        providerInstanceId: desiredInstanceId,
-        ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
-        modelSelection: desiredModelSelection,
-        ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
-        runtimeMode: desiredRuntimeMode,
-      });
+      providerService
+        .startSession(threadId, {
+          threadId,
+          ...(preferredProvider ? { provider: preferredProvider } : {}),
+          providerInstanceId: desiredInstanceId,
+          ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
+          ...(gcSessionEnv ? { env: gcSessionEnv } : {}),
+          modelSelection: desiredModelSelection,
+          ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
+          runtimeMode: desiredRuntimeMode,
+        })
+        .pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              if (gcSessionEnvSignature !== undefined) {
+                threadGcSessionEnvSignatures.set(threadId, gcSessionEnvSignature);
+              } else {
+                threadGcSessionEnvSignatures.delete(threadId);
+              }
+            }),
+          ),
+        );
 
     const bindSessionToThread = (session: ProviderSession) =>
       Effect.gen(function* () {
@@ -449,13 +487,18 @@ const make = Effect.gen(function* () {
         preferredProvider === "claudeAgent" &&
         requestedModelSelection !== undefined &&
         !Equal.equals(previousModelSelection, requestedModelSelection);
+      const previousGcSessionEnvSignature = threadGcSessionEnvSignatures.get(threadId);
+      const shouldRestartForGcSessionEnvChange =
+        (gcSessionEnvSignature !== undefined || previousGcSessionEnvSignature !== undefined) &&
+        previousGcSessionEnvSignature !== gcSessionEnvSignature;
 
       if (
         !runtimeModeChanged &&
         !cwdChanged &&
         !instanceChanged &&
         !shouldRestartForModelChange &&
-        !shouldRestartForModelSelectionChange
+        !shouldRestartForModelSelectionChange &&
+        !shouldRestartForGcSessionEnvChange
       ) {
         return existingSessionThreadId;
       }
@@ -480,6 +523,7 @@ const make = Effect.gen(function* () {
         instanceChanged,
         shouldRestartForModelChange,
         shouldRestartForModelSelectionChange,
+        shouldRestartForGcSessionEnvChange,
         hasResumeCursor: resumeCursor !== undefined,
       });
       const restartedSession = yield* startProviderSession(
@@ -902,6 +946,7 @@ const make = Effect.gen(function* () {
     if (thread.session && thread.session.status !== "stopped") {
       yield* providerService.stopSession({ threadId: thread.id });
     }
+    threadGcSessionEnvSignatures.delete(thread.id);
 
     yield* setThreadSession({
       threadId: thread.id,
