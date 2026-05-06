@@ -82,12 +82,19 @@ Observed local wrinkle during the audit:
 
 - `bd` from the polecat worktree attempted to use a stale Dolt endpoint and
   failed with `Dolt server unreachable at 127.0.0.1:35819`.
+- The worktree-local `.beads/metadata.json` still declared
+  `backend=dolt`, `database=dolt`, `dolt_mode=server`, `dolt_database=t3`,
+  and the worktree-local `.beads/config.yaml` still pinned
+  `dolt.host: 127.0.0.1` and `dolt.port: 35819`.
 - The same `bd` query from `/data/projects/t3code/packages/gascity-config/config`
-  succeeded, and `gc doctor` reported the HQ and rig stores healthy.
+  succeeded, where `.beads/metadata.json` declared `backend=doltlite`,
+  `database=doltlite`, and `dolt_mode=embedded`, and `gc doctor` reported the
+  HQ and rig stores healthy.
 
 This means the manual-origin work-discovery question is separate from the
 worktree-local Beads runtime mismatch: routed work exists, but manual sessions
-still do not consume generic pool demand through `gc hook`.
+still do not consume generic pool demand through `gc hook`, and this specific
+worktree was also carrying an outdated Beads store snapshot.
 
 ## T3Bridge Session Bead Lifecycle Audit
 
@@ -122,31 +129,37 @@ Important audit finding:
 - `buildThreadEnv(...)` still forwards `GC_DOLT_HOST` / `GC_DOLT_PORT` into
   `BEADS_DOLT_SERVER_*` thread env keys.
 - In this workspace, running `bd` from the polecat worktree failed with the
-  stale endpoint `127.0.0.1:35819`, while the same query from the city config
-  root succeeded and `gc doctor` reported the HQ and rig stores healthy.
-- That means the thread shell can inherit stale server-era Dolt routing even
-  though the active store metadata is doltlite.
+  stale endpoint `127.0.0.1:35819`, but the stronger confirmed cause was
+  worktree-local Beads metadata drift: the worktree snapshot still declared a
+  Dolt server store while the authoritative city root was already doltlite.
+- That means one real lock/open hazard is config-root ambiguity: a session or
+  shell that resolves Beads relative to the worktree can open the wrong store
+  before T3 bridge fallback logic even matters.
 - The watcher is partly insulated because it first tries
   `NewDoltliteReadStore(...)`, but if that direct open path ever fails, its
-  fallback `BdStore` path will inherit the same stale env and can miss bead
-  lifecycle updates for claimed/closed work.
+  fallback `BdStore` path can still be vulnerable to stale server-era env if
+  the discovered store metadata and thread env disagree.
 
 Practical consequence:
 
 - Fresh/reused T3 bridge sessions can still bind and surface `gc.session*`
   lifecycle correctly.
 - The fragile point under doltlite is assignment projection refresh after
-  startup, not initial session creation.
+  startup, especially if Beads discovery lands on a worktree-local stale store
+  or if fallback reads honor stale Dolt server env.
 - Symptoms would look like live session threads that stay open but stop
   updating `gc.bead`, `gc.beadTitle`, convoy counts, or
   `gc.bead.claimed` / `gc.bead.closed` activity after work transitions.
 
 Recommended follow-up:
 
+- Treat worktree-local `.beads` metadata drift as a first-class doltlite
+  lifecycle risk, not just a shell ergonomics issue.
 - Treat stale `GC_DOLT_*` / `BEADS_DOLT_SERVER_*` values in T3 bridge thread
-  env as a real doltlite lifecycle risk, not just a shell ergonomics issue.
+  env as an additional risk when fallback reads use `BdStore`.
 - Prefer clearing or ignoring those server-only vars when the discovered Beads
-  store metadata says `backend=doltlite`.
+  store metadata says `backend=doltlite`, and prefer anchoring Beads discovery
+  to the authoritative city/rig root instead of a transient worktree snapshot.
 - If a future fix changes this behavior, update both this note and the
   migration checklist with the exact direct-open and fallback-read results.
 
