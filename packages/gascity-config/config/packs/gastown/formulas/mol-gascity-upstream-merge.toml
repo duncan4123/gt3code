@@ -13,13 +13,27 @@ until the agent has:
 
 1. Audited upstream changes since the previous sync.
 2. Compared the packaged source, repo integration, and upstream latest commits.
-3. Enumerated every fork-owned Gas City, T3 bridge, beads, Dolt, and doltlite
+3. Mapped every active rig, repo, worktree, branch, and packaged copy that can
+   carry fork work.
+4. Planned which rig-local sync formula owns each repo/package surface and
+   which HQ formula coordinates the whole merge.
+5. Enumerated every fork-owned Gas City, T3 bridge, beads, Dolt, and doltlite
    feature before merging.
-4. Mapped each fork feature onto the post-merge source tree.
-5. Proved beads still supports both Dolt and doltlite backends.
-6. Proved generated/runtime config still resolves the expected backend.
-7. Rejected the merge if fork behavior disappeared without an explicit
+6. Mapped each fork feature onto the post-merge source tree.
+7. Proved beads still supports both Dolt and doltlite backends.
+8. Proved generated/runtime config still resolves the expected backend.
+9. Rejected the merge if fork behavior disappeared without an explicit
    replacement and audit note.
+
+Architecture rule:
+- HQ does not directly do all package/repo work. HQ owns orchestration,
+  cross-rig dependency ordering, package-boundary decisions, and final package
+  update.
+- Each rig owns its own sync formula in that rig's Gas City pack. Work must run
+  through the relevant rig formula so local branches, worktrees, config, and
+  tests are evaluated in the same place the work actually lives.
+- The final T3 package update happens only after the rig formulas have produced
+  audited outputs and the package sync direction is recorded.
 
 Never rely on conflict resolution alone. Upstream refactors can delete fork
 behavior without a conflict. The gates below exist to catch silent loss.
@@ -40,6 +54,14 @@ default = "upstream/main"
 description = "Fork branch that must preserve all fork features"
 default = "ship"
 
+[vars.t3code_integration_branch]
+description = "T3Code integration branch where audited rig outputs are assembled before landing"
+default = "integration/gascity-upstream-sync"
+
+[vars.rig_integration_branch_prefix]
+description = "Prefix for per-rig integration branches created by rig-local sync formulas"
+default = "integration/gascity-upstream-sync/"
+
 [vars.runtime_city]
 description = "Bundled T3Code GC city path"
 default = "/data/projects/t3code/packages/gascity-config/config"
@@ -54,7 +76,7 @@ default = "packages/gascity"
 
 [vars.repo_integration_paths]
 description = "Space-separated repo paths that integrate Gas City with T3"
-default = "packages/gascity packages/gascity-config packages/beads-doltlite packages/doltlite apps/server/src/gc apps/web/src/components/Sidebar.tsx apps/web/src/components/SidebarGcFolders.tsx apps/web/src/components/GcContextSidebar.tsx apps/web/src/components/settings/SettingsPanels.tsx scripts/gascity-runner.ts scripts/lib/bundled-gascity-env.ts"
+default = "packages/gascity packages/gascity-config packages/beads-doltlite packages/doltlite packages/contracts/src/gc.ts packages/contracts/src/provider.ts apps/server/src/gc apps/server/src/orchestration/Layers/ProviderCommandReactor.ts apps/server/src/orchestration/Layers/ProviderCommandReactor.test.ts apps/server/src/provider apps/web/src/store.ts apps/web/src/components/ChatView.tsx apps/web/src/components/Sidebar.tsx apps/web/src/components/SidebarGcFolders.tsx apps/web/src/components/GcPanel.tsx apps/web/src/components/GcContextSidebar.tsx apps/web/src/components/chat/ChatHeader.tsx apps/web/src/components/settings/SettingsPanels.tsx scripts/gascity-runner.ts scripts/lib/bundled-gascity-env.ts"
 
 [vars.feature_ledger]
 description = "Durable fork feature ledger to maintain during the merge"
@@ -63,6 +85,18 @@ default = "docs/gascity-fork-feature-ledger.md"
 [vars.audit_report]
 description = "Per-merge audit report path"
 default = "docs/gascity-upstream-merge-audit.md"
+
+[vars.rig_repo_matrix]
+description = "Per-merge rig/repo/worktree/branch inventory"
+default = "docs/gascity-rig-repo-matrix.md"
+
+[vars.hq_sync_formula]
+description = "HQ coordinator formula that runs rig-local sync formulas"
+default = "packages/gascity-config/config/packs/gastown/formulas/mol-gascity-upstream-merge.toml"
+
+[vars.rig_sync_formula_name]
+description = "Expected formula name each relevant rig pack provides for local sync"
+default = "mol-rig-upstream-sync"
 
 [vars.run_tests]
 description = "Whether this merge is allowed to run configured project tests"
@@ -184,9 +218,149 @@ Exit criteria:
 """
 
 [[steps]]
+id = "build-rig-repo-worktree-matrix"
+title = "Build rig, repo, worktree, and branch matrix"
+needs = ["establish-source-triad"]
+description = """
+Before merging or porting code, build a concrete matrix of every place fork
+work can live. This matrix is the source of truth for package sync decisions.
+Do not assume `packages/*` is the only copy and do not assume every rig is a
+repo. Record the actual filesystem and git state.
+
+Capture runtime rig bindings:
+```bash
+bun gc -- config show
+test -f {{runtime_city}}/.gc/site.toml && sed -n '1,220p' {{runtime_city}}/.gc/site.toml
+find {{runtime_city}}/.gc/worktrees -maxdepth 4 -type d -name .git -prune -o -type d -print 2>/dev/null
+git worktree list --porcelain
+```
+
+For every rig path, package source path, package wrapper path, and GC-created
+worktree, capture:
+```bash
+pwd
+git rev-parse --show-toplevel 2>/dev/null || true
+git status --short --branch 2>/dev/null || true
+git remote -v 2>/dev/null || true
+git branch --show-current 2>/dev/null || true
+git rev-parse HEAD 2>/dev/null || true
+git log --oneline --decorate -n 8 2>/dev/null || true
+```
+
+Write `{{rig_repo_matrix}}` and link it from `{{audit_report}}`. The matrix
+must have one row per discovered location with columns:
+- Rig or package name
+- Filesystem path
+- Role: `runtime-city`, `rig-root`, `gc-worktree`, `vendored-source`,
+  `package-wrapper`, `standalone-package-repo`, `scratch`, or `unknown`
+- Git root
+- Remote URLs
+- Current branch
+- HEAD
+- Dirty/untracked state
+- Related T3 package path, if any
+- Related standalone package repo, if any
+- Rig-local sync formula path, if any
+- Rig integration branch
+- T3Code integration branch
+- Upstream ref / target branch expected for that location
+- Sync direction: `repo-to-package`, `package-to-repo`, `bidirectional`,
+  `t3-only`, `runtime-only`, or `do-not-sync`
+- Merge risk and owner decision
+
+Hard gates:
+- Every active rig folder must appear in the matrix.
+- Every branch or worktree with unmerged commits touching in-scope paths must
+  be classified before merge work starts.
+- Package repo sync cannot be marked complete until the matrix says whether
+  the vendored package and standalone repo should match, diverge intentionally,
+  or be copied in one direction.
+- Every repo-backed rig must have a clearly named integration branch. Use
+  `{{rig_integration_branch_prefix}}<rig-name>` unless the matrix records an
+  intentional override.
+- T3Code package assembly must happen on `{{t3code_integration_branch}}`, not
+  directly on `{{target_branch}}`.
+- Dirty runtime files are never overwritten unless the matrix marks them
+  in-scope and the audit explains why.
+
+Exit criteria:
+- `{{rig_repo_matrix}}` exists and is linked from `{{audit_report}}`
+- all rigs, package copies, package repos, and GC worktrees are classified
+- branch/HEAD/dirty state is known for every repo-backed location
+"""
+
+[[steps]]
+id = "plan-rig-sync-formulas"
+title = "Plan HQ orchestration and rig-local sync formulas"
+needs = ["build-rig-repo-worktree-matrix"]
+description = """
+Turn the matrix into an execution plan. HQ coordinates the sync; rig-local
+formulas run inside the owning rig and use the normal Gastown pack workflow:
+convoy/coordinator work creates polecat work beads, polecats push feature
+branches, and the refinery merges those branches into the rig integration
+branch. HQ consumes the resulting rig integration branches; it does not bypass
+polecat/refinery.
+
+For every row in `{{rig_repo_matrix}}` with role `rig-root`,
+`standalone-package-repo`, or repo-backed `gc-worktree`, determine:
+- which Gas City pack owns the rig
+- whether that pack has `{{rig_sync_formula_name}}`
+- the rig integration branch, normally
+  `{{rig_integration_branch_prefix}}<rig-name>`
+- whether the rig integration branch already exists and what it points to
+- which branch/ref the formula should compare against
+- which output branch or bead will carry the result
+- which package path in T3 receives the final update, if any
+
+If a rig does not yet have a sync formula, do not silently fold its work into
+HQ. Record a missing-formula follow-up bead or add the rig-local formula in the
+rig's pack before doing that rig's merge work.
+
+Write a "rig sync plan" section to `{{audit_report}}` with columns:
+- Rig
+- Rig pack path
+- Rig-local formula path
+- Source repo/worktree
+- Target branch
+- Upstream ref
+- Rig integration branch
+- T3Code integration branch: `{{t3code_integration_branch}}`
+- Convoy or coordinator bead
+- Polecat work bead set
+- Refinery target for child branches
+- Final T3 package destination
+- Required local smoke checks
+- Status: `ready`, `missing-formula`, `blocked`, `not-repo`, or `runtime-only`
+
+Hard gates:
+- Rig-local sync formulas must produce normal Gastown work, not a parallel
+  merge system.
+- Implementation changes are done by polecat work beads using
+  `mol-polecat-work` or a rig-approved extension.
+- Polecats push branches and route their original work beads to refinery.
+- Refinery, not HQ and not polecat, merges child branches into the declared
+  rig integration branch.
+- No rig-local code work may happen on the rig's release/target branch unless
+  the audit marks that branch as the rig integration branch.
+- No T3Code package assembly may happen directly on `{{target_branch}}`; use
+  `{{t3code_integration_branch}}` and merge only after all gates pass.
+- HQ may run rig formulas and aggregate results, but HQ must not replace a
+  missing rig-local formula with ad hoc manual work.
+- No final package update may happen until every relevant rig formula is
+  `ready`, `runtime-only`, or explicitly `blocked` with a documented defer.
+- Rig formula outputs are the evidence used for package updates; package files
+  are not the first place where repo sync decisions are made.
+
+Exit criteria:
+- `{{audit_report}}` contains the HQ/rig sync plan
+- every syncable rig has a rig-local formula decision
+- package update destinations are known before merge work starts
+"""
+
+[[steps]]
 id = "build-feature-ledger"
 title = "Build or update the Gas City fork ledger"
-needs = ["establish-source-triad"]
+needs = ["plan-rig-sync-formulas"]
 description = """
 Create or update `{{feature_ledger}}` before merging upstream.
 
@@ -203,6 +377,13 @@ Every fork-owned feature must have:
 The ledger must include at least:
 - bundled `packages/gascity-config/config` city and pack behavior
 - sidebar-visible GC config metadata consumed by T3
+- T3 provider-session `gc.sessionEnv` forwarding from thread metadata into
+  agent runtime startup
+- T3 provider-session restart behavior when `gc.sessionEnv` changes
+- T3 web terminal/project-script forwarding of `gc.sessionEnv` into spawned
+  runtime shells
+- client store preservation of `customMetadata` from `thread.meta-updated`
+  events so GC-managed threads stay visible to sidebar/right-panel UI
 - controller/supervisor lifecycle behavior used by T3
 - opencode provider config and Kimi coding-provider defaults
 - beads CLI integration from Gas City
@@ -314,6 +495,23 @@ T3 thread/session binding and metadata:
   `gc.sessionName`, `gc.sessionEnv`, `gc.agent`, `gc.rig`, `GC_SESSION_NAME`,
   `GC_AGENT`, `GC_ALIAS`, `GC_CITY`, `GC_CITY_PATH`, `GC_TEMPLATE`,
   `GC_RIG`, and `GC_RIG_ROOT`.
+- `apps/server/src/orchestration/Layers/ProviderCommandReactor.ts` must parse
+  `parseGcMeta(thread.customMetadata).sessionEnv`, normalize non-empty env
+  rows, pass them as `env` to `providerService.startSession`, store a stable
+  per-thread env signature, restart an active provider session when the
+  signature changes, preserve resume cursor when allowed, and clear the
+  signature on session stop.
+- `apps/server/src/orchestration/Layers/ProviderCommandReactor.test.ts` must
+  keep regression tests proving `gc.sessionEnv` reaches provider session start
+  and proving env changes restart the provider session.
+- `packages/contracts/src/provider.ts` `ProviderSessionStartInput.env` must
+  remain part of the provider-session contract.
+- `apps/web/src/store.ts` must apply `customMetadata` from
+  `thread.meta-updated` and include metadata in thread/sidebar equality checks;
+  metadata-only updates must not be treated as no-ops.
+- `apps/web/src/components/ChatView.tsx` must merge
+  `parseGcMeta(thread.customMetadata).sessionEnv` into persistent terminal and
+  project-script terminal env, without replacing explicit per-launch env.
 
 T3 persistence and projection:
 - `apps/server/src/orchestration/Layers/ProjectionPipeline.ts` propagation of
@@ -352,7 +550,14 @@ Frontend GC surfaces:
   thread groups, and thread rendering.
 - `apps/web/src/components/sidebar/gcSidebarControls.ts` runtime-state labels,
   start binding polling, and summary labels.
-- `apps/web/src/components/GcContextSidebar.tsx` GC context panel.
+- Right sidebar GC context contract:
+  `apps/web/src/routes/_chat.$environmentId.$threadId.tsx` `panel=gc` route
+  state, `apps/web/src/components/chat/ChatHeader.tsx` GC toggle availability,
+  `apps/web/src/components/GcPanel.tsx` wrapper, and
+  `apps/web/src/components/GcContextSidebar.tsx` GC context panel. The panel
+  must show metadata, bead/formula/convoy context, runtime env, MCP servers,
+  skills, branch/worktree fields, provider/model/work_dir, and fallback
+  metadata-only rendering when GC API detail lookup fails.
 - `apps/web/src/components/settings/SettingsPanels.tsx` Gas City settings:
   `GC_BIN`, `GC_API_URL`, provider/opencode fields, runtime/env details.
 - `apps/web/src/localApi.ts`, `apps/web/src/rpc/wsRpcClient.ts`, and
@@ -374,6 +579,13 @@ T3 bridge smoke checks:
   path.
 - OpenCode health check starts or reuses the intended configured server.
 - No doltlite-configured bridge path starts an external `dolt` process.
+- Provider agent startup receives `GC_SESSION_NAME`, `GC_AGENT`, `GC_ALIAS`,
+  and related `gc.sessionEnv` rows in `ProviderSessionStartInput.env`.
+- Updating `gc.sessionEnv` on an active thread restarts the provider session
+  with the new env and keeps resume behavior where supported.
+- T3 terminal/project-script launches from a GC-managed thread inherit
+  `gc.sessionEnv` in addition to `T3CODE_PROJECT_ROOT` and
+  `T3CODE_WORKTREE_PATH`.
 
 Exit criteria:
 - `{{audit_report}}` contains the complete T3 bridge table
@@ -413,9 +625,77 @@ Exit criteria:
 """
 
 [[steps]]
+id = "run-rig-local-sync-formulas"
+title = "Run rig-local sync formulas"
+needs = ["audit-upstream-delta"]
+description = """
+Run the relevant rig-local sync formulas from the HQ sync plan. Each rig
+formula must run in that rig's Gas City context and produce its own audit
+output before HQ updates package files. The rig formula is responsible for
+creating or updating its convoy/coordinator bead and routing concrete work to
+polecats/refinery inside the rig.
+
+For each `ready` rig in the sync plan, run the rig formula with the bead or
+metadata that identifies:
+- source repo/worktree
+- target branch
+- upstream ref
+- rig integration branch
+- T3Code integration branch
+- package destination in T3, if any
+- required smoke checks
+
+Example shape; use the actual rig alias and formula path from the matrix:
+```bash
+gc sling {{rig_sync_formula_name}} \
+  --rig <rig> \
+  --metadata upstream_ref={{upstream_ref}} \
+  --metadata target_branch={{target_branch}} \
+  --metadata rig_integration_branch={{rig_integration_branch_prefix}}<rig> \
+  --metadata t3code_integration_branch={{t3code_integration_branch}}
+gc session list
+bd show {{issue}}
+```
+
+Each rig-local formula must write or attach:
+- rig fork-feature preservation/replay ledger
+- convoy/coordinator bead ID
+- polecat work bead IDs and target branches
+- local repo/worktree diff ledger
+- selected merge strategy
+- rig integration branch and HEAD
+- local branch/HEAD after work
+- dirty state after work
+- smoke results
+- package update instructions, if package files should be updated
+
+HQ responsibilities in this step:
+- aggregate rig outputs into `{{audit_report}}`
+- mark each rig `complete`, `blocked`, `runtime-only`, or `deferred`
+- reject package updates from rigs that did not run their local formula
+
+Hard gates:
+- Do not edit T3 package files as a substitute for doing the rig-local work.
+- Do not accept a rig output that bypassed polecat/refinery for implementation
+  branches.
+- Do not accept a rig output that was not produced on the declared rig
+  integration branch.
+- Do not accept a rig output until refinery has merged or explicitly rejected
+  every required polecat branch for that rig.
+- Do not accept a rig output that lacks branch/HEAD/dirty-state evidence.
+- Do not merge package updates from a rig marked `blocked` unless the audit
+  explicitly scopes that package path out of the blocked rig.
+
+Exit criteria:
+- every relevant rig-local formula has run or is explicitly blocked/deferred
+- HQ audit report links each rig output
+- package update instructions are available for completed rigs
+"""
+
+[[steps]]
 id = "complete-difference-ledger"
 title = "List every difference and decide the merge strategy"
-needs = ["audit-upstream-delta"]
+needs = ["run-rig-local-sync-formulas"]
 description = """
 Create a complete difference ledger before touching the working tree. This is
 the core of the reasoned merge.
@@ -488,6 +768,10 @@ description = """
 Integrate upstream only after the feature ledger, upstream delta audit, T3
 bridge inventory, and complete difference ledger exist.
 
+This merge happens on `{{t3code_integration_branch}}`. If that branch does not
+exist, create it from `{{target_branch}}` after confirming the target branch
+HEAD recorded in the audit still matches the working tree.
+
 During conflict resolution, never choose a whole side for files that define:
 - beads backend selection
 - Dolt or doltlite command execution
@@ -511,16 +795,59 @@ git diff ORIG_HEAD..HEAD -- packages/gascity packages/beads-doltlite packages/do
 ```
 
 Exit criteria:
-- upstream is integrated locally
+- upstream is integrated locally on `{{t3code_integration_branch}}`
 - every fork ledger item has a post-merge source mapping
 - every difference-ledger row has its decision applied or is blocked
 - no backend or T3 bridge behavior is assumed preserved without evidence
 """
 
 [[steps]]
+id = "final-package-update"
+title = "Apply final package updates from rig outputs"
+needs = ["merge-with-feature-map"]
+description = """
+Update T3 package files only after rig-local sync formulas have produced
+audited outputs and package update instructions. This is the handoff from
+rig-owned repo work into the T3 packaged sources.
+
+For each completed rig output, apply the recorded sync direction:
+- `repo-to-package`: copy or port from the rig/standalone repo into the T3
+  package path named in `{{rig_repo_matrix}}`
+- `package-to-repo`: update the standalone repo from the T3 package only after
+  the rig formula says T3 is authoritative
+- `bidirectional`: reconcile both sides and record the exact commits/paths
+- `t3-only`: keep work only in T3 packages and explain why no rig repo applies
+- `runtime-only`: do not copy into packages
+- `do-not-sync`: leave untouched and explain why
+
+Write a package update table to `{{audit_report}}` with:
+- Package path
+- Source rig/repo/worktree
+- Sync direction
+- Source rig integration branch and commit
+- Destination T3Code integration branch and path
+- Files updated
+- Features preserved
+- Smoke check proving the package copy still works
+
+Hard gates:
+- No package update may be applied without a corresponding rig matrix row.
+- No package update may be applied from a dirty source unless the dirty diff is
+  captured and intentionally selected.
+- Package updates must preserve the source rig's local smoke evidence.
+- Generated artifacts must be regenerated from source-of-truth inputs, not
+  hand-edited as the package update.
+
+Exit criteria:
+- all package changes trace back to rig formula outputs or explicit T3-only rows
+- package source and standalone repo divergence is intentional and documented
+- final T3 package state is ready for backend and runtime audits
+"""
+
+[[steps]]
 id = "backend-contract-audit"
 title = "Audit beads backend contracts"
-needs = ["merge-with-feature-map"]
+needs = ["final-package-update"]
 description = """
 Prove both beads backends still exist and are routed correctly.
 
@@ -658,6 +985,10 @@ Required checks:
 - controller/supervisor lifecycle commands still work or report the correct
   authority state.
 - opencode/Kimi provider defaults still resolve in config.
+- provider-session startup forwards `gc.sessionEnv` into the selected agent
+  driver, and env-only metadata changes restart active sessions.
+- embedded terminal/project-script launches include the GC session env for
+  GC-managed threads.
 - T3 sidebar data contracts still include pool min/max, named-session mode,
   wake mode, provider/model/work_dir, and lifecycle state.
 - no direct `dolt` process starts for a doltlite-configured city.
