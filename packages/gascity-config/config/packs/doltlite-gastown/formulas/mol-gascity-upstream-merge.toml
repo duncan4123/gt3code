@@ -835,6 +835,8 @@ Hard gates:
 - No package update may be applied from a dirty source unless the dirty diff is
   captured and intentionally selected.
 - Package updates must preserve the source rig's local smoke evidence.
+- Vendored package updates must not copy nested VCS metadata such as `.git`,
+  `.git/`, `.jj`, or `.jj/`; these break colocated JJ/Git status in T3Code.
 - Generated artifacts must be regenerated from source-of-truth inputs, not
   hand-edited as the package update.
 
