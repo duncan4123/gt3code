@@ -1,45 +1,11 @@
 [workspace]
-suspended = true
-global_fragments = ["command-glossary", "operational-awareness-doltlite"]
-
-[providers]
-[providers.kimi-for-coding]
-base = "builtin:opencode"
-ready_delay_ms = 0
-[providers.kimi-for-coding.env]
-GC_MODEL = "kimi-for-coding/k2p6"
-GC_OPENCODE_AGENT = "build"
-GC_PROVIDER = "opencode"
-
-[[named_session]]
-name = "crew"
-template = "gastown.hq-polecat"
-mode = "always"
-
-[[named_session]]
-name = "crew-mcp"
-template = "crew"
-dir = "context-mode"
-mode = "always"
-
-[[named_session]]
-name = "crew-mcp-fresh"
-template = "crew"
-dir = "context-mode"
-mode = "always"
+suspended = false
+global_fragments = ["command-glossary", "operational-awareness"]
 
 [[rigs]]
 name = "gascity"
-suspended = true
+suspended = false
 includes = ["packs/gastown"]
-
-[[rigs.overrides]]
-agent = "convoymaster"
-suspended = false
-
-[[rigs.overrides]]
-agent = "crew"
-suspended = false
 
 [[rigs.overrides]]
 agent = "polecat"
@@ -47,25 +13,17 @@ suspended = false
 
 [[rigs.overrides]]
 agent = "refinery"
-suspended = true
+suspended = false
 
 [[rigs.overrides]]
 agent = "witness"
-suspended = true
+suspended = false
 
 [[rigs]]
 name = "beads-doltlite"
 prefix = "bd"
-suspended = true
+suspended = false
 includes = ["packs/gastown"]
-
-[[rigs.overrides]]
-agent = "convoymaster"
-suspended = false
-
-[[rigs.overrides]]
-agent = "crew"
-suspended = false
 
 [[rigs.overrides]]
 agent = "polecat"
@@ -84,14 +42,6 @@ name = "context-mode"
 prefix = "ccm"
 suspended = true
 includes = ["packs/gastown"]
-
-[[rigs.overrides]]
-agent = "convoymaster"
-suspended = false
-
-[[rigs.overrides]]
-agent = "crew"
-suspended = false
 
 [[rigs.overrides]]
 agent = "polecat"
@@ -125,6 +75,7 @@ dir = ""
 name = "boot"
 suspended = false
 provider = "kimi-for-coding"
+
 [patches.agent.option_defaults]
 agent = "build"
 model = "kimi-for-coding/k2p6"
@@ -134,56 +85,9 @@ dir = ""
 name = "dog"
 suspended = false
 provider = "codex"
+
 [patches.agent.env]
 GC_MODEL = "gpt-5.4-mini"
-
-[[patches.agent]]
-dir = "gascity"
-name = "crew"
-suspended = false
-
-[[patches.agent]]
-dir = "context-mode"
-name = "crew"
-suspended = false
-max_active_sessions = 5
-
-[[patches.agent]]
-dir = "context-mode"
-name = "witness"
-suspended = false
-
-[[patches.agent]]
-dir = ""
-name = "gastown.mayor"
-suspended = false
-
-[[patches.agent]]
-dir = "beads-doltlite"
-name = "polecat"
-suspended = false
-wake_mode = "resume"
-
-[[patches.agent]]
-dir = "context-mode"
-name = "convoymaster"
-suspended = false
-
-[[patches.agent]]
-dir = ""
-name = "gastown.hq-polecat"
-suspended = false
-wake_mode = "fresh"
-
-[[patches.agent]]
-dir = ""
-name = "gastown.hq-refinery"
-suspended = false
-
-[[patches.agent]]
-dir = ""
-name = "gastown.hq-witness"
-suspended = false
 
 [[patches.agent]]
 dir = "gascity"
@@ -196,10 +100,15 @@ name = "witness"
 suspended = false
 
 [[patches.agent]]
-dir = ""
-name = "hq-refinery"
+dir = "beads-doltlite"
+name = "polecat"
 suspended = false
-wake_mode = "resume"
+wake_mode = "fresh"
+
+[[patches.agent]]
+dir = "context-mode"
+name = "witness"
+suspended = false
 
 [[patches.named_session]]
 template = "mayor"
@@ -227,24 +136,3 @@ mode = "always"
 dir = "context-mode"
 template = "refinery"
 mode = "always"
-
-[beads]
-provider = "bd"
-backend = "doltlite"
-
-[session]
-provider = "t3bridge"
-
-[daemon]
-formula_v2 = true
-graph_workflows = true
-patrol_interval = "30s"
-max_restarts = 5
-restart_window = "1h"
-shutdown_timeout = "5s"
-
-[orders]
-skip = ["spawn-storm-detect", "orphan-sweep", "cross-rig-deps", "gate-sweep", "wisp-compact", "prune-branches", "mol-dog-jsonl", "mol-dog-reaper", "digest-generate", "dolt-health", "dolt-remotes-patrol", "mol-dog-stale-db", "mol-dog-phantom-db", "mol-dog-compactor", "mol-dog-backup", "mol-dog-doctor", "beads-health"]
-
-[api]
-port = 8372

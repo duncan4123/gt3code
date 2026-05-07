@@ -9,11 +9,11 @@ shortcuts today, so this formula maps the same intent onto primitives we do
 have:
 
 - repo-local artifacts (`.prd-reviews/`, `.designs/`, `.plan-reviews/`)
-- review task beads created with `bd create`
+- review task beads created with `gc bd create`
 - parallel dispatch via `gc sling ... --on mol-review-leg`
 - completion mail via `gc mail send`
 - one human clarification gate in the live conversation
-- final bead graph creation with `bd create` + `bd dep add`
+- final bead graph creation with `gc bd create` + `gc bd dep add`
 
 Run this from a coordinator workspace that has the target repo checked out
 (typically a crew worker, or a mayor who has already `cd`'d into the rig repo).
@@ -32,6 +32,7 @@ The goal is parity of outcome, not a verbatim port of upstream's convoy DSL.
 """
 formula = "mol-idea-to-plan"
 version = 2
+contract = "graph.v2"
 
 [vars]
 [vars.problem]
@@ -43,7 +44,7 @@ description = "Additional context: constraints, prior decisions, related code, l
 default = ""
 
 [vars.review_target]
-description = "Agent or pool that should execute review legs (for example, my-rig/polecat). Empty means derive $GC_RIG/polecat."
+description = "Agent or pool that should execute review legs (for example, my-rig/{{binding_prefix}}polecat). Empty means derive $GC_RIG/{{binding_prefix}}polecat."
 default = ""
 
 [vars.review_formula]
@@ -67,7 +68,7 @@ Use only the primitives listed in this formula.
 **1. Prime and move to the repo root:**
 ```bash
 gc prime
-bd prime
+gc bd prime
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 ```
@@ -77,9 +78,9 @@ cd "$REPO_ROOT"
 REVIEW_TARGET="{{review_target}}"
 if [ -z "$REVIEW_TARGET" ]; then
   if [ -n "$GC_RIG" ]; then
-    REVIEW_TARGET="$GC_RIG/polecat"
+    REVIEW_TARGET="$GC_RIG/{{binding_prefix}}polecat"
   else
-    echo "Pass --var review_target=<rig>/polecat when not running inside a rig session."
+    echo "Pass --var review_target=<rig>/{{binding_prefix}}polecat when not running inside a rig session."
   fi
 fi
 COORDINATOR="$GC_AGENT"
@@ -141,7 +142,7 @@ description = """
 Fan out parallel PRD review using review task beads plus `mol-review-leg`.
 
 **Dispatch pattern for EVERY review leg in this workflow:**
-1. `bd create` a task bead with a detailed description
+1. `gc bd create` a task bead with a detailed description
 2. set metadata:
    - `coordinator=$COORDINATOR`
    - `review_id=$REVIEW_ID`
@@ -153,7 +154,7 @@ gc sling "$REVIEW_TARGET" "$LEG_BEAD" --on {{review_formula}}
 ```
 4. record the bead ID in the round log
 5. wait for completion mail or poll the bead until it closes
-6. read the full report from the bead notes with `bd show <id>`
+6. read the full report from the bead notes with `gc bd show <id>`
 
 **Standard instructions each review bead must include:**
 - read `.prd-reviews/$REVIEW_ID/prd-draft.md`
@@ -454,10 +455,10 @@ After creating the task beads, add them to the convoy with:
 gc convoy add <convoy-id> <task-id>
 ```
 
-**4. Wire dependencies with `bd dep add`:**
+**4. Wire dependencies with `gc bd dep add`:**
 Model the actual "X needs Y" relationships. Verify with:
 ```bash
-bd blocked
+gc bd blocked
 ```
 
 **5. Record the created bead IDs in:**

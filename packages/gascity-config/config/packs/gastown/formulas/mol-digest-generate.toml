@@ -2,15 +2,15 @@ description = """
 Generate activity digest for the mayor.
 
 This is a **periodic formula** — dispatched by the deacon's
-`periodic-formulas` step when the cooldown gate elapses. Configured
+`periodic-formulas` step when the cooldown trigger elapses. Configured
 in `city.toml` under `[formulas]`:
 
 ```toml
 [[formulas.periodic]]
 formula = "mol-digest-generate"
-gate = "cooldown"
+trigger = "cooldown"
 interval = "24h"
-pool = "dog"
+pool = "gastown.dog"
 ```
 
 The deacon checks if enough time has passed since the last run
@@ -31,6 +31,7 @@ The digest is mailed to the mayor and archived as a digest bead.
 Read each step's description before acting — Config values override defaults."""
 formula = "mol-digest-generate"
 version = 2
+contract = "graph.v2"
 
 [vars]
 [vars.period]
@@ -85,8 +86,8 @@ gc rig list
 
 a) **Issues filed and closed:**
 ```bash
-bd list --created-after=$SINCE --json --limit=0
-bd list --status=closed --closed-after=$SINCE --json --limit=0
+gc bd list --created-after=$SINCE --json --limit=0
+gc bd list --status=closed --closed-after=$SINCE --json --limit=0
 ```
 
 b) **Merge activity:**
@@ -96,24 +97,24 @@ git -C <rig-path> log --merges --since=$SINCE --oneline main
 
 c) **Incidents:**
 ```bash
-bd list --label=incident --created-after=$SINCE --json
+gc bd list --label=incident --created-after=$SINCE --json
 ```
 
 **3. Collect town-level data:**
 
-a) **Agent events:**
+a) **Session lifecycle events:**
 ```bash
-gc events --since=$SINCE --type=agent.started,agent.stopped,agent.crashed --json
+gc events --since=$SINCE --type=session.woke,session.stopped,session.crashed --json
 ```
 
 b) **Escalations:**
 ```bash
-bd list --label=escalation --created-after=$SINCE --json
+gc bd list --label=escalation --created-after=$SINCE --json
 ```
 
 c) **Warrants filed:**
 ```bash
-bd list --type=warrant --created-after=$SINCE --json
+gc bd list --type=warrant --created-after=$SINCE --json
 ```
 
 Close this step when all data is collected."""
@@ -160,14 +161,14 @@ gc mail send mayor/ -s "Gas Town Digest: $DATE" -m "$DIGEST"
 
 **3. Archive as bead:**
 ```bash
-bd create --type=digest \
+gc bd create --type=digest \
   --title="Digest: $DATE" \
   --label=digest,{{period}}
 ```
 
 **4. Close work bead, signal reconciler, and exit:**
 ```bash
-bd close <work-bead> --reason "Digest generated and sent"
+gc bd close <work-bead> --reason "Digest generated and sent"
 gc runtime drain-ack
 exit
 ```

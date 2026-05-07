@@ -1,0 +1,250 @@
+[workspace]
+suspended = false
+global_fragments = ["command-glossary", "operational-awareness-doltlite"]
+
+[providers]
+[providers.kimi-for-coding]
+base = "builtin:opencode"
+ready_delay_ms = 0
+[providers.kimi-for-coding.env]
+GC_MODEL = "kimi-for-coding/k2p6"
+GC_OPENCODE_AGENT = "build"
+GC_PROVIDER = "opencode"
+
+[[named_session]]
+name = "crew"
+template = "doltlite-gastown.hq-polecat"
+mode = "always"
+
+[[named_session]]
+name = "crew-mcp"
+template = "crew"
+dir = "context-mode"
+mode = "always"
+
+[[named_session]]
+name = "crew-mcp-fresh"
+template = "crew"
+dir = "context-mode"
+mode = "always"
+
+[[rigs]]
+name = "gascity"
+suspended = false
+includes = ["packs/doltlite-gastown"]
+
+[[rigs.overrides]]
+agent = "convoymaster"
+suspended = false
+
+[[rigs.overrides]]
+agent = "crew"
+suspended = false
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = false
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = false
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = false
+
+[[rigs]]
+name = "beads-doltlite"
+prefix = "bd"
+suspended = false
+includes = ["packs/doltlite-gastown"]
+
+[[rigs.overrides]]
+agent = "convoymaster"
+suspended = false
+
+[[rigs.overrides]]
+agent = "crew"
+suspended = false
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = false
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = false
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = false
+
+[[rigs]]
+name = "context-mode"
+prefix = "ccm"
+suspended = true
+includes = ["packs/doltlite-gastown"]
+
+[[rigs.overrides]]
+agent = "convoymaster"
+suspended = false
+
+[[rigs.overrides]]
+agent = "crew"
+suspended = false
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = false
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = false
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = false
+
+[patches]
+
+[[patches.agent]]
+dir = ""
+name = "mayor"
+suspended = false
+provider = "codex"
+wake_mode = "resume"
+
+[[patches.agent]]
+dir = ""
+name = "deacon"
+suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = ""
+name = "boot"
+suspended = false
+provider = "kimi-for-coding"
+[patches.agent.option_defaults]
+agent = "build"
+model = "kimi-for-coding/k2p6"
+
+[[patches.agent]]
+dir = ""
+name = "dog"
+suspended = false
+provider = "codex"
+[patches.agent.env]
+GC_MODEL = "gpt-5.4-mini"
+
+[[patches.agent]]
+dir = "gascity"
+name = "crew"
+suspended = false
+
+[[patches.agent]]
+dir = "context-mode"
+name = "crew"
+suspended = false
+max_active_sessions = 5
+
+[[patches.agent]]
+dir = "context-mode"
+name = "witness"
+suspended = false
+
+[[patches.agent]]
+dir = ""
+name = "doltlite-gastown.mayor"
+suspended = false
+
+[[patches.agent]]
+dir = "beads-doltlite"
+name = "polecat"
+suspended = false
+wake_mode = "fresh"
+
+[[patches.agent]]
+dir = "context-mode"
+name = "convoymaster"
+suspended = false
+
+[[patches.agent]]
+dir = ""
+name = "doltlite-gastown.hq-polecat"
+suspended = false
+wake_mode = "fresh"
+
+[[patches.agent]]
+dir = ""
+name = "doltlite-gastown.hq-refinery"
+suspended = false
+
+[[patches.agent]]
+dir = ""
+name = "doltlite-gastown.hq-witness"
+suspended = false
+
+[[patches.agent]]
+dir = "gascity"
+name = "refinery"
+suspended = false
+
+[[patches.agent]]
+dir = "gascity"
+name = "witness"
+suspended = false
+
+[[patches.agent]]
+dir = ""
+name = "hq-refinery"
+suspended = false
+wake_mode = "resume"
+
+[[patches.named_session]]
+template = "mayor"
+mode = "always"
+
+[[patches.named_session]]
+template = "deacon"
+mode = "always"
+
+[[patches.named_session]]
+template = "boot"
+mode = "always"
+
+[[patches.named_session]]
+dir = "gascity"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
+dir = "beads-doltlite"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
+dir = "context-mode"
+template = "refinery"
+mode = "always"
+
+[beads]
+provider = "bd"
+backend = "doltlite"
+
+[session]
+provider = "t3bridge"
+
+[daemon]
+formula_v2 = true
+graph_workflows = true
+patrol_interval = "30s"
+max_restarts = 5
+restart_window = "1h"
+shutdown_timeout = "5s"
+
+[orders]
+skip = ["spawn-storm-detect", "orphan-sweep", "cross-rig-deps", "gate-sweep", "wisp-compact", "prune-branches", "mol-dog-jsonl", "mol-dog-reaper", "digest-generate", "dolt-health", "dolt-remotes-patrol", "mol-dog-stale-db", "mol-dog-phantom-db", "mol-dog-compactor", "mol-dog-backup", "mol-dog-doctor", "beads-health"]
+
+[api]
+port = 8372

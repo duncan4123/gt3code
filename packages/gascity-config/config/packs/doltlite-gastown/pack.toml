@@ -1,0 +1,83 @@
+# Gas Town — domain-specific coding workflow pack.
+#
+# Gastown roles: mayor (coordinator), deacon (patrol), boot (watchdog),
+# workspace-scoped HQ agents, plus rig-scoped agents (witness, refinery, crew,
+# polecat).
+# Dog (utility pool) is defined here with tmux theming; maintenance provides
+# the fallback (unthemed) dog. Mechanical housekeeping lives in maintenance.
+#
+# Referenced by both workspace.pack and rigs[].pack:
+#   workspace.pack → expands city-scoped agents only (mayor, deacon, boot,
+#                     hq-witness, hq-polecat, hq-refinery)
+#   rigs[].pack    → expands rig agents only (witness, refinery, crew, polecat)
+
+[pack]
+name = "doltlite-gastown"
+schema = 2
+includes = ["../maintenance"]
+
+[providers.kimi-for-coding]
+base = "builtin:opencode"
+
+[providers.kimi-for-coding.env]
+GC_PROVIDER = "opencode"
+GC_MODEL = "kimi-for-coding/k2p6"
+GC_OPENCODE_AGENT = "build"
+
+[formulas]
+dir = "formulas"
+
+[[patches.agent]]
+name = "dog"
+# Pool defaults are surfaced directly in the T3 sidebar controls.
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 3
+work_dir = ".gc/agents/dogs/{{.AgentBase}}"
+prompt_template = "../maintenance/agents/dog/prompt.template.md"
+overlay_dir = "../maintenance/agents/dog/overlay"
+
+[[named_session]]
+template = "mayor"
+scope = "city"
+mode = "always"
+
+[[named_session]]
+template = "deacon"
+scope = "city"
+mode = "always"
+
+[[named_session]]
+template = "boot"
+scope = "city"
+mode = "always"
+
+[[named_session]]
+template = "hq-witness"
+scope = "city"
+mode = "always"
+
+[[named_session]]
+template = "hq-refinery"
+scope = "city"
+mode = "on_demand"
+
+[[named_session]]
+template = "witness"
+scope = "rig"
+mode = "always"
+
+[[named_session]]
+template = "refinery"
+scope = "rig"
+mode = "on_demand"
+
+[[named_session]]
+template = "crew"
+scope = "rig"
+mode = "always"
+
+[[named_session]]
+template = "convoymaster"
+scope = "rig"
+mode = "on_demand"
