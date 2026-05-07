@@ -1,5 +1,5 @@
 import type { BeadRecord, RigRecord, ServiceStatusRecord } from "../api";
-import { api, cityScope } from "../api";
+import { api, cityScope, mutationHeaders } from "../api";
 import { promptActionDialog, promptConfirmDialog } from "../modals";
 import { byId, clear, el } from "../util/dom";
 import { formatAgentAddress, formatTimestamp, statusBadgeClass, truncate } from "../util/legacy";
@@ -14,14 +14,9 @@ export async function renderAdminPanels(): Promise<void> {
 
   const [servicesR, rigsR, escalationsR, assignedR, queuesR] = await Promise.all([
     api.GET("/v0/city/{cityName}/services", { params: { path: { cityName: city } } }),
-    api.GET("/v0/city/{cityName}/rigs", {
-      params: { path: { cityName: city }, query: { git: true } },
-    }),
+    api.GET("/v0/city/{cityName}/rigs", { params: { path: { cityName: city }, query: { git: true } } }),
     api.GET("/v0/city/{cityName}/beads", {
-      params: {
-        path: { cityName: city },
-        query: { label: "gc:escalation", status: "open", limit: 200 },
-      },
+      params: { path: { cityName: city }, query: { label: "gc:escalation", status: "open", limit: 200 } },
     }),
     api.GET("/v0/city/{cityName}/beads", {
       params: { path: { cityName: city }, query: { status: "in_progress", limit: 500 } },
@@ -38,7 +33,7 @@ export async function renderAdminPanels(): Promise<void> {
   renderQueues(queuesR.data?.items ?? null);
 }
 
-function renderAdminEmptyStates(): void {
+export function renderAdminEmptyStates(): void {
   renderEmptyBody("services-body", "services-count", "Select a city to view services");
   renderEmptyBody("rigs-body", "rigs-count", "Select a city to view rigs");
   renderEmptyBody("escalations-body", "escalations-count", "Select a city to view escalations");
@@ -80,34 +75,24 @@ function renderServices(items: ServiceStatusRecord[] | null, error?: string): vo
     restart.addEventListener("click", () => {
       void restartService(svc.service_name);
     });
-    tbody.append(
-      el("tr", {}, [
-        el("td", {}, [el("strong", {}, [svc.service_name])]),
-        el("td", {}, [svc.kind ?? "—"]),
-        el("td", {}, [
-          el("span", { class: `badge ${statusBadgeClass(svc.state ?? svc.publication_state)}` }, [
-            svc.state ?? svc.publication_state ?? "unknown",
-          ]),
-        ]),
-        el("td", {}, [svc.local_state]),
-        el("td", {}, [restart]),
-      ]),
-    );
+    tbody.append(el("tr", {}, [
+      el("td", {}, [el("strong", {}, [svc.service_name])]),
+      el("td", {}, [svc.kind ?? "—"]),
+      el("td", {}, [el("span", { class: `badge ${statusBadgeClass(svc.state ?? svc.publication_state)}` }, [svc.state ?? svc.publication_state ?? "unknown"])]),
+      el("td", {}, [svc.local_state]),
+      el("td", {}, [restart]),
+    ]));
   });
-  body.append(
-    el("table", {}, [
-      el("thead", {}, [
-        el("tr", {}, [
-          el("th", {}, ["Name"]),
-          el("th", {}, ["Kind"]),
-          el("th", {}, ["Service"]),
-          el("th", {}, ["Local"]),
-          el("th", {}, ["Actions"]),
-        ]),
-      ]),
-      tbody,
-    ]),
-  );
+  body.append(el("table", {}, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", {}, ["Name"]),
+      el("th", {}, ["Kind"]),
+      el("th", {}, ["Service"]),
+      el("th", {}, ["Local"]),
+      el("th", {}, ["Actions"]),
+    ])]),
+    tbody,
+  ]));
 }
 
 function renderRigs(items: RigRecord[] | null): void {
@@ -124,9 +109,7 @@ function renderRigs(items: RigRecord[] | null): void {
 
   const tbody = el("tbody");
   rigs.forEach((rig) => {
-    const suspendResume = el("button", { class: "esc-btn", type: "button" }, [
-      rig.suspended ? "Resume" : "Suspend",
-    ]);
+    const suspendResume = el("button", { class: "esc-btn", type: "button" }, [rig.suspended ? "Resume" : "Suspend"]);
     suspendResume.addEventListener("click", () => {
       void rigAction(rig.name, rig.suspended ? "resume" : "suspend");
     });
@@ -134,33 +117,27 @@ function renderRigs(items: RigRecord[] | null): void {
     restart.addEventListener("click", () => {
       void rigAction(rig.name, "restart");
     });
-    tbody.append(
-      el("tr", {}, [
-        el("td", {}, [el("span", { class: "rig-name" }, [rig.name])]),
-        el("td", {}, [String(rig.agent_count - rig.running_count)]),
-        el("td", {}, [String(rig.running_count)]),
-        el("td", {}, [rig.git?.branch ? `${rig.git.branch}${rig.git.clean ? "" : "*"}` : "—"]),
-        el("td", {}, [formatTimestamp(rig.last_activity)]),
-        el("td", {}, [suspendResume, " ", restart]),
-      ]),
-    );
+    tbody.append(el("tr", {}, [
+      el("td", {}, [el("span", { class: "rig-name" }, [rig.name])]),
+      el("td", {}, [String(rig.agent_count - rig.running_count)]),
+      el("td", {}, [String(rig.running_count)]),
+      el("td", {}, [rig.git?.branch ? `${rig.git.branch}${rig.git.clean ? "" : "*"}` : "—"]),
+      el("td", {}, [formatTimestamp(rig.last_activity)]),
+      el("td", {}, [suspendResume, " ", restart]),
+    ]));
   });
 
-  body.append(
-    el("table", {}, [
-      el("thead", {}, [
-        el("tr", {}, [
-          el("th", {}, ["Name"]),
-          el("th", {}, ["Idle"]),
-          el("th", {}, ["Running"]),
-          el("th", {}, ["Git"]),
-          el("th", {}, ["Activity"]),
-          el("th", {}, ["Actions"]),
-        ]),
-      ]),
-      tbody,
-    ]),
-  );
+  body.append(el("table", {}, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", {}, ["Name"]),
+      el("th", {}, ["Idle"]),
+      el("th", {}, ["Running"]),
+      el("th", {}, ["Git"]),
+      el("th", {}, ["Activity"]),
+      el("th", {}, ["Actions"]),
+    ])]),
+    tbody,
+  ]));
 }
 
 function renderEscalations(items: BeadRecord[] | null): void {
@@ -168,9 +145,7 @@ function renderEscalations(items: BeadRecord[] | null): void {
   const count = byId("escalations-count");
   if (!body || !count) return;
   clear(body);
-  const escalations = (items ?? []).sort((a, b) =>
-    (a.created_at ?? "").localeCompare(b.created_at ?? ""),
-  );
+  const escalations = (items ?? []).sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
   count.textContent = String(escalations.length);
   if (escalations.length === 0) {
     body.append(el("div", { class: "empty-state" }, [el("p", {}, ["No escalations"])]));
@@ -185,51 +160,37 @@ function renderEscalations(items: BeadRecord[] | null): void {
     ack.addEventListener("click", () => {
       void ackEscalation(issue);
     });
-    const resolve = el("button", { class: "esc-btn esc-resolve-btn", type: "button" }, [
-      "✓ Resolve",
-    ]);
+    const resolve = el("button", { class: "esc-btn esc-resolve-btn", type: "button" }, ["✓ Resolve"]);
     resolve.addEventListener("click", () => {
       if (issue.id) void closeBead(issue.id);
     });
-    const reassign = el("button", { class: "esc-btn esc-reassign-btn", type: "button" }, [
-      "↻ Reassign",
-    ]);
+    const reassign = el("button", { class: "esc-btn esc-reassign-btn", type: "button" }, ["↻ Reassign"]);
     reassign.addEventListener("click", () => {
       if (issue.id) void reassignBead(issue.id);
     });
 
-    tbody.append(
-      el("tr", { class: "escalation-row", "data-escalation-id": issue.id ?? "" }, [
-        el("td", {}, [
-          el("span", { class: `badge ${severityBadge(severity)}` }, [severity.toUpperCase()]),
-        ]),
-        el("td", {}, [
-          issue.title ?? issue.id ?? "",
-          acked
-            ? el("span", { class: "badge badge-cyan", style: "margin-left: 4px;" }, ["ACK"])
-            : null,
-        ]),
-        el("td", {}, [formatAgentAddress(issue.assignee)]),
-        el("td", {}, [formatTimestamp(issue.created_at)]),
-        el("td", { class: "escalation-actions" }, [!acked ? ack : null, resolve, reassign]),
+    tbody.append(el("tr", { class: "escalation-row", "data-escalation-id": issue.id ?? "" }, [
+      el("td", {}, [el("span", { class: `badge ${severityBadge(severity)}` }, [severity.toUpperCase()])]),
+      el("td", {}, [
+        issue.title ?? issue.id ?? "",
+        acked ? el("span", { class: "badge badge-cyan", style: "margin-left: 4px;" }, ["ACK"]) : null,
       ]),
-    );
+      el("td", {}, [formatAgentAddress(issue.assignee)]),
+      el("td", {}, [formatTimestamp(issue.created_at)]),
+      el("td", { class: "escalation-actions" }, [!acked ? ack : null, resolve, reassign]),
+    ]));
   });
 
-  body.append(
-    el("table", {}, [
-      el("thead", {}, [
-        el("tr", {}, [
-          el("th", {}, ["Severity"]),
-          el("th", {}, ["Issue"]),
-          el("th", {}, ["From"]),
-          el("th", {}, ["Age"]),
-          el("th", {}, ["Actions"]),
-        ]),
-      ]),
-      tbody,
-    ]),
-  );
+  body.append(el("table", {}, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", {}, ["Severity"]),
+      el("th", {}, ["Issue"]),
+      el("th", {}, ["From"]),
+      el("th", {}, ["Age"]),
+      el("th", {}, ["Actions"]),
+    ])]),
+    tbody,
+  ]));
 }
 
 function renderAssigned(items: BeadRecord[] | null): void {
@@ -252,31 +213,25 @@ function renderAssigned(items: BeadRecord[] | null): void {
     unassign.addEventListener("click", () => {
       if (bead.id) void unassignBead(bead.id);
     });
-    tbody.append(
-      el("tr", {}, [
-        el("td", {}, [el("span", { class: "assigned-id" }, [bead.id ?? ""])]),
-        el("td", { class: "assigned-title" }, [truncate(bead.title ?? "", 80)]),
-        el("td", { class: "assigned-agent" }, [formatAgentAddress(bead.assignee)]),
-        el("td", { class: "assigned-age" }, [formatTimestamp(bead.created_at)]),
-        el("td", {}, [unassign]),
-      ]),
-    );
+    tbody.append(el("tr", {}, [
+      el("td", {}, [el("span", { class: "assigned-id" }, [bead.id ?? ""])]),
+      el("td", { class: "assigned-title" }, [truncate(bead.title ?? "", 80)]),
+      el("td", { class: "assigned-agent" }, [formatAgentAddress(bead.assignee)]),
+      el("td", { class: "assigned-age" }, [formatTimestamp(bead.created_at)]),
+      el("td", {}, [unassign]),
+    ]));
   });
 
-  body.append(
-    el("table", {}, [
-      el("thead", {}, [
-        el("tr", {}, [
-          el("th", {}, ["Bead"]),
-          el("th", {}, ["Title"]),
-          el("th", {}, ["Agent"]),
-          el("th", {}, ["Since"]),
-          el("th", {}, [""]),
-        ]),
-      ]),
-      tbody,
-    ]),
-  );
+  body.append(el("table", {}, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", {}, ["Bead"]),
+      el("th", {}, ["Title"]),
+      el("th", {}, ["Agent"]),
+      el("th", {}, ["Since"]),
+      el("th", {}, [""]),
+    ])]),
+    tbody,
+  ]));
 }
 
 function renderQueues(items: BeadRecord[] | null): void {
@@ -293,35 +248,25 @@ function renderQueues(items: BeadRecord[] | null): void {
 
   const tbody = el("tbody");
   queues.forEach((queue) => {
-    tbody.append(
-      el("tr", {}, [
-        el("td", {}, [queue.title ?? queue.id ?? "queue"]),
-        el("td", {}, [queue.id ?? "—"]),
-        el("td", {}, [
-          el("span", { class: `badge ${statusBadgeClass(queue.status)}` }, [
-            queue.status ?? "open",
-          ]),
-        ]),
-        el("td", {}, [formatAgentAddress(queue.assignee)]),
-        el("td", {}, [formatTimestamp(queue.created_at)]),
-      ]),
-    );
+    tbody.append(el("tr", {}, [
+      el("td", {}, [queue.title ?? queue.id ?? "queue"]),
+      el("td", {}, [queue.id ?? "—"]),
+      el("td", {}, [el("span", { class: `badge ${statusBadgeClass(queue.status)}` }, [queue.status ?? "open"])]),
+      el("td", {}, [formatAgentAddress(queue.assignee)]),
+      el("td", {}, [formatTimestamp(queue.created_at)]),
+    ]));
   });
 
-  body.append(
-    el("table", {}, [
-      el("thead", {}, [
-        el("tr", {}, [
-          el("th", {}, ["Queue"]),
-          el("th", {}, ["Bead"]),
-          el("th", {}, ["Status"]),
-          el("th", {}, ["Assignee"]),
-          el("th", {}, ["Created"]),
-        ]),
-      ]),
-      tbody,
-    ]),
-  );
+  body.append(el("table", {}, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", {}, ["Queue"]),
+      el("th", {}, ["Bead"]),
+      el("th", {}, ["Status"]),
+      el("th", {}, ["Assignee"]),
+      el("th", {}, ["Created"]),
+    ])]),
+    tbody,
+  ]));
 }
 
 function renderEmptyBody(bodyID: string, countID: string, message: string): void {
@@ -364,7 +309,7 @@ export async function openAssignModal(beadID = ""): Promise<void> {
   });
   if (!selection) return;
   const res = await api.POST("/v0/city/{cityName}/sling", {
-    params: { path: { cityName: city } },
+    params: { path: { cityName: city }, header: mutationHeaders },
     body: { bead: selection.beadID, target: selection.target, rig: selection.rig || undefined },
   });
   if (res.error) {
@@ -392,14 +337,12 @@ async function clearAllAssigned(): Promise<void> {
     title: "Clear Assignments",
   });
   if (!confirmed) return;
-  await Promise.all(
-    items.map((bead) =>
-      api.POST("/v0/city/{cityName}/bead/{id}/assign", {
-        params: { path: { cityName: city, id: bead.id ?? "" } },
-        body: { assignee: "" },
-      }),
-    ),
-  );
+  await Promise.all(items.map((bead) =>
+    api.POST("/v0/city/{cityName}/bead/{id}/assign", {
+      params: { path: { cityName: city, id: bead.id ?? "" }, header: mutationHeaders },
+      body: { assignee: "" },
+    }),
+  ));
   showToast("success", "Cleared", `${items.length} assignments removed`);
   await renderAdminPanels();
 }
@@ -408,7 +351,7 @@ async function unassignBead(beadID: string): Promise<void> {
   const city = cityScope();
   if (!city) return;
   const res = await api.POST("/v0/city/{cityName}/bead/{id}/assign", {
-    params: { path: { cityName: city, id: beadID } },
+    params: { path: { cityName: city, id: beadID }, header: mutationHeaders },
     body: { assignee: "" },
   });
   if (res.error) {
@@ -423,7 +366,7 @@ async function restartService(service: string): Promise<void> {
   const city = cityScope();
   if (!city) return;
   const res = await api.POST("/v0/city/{cityName}/service/{name}/restart", {
-    params: { path: { cityName: city, name: service } },
+    params: { path: { cityName: city, name: service }, header: mutationHeaders },
   });
   if (res.error) {
     showToast("error", "Service failed", res.error.detail ?? "Could not restart service");
@@ -437,7 +380,7 @@ async function rigAction(rig: string, action: string): Promise<void> {
   const city = cityScope();
   if (!city) return;
   const res = await api.POST("/v0/city/{cityName}/rig/{name}/{action}", {
-    params: { path: { cityName: city, name: rig, action } },
+    params: { path: { cityName: city, name: rig, action }, header: mutationHeaders },
   });
   if (res.error) {
     showToast("error", "Rig action failed", res.error.detail ?? `Could not ${action} ${rig}`);
@@ -452,7 +395,7 @@ async function ackEscalation(issue: BeadRecord): Promise<void> {
   if (!city || !issue.id) return;
   const labels = Array.from(new Set([...(issue.labels ?? []), "acked"]));
   const res = await api.POST("/v0/city/{cityName}/bead/{id}/update", {
-    params: { path: { cityName: city, id: issue.id } },
+    params: { path: { cityName: city, id: issue.id }, header: mutationHeaders },
     body: { labels },
   });
   if (res.error) {
@@ -467,7 +410,7 @@ async function closeBead(issueID: string): Promise<void> {
   const city = cityScope();
   if (!city) return;
   const res = await api.POST("/v0/city/{cityName}/bead/{id}/close", {
-    params: { path: { cityName: city, id: issueID } },
+    params: { path: { cityName: city, id: issueID }, header: mutationHeaders },
   });
   if (res.error) {
     showToast("error", "Resolve failed", res.error.detail ?? "Could not resolve escalation");
@@ -488,7 +431,7 @@ async function reassignBead(issueID: string): Promise<void> {
   });
   if (!selection) return;
   const res = await api.POST("/v0/city/{cityName}/bead/{id}/assign", {
-    params: { path: { cityName: city, id: issueID } },
+    params: { path: { cityName: city, id: issueID }, header: mutationHeaders },
     body: { assignee: selection.target },
   });
   if (res.error) {

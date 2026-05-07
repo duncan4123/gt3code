@@ -277,7 +277,7 @@ func seedDeferredManagedBeadsBeforeProviderReadiness(cityPath string, cfg *confi
 		return nil
 	}
 	if cityUsesDoltliteBeadsBackend(cityPath) {
-		return seedDoltliteBeadsForConfiguredScopes(cityPath, cfg)
+		return nil
 	}
 	resolveRigPaths(cityPath, cfg.Rigs)
 	if !workspaceUsesManagedBdStoreContract(cityPath, cfg.Rigs) {
@@ -293,22 +293,6 @@ func seedDeferredManagedBeadsBeforeProviderReadiness(cityPath string, cfg *confi
 			continue
 		}
 		if err := seedDeferredManagedBeadsErr(cityPath, rig.Path, rig.EffectivePrefix(), ""); err != nil {
-			return fmt.Errorf("rig %q: %w", rig.Name, err)
-		}
-	}
-	return nil
-}
-
-func seedDoltliteBeadsForConfiguredScopes(cityPath string, cfg *config.City) error {
-	resolveRigPaths(cityPath, cfg.Rigs)
-	if err := ensureDoltliteScopeMetadataForInit(fsys.OSFS{}, cityPath, cityPath, config.EffectiveHQPrefix(cfg), ""); err != nil {
-		return fmt.Errorf("hq: %w", err)
-	}
-	for _, rig := range cfg.Rigs {
-		if strings.TrimSpace(rig.Path) == "" {
-			continue
-		}
-		if err := ensureDoltliteScopeMetadataForInit(fsys.OSFS{}, cityPath, rig.Path, rig.EffectivePrefix(), ""); err != nil {
 			return fmt.Errorf("rig %q: %w", rig.Name, err)
 		}
 	}
@@ -578,13 +562,11 @@ func checkHardDependencies(cityPath string) []missingDep {
 			continue
 		}
 		if d.minVersion != "" {
-			if ver := parseDepVersion(d.name); ver != "" {
-				if compareVersions(ver, d.minVersion) < 0 {
-					missing = append(missing, missingDep{
-						name:        fmt.Sprintf("%s (found v%s, need v%s+)", d.name, ver, d.minVersion),
-						installHint: d.installHint,
-					})
-				}
+			if ver, ok := depMeetsMinVersion(d.name, d.minVersion); ver != "" && !ok {
+				missing = append(missing, missingDep{
+					name:        fmt.Sprintf("%s (found v%s, need v%s+)", d.name, ver, d.minVersion),
+					installHint: d.installHint,
+				})
 			}
 		}
 	}
@@ -624,13 +606,29 @@ func initNeedsDoltTooling(cityPath string) bool {
 	return initNeedsBdTooling(cityPath) && !cityUsesDoltliteBeadsBackend(cityPath)
 }
 
-// parseDepVersion runs "<binary> version" and extracts a semver-like version string.
-// Returns "" if the version cannot be determined (non-fatal).
-func parseDepVersion(binary string) string {
+func depMeetsMinVersion(binary, minVersion string) (string, bool) {
 	line, err := initRunVersion(binary)
 	if err != nil {
-		return ""
+		return "", true
 	}
+	if binary == "dolt" {
+		info, err := doltversion.CheckFinalMinimum(line, minVersion)
+		if errors.Is(err, doltversion.ErrPreRelease) || errors.Is(err, doltversion.ErrBelowMinimum) {
+			return info.Raw, false
+		}
+		if err != nil {
+			return "", true
+		}
+		return info.Raw, true
+	}
+	ver := parseDepVersionLine(line)
+	if ver == "" {
+		return "", true
+	}
+	return ver, compareVersions(ver, minVersion) >= 0
+}
+
+func parseDepVersionLine(line string) string {
 	// Patterns: "dolt version 1.86.1", "bd version 1.0.0 (3ac028bf: ...)"
 	for _, field := range strings.Fields(line) {
 		if len(field) > 0 && field[0] >= '0' && field[0] <= '9' && strings.Contains(field, ".") {

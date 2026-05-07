@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -19,16 +18,6 @@ import (
 	"github.com/gastownhall/gascity/internal/supervisor"
 	"github.com/gastownhall/gascity/internal/worker"
 )
-
-type statusResolvingProvider struct {
-	*runtime.Fake
-	byAgent map[string]string
-}
-
-func (p *statusResolvingProvider) SessionNameForAgent(agentName string) (string, bool) {
-	value, ok := p.byAgent[agentName]
-	return value, ok
-}
 
 func TestCityStatusEmptyCity(t *testing.T) {
 	sp := runtime.NewFake()
@@ -100,93 +89,17 @@ func TestCityStatusWithAgents(t *testing.T) {
 	}
 }
 
-func TestCityStatusUsesSessionSnapshotForRuntimeObservation(t *testing.T) {
-	store := beads.NewMemStore()
-	if _, err := store.Create(beads.Bead{
-		Title:  "mayor",
-		Type:   sessionBeadType,
-		Labels: []string{sessionBeadLabel, "agent:mayor"},
-		Metadata: map[string]string{
-			"agent_name":   "mayor",
-			"session_name": "live-mayor",
-			"template":     "mayor",
-		},
-	}); err != nil {
-		t.Fatalf("Create session bead: %v", err)
-	}
-
-	oldObserve := observeSessionTargetForStatus
-	var gotStore beads.Store
-	var gotTarget string
-	observeSessionTargetForStatus = func(_ string, store beads.Store, _ runtime.Provider, _ *config.City, target string) (worker.LiveObservation, error) {
-		gotStore = store
-		gotTarget = target
-		return worker.LiveObservation{Running: true}, nil
-	}
-	t.Cleanup(func() { observeSessionTargetForStatus = oldObserve })
-
-	cfg := &config.City{
-		Workspace: config.Workspace{Name: "city"},
-		Agents: []config.Agent{
-			{Name: "mayor", MaxActiveSessions: intPtr(1)},
-		},
-	}
-	snapshot := collectCityStatusSnapshot(runtime.NewFake(), cfg, "/home/user/city", store, io.Discard)
-	if gotTarget != "live-mayor" {
-		t.Fatalf("observed target = %q, want session bead name live-mayor", gotTarget)
-	}
-	if gotStore != nil {
-		t.Fatalf("observation store = %#v, want nil to avoid status-time bd target resolution", gotStore)
-	}
-	if snapshot.Summary.RunningAgents != 1 {
-		t.Fatalf("running agents = %d, want 1", snapshot.Summary.RunningAgents)
-	}
-}
-
-func TestCityStatusUsesProviderAgentSessionResolver(t *testing.T) {
-	base := runtime.NewFake()
-	if err := base.Start(context.Background(), "bridge-mayor", runtime.Config{Command: "echo"}); err != nil {
-		t.Fatal(err)
-	}
-	sp := &statusResolvingProvider{
-		Fake: base,
-		byAgent: map[string]string{
-			"mayor": "bridge-mayor",
-		},
-	}
-	dops := newFakeDrainOps()
-	cfg := &config.City{
-		Workspace: config.Workspace{Name: "city"},
-		Agents: []config.Agent{
-			{Name: "mayor", MaxActiveSessions: intPtr(1)},
-		},
-	}
-
-	var stdout, stderr bytes.Buffer
-	code := doCityStatus(sp, dops, cfg, "/home/user/city", &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("code = %d, want 0; stderr: %s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "1/1 agents running") {
-		t.Fatalf("stdout missing provider-resolved live status, got:\n%s", stdout.String())
-	}
-}
-
 func TestCityStatusReportsObservationErrors(t *testing.T) {
 	sp := runtime.NewFake()
+	if err := sp.Start(context.Background(), "mayor", runtime.Config{Command: "echo"}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
 	dops := newFakeDrainOps()
 	oldObserve := observeSessionTargetForStatus
 	observeSessionTargetForStatus = func(string, beads.Store, runtime.Provider, *config.City, string) (worker.LiveObservation, error) {
 		return worker.LiveObservation{}, errors.New("status observation unavailable")
 	}
-	oldOpen := openCityStoreAtForStatus
-	openCityStoreAtForStatus = func(string) (beads.Store, error) {
-		return nil, nil
-	}
-	t.Cleanup(func() {
-		observeSessionTargetForStatus = oldObserve
-		openCityStoreAtForStatus = oldOpen
-	})
+	t.Cleanup(func() { observeSessionTargetForStatus = oldObserve })
 	cfg := &config.City{
 		Workspace: config.Workspace{Name: "city"},
 		Agents: []config.Agent{
@@ -426,18 +339,14 @@ func TestCityStatusJSONWithAgents(t *testing.T) {
 
 func TestCityStatusJSONReportsObservationErrors(t *testing.T) {
 	sp := runtime.NewFake()
+	if err := sp.Start(context.Background(), "mayor", runtime.Config{Command: "echo"}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
 	oldObserve := observeSessionTargetForStatus
 	observeSessionTargetForStatus = func(string, beads.Store, runtime.Provider, *config.City, string) (worker.LiveObservation, error) {
 		return worker.LiveObservation{}, errors.New("status observation unavailable")
 	}
-	oldOpen := openCityStoreAtForStatus
-	openCityStoreAtForStatus = func(string) (beads.Store, error) {
-		return nil, nil
-	}
-	t.Cleanup(func() {
-		observeSessionTargetForStatus = oldObserve
-		openCityStoreAtForStatus = oldOpen
-	})
+	t.Cleanup(func() { observeSessionTargetForStatus = oldObserve })
 	cfg := &config.City{
 		Workspace: config.Workspace{Name: "city"},
 		Agents: []config.Agent{

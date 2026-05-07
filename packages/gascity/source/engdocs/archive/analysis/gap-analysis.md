@@ -10,7 +10,6 @@ doesn't have a Gas City parallel. Each item gets a verdict: PORT, DEFER,
 or EXCLUDE — with rationale.
 
 **Ground rules:**
-
 - Gas City has ZERO hardcoded roles. Anything role-specific is config.
 - The Primitive Test (`engdocs/contributors/primitive-test.md`) applies: Atomicity +
   Bitter Lesson + ZFC.
@@ -21,12 +20,12 @@ or EXCLUDE — with rationale.
 
 ## Verdicts
 
-| Verdict     | Meaning                                                        |
-| ----------- | -------------------------------------------------------------- |
-| **PORT**    | Infrastructure primitive. Should be built.                     |
-| **DEFER**   | Useful but not needed until a specific use case arises.        |
+| Verdict | Meaning |
+|---------|---------|
+| **PORT** | Infrastructure primitive. Should be built. |
+| **DEFER** | Useful but not needed until a specific use case arises. |
 | **EXCLUDE** | Gastown-specific, fails Primitive Test, or deployment concern. |
-| **DONE**    | Already implemented in Gas City.                               |
+| **DONE** | Already implemented in Gas City. |
 
 ---
 
@@ -45,6 +44,7 @@ prompt at startup. Non-hook agents (detected via `config.AgentHasHooks`)
 also get a "Run `gc prime`" instruction. Wired into both `buildAgents`
 and `poolAgents`.
 
+
 ---
 
 ### 1.2 PID Tracking — EXCLUDE
@@ -59,6 +59,7 @@ stale on crash and require validation logic in Go. Gas City's
 `KillSessionWithProcesses` handles the normal case. If tmux itself
 dies, the processes are orphaned at the OS level, not a Gas City
 concern.
+
 
 ---
 
@@ -85,6 +86,7 @@ reconciliation with crash-loop backoff. tmux-level respawn bypasses
 the controller's crash tracking, quarantine, and event recording.
 Controller reconciliation is the single restart mechanism.
 
+
 ---
 
 ### 1.5 Prefix Registry — EXCLUDE
@@ -99,6 +101,7 @@ Gas City has one naming convention (`gc-{city}-{agent}`) and bead
 prefixes are config data on the rig (`rig.EffectivePrefix()`). Any
 code that needs prefix↔rig can iterate `cfg.Rigs`. No runtime
 registry needed.
+
 
 ---
 
@@ -128,6 +131,7 @@ provides ACID transactions. Work claiming is solved by `bd update
 single-actor, but revisit if concurrent molecule attach/detach
 becomes a real pattern.
 
+
 ---
 
 ### 2.2 Merge Slot — EXCLUDE
@@ -156,6 +160,7 @@ in-progress bead per assignee" means `gc hook` can find current work
 by querying for in-progress beads assigned to `$GC_AGENT`. No
 indirection through a pinned bead needed.
 
+
 ---
 
 ### 2.4 Beads Routing — EXCLUDE
@@ -169,6 +174,7 @@ gastown rig, `bd-456` routes to beads rig.
 Worktree agents follow the beads redirect (see 2.5). No prefix-based
 routing table needed — the agent's directory IS the routing.
 
+
 ---
 
 ### 2.5 Redirect Handling — DONE
@@ -180,6 +186,7 @@ shared beads across agents. Follows redirect, detects circular refs.
 `cmd/gc/worktree.go` creates redirect files for worktree-isolated
 agents, pointing back to the rig's shared bead database.
 
+
 ---
 
 ### 2.6 Audit Logging — DEFER
@@ -189,6 +196,7 @@ agents, pointing back to the rig's shared bead database.
 
 **Why DEFER:** Only needed when molecules have complex lifecycle
 operations (squash, detach). Premature before formulas exist.
+
 
 ---
 
@@ -202,6 +210,7 @@ serialization, in-memory caching.
 formulas loaded from config. The hierarchical override pattern becomes
 relevant with multi-rig.
 
+
 ---
 
 ### 2.8 Custom Bead Types — DEFER
@@ -212,6 +221,7 @@ sentinel file).
 
 **Why DEFER:** Basic types (task, message) work today. Custom types
 matter when formulas create specialized bead types.
+
 
 ---
 
@@ -285,6 +295,7 @@ composes from beads + formulas + event bus. Need formulas first.
 **Open design question:** Should convoys be bead metadata, molecule
 grouping, or a separate primitive? Needs design work before building.
 
+
 ---
 
 ## 4. Formula Layer
@@ -292,7 +303,6 @@ grouping, or a separate primitive? Needs design work before building.
 ### 4.1 Multi-Type Formulas — DEFER
 
 **Gastown:** `formula/types.go` — Four formula types:
-
 - `convoy` — parallel legs + synthesis
 - `workflow` — sequential steps with dependencies
 - `expansion` — template-based step generation
@@ -302,6 +312,7 @@ grouping, or a separate primitive? Needs design work before building.
 dependencies). No convoy/expansion/aspect types.
 
 **Why DEFER:** Workflow type is sufficient for current use cases.
+
 
 ---
 
@@ -316,6 +327,7 @@ child beads but doesn't parse markdown step descriptions.
 
 **Why DEFER:** TOML formulas are working. Markdown parsing is an
 alternative authoring format. Not needed until formulas are mature.
+
 
 ---
 
@@ -343,6 +355,7 @@ stream.
 **Why DEFER:** Gas City currently logs all events equally. Tiers
 matter when there's a user-facing feed with multiple agents.
 
+
 ---
 
 ### 5.3 Typed Event Payloads — DEFER
@@ -357,6 +370,7 @@ structured payloads.
 **Why DEFER:** String messages are sufficient for logging. Structured
 payloads matter when code needs to react to specific event fields
 (e.g., `events --watch --type=agent.started` filtering by agent name).
+
 
 ---
 
@@ -474,28 +488,25 @@ config-driven and works today. The full lifecycle
 (base + override + merge + discover) matters when hooks need to
 compose from multiple sources.
 
+
 ---
 
 ## Summary
 
 ### DEFER (moved from PORT)
-
 - Bead locking (bd provides ACID; revisit for molecule concurrency)
 
 ### DEFER (build when needed)
-
 - Audit logging, molecule catalog, convoy tracking, multi-type formulas,
   molecule step parsing, visibility tiers, typed event payloads,
   custom bead types, rich env generation, hooks lifecycle,
   checkpoint/recovery
 
 ### DONE (already sufficient)
-
 - Startup beacon, session staleness detection, redirect handling,
   cross-process event safety
 
 ### EXCLUDE (not SDK concerns)
-
 - PID tracking, SetAutoRespawnHook, prefix registry, merge slot,
   beads routing, escalation/channel/queue/group/delegation beads,
   agent preset registry, cost tiers, overseer identity, KRC,

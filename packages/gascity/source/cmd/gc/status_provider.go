@@ -9,28 +9,16 @@ import (
 )
 
 var statusProviderCallTimeout = 50 * time.Millisecond
-var statusProviderBridgeCallTimeout = 250 * time.Millisecond
 var statusProviderDegradeWindow = 30 * time.Second
 
 type statusProvider struct {
-	base    runtime.Provider
-	timeout time.Duration
-	mu      sync.Mutex
-	down    time.Time
+	base runtime.Provider
+	mu   sync.Mutex
+	down time.Time
 }
 
 func newStatusSessionProvider() runtime.Provider {
-	ctx := loadSessionProviderContext()
-	sessionBeads := loadProviderSessionSnapshot(ctx)
-	timeout := statusProviderCallTimeout
-	if ctx.providerName == "t3bridge" {
-		timeout = statusProviderBridgeCallTimeout
-	}
-	base := newSessionProviderFromContext(ctx, sessionBeads)
-	return &statusProvider{
-		base:    base,
-		timeout: timeout,
-	}
+	return &statusProvider{base: newSessionProvider()}
 }
 
 func (p *statusProvider) shouldDegrade() bool {
@@ -49,11 +37,7 @@ func boundedStatusCall[T any](p *statusProvider, fallback T, fn func() T) T {
 	if p.shouldDegrade() {
 		return fallback
 	}
-	timeout := p.timeout
-	if timeout == 0 {
-		timeout = statusProviderCallTimeout
-	}
-	if timeout <= 0 {
+	if statusProviderCallTimeout <= 0 {
 		return fn()
 	}
 	resultCh := make(chan T, 1)
@@ -63,7 +47,7 @@ func boundedStatusCall[T any](p *statusProvider, fallback T, fn func() T) T {
 	select {
 	case result := <-resultCh:
 		return result
-	case <-time.After(timeout):
+	case <-time.After(statusProviderCallTimeout):
 		p.markDegraded()
 		return fallback
 	}
@@ -85,29 +69,6 @@ func (p *statusProvider) IsRunning(name string) bool {
 	return boundedStatusCall(p, false, func() bool {
 		return p.base.IsRunning(name)
 	})
-}
-
-func (p *statusProvider) SessionNameForAgent(agentName string) (string, bool) {
-	resolver, ok := p.base.(interface {
-		SessionNameForAgent(string) (string, bool)
-	})
-	if !ok {
-		return "", false
-	}
-	result := boundedStatusCall(p, struct {
-		name string
-		ok   bool
-	}{}, func() struct {
-		name string
-		ok   bool
-	} {
-		name, found := resolver.SessionNameForAgent(agentName)
-		return struct {
-			name string
-			ok   bool
-		}{name: name, ok: found}
-	})
-	return result.name, result.ok
 }
 
 func (p *statusProvider) IsAttached(name string) bool {

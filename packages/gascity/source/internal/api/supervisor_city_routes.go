@@ -61,6 +61,7 @@ func (sm *SupervisorMux) registerCityRoutes() {
 		Method:        http.MethodPost,
 		Path:          "/agents",
 		Summary:       "Create an agent",
+		Description:   "Creates an agent and waits until it is visible to immediate follow-up operations. If the agent is durably created but visibility confirmation is canceled or times out, the retryable 503/504 response includes a Retry-After header.",
 		DefaultStatus: http.StatusCreated,
 	}, (*Server).humaHandleAgentCreate)
 	cityPatch(sm, "/agent/{dir}/{base}", (*Server).humaHandleAgentUpdateQualified)
@@ -81,6 +82,7 @@ func (sm *SupervisorMux) registerCityRoutes() {
 		Path:        cityScopePrefix + "/agent/{base}/output/stream",
 		Summary:     "Stream agent output in real time",
 		Description: "Server-Sent Events stream of agent output (session log tail or tmux pane polling).",
+		Responses:   sseResponseHeaders("GC-Agent-Status"),
 	}, agentOutputEventMap,
 		sseCityPrecheck(sm, (*Server).checkAgentOutputStream),
 		sseCityStream(sm, (*Server).streamAgentOutput))
@@ -90,6 +92,7 @@ func (sm *SupervisorMux) registerCityRoutes() {
 		Path:        cityScopePrefix + "/agent/{dir}/{base}/output/stream",
 		Summary:     "Stream agent output in real time (qualified name)",
 		Description: "Server-Sent Events stream of agent output for qualified (rig-prefixed) agent names.",
+		Responses:   sseResponseHeaders("GC-Agent-Status"),
 	}, agentOutputEventMap,
 		sseCityPrecheck(sm, (*Server).checkAgentOutputStreamQualified),
 		sseCityStream(sm, (*Server).streamAgentOutputQualified))
@@ -296,6 +299,7 @@ func (sm *SupervisorMux) registerCityRoutes() {
 			"Streams turns (conversation format) or raw messages (JSONL format) " +
 			"based on the format query parameter. Emits activity and pending events " +
 			"for tool approval prompts.",
+		Responses: sseResponseHeaders("GC-Session-State", "GC-Session-Status"),
 	}, sessionStreamEventMap(),
 		sseCityPrecheck(sm, (*Server).checkSessionStream),
 		sseCityStream(sm, (*Server).streamSession))
@@ -307,9 +311,12 @@ func (sm *SupervisorMux) registerCityRoutes() {
 		Path:        cityScopePrefix + "/events/stream",
 		Summary:     "Stream city events in real time",
 		Description: "Server-Sent Events stream of city events with optional workflow projections. " +
-			"Supports reconnection via Last-Event-ID header or after_seq query param.",
+			"Supports reconnection via Last-Event-ID header or after_seq query param; omitting both starts at the current city event head.",
 	}, map[string]any{
-		"event":     eventStreamEnvelope{},
+		"event": sseEventContract{
+			runtimeSample: eventStreamEnvelope{},
+			schemaSample:  typedEventStreamEnvelopeSchema{},
+		},
 		"heartbeat": HeartbeatEvent{},
 	},
 		sseCityPrecheck(sm, (*Server).checkEventStream),

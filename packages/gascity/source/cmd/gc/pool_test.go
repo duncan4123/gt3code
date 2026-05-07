@@ -101,8 +101,8 @@ func TestEvaluatePoolNonInteger(t *testing.T) {
 }
 
 func TestEvaluatePoolDefaultScaleCheckCountsRoutedReadyWork(t *testing.T) {
-	clearStandaloneBdEnv(t)
-	bdPath, err := findPreferredBinary("bd")
+	skipSlowCmdGCTest(t, "uses real bd and jq for default scale_check coverage; run make test-cmd-gc-process for full coverage")
+	bdPath, err := findPreferredBinary("bd", "/home/ubuntu/.local/bin/bd")
 	if err != nil {
 		t.Skip("bd not installed")
 	}
@@ -116,7 +116,6 @@ func TestEvaluatePoolDefaultScaleCheckCountsRoutedReadyWork(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "city.toml"), []byte("[workspace]\nname = \"test-city\"\n"), 0o644); err != nil {
 		t.Fatalf("write city.toml: %v", err)
 	}
-	t.Setenv("BEADS_DIR", filepath.Join(dir, ".beads"))
 	runExternal(t, dir, bdPath, "init", "-p", "ct", "--skip-hooks", "-q")
 
 	agent := &config.Agent{
@@ -145,9 +144,9 @@ func TestEvaluatePoolDefaultScaleCheckCountsRoutedReadyWork(t *testing.T) {
 	}
 }
 
-func TestEvaluatePoolDefaultScaleCheckCountsRoutedActiveUnassignedWork(t *testing.T) {
-	clearStandaloneBdEnv(t)
-	bdPath, err := findPreferredBinary("bd")
+func TestEvaluatePoolDefaultScaleCheckIgnoresRoutedActiveUnassignedWork(t *testing.T) {
+	skipSlowCmdGCTest(t, "uses real bd and jq for default scale_check coverage; run make test-cmd-gc-process for full coverage")
+	bdPath, err := findPreferredBinary("bd", "/home/ubuntu/.local/bin/bd")
 	if err != nil {
 		t.Skip("bd not installed")
 	}
@@ -161,7 +160,6 @@ func TestEvaluatePoolDefaultScaleCheckCountsRoutedActiveUnassignedWork(t *testin
 	if err := os.WriteFile(filepath.Join(dir, "city.toml"), []byte("[workspace]\nname = \"test-city\"\n"), 0o644); err != nil {
 		t.Fatalf("write city.toml: %v", err)
 	}
-	t.Setenv("BEADS_DIR", filepath.Join(dir, ".beads"))
 	runExternal(t, dir, bdPath, "init", "-p", "ct", "--skip-hooks", "-q")
 
 	raw := runExternalOutput(t, dir, bdPath, "create", "--json", "active worker job", "-t", "task",
@@ -189,8 +187,34 @@ func TestEvaluatePoolDefaultScaleCheckCountsRoutedActiveUnassignedWork(t *testin
 	if err != nil {
 		t.Fatalf("evaluatePool with routed in-progress work: %v", err)
 	}
-	if got != 1 {
-		t.Fatalf("evaluatePool with routed in-progress work = %d, want 1", got)
+	if got != 0 {
+		t.Fatalf("evaluatePool with routed in-progress work = %d, want 0", got)
+	}
+}
+
+func TestEvaluatePoolNewDemandDoesNotApplyMinOrMax(t *testing.T) {
+	sp := scaleParams{Min: 2, Max: 3, Check: "ignored"}
+	runner := func(_, _ string, _ map[string]string) (string, error) { return "5\n", nil }
+
+	got, err := evaluatePoolNewDemand("worker", sp, "", nil, runner)
+	if err != nil {
+		t.Fatalf("evaluatePoolNewDemand: %v", err)
+	}
+	if got != 5 {
+		t.Fatalf("evaluatePoolNewDemand = %d, want raw new demand 5", got)
+	}
+}
+
+func TestEvaluatePoolNewDemandErrorFallsBackToZero(t *testing.T) {
+	sp := scaleParams{Min: 2, Max: 3, Check: "ignored"}
+	runner := func(_, _ string, _ map[string]string) (string, error) { return "not-a-number\n", nil }
+
+	got, err := evaluatePoolNewDemand("worker", sp, "", nil, runner)
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	if got != 0 {
+		t.Fatalf("evaluatePoolNewDemand error fallback = %d, want 0", got)
 	}
 }
 
@@ -1137,7 +1161,7 @@ func runExternalOutput(t *testing.T, dir, name string, args ...string) []byte {
 	t.Helper()
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
-	cmd.Env = filteredStandaloneExternalEnv()
+	cmd.Env = os.Environ()
 	if filepath.Base(name) == "bd" {
 		cmd.Env = append(cmd.Env, "BEADS_DIR="+filepath.Join(dir, ".beads"))
 	}
@@ -1145,23 +1169,6 @@ func runExternalOutput(t *testing.T, dir, name string, args ...string) []byte {
 	if err != nil {
 		t.Fatalf("%s %s failed: %v\n%s", name, strings.Join(args, " "), err, out)
 	}
-	return out
-}
-
-func filteredStandaloneExternalEnv() []string {
-	base := os.Environ()
-	out := make([]string, 0, len(base))
-	for _, entry := range base {
-		key, _, ok := strings.Cut(entry, "=")
-		if !ok {
-			continue
-		}
-		if strings.HasPrefix(key, "GC_DOLT") || strings.HasPrefix(key, "BEADS_DOLT") {
-			continue
-		}
-		out = append(out, entry)
-	}
-	out = append(out, "BEADS_DOLT_AUTO_START=1")
 	return out
 }
 
@@ -1176,7 +1183,6 @@ func findPreferredBinary(name string, preferred ...string) (string, error) {
 	}
 	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
 		candidates = append(candidates,
-			filepath.Join(homeDir, "go", "bin", name),
 			filepath.Join(homeDir, ".local", "bin", name),
 			filepath.Join(homeDir, "bin", name),
 		)
@@ -1207,31 +1213,6 @@ func findPreferredBinary(name string, preferred ...string) (string, error) {
 		return candidate, nil
 	}
 	return "", exec.ErrNotFound
-}
-
-func clearStandaloneBdEnv(t *testing.T) {
-	t.Helper()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	for _, key := range []string{
-		"GC_DOLT_HOST",
-		"GC_DOLT_PORT",
-		"GC_DOLT_USER",
-		"GC_DOLT_PASSWORD",
-		"BEADS_DOLT_SERVER_HOST",
-		"BEADS_DOLT_SERVER_PORT",
-		"BEADS_DOLT_SERVER_USER",
-		"BEADS_DOLT_SERVER_MODE",
-		"BEADS_DOLT_PORT",
-		"BEADS_DOLT_PASSWORD",
-		"BEADS_DOLT_AUTO_START",
-	} {
-		if err := os.Unsetenv(key); err != nil {
-			t.Fatalf("unset %s: %v", key, err)
-		}
-	}
-	t.Setenv("BEADS_DOLT_AUTO_START", "1")
 }
 
 func isTestscriptShim(path string) bool {

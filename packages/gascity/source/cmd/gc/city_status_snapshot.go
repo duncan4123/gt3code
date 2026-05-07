@@ -1,18 +1,18 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/gastownhall/gascity/internal/agent"
 	"github.com/gastownhall/gascity/internal/beads"
 	"github.com/gastownhall/gascity/internal/config"
 	"github.com/gastownhall/gascity/internal/runtime"
 	"github.com/gastownhall/gascity/internal/session"
-	"github.com/gastownhall/gascity/internal/worker"
 )
 
 type cityStatusSnapshot struct {
@@ -46,46 +46,11 @@ type rigStatusCounts struct {
 	Suspended int
 }
 
-type statusAgentSessionResolver interface {
-	SessionNameForAgent(string) (string, bool)
-}
-
-func observeStatusSession(
-	cmdName string,
-	cityPath string,
-	store beads.Store,
-	sp runtime.Provider,
-	cfg *config.City,
-	target string,
-	stderr io.Writer,
-) worker.LiveObservation {
-	providerObs := observeProviderStatusSession(sp, target)
-	if providerObs.Running || providerObs.Alive || providerObs.Attached || providerObs.LastActivity != nil {
-		return providerObs
-	}
-	return observeSessionTargetWithWarning(cmdName, cityPath, store, sp, cfg, target, stderr)
-}
-
-func observeProviderStatusSession(sp runtime.Provider, target string) worker.LiveObservation {
-	running := sp.IsRunning(target)
-	obs := worker.LiveObservation{
-		Running:     running,
-		Alive:       running,
-		Attached:    sp.IsAttached(target),
-		SessionName: target,
-	}
-	if last, err := sp.GetLastActivity(target); err == nil && !last.IsZero() {
-		last = last.UTC().Truncate(time.Millisecond)
-		obs.LastActivity = &last
-	}
-	if obs.Running || obs.Alive || obs.Attached {
-		obs.RuntimeSessionID = target
-	}
-	return obs
-}
-
 func openCityStatusStore(cityPath string, stderr io.Writer) (beads.Store, int) {
 	if cityPath == "" {
+		return nil, 0
+	}
+	if cityUsesDoltliteBeadsBackend(cityPath) || statusCityHasDoltliteMetadata(cityPath) {
 		return nil, 0
 	}
 	opened, err := openCityStoreAtForStatus(cityPath)
@@ -96,7 +61,33 @@ func openCityStatusStore(cityPath string, stderr io.Writer) (beads.Store, int) {
 	return opened, 0
 }
 
+func statusCityHasDoltliteMetadata(cityPath string) bool {
+	data, err := os.ReadFile(filepath.Join(cityPath, ".beads", "metadata.json"))
+	if err != nil {
+		return false
+	}
+	var meta struct {
+		Backend  string `json:"backend"`
+		Database string `json:"database"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return false
+	}
+	return strings.TrimSpace(meta.Backend) == "doltlite" || strings.TrimSpace(meta.Database) == "doltlite"
+}
+
 func collectCityStatusSnapshot(sp runtime.Provider, cfg *config.City, cityPath string, store beads.Store, stderr io.Writer) cityStatusSnapshot {
+	return collectCityStatusSnapshotFromStoreSnapshot(sp, cfg, cityPath, store, loadStatusSessionSnapshot(store), stderr)
+}
+
+func collectCityStatusSnapshotFromStoreSnapshot(
+	sp runtime.Provider,
+	cfg *config.City,
+	cityPath string,
+	store beads.Store,
+	statusSnapshot *sessionBeadSnapshot,
+	stderr io.Writer,
+) cityStatusSnapshot {
 	suspended := os.Getenv("GC_SUSPENDED") == "1"
 	if cfg != nil {
 		suspended = citySuspended(cfg)
@@ -108,30 +99,9 @@ func collectCityStatusSnapshot(sp runtime.Provider, cfg *config.City, cityPath s
 		Suspended:       suspended,
 	}
 	snapshot.CityName = loadedCityName(cfg, cityPath)
+	registerStatusProviderACPRoutes(sp, statusSnapshot, snapshot.CityName, cfg)
 	if cfg == nil {
 		return snapshot
-	}
-
-	var sessionBeads *sessionBeadSnapshot
-	if store != nil {
-		if loaded, err := loadSessionBeadSnapshot(store); err == nil {
-			sessionBeads = loaded
-		} else if stderr != nil {
-			fmt.Fprintf(stderr, "gc status: loading session bead snapshot: %v\n", err) //nolint:errcheck // best-effort stderr
-		}
-	}
-	statusSessionName := func(qualifiedName string) string {
-		if resolver, ok := sp.(statusAgentSessionResolver); ok {
-			if sn, found := resolver.SessionNameForAgent(qualifiedName); found {
-				return sn
-			}
-		}
-		if sessionBeads != nil {
-			if sn := sessionBeads.FindSessionNameByTemplate(qualifiedName); sn != "" {
-				return sn
-			}
-		}
-		return agent.SessionNameFor(snapshot.CityName, qualifiedName, cfg.Workspace.SessionTemplate)
 	}
 
 	suspendedRigs := make(map[string]bool, len(cfg.Rigs))
@@ -173,8 +143,8 @@ func collectCityStatusSnapshot(sp runtime.Provider, cfg *config.City, cityPath s
 			scaleLabel := fmt.Sprintf("scaled (min=%d, %s)", sp0.Min, maxDisplay)
 			headerShown := false
 			for _, qualifiedInstance := range discoverPoolInstances(a.Name, a.Dir, sp0, &a, snapshot.CityName, cfg.Workspace.SessionTemplate, sp) {
-				sn := statusSessionName(qualifiedInstance)
-				obs := observeStatusSession("gc status", cityPath, nil, sp, cfg, sn, stderr)
+				target := statusObservationTargetForIdentity(statusSnapshot, snapshot.CityName, qualifiedInstance, cfg.Workspace.SessionTemplate)
+				obs := observeSessionTargetWithWarning("gc status", cityPath, store, sp, cfg, target, stderr)
 				_, instanceName := config.ParseQualifiedName(qualifiedInstance)
 				row := cityStatusAgentRow{
 					Agent: StatusAgentJSON{
@@ -185,7 +155,7 @@ func collectCityStatusSnapshot(sp runtime.Provider, cfg *config.City, cityPath s
 						Suspended:     suspended || obs.Suspended,
 						Pool:          nil,
 					},
-					SessionName: sn,
+					SessionName: target.runtimeSessionName,
 					GroupName:   a.QualifiedName(),
 					Expanded:    true,
 				}
@@ -203,8 +173,8 @@ func collectCityStatusSnapshot(sp runtime.Provider, cfg *config.City, cityPath s
 			continue
 		}
 
-		sn := statusSessionName(a.QualifiedName())
-		obs := observeStatusSession("gc status", cityPath, nil, sp, cfg, sn, stderr)
+		target := statusObservationTargetForIdentity(statusSnapshot, snapshot.CityName, a.QualifiedName(), cfg.Workspace.SessionTemplate)
+		obs := observeSessionTargetWithWarning("gc status", cityPath, store, sp, cfg, target, stderr)
 		snapshot.Agents = append(snapshot.Agents, cityStatusAgentRow{
 			Agent: StatusAgentJSON{
 				Name:          a.Name,
@@ -213,7 +183,7 @@ func collectCityStatusSnapshot(sp runtime.Provider, cfg *config.City, cityPath s
 				Running:       obs.Running,
 				Suspended:     suspended || obs.Suspended,
 			},
-			SessionName: sn,
+			SessionName: target.runtimeSessionName,
 			GroupName:   a.QualifiedName(),
 			Expanded:    false,
 		})
@@ -241,7 +211,7 @@ func collectCityStatusSnapshot(sp runtime.Provider, cfg *config.City, cityPath s
 	for _, ns := range cfg.NamedSessions {
 		identity := ns.QualifiedName()
 		mode := ns.ModeOrDefault()
-		status := namedSessionStatusForCity(cfg, sessionBeads, snapshot.CityName, identity, mode, suspendedRigs)
+		status := namedSessionStatusForCity(cityPath, cfg, store, snapshot.CityName, identity, mode, suspendedRigs)
 		snapshot.NamedSessions = append(snapshot.NamedSessions, cityStatusNamedSession{
 			Identity: identity,
 			Status:   status,
@@ -253,35 +223,36 @@ func collectCityStatusSnapshot(sp runtime.Provider, cfg *config.City, cityPath s
 }
 
 func namedSessionStatusForCity(
+	cityPath string,
 	cfg *config.City,
-	sessionBeads *sessionBeadSnapshot,
+	store beads.Store,
 	cityName string,
 	identity string,
 	mode string,
 	suspendedRigs map[string]bool,
 ) string {
 	status := "reserved-unmaterialized"
-	spec, hasSpec := findNamedSessionSpec(cfg, cityName, identity)
-	if hasSpec {
+	if spec, ok := findNamedSessionSpec(cfg, cityName, identity); ok {
 		if mode == "always" && namedSessionBlockedBySuspension(cfg, spec.Agent, suspendedRigs) {
 			status = "degraded blocked"
 		}
 	}
-	if sessionBeads == nil || !hasSpec {
+	if store == nil {
 		return status
 	}
-	if bead, ok := findCanonicalNamedSessionBead(sessionBeads, spec); ok {
-		return namedSessionStatusFromBead(bead)
-	}
-	for _, bead := range sessionBeads.Open() {
-		if strings.TrimSpace(bead.Metadata["session_name"]) == strings.TrimSpace(spec.SessionName) {
-			return namedSessionStatusFromBead(bead)
-		}
-	}
-	return status
-}
 
-func namedSessionStatusFromBead(bead beads.Bead) string {
+	id, err := resolveSessionIDWithConfig(cityPath, cfg, store, identity)
+	if err != nil {
+		if errors.Is(err, session.ErrSessionNotFound) {
+			return status
+		}
+		return "lookup error: " + err.Error()
+	}
+
+	bead, err := store.Get(id)
+	if err != nil {
+		return "lookup error: " + err.Error()
+	}
 	if state := strings.TrimSpace(bead.Metadata["state"]); state != "" {
 		return state
 	}

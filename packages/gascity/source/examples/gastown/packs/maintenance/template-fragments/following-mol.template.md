@@ -1,5 +1,4 @@
 {{ define "following-mol" }}
-
 ## Following Your Formula
 
 Your formula defines your work as a sequence of steps. Steps are NOT

@@ -6,8 +6,8 @@ description: Practical checklist for merging latest main into feature/t3-session
 ## Baseline
 
 - [ ] Fetch latest refs:
-      `git fetch origin main`
-      `git fetch upstream main`
+  `git fetch origin main`
+  `git fetch upstream main`
 - [ ] Use `upstream/main` as default merge target for this branch.
 - [ ] Confirm current head and target SHAs before merging.
 - [ ] Confirm current branch is `feature/t3-session-bridge`.
@@ -81,10 +81,10 @@ Known conflict set from isolated probe against `upstream/main`:
 - [ ] Prefer `git stash apply --index`.
 - [ ] If stash apply fails, fall back to saved patch files with `git apply --3way`.
 - [ ] Re-check restored local edits in:
-      `cmd/gc/api_state.go`,
-      `cmd/gc/cmd_reload.go`,
-      `cmd/gc/providers.go`,
-      `cmd/gc/template_resolve.go`
+  `cmd/gc/api_state.go`,
+  `cmd/gc/cmd_reload.go`,
+  `cmd/gc/providers.go`,
+  `cmd/gc/template_resolve.go`
 
 ## Validate
 

@@ -80,9 +80,6 @@ func TestPhase0ConfigDefaults_WorkQueryIsOriginAware(t *testing.T) {
 	if !strings.Contains(got, "ephemeral") {
 		t.Fatalf("EffectiveWorkQuery() = %q, want origin-specific ephemeral generic queue tier", got)
 	}
-	if !strings.Contains(got, "manual:myrig/worker") {
-		t.Fatalf("EffectiveWorkQuery() = %q, want manual pool sessions to see their routed queue", got)
-	}
 	if !strings.Contains(got, "gc.routed_to=myrig/worker") {
 		t.Fatalf("EffectiveWorkQuery() = %q, want qualified config route", got)
 	}
@@ -95,11 +92,15 @@ func TestPhase0ConfigDefaults_OnBootUnclaimsRoutedWorkByDefault(t *testing.T) {
 	for _, want := range []string{
 		"bd list --metadata-field gc.routed_to=myrig/worker",
 		"--status=in_progress",
-		"--assignee \"\"",
+		"--no-assignee",
+		"--status open",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("EffectiveOnBoot() = %q, want %q", got, want)
 		}
+	}
+	if strings.Contains(got, `--assignee ""`) {
+		t.Fatalf("EffectiveOnBoot() = %q, want to target only ownerless work instead of bulk-unassigning routed work", got)
 	}
 }
 

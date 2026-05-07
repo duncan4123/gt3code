@@ -1,5 +1,4 @@
 {{ define "tdd-discipline" }}
-
 ## TDD Discipline
 
 > **Build/Test Execution Guard**: Do not run builds or tests unless explicitly asked to do so.
@@ -64,7 +63,6 @@ One logical change per commit. The test and the code it tests are ONE
 logical change — they go together.
 
 If you're fixing a test failure you introduced, that's a separate commit:
-
 ```
 git commit -m "fix: correct <what broke>"
 ```
@@ -89,4 +87,4 @@ git commit -m "fix: correct <what broke>"
 - **No testing implementation details.** Test behavior, not internals.
   If you refactor and tests break, your tests were too coupled. Rewrite
   them to test the contract, not the wiring.
-  {{ end }}
+{{ end }}

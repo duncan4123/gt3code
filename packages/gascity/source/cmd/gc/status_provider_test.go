@@ -3,12 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/gastownhall/gascity/internal/beads"
 	"github.com/gastownhall/gascity/internal/config"
 	"github.com/gastownhall/gascity/internal/runtime"
 )
@@ -52,22 +50,8 @@ func (p *blockingStatusProvider) GetLastActivity(name string) (time.Time, error)
 
 func TestDoCityStatusTimesOutSlowProvider(t *testing.T) {
 	oldTimeout := statusProviderCallTimeout
-	oldBackend := os.Getenv("GC_BEADS_BACKEND")
 	statusProviderCallTimeout = 20 * time.Millisecond
-	t.Setenv("GC_BEADS_BACKEND", "file")
-	oldOpen := openCityStoreAtForStatus
-	openCityStoreAtForStatus = func(string) (beads.Store, error) {
-		return nil, nil
-	}
-	t.Cleanup(func() {
-		statusProviderCallTimeout = oldTimeout
-		openCityStoreAtForStatus = oldOpen
-		if oldBackend == "" {
-			os.Unsetenv("GC_BEADS_BACKEND")
-		} else {
-			os.Setenv("GC_BEADS_BACKEND", oldBackend)
-		}
-	})
+	t.Cleanup(func() { statusProviderCallTimeout = oldTimeout })
 
 	base := newBlockingStatusProvider(200 * time.Millisecond)
 	if err := base.Start(context.Background(), "mayor", runtime.Config{Command: "echo"}); err != nil {
@@ -93,37 +77,6 @@ func TestDoCityStatusTimesOutSlowProvider(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "0/1 agents running") {
 		t.Fatalf("stdout missing degraded status summary, got:\n%s", stdout.String())
-	}
-}
-
-func TestStatusProviderUsesConfiguredTimeout(t *testing.T) {
-	oldTimeout := statusProviderCallTimeout
-	statusProviderCallTimeout = 20 * time.Millisecond
-	t.Cleanup(func() { statusProviderCallTimeout = oldTimeout })
-
-	base := newBlockingStatusProvider(50 * time.Millisecond)
-	if err := base.Start(context.Background(), "mayor", runtime.Config{Command: "echo"}); err != nil {
-		t.Fatal(err)
-	}
-	sp := &statusProvider{
-		base:    base,
-		timeout: 200 * time.Millisecond,
-	}
-	dops := newFakeDrainOps()
-	cfg := &config.City{
-		Workspace: config.Workspace{Name: "city"},
-		Agents: []config.Agent{
-			{Name: "mayor", MaxActiveSessions: intPtr(1)},
-		},
-	}
-
-	var stdout, stderr bytes.Buffer
-	code := doCityStatus(sp, dops, cfg, "/tmp/city", &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("code = %d, want 0; stderr: %s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "1/1 agents running") {
-		t.Fatalf("stdout missing live status summary, got:\n%s", stdout.String())
 	}
 }
 

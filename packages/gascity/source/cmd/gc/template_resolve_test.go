@@ -36,19 +36,6 @@ func TestStartupEnvelopeModel_UsesCurrentProviderDefaults(t *testing.T) {
 			tp:   TemplateParams{Env: map[string]string{"GC_PROVIDER": "claude"}},
 			want: "claude-sonnet-4-6",
 		},
-		{
-			name: "opencode",
-			tp:   TemplateParams{Env: map[string]string{"GC_PROVIDER": "opencode"}},
-			want: "openai/gpt-5",
-		},
-		{
-			name: "opencode explicit model",
-			tp: TemplateParams{Env: map[string]string{
-				"GC_PROVIDER": "opencode",
-				"GC_MODEL":    "kimi-for-coding/k2p6",
-			}},
-			want: "kimi-for-coding/k2p6",
-		},
 	}
 
 	for _, tt := range tests {

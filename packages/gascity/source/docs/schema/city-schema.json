@@ -52,7 +52,7 @@
         },
         "description": {
           "type": "string",
-          "description": "Description is a human-readable description shown in MC's session creation UI."
+          "description": "Description is a human-readable description shown in a real-world app's session creation UI."
         },
         "dir": {
           "type": "string",
@@ -64,7 +64,10 @@
         },
         "scope": {
           "type": "string",
-          "enum": ["city", "rig"],
+          "enum": [
+            "city",
+            "rig"
+          ],
           "description": "Scope defines where this agent is instantiated: \"city\" (one per city)\nor \"rig\" (one per rig, the default). Only meaningful for pack-defined\nagents; inline agents in city.toml use Dir directly."
         },
         "suspended": {
@@ -88,8 +91,11 @@
         },
         "session": {
           "type": "string",
-          "enum": ["acp"],
-          "description": "Session overrides the session transport for this agent.\n\"\" (default) uses the city-level session provider (typically tmux).\n\"acp\" uses the Agent Client Protocol (JSON-RPC over stdio).\nThe agent's resolved provider must have supports_acp = true."
+          "enum": [
+            "acp",
+            "tmux"
+          ],
+          "description": "Session overrides the session transport for this agent.\n\"\" (default) uses the provider default.\n\"tmux\" uses the tmux-backed CLI path even when the provider supports ACP.\n\"acp\" uses the Agent Client Protocol (JSON-RPC over stdio); the agent's\nresolved provider must have supports_acp = true."
         },
         "provider": {
           "type": "string",
@@ -108,7 +114,11 @@
         },
         "prompt_mode": {
           "type": "string",
-          "enum": ["arg", "flag", "none"],
+          "enum": [
+            "arg",
+            "flag",
+            "none"
+          ],
           "description": "PromptMode controls how prompts are delivered: \"arg\", \"flag\", or \"none\".",
           "default": "arg"
         },
@@ -160,7 +170,7 @@
         },
         "scale_check": {
           "type": "string",
-          "description": "ScaleCheck is a shell command template whose output determines desired\nsession count. Optional override — when set, its output is the desired\ncount (still clamped by all cap levels). If it contains Go template\nplaceholders, gc expands them using the same PathContext fields as\nwork_dir and session_setup (Agent, AgentBase, Rig, RigRoot, CityRoot,\nCityName) before running the command."
+          "description": "ScaleCheck is a shell command template whose output reports new\nunassigned session demand. In bead-backed reconciliation this is\nadditive: assigned work is resumed separately, and ScaleCheck reports\nonly how many new generic sessions to start, still bounded by all cap\nlevels. Legacy no-store evaluation continues to treat the output as\nthe desired session count. If it contains Go template placeholders, gc\nexpands them using the same PathContext fields as work_dir and\nsession_setup (Agent, AgentBase, Rig, RigRoot, CityRoot, CityName)\nbefore running the command."
         },
         "drain_timeout": {
           "type": "string",
@@ -285,13 +295,18 @@
         },
         "wake_mode": {
           "type": "string",
-          "enum": ["resume", "fresh"],
+          "enum": [
+            "resume",
+            "fresh"
+          ],
           "description": "WakeMode controls context freshness across sleep/wake cycles.\n\"resume\" (default): reuse provider session key for conversation continuity.\n\"fresh\": start a new provider session on every wake (polecat pattern)."
         }
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "description": "Agent defines a configured agent in the city."
     },
     "AgentDefaults": {
@@ -302,7 +317,10 @@
         },
         "wake_mode": {
           "type": "string",
-          "enum": ["resume", "fresh"],
+          "enum": [
+            "resume",
+            "fresh"
+          ],
           "description": "WakeMode is the parsed/composed default wake mode (\"resume\" or\n\"fresh\"), but it is not yet auto-applied at runtime."
         },
         "default_sling_formula": {
@@ -402,7 +420,7 @@
         },
         "session": {
           "type": "string",
-          "description": "Session overrides the session transport (\"acp\")."
+          "description": "Session overrides the session transport (\"acp\" or \"tmux\")."
         },
         "provider": {
           "type": "string",
@@ -552,7 +570,10 @@
         },
         "wake_mode": {
           "type": "string",
-          "enum": ["resume", "fresh"],
+          "enum": [
+            "resume",
+            "fresh"
+          ],
           "description": "WakeMode overrides the agent's wake mode (\"resume\" or \"fresh\")."
         },
         "inject_fragments_append": {
@@ -572,7 +593,7 @@
         },
         "scale_check": {
           "type": "string",
-          "description": "ScaleCheck overrides the shell command whose output determines desired session count."
+          "description": "ScaleCheck overrides the shell command whose output reports new\nunassigned session demand for bead-backed reconciliation."
         },
         "option_defaults": {
           "additionalProperties": {
@@ -584,7 +605,9 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["agent"],
+      "required": [
+        "agent"
+      ],
       "description": "AgentOverride modifies a pack-stamped agent for a specific rig."
     },
     "AgentPatch": {
@@ -640,7 +663,7 @@
         },
         "session": {
           "type": "string",
-          "description": "Session overrides the session transport (\"acp\")."
+          "description": "Session overrides the session transport (\"acp\" or \"tmux\")."
         },
         "provider": {
           "type": "string",
@@ -762,7 +785,10 @@
         },
         "wake_mode": {
           "type": "string",
-          "enum": ["resume", "fresh"],
+          "enum": [
+            "resume",
+            "fresh"
+          ],
           "description": "WakeMode overrides the agent's wake mode (\"resume\" or \"fresh\")."
         },
         "pre_start_append": {
@@ -810,7 +836,7 @@
         },
         "scale_check": {
           "type": "string",
-          "description": "ScaleCheck overrides the command template whose output determines desired\nsession count. Supports the same Go template placeholders as\nAgent.scale_check."
+          "description": "ScaleCheck overrides the command template whose output reports new\nunassigned session demand for bead-backed reconciliation. Supports the\nsame Go template placeholders as Agent.scale_check."
         },
         "option_defaults": {
           "additionalProperties": {
@@ -822,7 +848,10 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["dir", "name"],
+      "required": [
+        "dir",
+        "name"
+      ],
       "description": "AgentPatch modifies an existing agent identified by (Dir, Name)."
     },
     "BeadsConfig": {
@@ -955,6 +984,10 @@
           "$ref": "#/$defs/ConvergenceConfig",
           "description": "Convergence configures convergence loop limits."
         },
+        "doctor": {
+          "$ref": "#/$defs/DoctorConfig",
+          "description": "Doctor configures gc doctor thresholds and policy toggles\n(worktree size warnings, nested-worktree auto-prune)."
+        },
         "service": {
           "items": {
             "$ref": "#/$defs/Service"
@@ -969,7 +1002,10 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["workspace", "agent"],
+      "required": [
+        "workspace",
+        "agent"
+      ],
       "description": "City is the top-level configuration for a Gas City instance."
     },
     "ConvergenceConfig": {
@@ -1014,6 +1050,24 @@
           "description": "RestartWindow is the sliding time window for counting restarts.\nDuration string (e.g., \"30s\", \"5m\", \"1h\"). Defaults to \"1h\".",
           "default": "1h"
         },
+        "session_circuit_breaker": {
+          "type": "boolean",
+          "description": "SessionCircuitBreaker enables the named-session respawn circuit breaker.\nWhen enabled, the controller suppresses no-progress named-session respawns\nafter the configured restart threshold is exceeded."
+        },
+        "session_circuit_breaker_max_restarts": {
+          "type": "integer",
+          "description": "SessionCircuitBreakerMaxRestarts overrides MaxRestarts for the\nnamed-session respawn circuit breaker. Nil reuses MaxRestartsOrDefault.\n0 disables the circuit breaker even when SessionCircuitBreaker is true.",
+          "default": 5
+        },
+        "session_circuit_breaker_window": {
+          "type": "string",
+          "description": "SessionCircuitBreakerWindow overrides RestartWindow for the named-session\nrespawn circuit breaker. Empty reuses RestartWindowDuration.",
+          "default": "1h"
+        },
+        "session_circuit_breaker_reset_after": {
+          "type": "string",
+          "description": "SessionCircuitBreakerResetAfter is the cooldown before an open named-session\nbreaker resets automatically. Empty defaults to 2 * SessionCircuitBreakerWindowDuration."
+        },
         "shutdown_timeout": {
           "type": "string",
           "description": "ShutdownTimeout is the time to wait after sending Ctrl-C before force-killing\nagents during shutdown. Duration string (e.g., \"5s\", \"30s\"). Set to \"0s\"\nfor immediate kill. Defaults to \"5s\".",
@@ -1054,6 +1108,28 @@
       "type": "object",
       "description": "DaemonConfig holds controller daemon settings."
     },
+    "DoctorConfig": {
+      "properties": {
+        "worktree_rig_warn_size": {
+          "type": "string",
+          "description": "WorktreeRigWarnSize is the per-rig warning threshold for the total\ndisk footprint under .gc/worktrees/\u003crig\u003e/. Reported by the\nworktree-disk-size check. Go-style human size string (\"10GB\", \"500MB\").\nEmpty or unparseable falls back to the default (10 GB).",
+          "default": "10GB"
+        },
+        "worktree_rig_error_size": {
+          "type": "string",
+          "description": "WorktreeRigErrorSize is the per-rig error threshold. When any rig\nexceeds this, the worktree-disk-size check reports an error rather\nthan a warning. Empty or unparseable falls back to the default\n(50 GB).",
+          "default": "50GB"
+        },
+        "nested_worktree_prune": {
+          "type": "boolean",
+          "description": "NestedWorktreePrune escalates the nested-worktree-prune check\nfrom warning to error severity when safely-prunable nested\nworktrees are present, so CI / scripted doctor runs fail until\nthe operator runs `gc doctor --fix`. Actual removal still\nrequires --fix; this flag does not auto-prune. Safety is\nenforced by mechanical checks (no uncommitted changes, no\nunpushed commits, no stashes) — never by role identity.",
+          "default": false
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DoctorConfig holds settings for the gc doctor surface."
+    },
     "DoltConfig": {
       "properties": {
         "port": {
@@ -1065,6 +1141,11 @@
           "type": "string",
           "description": "Host is the dolt server hostname. Defaults to localhost.",
           "default": "localhost"
+        },
+        "archive_level": {
+          "type": "integer",
+          "description": "ArchiveLevel controls Dolt's auto_gc archive aggressiveness.\n0 disables archive compaction (lower CPU on startup).\n1 enables archive compaction (higher CPU on startup).\nnil (omitted) defaults to 0.",
+          "default": 0
         }
       },
       "additionalProperties": false,
@@ -1114,13 +1195,18 @@
         },
         "shadow": {
           "type": "string",
-          "enum": ["warn", "silent"],
+          "enum": [
+            "warn",
+            "silent"
+          ],
           "description": "Shadow controls shadow warnings when the importer defines an agent\nwith the same name as one from this import. \"warn\" (default) emits\na warning; \"silent\" suppresses it."
         }
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["source"],
+      "required": [
+        "source"
+      ],
       "description": "Import defines a named import of another pack."
     },
     "K8sConfig": {
@@ -1190,7 +1276,10 @@
         },
         "scope": {
           "type": "string",
-          "enum": ["city", "rig"],
+          "enum": [
+            "city",
+            "rig"
+          ],
           "description": "Scope defines where this named session is instantiated in pack\nexpansion: \"city\" (one per city) or \"rig\" (one per rig)."
         },
         "dir": {
@@ -1199,13 +1288,18 @@
         },
         "mode": {
           "type": "string",
-          "enum": ["on_demand", "always"],
+          "enum": [
+            "on_demand",
+            "always"
+          ],
           "description": "Mode controls controller behavior for this named session.\n\"on_demand\" (default): reserve identity and materialize when work or\nan explicit reference requires it.\n\"always\": keep the canonical session controller-managed."
         }
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["template"],
+      "required": [
+        "template"
+      ],
       "description": "NamedSession defines a canonical persistent session backed by an agent template."
     },
     "OptionChoice": {
@@ -1222,11 +1316,25 @@
           },
           "type": "array",
           "description": "FlagArgs are the CLI arguments injected when this choice is selected.\njson:\"-\" is intentional: FlagArgs must never appear in the public API DTO\n(security boundary — prevents clients from seeing internal CLI flags)."
+        },
+        "flag_aliases": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "array",
+          "description": "FlagAliases are equivalent CLI argument sequences stripped from legacy\nprovider args. Like FlagArgs, they stay server-side only."
         }
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["value", "label", "flag_args"],
+      "required": [
+        "value",
+        "label",
+        "flag_args"
+      ],
       "description": "OptionChoice is one allowed value for a \"select\" option."
     },
     "OrderOverride": {
@@ -1237,7 +1345,7 @@
         },
         "rig": {
           "type": "string",
-          "description": "Rig scopes the override to a specific rig's order.\nEmpty matches city-level orders."
+          "description": "Rig scopes the override to a specific rig's order. Empty matches\nONLY city-level orders (those with no rig); it does NOT match\nper-rig instances of the same name — those expand at scan time\nand require an explicit rig. Use rig = \"*\" as a wildcard to match\nevery instance of the named order (city-level + every rig-scoped\ncopy). The literal \"*\" is reserved and rejected as a real rig\nname by config validation."
         },
         "enabled": {
           "type": "boolean",
@@ -1279,7 +1387,9 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "description": "OrderOverride modifies a scanned order's scheduling fields."
     },
     "OrdersConfig": {
@@ -1324,7 +1434,9 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["source"],
+      "required": [
+        "source"
+      ],
       "description": "PackSource defines a remote pack repository."
     },
     "Patches": {
@@ -1416,7 +1528,13 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["key", "label", "type", "default", "choices"],
+      "required": [
+        "key",
+        "label",
+        "type",
+        "default",
+        "choices"
+      ],
       "description": "ProviderOption declares a single configurable option for a provider."
     },
     "ProviderPatch": {
@@ -1433,12 +1551,23 @@
           "type": "string",
           "description": "Command overrides the provider command."
         },
+        "acp_command": {
+          "type": "string",
+          "description": "ACPCommand overrides the provider command for ACP transport sessions."
+        },
         "args": {
           "items": {
             "type": "string"
           },
           "type": "array",
           "description": "Args overrides the provider args."
+        },
+        "acp_args": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "ACPArgs overrides the provider args for ACP transport sessions."
         },
         "args_append": {
           "items": {
@@ -1453,7 +1582,11 @@
         },
         "prompt_mode": {
           "type": "string",
-          "enum": ["arg", "flag", "none"],
+          "enum": [
+            "arg",
+            "flag",
+            "none"
+          ],
           "description": "PromptMode overrides prompt delivery mode."
         },
         "prompt_flag": {
@@ -1486,7 +1619,9 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "description": "ProviderPatch modifies an existing provider identified by Name."
     },
     "ProviderSpec": {
@@ -1504,7 +1639,10 @@
         },
         "options_schema_merge": {
           "type": "string",
-          "enum": ["replace", "by_key"],
+          "enum": [
+            "replace",
+            "by_key"
+          ],
           "description": "OptionsSchemaMerge controls OptionsSchema merge mode across the\nchain: \"replace\" (default) or \"by_key\"."
         },
         "display_name": {
@@ -1524,7 +1662,11 @@
         },
         "prompt_mode": {
           "type": "string",
-          "enum": ["arg", "flag", "none"],
+          "enum": [
+            "arg",
+            "flag",
+            "none"
+          ],
           "description": "PromptMode controls how prompts are delivered: \"arg\", \"flag\", or \"none\".",
           "default": "arg"
         },
@@ -1585,7 +1727,7 @@
         },
         "resume_command": {
           "type": "string",
-          "description": "ResumeCommand is the full shell command to run when resuming a session.\nSupports {{.SessionKey}} template variable. When set, takes precedence\nover ResumeFlag/ResumeStyle. Example:\n  \"claude --resume {{.SessionKey}} --dangerously-skip-permissions\""
+          "description": "ResumeCommand is the full shell command to run when resuming a session.\nSupports only the {{.SessionKey}} template variable. When set, takes precedence\nover ResumeFlag/ResumeStyle. When schema-managed defaults are inserted, the\nresolver tokenizes and re-emits the command; for subcommand-style resume it\ninserts after the ResumeFlag token that precedes {{.SessionKey}}. Example:\n  \"claude --resume {{.SessionKey}} --dangerously-skip-permissions\"\nSchema-managed defaults missing from a subcommand-style resume command\nare inserted before {{.SessionKey}} during provider resolution."
         },
         "session_id_flag": {
           "type": "string",
@@ -1596,7 +1738,7 @@
             "type": "string"
           },
           "type": "object",
-          "description": "PermissionModes maps permission mode names to CLI flags.\nExample: {\"unrestricted\": \"--dangerously-skip-permissions\", \"plan\": \"--permission-mode plan\"}\nThis is a config-only lookup table consumed by external clients\n(e.g., Mission Control) to populate permission mode dropdowns.\nLaunch-time flag substitution is planned for a follow-up PR —\ncurrently no runtime code reads this field."
+          "description": "PermissionModes maps permission mode names to CLI flags.\nExample: {\"unrestricted\": \"--dangerously-skip-permissions\", \"plan\": \"--permission-mode plan\"}\nThis is a config-only lookup table consumed by external clients\n(e.g., real-world app) to populate permission mode dropdowns.\nLaunch-time flag substitution is planned for a follow-up PR —\ncurrently no runtime code reads this field."
         },
         "option_defaults": {
           "additionalProperties": {
@@ -1622,6 +1764,17 @@
         "title_model": {
           "type": "string",
           "description": "TitleModel is the OptionsSchema model key used for title generation.\nResolved via the \"model\" option in OptionsSchema to get FlagArgs.\nDefaults to the cheapest/fastest model for each provider.\nExamples: \"haiku\" (claude), \"o4-mini\" (codex), \"gemini-2.5-flash\" (gemini)"
+        },
+        "acp_command": {
+          "type": "string",
+          "description": "ACPCommand overrides Command when the session transport is ACP.\nWhen empty, Command is used for both tmux and ACP transports."
+        },
+        "acp_args": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "ACPArgs overrides Args when the session transport is ACP.\nWhen nil, Args is used for both tmux and ACP transports."
         }
       },
       "additionalProperties": false,
@@ -1701,7 +1854,9 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "description": "Rig defines an external project registered in the city."
     },
     "RigPatch": {
@@ -1725,7 +1880,9 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "description": "RigPatch modifies an existing rig identified by Name."
     },
     "Service": {
@@ -1736,12 +1893,18 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["workflow", "proxy_process"],
+          "enum": [
+            "workflow",
+            "proxy_process"
+          ],
           "description": "Kind selects how the service is implemented."
         },
         "publish_mode": {
           "type": "string",
-          "enum": ["private", "direct"],
+          "enum": [
+            "private",
+            "direct"
+          ],
           "description": "PublishMode declares how the service is intended to be published.\nv0 supports private services and direct reuse of the API listener."
         },
         "state_root": {
@@ -1763,7 +1926,9 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "description": "Service declares a workspace-owned HTTP service mounted under /svc/{name}."
     },
     "ServiceProcessConfig": {
@@ -1788,7 +1953,11 @@
       "properties": {
         "visibility": {
           "type": "string",
-          "enum": ["private", "public", "tenant"],
+          "enum": [
+            "private",
+            "public",
+            "tenant"
+          ],
           "description": "Visibility selects whether the service is private to the workspace,\navailable publicly, or gated by tenant auth at the platform edge."
         },
         "hostname": {

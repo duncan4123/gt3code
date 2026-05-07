@@ -60,42 +60,33 @@ export async function renderCrew(): Promise<void> {
       const res = await api.GET("/v0/city/{cityName}/bead/{id}", {
         params: { path: { cityName: city, id: session.active_bead } },
       });
-      beadTitles.set(
-        session.active_bead,
-        res.data?.id ? (res.data.title ?? res.data.id) : session.active_bead,
-      );
+      beadTitles.set(session.active_bead, res.data?.id ? (res.data.title ?? res.data.id) : session.active_bead);
     }),
   );
 
   const crew = sessions;
   crew.forEach((session, index) => {
     const state = classifyCrewState(session, pending[index] ?? false);
-    const beadText = session.active_bead
-      ? truncate(beadTitles.get(session.active_bead) ?? session.active_bead, 24)
-      : "—";
+    const beadText = session.active_bead ? truncate(beadTitles.get(session.active_bead) ?? session.active_bead, 24) : "—";
     const row = el("tr", {}, [
       el("td", {}, [session.template]),
       el("td", {}, [session.rig ?? "city"]),
       el("td", {}, [el("span", { class: `badge ${statusBadgeClass(state)}` }, [state])]),
       el("td", {}, [beadText]),
-      el(
-        "td",
-        {
-          class: calculateActivity(session.last_active).colorClass
-            ? `activity-${calculateActivity(session.last_active).colorClass}`
-            : "",
-        },
-        [
-          el("span", { class: "activity-dot" }),
-          ` ${calculateActivity(session.last_active).display}`,
-        ],
-      ),
+      el("td", { class: calculateActivity(session.last_active).colorClass ? `activity-${calculateActivity(session.last_active).colorClass}` : "" }, [
+        el("span", { class: "activity-dot" }),
+        ` ${calculateActivity(session.last_active).display}`,
+      ]),
       el("td", {}, [
         el("span", { class: `badge ${session.attached ? "badge-green" : "badge-muted"}` }, [
           session.attached ? "Attached" : "Detached",
         ]),
       ]),
-      el("td", {}, [attachButton(session.template), " ", logButton(session.id, session.template)]),
+      el("td", {}, [
+        attachButton(session.template),
+        " ",
+        logButton(session.id, session.template),
+      ]),
     ]);
     crewBody.append(row);
   });
@@ -113,7 +104,7 @@ export async function renderCrew(): Promise<void> {
   renderPooledAgents(sessions);
 }
 
-function resetCrewNoCity(): void {
+export function resetCrewNoCity(): void {
   const crewLoading = byId("crew-loading");
   const crewTable = byId<HTMLTableElement>("crew-table");
   const crewEmpty = byId("crew-empty");
@@ -161,11 +152,7 @@ function attachButton(template: string): HTMLElement {
 }
 
 function logButton(sessionID: string, label: string): HTMLElement {
-  const btn = el(
-    "button",
-    { class: "agent-log-link", type: "button", "data-session-id": sessionID },
-    [label],
-  );
+  const btn = el("button", { class: "agent-log-link", type: "button", "data-session-id": sessionID }, [label]);
   btn.addEventListener("click", () => {
     void openLogDrawer(sessionID, label);
   });
@@ -189,50 +176,33 @@ function renderRiggedAgents(sessions: SessionRecord[], beadTitles: Map<string, s
   const tbody = el("tbody");
   rows.forEach((session) => {
     const activity = calculateActivity(session.last_active);
-    const workStatus = !session.active_bead
-      ? "Idle"
-      : activity.colorClass === "red"
-        ? "Stuck"
-        : activity.colorClass === "yellow"
-          ? "Stale"
-          : "Working";
-    tbody.append(
-      el("tr", { class: `rigged-${workStatus.toLowerCase()}` }, [
-        el("td", {}, [logButton(session.id, session.template)]),
-        el("td", {}, [el("span", { class: "badge badge-muted" }, [session.pool ?? "pool"])]),
-        el("td", {}, [session.rig ?? "city"]),
-        el("td", { class: "rigged-issue" }, [
-          session.active_bead
-            ? `${session.active_bead} ${beadTitles.get(session.active_bead) ?? ""}`.trim()
-            : "—",
-        ]),
-        el("td", {}, [
-          el("span", { class: `badge ${statusBadgeClass(workStatus)}` }, [workStatus]),
-        ]),
-        el("td", { class: `activity-${activity.colorClass}` }, [
-          el("span", { class: "activity-dot" }),
-          ` ${activity.display}`,
-        ]),
+    const workStatus = !session.active_bead ? "Idle" : activity.colorClass === "red" ? "Stuck" : activity.colorClass === "yellow" ? "Stale" : "Working";
+    tbody.append(el("tr", { class: `rigged-${workStatus.toLowerCase()}` }, [
+      el("td", {}, [logButton(session.id, session.template)]),
+      el("td", {}, [el("span", { class: "badge badge-muted" }, [session.pool ?? "pool"])]),
+      el("td", {}, [session.rig ?? "city"]),
+      el("td", { class: "rigged-issue" }, [
+        session.active_bead
+          ? `${session.active_bead} ${beadTitles.get(session.active_bead) ?? ""}`.trim()
+          : "—",
       ]),
-    );
+      el("td", {}, [el("span", { class: `badge ${statusBadgeClass(workStatus)}` }, [workStatus])]),
+      el("td", { class: `activity-${activity.colorClass}` }, [el("span", { class: "activity-dot" }), ` ${activity.display}`]),
+    ]));
   });
 
   clear(body);
-  body.append(
-    el("table", {}, [
-      el("thead", {}, [
-        el("tr", {}, [
-          el("th", {}, ["Agent"]),
-          el("th", {}, ["Pool"]),
-          el("th", {}, ["Rig"]),
-          el("th", {}, ["Working On"]),
-          el("th", {}, ["Status"]),
-          el("th", {}, ["Activity"]),
-        ]),
-      ]),
-      tbody,
-    ]),
-  );
+  body.append(el("table", {}, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", {}, ["Agent"]),
+      el("th", {}, ["Pool"]),
+      el("th", {}, ["Rig"]),
+      el("th", {}, ["Working On"]),
+      el("th", {}, ["Status"]),
+      el("th", {}, ["Activity"]),
+    ])]),
+    tbody,
+  ]));
 }
 
 // renderPooledAgents lists sessions that belong to a pool but are not
@@ -251,34 +221,24 @@ function renderPooledAgents(sessions: SessionRecord[]): void {
 
   const tbody = el("tbody");
   rows.forEach((session) => {
-    tbody.append(
-      el("tr", {}, [
-        el("td", {}, [session.template]),
-        el("td", {}, [
-          el("span", { class: `badge ${session.active_bead ? "badge-yellow" : "badge-green"}` }, [
-            session.active_bead ? "Working" : "Idle",
-          ]),
-        ]),
-        el("td", { class: "status-hint" }, [truncate(session.last_output, 80) || "—"]),
-        el("td", {}, [formatTimestamp(session.last_active)]),
-      ]),
-    );
+    tbody.append(el("tr", {}, [
+      el("td", {}, [session.template]),
+      el("td", {}, [el("span", { class: `badge ${session.active_bead ? "badge-yellow" : "badge-green"}` }, [session.active_bead ? "Working" : "Idle"])]),
+      el("td", { class: "status-hint" }, [truncate(session.last_output, 80) || "—"]),
+      el("td", {}, [formatTimestamp(session.last_active)]),
+    ]));
   });
 
   clear(body);
-  body.append(
-    el("table", {}, [
-      el("thead", {}, [
-        el("tr", {}, [
-          el("th", {}, ["Agent"]),
-          el("th", {}, ["State"]),
-          el("th", {}, ["Work"]),
-          el("th", {}, ["Activity"]),
-        ]),
-      ]),
-      tbody,
-    ]),
-  );
+  body.append(el("table", {}, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", {}, ["Agent"]),
+      el("th", {}, ["State"]),
+      el("th", {}, ["Work"]),
+      el("th", {}, ["Activity"]),
+    ])]),
+    tbody,
+  ]));
 }
 
 function renderSimpleEmpty(container: HTMLElement, message: string): void {
@@ -386,8 +346,7 @@ async function loadTranscript(sessionID: string, prepend: boolean): Promise<void
   countEl.textContent = String(logCount);
 
   logBeforeCursor = res.data.pagination?.truncated_before_message ?? "";
-  olderBtn.style.display =
-    res.data.pagination?.has_older_messages && logBeforeCursor ? "inline-flex" : "none";
+  olderBtn.style.display = res.data.pagination?.has_older_messages && logBeforeCursor ? "inline-flex" : "none";
   logDebug("crew", "Transcript loaded", {
     hasOlderMessages: res.data.pagination?.has_older_messages ?? false,
     nextBeforeCursor: logBeforeCursor,
@@ -400,18 +359,9 @@ async function loadTranscript(sessionID: string, prepend: boolean): Promise<void
 function appendStreamEvent(msg: AgentOutputMessage): void {
   const messagesEl = byId("log-drawer-messages");
   if (!messagesEl) return;
-  const payload = msg.data as {
-    data?: { message?: { role?: string; text?: string; timestamp?: string } };
-    event?: string;
-  } | null;
+  const payload = msg.data as { data?: { message?: { role?: string; text?: string; timestamp?: string } }; event?: string } | null;
   if (msg.type !== "message" || !payload?.data?.message) return;
-  messagesEl.append(
-    renderTurn(
-      payload.data.message.role ?? "agent",
-      payload.data.message.text ?? "",
-      payload.data.message.timestamp,
-    ),
-  );
+  messagesEl.append(renderTurn(payload.data.message.role ?? "agent", payload.data.message.text ?? "", payload.data.message.timestamp));
   logCount += 1;
   byId("log-drawer-count")!.textContent = String(logCount);
   const body = byId("log-drawer-body");

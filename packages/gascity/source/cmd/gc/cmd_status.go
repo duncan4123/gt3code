@@ -26,6 +26,7 @@ func newRigStatusCmd(stdout, stderr io.Writer) *cobra.Command {
 			}
 			return nil
 		},
+		ValidArgsFunction: completeRigNames,
 	}
 }
 
@@ -74,28 +75,31 @@ func cmdRigStatus(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	sp := newStatusSessionProvider()
 	cityName := loadedCityName(cfg, cityPath)
-	dops := newDrainOps(sp)
-	return doRigStatus(sp, dops, rig, rigAgents, cityPath, cityName, cfg.Workspace.SessionTemplate, stdout, stderr)
-}
-
-// doRigStatus prints rig info and per-agent running state.
-func doRigStatus(
-	sp runtime.Provider,
-	dops drainOps,
-	rig config.Rig,
-	agents []config.Agent,
-	cityPath, cityName, sessionTemplate string,
-	stdout, stderr io.Writer,
-) int {
-	_ = stderr // reserved for future error reporting
 	var store beads.Store
 	if cityPath != "" {
 		if opened, err := openCityStoreAt(cityPath); err == nil {
 			store = opened
 		}
 	}
+	statusSnapshot := loadStatusSessionSnapshot(store)
+	sp := newStatusSessionProviderForCityWithSnapshot(cfg, cityPath, statusSnapshot)
+	dops := newDrainOps(sp)
+	return doRigStatusWithStoreAndSnapshot(sp, dops, rig, rigAgents, cityPath, cityName, cfg.Workspace.SessionTemplate, cfg, store, statusSnapshot, stdout, stderr)
+}
+
+func doRigStatusWithStoreAndSnapshot(
+	sp runtime.Provider,
+	dops drainOps,
+	rig config.Rig,
+	agents []config.Agent,
+	cityPath, cityName, sessionTemplate string,
+	cfg *config.City,
+	store beads.Store,
+	statusSnapshot *sessionBeadSnapshot,
+	stdout, stderr io.Writer,
+) int {
+	registerStatusProviderACPRoutes(sp, statusSnapshot, cityName, cfg)
 
 	suspStr := "no"
 	if rig.Suspended {
@@ -110,20 +114,31 @@ func doRigStatus(
 	for _, a := range agents {
 		sp0 := scaleParamsFor(&a)
 		if !a.SupportsInstanceExpansion() {
-			sn := cliSessionName(cityPath, cityName, a.QualifiedName(), sessionTemplate)
-			obs := observeSessionTargetWithWarning("gc rig status", cityPath, store, sp, nil, sn, stderr)
-			status := agentStatusLine(obs.Running, dops, sn, a.Suspended || obs.Suspended)
+			target := statusObservationTargetForIdentity(statusSnapshot, cityName, a.QualifiedName(), sessionTemplate)
+			obs := observeSessionTargetWithWarning("gc rig status", cityPath, store, sp, cfg, target, stderr)
+			status := agentStatusLine(obs.Running, dops, target.runtimeSessionName, a.Suspended || obs.Suspended)
 			fmt.Fprintf(stdout, "    %-12s%s\n", a.QualifiedName(), status) //nolint:errcheck // best-effort stdout
 		} else {
 			for _, qualifiedInstance := range discoverPoolInstances(a.Name, a.Dir, sp0, &a, cityName, sessionTemplate, sp) {
-				sn := cliSessionName(cityPath, cityName, qualifiedInstance, sessionTemplate)
-				obs := observeSessionTargetWithWarning("gc rig status", cityPath, store, sp, nil, sn, stderr)
-				status := agentStatusLine(obs.Running, dops, sn, a.Suspended || obs.Suspended)
+				target := statusObservationTargetForIdentity(statusSnapshot, cityName, qualifiedInstance, sessionTemplate)
+				obs := observeSessionTargetWithWarning("gc rig status", cityPath, store, sp, cfg, target, stderr)
+				status := agentStatusLine(obs.Running, dops, target.runtimeSessionName, a.Suspended || obs.Suspended)
 				fmt.Fprintf(stdout, "    %-12s%s\n", qualifiedInstance, status) //nolint:errcheck // best-effort stdout
 			}
 		}
 	}
 	return 0
+}
+
+func doRigStatus(
+	sp runtime.Provider,
+	dops drainOps,
+	rig config.Rig,
+	agents []config.Agent,
+	cityPath, cityName, sessionTemplate string,
+	stdout, stderr io.Writer,
+) int {
+	return doRigStatusWithStoreAndSnapshot(sp, dops, rig, agents, cityPath, cityName, sessionTemplate, nil, nil, nil, stdout, stderr)
 }
 
 // agentStatusLine returns a human-readable status string for an agent session.

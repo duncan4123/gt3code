@@ -65,6 +65,10 @@ type Server struct {
 	lookPathMu      sync.Mutex
 	lookPathEntries map[string]lookPathEntry
 
+	// agentVisibilityWaitTimeout overrides the POST /agents visibility wait
+	// in tests. Zero uses defaultAgentVisibilityWaitTimeout.
+	agentVisibilityWaitTimeout time.Duration
+
 	// responseCache memoizes expensive read responses for a short TTL so
 	// repeated UI polls do not re-run the same bead-store subprocesses when
 	// nothing material has changed.
@@ -258,7 +262,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sm := NewSupervisorMux(&singleStateResolver{state: s.state}, s.readOnly, "test", time.Now())
+	sm := NewSupervisorMux(&singleStateResolver{state: s.state}, nil, s.readOnly, "test", time.Now())
 	sm.cacheMu.Lock()
 	sm.cache[s.state.CityName()] = cachedCityServer{state: s.state, srv: s}
 	sm.cacheMu.Unlock()

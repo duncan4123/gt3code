@@ -31,6 +31,9 @@ type Provenance struct {
 	Workspace map[string]string
 	// Warnings collects non-fatal collision warnings from composition.
 	Warnings []string
+
+	sourceContents   map[string][]byte
+	revisionSnapshot *revisionSnapshot
 }
 
 // LoadOptions controls optional config-loading behavior.
@@ -62,6 +65,7 @@ func LoadWithIncludesOptions(fs fsys.FS, path string, opts LoadOptions, extraInc
 	}
 	cityRoot := filepath.Dir(path)
 	prov := newProvenance(path)
+	prov.recordSource(path, data)
 	prov.Warnings = append(prov.Warnings, rootWarnings...)
 	cityAgentsForProvenance := root.Agents
 
@@ -176,6 +180,7 @@ func LoadWithIncludesOptions(fs fsys.FS, path string, opts LoadOptions, extraInc
 		// Track pack.toml agents in provenance.
 		trackAgents(prov, pc.Agents, packPath)
 		prov.Sources = append(prov.Sources, packPath)
+		prov.recordSource(packPath, packData)
 
 		packCommands, err := DiscoverPackCommands(fs, cityRoot, pc.Pack.Name)
 		if err != nil {
@@ -294,6 +299,7 @@ func LoadWithIncludesOptions(fs fsys.FS, path string, opts LoadOptions, extraInc
 		// Merge fragment into root.
 		mergeFragment(root, frag, fragMeta, fragPath, prov)
 		prov.Sources = append(prov.Sources, fragPath)
+		prov.recordSource(fragPath, fragData)
 	}
 
 	// Inject system pack includes into Workspace.Includes. These are
@@ -318,7 +324,7 @@ func LoadWithIncludesOptions(fs fsys.FS, path string, opts LoadOptions, extraInc
 	// Resolve named pack references to cache paths before any expansion.
 	resolveNamedPacks(root, cityRoot)
 
-	implicitImports, implicitPath, implicitErr := ReadImplicitImports()
+	implicitImports, implicitPath, implicitData, implicitErr := readImplicitImportsWithData()
 	if implicitErr != nil {
 		return nil, nil, implicitErr
 	}
@@ -370,6 +376,9 @@ func LoadWithIncludesOptions(fs fsys.FS, path string, opts LoadOptions, extraInc
 		}
 		if addedImplicit && implicitPath != "" {
 			prov.Sources = append(prov.Sources, implicitPath)
+			if implicitData != nil {
+				prov.recordSource(implicitPath, implicitData)
+			}
 		}
 	}
 
@@ -421,6 +430,15 @@ func LoadWithIncludesOptions(fs fsys.FS, path string, opts LoadOptions, extraInc
 		}
 	}
 
+	// Apply patches after all fragments and all pack expansion so both
+	// city-scoped and rig-scoped resources exist in the merged config.
+	if !root.Patches.IsEmpty() {
+		if err := ApplyPatches(root, root.Patches); err != nil {
+			return nil, nil, fmt.Errorf("applying patches: %w", err)
+		}
+		root.Patches = Patches{} // clear after application
+	}
+
 	// Apply [global] sections from packs to agents in scope.
 	root.PackGlobals = append(root.PackGlobals, rootPackGlobals...)
 	applyPackGlobals(root)
@@ -438,19 +456,9 @@ func LoadWithIncludesOptions(fs fsys.FS, path string, opts LoadOptions, extraInc
 		cityTopoFormulas, cityLocalFormulas, rigFormulaDirs, root.Rigs, cityRoot)
 
 	// Inject implicit agents for built-in providers not already defined.
-	// Must happen after all composition (fragments and packs) so explicit
-	// agents always take precedence. Root-level patches are applied after this
-	// so cities can tune generated built-ins such as control-dispatcher.
+	// Must happen after all composition (fragments, packs, patches) so
+	// explicit agents always take precedence.
 	InjectImplicitAgents(root)
-
-	// Apply root-level patches after all fragments, pack expansion, and
-	// implicit built-ins exist in the merged config.
-	if !root.Patches.IsEmpty() {
-		if err := ApplyPatches(root, root.Patches); err != nil {
-			return nil, nil, fmt.Errorf("applying patches: %w", err)
-		}
-		root.Patches = Patches{} // clear after application
-	}
 
 	// Apply [agent_defaults] values to all agents (explicit and implicit)
 	// that don't set their own override. Deprecated [agents] aliases are
@@ -498,6 +506,16 @@ func LoadWithIncludesOptions(fs fsys.FS, path string, opts LoadOptions, extraInc
 		return nil, nil, fmt.Errorf("%s: provider cache build failed: %w", path, err)
 	}
 
+	// v0.15.1: enrich every agent with its convention-discovered
+	// agent-local asset paths (agents/<name>/skills/, agents/<name>/mcp/).
+	// DiscoverPackAgents only does this for agents it creates — it skips
+	// names already present in pack.toml [[agent]] or city.toml
+	// [[agent]] entries, so those agents leave the discovery pass with
+	// empty SkillsDir/MCPDir even when agents/<name>/skills/ exists on
+	// disk. The materializer and collision validator both key off
+	// SkillsDir, so that gap silently loses agent-local skills for every
+	// explicitly-declared agent. Populate the fields here so the
+	// convention works uniformly.
 	populateAgentLocalAssetDirs(fs, root, cityRoot)
 
 	// Load namepool files for pool agents.
@@ -516,16 +534,10 @@ func LoadWithIncludesOptions(fs fsys.FS, path string, opts LoadOptions, extraInc
 		prov.Warnings = append(prov.Warnings, warning)
 	}
 
-	// v0.15.1: enrich every agent with its convention-discovered
-	// agent-local asset paths (agents/<name>/skills/, agents/<name>/mcp/).
-	// DiscoverPackAgents only does this for agents it creates — it skips
-	// names already present in pack.toml [[agent]] or city.toml
-	// [[agent]] entries, so those agents leave the discovery pass with
-	// empty SkillsDir/MCPDir even when agents/<name>/skills/ exists on
-	// disk. The materializer and collision validator both key off
-	// SkillsDir, so that gap silently loses agent-local skills for every
-	// explicitly-declared agent. Populate the fields here so the
-	// convention works uniformly.
+	// Capture revision inputs after all config and pack discovery so callers
+	// can compare the loaded snapshot to future reloads without re-reading
+	// mutable files from disk.
+	prov.captureRevisionSnapshot(fs, root, cityRoot)
 	return root, prov, nil
 }
 
@@ -1204,6 +1216,15 @@ func newProvenance(rootPath string) *Provenance {
 		Rigs:      make(map[string]string),
 		Workspace: make(map[string]string),
 	}
+}
+
+func (p *Provenance) recordSource(path string, data []byte) {
+	if p.sourceContents == nil {
+		p.sourceContents = make(map[string][]byte)
+	}
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	p.sourceContents[path] = cp
 }
 
 func trackAgents(prov *Provenance, agents []Agent, source string) {

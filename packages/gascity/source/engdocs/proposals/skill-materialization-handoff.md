@@ -67,7 +67,7 @@ something specific. The spec + plan capture everything you need.
    `skills/gc-<topic>/SKILL.md` × 7. Content migrated from
    `cmd/gc/skills/*.md` with real YAML frontmatter. Registered in
    `BootstrapPacks` with `Source:
-"github.com/gastownhall/gc-core"`.
+   "github.com/gastownhall/gc-core"`.
 
 3. **Implicit-import collision detection** (task 3). New
    `internal/bootstrap/collision.go` with `CollidesWithBootstrapPack` +
@@ -91,7 +91,6 @@ something specific. The spec + plan capture everything you need.
 
 Five issues from the first Phase 1 review pass were fixed in-line (not
 in a separate commit):
-
 - Scoped compose-time hard-stop to bootstrap names only (was rejecting
   all implicit-import collisions).
 - Aggregated all colliding names in both error messages.
@@ -105,11 +104,11 @@ in a separate commit):
 
 ### Phase 2 (3 subagents) — the materializer core
 
-| Task | Subject                                                 | Key files                                                                                            |
-| ---- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| 6    | Materializer core library                               | `internal/materialize/skills.go` (new), vendor map, source discovery, cleanup, legacy-stub migration |
-| 7    | Delete `gc skills` command + stub materializer          | Delete `cmd/gc/skill_stubs.go`, `cmd_skills.go`, `cmd/gc/skills/*.md`; remove call sites             |
-| 8    | `gc doctor --fix` rule for deprecated attachment fields | `internal/doctor/autofix_skills.go` (new)                                                            |
+| Task | Subject | Key files |
+|------|---------|-----------|
+| 6 | Materializer core library | `internal/materialize/skills.go` (new), vendor map, source discovery, cleanup, legacy-stub migration |
+| 7 | Delete `gc skills` command + stub materializer | Delete `cmd/gc/skill_stubs.go`, `cmd_skills.go`, `cmd/gc/skills/*.md`; remove call sites |
+| 8 | `gc doctor --fix` rule for deprecated attachment fields | `internal/doctor/autofix_skills.go` (new) |
 
 Task 9 is the Phase 2 review boundary — run `/review-pr` and iterate.
 
@@ -120,22 +119,22 @@ do 6 → 7 → 8.
 
 ### Phase 3 (3 subagents)
 
-| Task | Subject                                                                          |
-| ---- | -------------------------------------------------------------------------------- |
-| 10   | `gc internal materialize-skills` CLI (thin cobra wrapper over task 6's library)  |
-| 11   | `BuildDesiredState` integration + `FingerprintExtra["skills:<name>"]` population |
-| 12   | Update `gc skill list` to include bootstrap catalogs                             |
+| Task | Subject |
+|------|---------|
+| 10 | `gc internal materialize-skills` CLI (thin cobra wrapper over task 6's library) |
+| 11 | `BuildDesiredState` integration + `FingerprintExtra["skills:<name>"]` population |
+| 12 | Update `gc skill list` to include bootstrap catalogs |
 
 Task 13 = Phase 3 review boundary.
 
 ### Phase 4 (3 subagents + final review)
 
-| Task | Subject                                                |
-| ---- | ------------------------------------------------------ |
-| 14   | Supervisor tick reordering + start-time collision gate |
-| 15   | Acceptance + integration tests                         |
-| 16   | Schema + reference docs + migration guide updates      |
-| 17   | Final `/review-pr` + handoff for manual testing        |
+| Task | Subject |
+|------|---------|
+| 14 | Supervisor tick reordering + start-time collision gate |
+| 15 | Acceptance + integration tests |
+| 16 | Schema + reference docs + migration guide updates |
+| 17 | Final `/review-pr` + handoff for manual testing |
 
 ---
 
@@ -255,7 +254,6 @@ Don't commit on behalf of the user unless asked.
 ## File-level change manifest
 
 **New files (8):**
-
 - `engdocs/proposals/skill-materialization.md` (spec, untracked)
 - `engdocs/proposals/skill-materialization-implementation-plan.md`
 - `engdocs/proposals/skill-materialization-handoff.md` (this file)
@@ -269,7 +267,6 @@ Don't commit on behalf of the user unless asked.
 - `internal/validation/skill_collision_test.go`
 
 **Modified files (22):**
-
 - `cmd/gc/cmd_doctor.go`, `cmd_mcp.go`, `cmd_skill.go`,
   `cmd_skill_test.go`, `init_provider_readiness.go`, `pool.go`,
   `pool_test.go`

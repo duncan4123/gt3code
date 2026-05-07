@@ -1,5 +1,5 @@
 import type { BeadRecord } from "../api";
-import { api, cityScope } from "../api";
+import { api, cityScope, mutationHeaders } from "../api";
 import { promptActionDialog } from "../modals";
 import { byId, clear, el } from "../util/dom";
 import { beadPriority, formatTimestamp, priorityBadgeClass, truncate } from "../util/legacy";
@@ -27,7 +27,7 @@ export async function renderIssues(): Promise<void> {
     api.GET("/v0/city/{cityName}/beads", {
       params: { path: { cityName: city }, query: { status: "in_progress", limit: 500 } },
     }),
-    getOptions(true),
+    getOptions(),
   ]);
   if ((openR.error && progressR.error) || (!openR.data?.items && !progressR.data?.items)) {
     clear(issuesList);
@@ -35,14 +35,10 @@ export async function renderIssues(): Promise<void> {
     return;
   }
 
-  allIssues = [...(openR.data?.items ?? []), ...(progressR.data?.items ?? [])]
-    .filter((bead) => !isInternalBead(bead))
-    .sort((a, b) => {
-      const pa = beadPriority(a.priority);
-      const pb = beadPriority(b.priority);
-      if (pa !== pb) return pa - pb;
-      return (b.created_at ?? "").localeCompare(a.created_at ?? "");
-    });
+  allIssues = sortIssues(
+    [...(openR.data?.items ?? []), ...(progressR.data?.items ?? [])]
+      .filter((bead) => !isInternalBead(bead)),
+  );
   byId("issues-count")!.textContent = String(allIssues.length);
 
   const rigTabs = byId("rig-filter-tabs");
@@ -55,7 +51,7 @@ export async function renderIssues(): Promise<void> {
   renderIssueTable();
 }
 
-function resetIssuesNoCity(): void {
+export function resetIssuesNoCity(): void {
   const issuesList = byId("issues-list");
   const rigTabs = byId("rig-filter-tabs");
   const detail = byId("issue-detail");
@@ -65,10 +61,9 @@ function resetIssuesNoCity(): void {
   const detailOpen = detail.style.display === "block";
   detail.style.display = "none";
   issuesList.style.display = "block";
+  clearIssueDetailContent();
   clear(issuesList);
-  issuesList.append(
-    el("div", { class: "empty-state" }, [el("p", {}, ["Select a city to view beads"])]),
-  );
+  issuesList.append(el("div", { class: "empty-state" }, [el("p", {}, ["Select a city to view beads"])]));
   clear(rigTabs);
   currentRig = "all";
   currentIssueID = "";
@@ -76,6 +71,32 @@ function resetIssuesNoCity(): void {
   rigTabs.append(rigButton("all", true));
   byId("issues-count")!.textContent = "0";
   if (detailOpen) popPause();
+}
+
+function clearIssueDetailContent(): void {
+  [
+    "issue-detail-id",
+    "issue-detail-title-text",
+    "issue-detail-description",
+    "issue-detail-status",
+    "issue-detail-type",
+    "issue-detail-owner",
+    "issue-detail-created",
+  ].forEach((id) => {
+    const node = byId(id);
+    if (node) node.textContent = "";
+  });
+  const priority = byId("issue-detail-priority");
+  if (priority) {
+    priority.className = "badge";
+    priority.textContent = "";
+  }
+  ["issue-detail-actions", "issue-detail-depends-on", "issue-detail-blocks"].forEach((id) => {
+    const node = byId(id);
+    if (node) clear(node);
+  });
+  byId("issue-detail-deps")?.style.setProperty("display", "none");
+  byId("issue-detail-blocks-section")?.style.setProperty("display", "none");
 }
 
 function renderIssueTable(): void {
@@ -97,32 +118,24 @@ function renderIssueTable(): void {
 
   const tbody = el("tbody");
   filtered.forEach((issue) => {
-    const row = el(
-      "tr",
-      {
-        class: `issue-row priority-${beadPriority(issue.priority)}`,
-        "data-issue-id": issue.id ?? "",
-        "data-status": issue.assignee ? "progress" : "ready",
-        "data-rig": inferRig(issue),
-      },
-      [
-        el("td", {}, [
-          el("span", { class: `badge ${priorityBadgeClass(issue.priority)}` }, [
-            `P${beadPriority(issue.priority)}`,
-          ]),
-        ]),
-        el("td", {}, [el("span", { class: "issue-id" }, [issue.id ?? ""])]),
-        el("td", { class: "issue-title" }, [truncate(issue.title ?? issue.id ?? "", 80)]),
-        el("td", { class: "issue-rig" }, [inferRig(issue)]),
-        el("td", { class: "issue-status" }, [
-          issue.assignee
-            ? el("span", { class: "badge badge-blue", title: issue.assignee }, [issue.assignee])
-            : el("span", { class: "badge badge-green" }, ["Ready"]),
-        ]),
-        el("td", { class: "issue-age" }, [formatTimestamp(issue.created_at)]),
-        el("td", {}, [slingButton(issue.id ?? "")]),
-      ],
-    );
+    const row = el("tr", {
+      class: `issue-row priority-${beadPriority(issue.priority)}`,
+      "data-issue-id": issue.id ?? "",
+      "data-status": issue.assignee ? "progress" : "ready",
+      "data-rig": inferRig(issue),
+    }, [
+      el("td", {}, [el("span", { class: `badge ${priorityBadgeClass(issue.priority)}` }, [`P${beadPriority(issue.priority)}`])]),
+      el("td", {}, [el("span", { class: "issue-id" }, [issue.id ?? ""])]),
+      el("td", { class: "issue-title" }, [truncate(issue.title ?? issue.id ?? "", 80)]),
+      el("td", { class: "issue-rig" }, [inferRig(issue)]),
+      el("td", { class: "issue-status" }, [
+        issue.assignee
+          ? el("span", { class: "badge badge-blue", title: issue.assignee }, [issue.assignee])
+          : el("span", { class: "badge badge-green" }, ["Ready"]),
+      ]),
+      el("td", { class: "issue-age" }, [formatTimestamp(issue.created_at)]),
+      el("td", {}, [slingButton(issue.id ?? "")]),
+    ]);
     row.addEventListener("click", (event) => {
       const target = event.target as HTMLElement;
       if (target.closest(".sling-btn")) return;
@@ -131,28 +144,22 @@ function renderIssueTable(): void {
     tbody.append(row);
   });
 
-  container.append(
-    el("table", { id: "work-table" }, [
-      el("thead", {}, [
-        el("tr", {}, [
-          el("th", {}, ["Pri"]),
-          el("th", {}, ["ID"]),
-          el("th", {}, ["Title"]),
-          el("th", {}, ["Rig"]),
-          el("th", {}, ["Status"]),
-          el("th", {}, ["Age"]),
-          el("th", {}, ["Actions"]),
-        ]),
-      ]),
-      tbody,
-    ]),
-  );
+  container.append(el("table", { id: "work-table" }, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", {}, ["Pri"]),
+      el("th", {}, ["ID"]),
+      el("th", {}, ["Title"]),
+      el("th", {}, ["Rig"]),
+      el("th", {}, ["Status"]),
+      el("th", {}, ["Age"]),
+      el("th", {}, ["Actions"]),
+    ])]),
+    tbody,
+  ]));
 }
 
 function rigButton(rig: string, active: boolean): HTMLElement {
-  const btn = el("button", { class: `rig-btn${active ? " active" : ""}`, "data-rig": rig }, [
-    rig === "all" ? "All" : rig,
-  ]);
+  const btn = el("button", { class: `rig-btn${active ? " active" : ""}`, "data-rig": rig }, [rig === "all" ? "All" : rig]);
   btn.addEventListener("click", () => {
     currentRig = rig;
     document.querySelectorAll(".rig-btn").forEach((node) => node.classList.remove("active"));
@@ -168,9 +175,16 @@ function inferRig(issue: BeadRecord): string {
 
 function isInternalBead(issue: BeadRecord): boolean {
   if ((issue.issue_type ?? "").toLowerCase() === "convoy") return true;
-  return (issue.labels ?? []).some(
-    (label) => label.startsWith("gc:queue") || label.startsWith("gc:message"),
-  );
+  return (issue.labels ?? []).some((label) => label.startsWith("gc:queue") || label.startsWith("gc:message"));
+}
+
+function sortIssues(issues: BeadRecord[]): BeadRecord[] {
+  return [...issues].sort((a, b) => {
+    const pa = beadPriority(a.priority);
+    const pb = beadPriority(b.priority);
+    if (pa !== pb) return pa - pb;
+    return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+  });
 }
 
 export function installIssueInteractions(): void {
@@ -187,9 +201,7 @@ export function installIssueInteractions(): void {
   byId("new-issue-btn")?.addEventListener("click", () => openIssueModal());
   byId("issue-modal-close-btn")?.addEventListener("click", () => closeIssueModal());
   byId("issue-modal-cancel-btn")?.addEventListener("click", () => closeIssueModal());
-  byId("issue-modal")
-    ?.querySelector(".modal-backdrop")
-    ?.addEventListener("click", () => closeIssueModal());
+  byId("issue-modal")?.querySelector(".modal-backdrop")?.addEventListener("click", () => closeIssueModal());
   byId("issue-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
     void createIssueFromModal();
@@ -250,9 +262,7 @@ async function openIssueDetail(issueID: string): Promise<void> {
 
   const [issueR, depsR, options] = await Promise.all([
     api.GET("/v0/city/{cityName}/bead/{id}", { params: { path: { cityName: city, id: issueID } } }),
-    api.GET("/v0/city/{cityName}/bead/{id}/deps", {
-      params: { path: { cityName: city, id: issueID } },
-    }),
+    api.GET("/v0/city/{cityName}/bead/{id}/deps", { params: { path: { cityName: city, id: issueID } } }),
     getOptions(),
   ]);
   if (issueR.error || !issueR.data) {
@@ -269,12 +279,8 @@ async function openIssueDetail(issueID: string): Promise<void> {
   byId("issue-detail-status")!.textContent = issue.status ?? "open";
   byId("issue-detail-status")!.className = `issue-status ${issue.status ?? "open"}`;
   byId("issue-detail-type")!.textContent = issue.issue_type ? `Type: ${issue.issue_type}` : "";
-  byId("issue-detail-owner")!.textContent = issue.assignee
-    ? `Owner: ${issue.assignee}`
-    : "Owner: unassigned";
-  byId("issue-detail-created")!.textContent = issue.created_at
-    ? `Created: ${formatTimestamp(issue.created_at)}`
-    : "";
+  byId("issue-detail-owner")!.textContent = issue.assignee ? `Owner: ${issue.assignee}` : "Owner: unassigned";
+  byId("issue-detail-created")!.textContent = issue.created_at ? `Created: ${formatTimestamp(issue.created_at)}` : "";
 
   renderIssueActions(issue, options.agents);
   renderDependencies(depsR.data?.children ?? []);
@@ -295,9 +301,7 @@ function renderDependencies(children: BeadRecord[]): void {
   }
   depsSection.style.display = "block";
   children.forEach((child) => {
-    const pill = el("span", { class: "issue-dep-item", "data-issue-id": child.id ?? "" }, [
-      `→ ${child.id ?? ""}`,
-    ]);
+    const pill = el("span", { class: "issue-dep-item", "data-issue-id": child.id ?? "" }, [`→ ${child.id ?? ""}`]);
     pill.addEventListener("click", () => {
       if (child.id) void openIssueDetail(child.id);
     });
@@ -312,10 +316,9 @@ function renderIssueActions(issue: BeadRecord, agents: string[]): void {
   clear(actions);
 
   const bar = el("div", { class: "issue-actions-bar" });
-  const primary =
-    issue.status === "closed"
-      ? actionButton("↺ Reopen", "reopen", () => void reopenIssue(issue.id!))
-      : actionButton("✓ Close", "close", () => void closeIssue(issue.id!));
+  const primary = issue.status === "closed"
+    ? actionButton("↺ Reopen", "reopen", () => void reopenIssue(issue.id!))
+    : actionButton("✓ Close", "close", () => void closeIssue(issue.id!));
   bar.append(primary);
   if (issue.status !== "closed") {
     bar.append(actionButton("🚚 Sling", "sling", () => void slingIssue(issue.id!)));
@@ -340,14 +343,9 @@ function actionButton(label: string, klass: string, onClick: () => void): HTMLEl
 }
 
 function prioritySelect(issueID: string, current: number | undefined): HTMLElement {
-  const select = el("select", {
-    class: "issue-action-select",
-    id: "issue-action-priority",
-  }) as HTMLSelectElement;
+  const select = el("select", { class: "issue-action-select", id: "issue-action-priority", "aria-label": "Priority" }) as HTMLSelectElement;
   [1, 2, 3, 4].forEach((priority) => {
-    const option = el("option", { value: priority, selected: beadPriority(current) === priority }, [
-      `P${priority}`,
-    ]) as HTMLOptionElement;
+    const option = el("option", { value: priority, selected: beadPriority(current) === priority }, [`P${priority}`]) as HTMLOptionElement;
     select.append(option);
   });
   select.addEventListener("change", () => {
@@ -356,15 +354,8 @@ function prioritySelect(issueID: string, current: number | undefined): HTMLEleme
   return select;
 }
 
-function assigneeSelect(
-  issueID: string,
-  current: string | undefined,
-  agents: string[],
-): HTMLElement {
-  const select = el("select", {
-    class: "issue-action-select",
-    id: "issue-action-assignee",
-  }) as HTMLSelectElement;
+function assigneeSelect(issueID: string, current: string | undefined, agents: string[]): HTMLElement {
+  const select = el("select", { class: "issue-action-select", id: "issue-action-assignee", "aria-label": "Assignee" }) as HTMLSelectElement;
   select.append(el("option", { value: "" }, ["Unassigned"]));
   agents.forEach((agent) => {
     select.append(el("option", { value: agent, selected: current === agent }, [agent]));
@@ -388,7 +379,7 @@ async function closeIssue(issueID: string): Promise<void> {
   const city = cityScope();
   if (!city) return;
   const res = await api.POST("/v0/city/{cityName}/bead/{id}/close", {
-    params: { path: { cityName: city, id: issueID } },
+    params: { path: { cityName: city, id: issueID }, header: mutationHeaders },
   });
   if (res.error) {
     showToast("error", "Close failed", res.error.detail ?? "Could not close issue");
@@ -403,7 +394,7 @@ async function reopenIssue(issueID: string): Promise<void> {
   const city = cityScope();
   if (!city) return;
   const res = await api.POST("/v0/city/{cityName}/bead/{id}/reopen", {
-    params: { path: { cityName: city, id: issueID } },
+    params: { path: { cityName: city, id: issueID }, header: mutationHeaders },
   });
   if (res.error) {
     showToast("error", "Reopen failed", res.error.detail ?? "Could not reopen issue");
@@ -418,7 +409,7 @@ async function updateIssuePriority(issueID: string, priority: number): Promise<v
   const city = cityScope();
   if (!city) return;
   const res = await api.POST("/v0/city/{cityName}/bead/{id}/update", {
-    params: { path: { cityName: city, id: issueID } },
+    params: { path: { cityName: city, id: issueID }, header: mutationHeaders },
     body: { priority },
   });
   if (res.error) {
@@ -434,7 +425,7 @@ async function assignIssue(issueID: string, assignee: string): Promise<void> {
   const city = cityScope();
   if (!city) return;
   const res = await api.POST("/v0/city/{cityName}/bead/{id}/assign", {
-    params: { path: { cityName: city, id: issueID } },
+    params: { path: { cityName: city, id: issueID }, header: mutationHeaders },
     body: { assignee },
   });
   if (res.error) {
@@ -457,7 +448,7 @@ async function slingIssue(issueID: string): Promise<void> {
   });
   if (!selection) return;
   const res = await api.POST("/v0/city/{cityName}/sling", {
-    params: { path: { cityName: city } },
+    params: { path: { cityName: city }, header: mutationHeaders },
     body: { bead: issueID, target: selection.target, rig: selection.rig || undefined },
   });
   if (res.error) {
@@ -472,9 +463,7 @@ async function slingIssue(issueID: string): Promise<void> {
 }
 
 function slingButton(issueID: string): HTMLElement {
-  const btn = el("button", { class: "sling-btn", type: "button", "data-bead-id": issueID }, [
-    "Sling",
-  ]);
+  const btn = el("button", { class: "sling-btn", type: "button", "data-bead-id": issueID }, ["Sling"]);
   btn.addEventListener("click", (event) => {
     event.stopPropagation();
     void slingIssue(issueID);
@@ -492,7 +481,7 @@ export async function createIssue(input: {
   const city = cityScope();
   if (!city) return { ok: false, error: "no city selected" };
   const { error } = await api.POST("/v0/city/{cityName}/beads", {
-    params: { path: { cityName: city } },
+    params: { path: { cityName: city }, header: mutationHeaders },
     body: {
       title: input.title,
       description: input.description,

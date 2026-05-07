@@ -641,6 +641,38 @@ func TestPackContentHashRecursive(t *testing.T) {
 	}
 }
 
+func TestPackContentHashRecursiveIgnoresRuntimeDirs(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pack.toml", "test")
+	writeFile(t, dir, "prompts/a.md", "prompt a")
+
+	h1 := PackContentHashRecursive(fsys.OSFS{}, dir)
+	writeFile(t, dir, "state/triage/runs/audit.json", `{"status":"running"}`)
+	writeFile(t, dir, "tmp/scratch.txt", "scratch")
+	writeFile(t, dir, "__pycache__/helper.pyc", "compiled")
+	writeFile(t, dir, ".gc/runtime.json", `{"pid":123}`)
+	writeFile(t, dir, ".beads/db", "runtime state")
+	writeFile(t, dir, ".cache/tool/result.json", `{"cached":true}`)
+	writeFile(t, dir, ".git/HEAD", "ref: refs/heads/main")
+	writeFile(t, dir, "nested/__pycache__/helper.pyc", "compiled")
+	h2 := PackContentHashRecursive(fsys.OSFS{}, dir)
+	if h2 != h1 {
+		t.Fatalf("hash changed after runtime output writes: %q vs %q", h1, h2)
+	}
+
+	writeFile(t, dir, "prompts/state/example.md", "state prompt")
+	hPromptState := PackContentHashRecursive(fsys.OSFS{}, dir)
+	if hPromptState == h1 {
+		t.Fatal("hash should change for config content below a non-runtime state path")
+	}
+
+	writeFile(t, dir, "prompts/a.md", "modified prompt a")
+	h3 := PackContentHashRecursive(fsys.OSFS{}, dir)
+	if h3 == h1 {
+		t.Fatal("hash should still change when config-bearing pack content changes")
+	}
+}
+
 func TestExpandPacks_ViaLoadWithIncludes(t *testing.T) {
 	dir := t.TempDir()
 
@@ -696,45 +728,6 @@ includes = ["packs/gt"]
 		t.Error("provenance should track hello-world/witness")
 	} else if !strings.Contains(src, "pack.toml") {
 		t.Errorf("witness provenance = %q, want to contain pack.toml", src)
-	}
-}
-
-func TestLoadWithIncludes_PatchesImplicitControlDispatcher(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "city.toml", `
-[workspace]
-name = "test-city"
-
-[providers.codex]
-base = "builtin:codex"
-
-[[rigs]]
-name = "gascity"
-
-[daemon]
-formula_v2 = true
-
-[[patches.agent]]
-dir = "gascity"
-name = "control-dispatcher"
-suspended = true
-`)
-
-	cfg, _, err := LoadWithIncludes(fsys.OSFS{}, filepath.Join(dir, "city.toml"))
-	if err != nil {
-		t.Fatalf("LoadWithIncludes: %v", err)
-	}
-	var found bool
-	for _, agent := range cfg.Agents {
-		if agent.QualifiedName() == "gascity/control-dispatcher" {
-			found = true
-			if !agent.Suspended {
-				t.Fatal("gascity/control-dispatcher should be patched suspended")
-			}
-		}
-	}
-	if !found {
-		t.Fatal("gascity/control-dispatcher not found")
 	}
 }
 

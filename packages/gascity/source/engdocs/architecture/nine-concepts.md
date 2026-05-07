@@ -2,7 +2,7 @@
 title: "Nine Concepts"
 ---
 
-> Last verified against code: 2026-03-01
+> Last verified against code: 2026-04-25
 
 ## Summary
 
@@ -28,19 +28,26 @@ Before adding a new primitive, apply three necessary conditions (see
 
 These are irreducible. Each has a dedicated architecture doc.
 
-### 1. Agent Protocol
+### 1. Session
 
-Start/stop/prompt/observe agents regardless of session provider.
-Covers identity, pools, sandboxes, resume, and crash adoption.
+Start/stop/prompt/observe sessions regardless of provider. Covers
+identity, pools, sandboxes, resume, and crash adoption.
 
-- **Interface**: `runtime.Provider` with naming and startup hints from
-  `internal/agent/`
+- **Interface**: `runtime.Provider` (low-level) plus
+  `internal/session/` for bead-backed lifecycle and naming/startup
+  hints from `internal/agent/`
 - **Implementations**: tmux (production), subprocess (remote),
-  k8s (Kubernetes), Fake (test)
-- **Key insight**: The SDK manages agent lifecycle. The prompt defines
-  agent behavior. These concerns never cross.
+  exec (script), k8s (Kubernetes), Fake (test); acp / auto / hybrid
+  routing layers compose these
+- **Key insight**: The SDK manages session lifecycle. The prompt
+  defines agent behavior. These concerns never cross.
 
-**Details**: [Agent Protocol](agent-protocol.md)
+**Details**: [Session](session.md)
+
+> **History.** This primitive was named "Agent Protocol" and exposed
+> a dedicated `agent.Agent` / `agent.Handle` interface until commit
+> `dd90ac0a` (Mar 8 2026). The interface was removed; responsibilities
+> live in `internal/session/` and `internal/runtime/`.
 
 ### 2. Task Store (Beads)
 
@@ -111,7 +118,7 @@ Mail + nudge. No new primitive needed.
 - **Nudge derivation**: `runtime.Provider.Nudge(text)` → text typed
   into the agent's session. Fire-and-forget.
 - **Proof**: Mail uses only Bead Store (primitive 2). Nudge uses only
-  Agent Protocol (primitive 1). No new infrastructure.
+  Session (primitive 1). No new infrastructure.
 
 **Details**: [Messaging](messaging.md)
 
@@ -139,24 +146,23 @@ formulas with trigger conditions on Event Bus.
 Find/spawn agent → select formula → create molecule → hook to agent →
 nudge → create convoy → log event.
 
-- **Derivation**: Agent Protocol (find/spawn) + Config (select formula)
-  - Bead Store (create molecule, convoy) + Agent Protocol (nudge) +
-    Event Bus (log event).
+- **Derivation**: Session (find/spawn) + Config (select formula)
+  + Bead Store (create molecule, convoy) + Session (nudge) +
+  Event Bus (log event).
 - **Proof**: Pure composition of primitives 1-4. No new infrastructure.
 
 **Details**: [Dispatch](dispatch.md)
 
 ### 9. Health Patrol
 
-Ping agents (Agent Protocol), compare thresholds (Config), publish
-stalls (Event Bus), restart with backoff.
+Probe sessions (Session), compare thresholds (Config), publish stalls
+(Event Bus), restart with backoff.
 
-- **Derivation**: Agent Protocol (primitive 1) for liveness. Config
+- **Derivation**: Session (primitive 1) for liveness. Config
   (primitive 4) for thresholds and backoff parameters. Event Bus
   (primitive 3) for stall publication.
-- **Proof**: Uses Agent Protocol, Config, and Event Bus. The
-  controller drives all operations — no user-configured agent role
-  is required.
+- **Proof**: Uses Session, Config, and Event Bus. The controller
+  drives all operations — no user-configured agent role is required.
 
 **Details**: [Health Patrol](health-patrol.md)
 
@@ -176,16 +182,16 @@ These hold across all nine concepts:
 
 Capabilities activate based on config section presence:
 
-| Level | Config Required                 | Adds                   |
-| ----- | ------------------------------- | ---------------------- |
-| 0-1   | `[workspace]` + `[[agent]]`     | Agent + tasks          |
-| 2     | `[daemon]`                      | Task loop (controller) |
-| 3     | `[[agent]]` with `[agent.pool]` | Multiple agents + pool |
-| 4     | `[mail]`                        | Messaging              |
-| 5     | Formula files + `[formulas]`    | Formulas & molecules   |
-| 6     | `[daemon]` health fields        | Health monitoring      |
-| 7     | `orders/` directories           | Orders                 |
-| 8     | All sections                    | Full orchestration     |
+| Level | Config Required | Adds |
+|---|---|---|
+| 0-1 | `[workspace]` + `[[agent]]` | Session + tasks |
+| 2 | `[daemon]` | Task loop (controller) |
+| 3 | `[[agent]]` with `[agent.pool]` | Multiple agents + pool |
+| 4 | `[mail]` | Messaging |
+| 5 | Formula files + `[formulas]` | Formulas & molecules |
+| 6 | `[daemon]` health fields | Health monitoring |
+| 7 | `orders/` directories | Orders |
+| 8 | All sections | Full orchestration |
 
 ## See Also
 

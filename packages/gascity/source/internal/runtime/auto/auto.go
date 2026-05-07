@@ -26,9 +26,11 @@ type Provider struct {
 
 var (
 	_ runtime.Provider                      = (*Provider)(nil)
+	_ runtime.DeadRuntimeSessionChecker     = (*Provider)(nil)
 	_ runtime.InteractionProvider           = (*Provider)(nil)
 	_ runtime.InterruptBoundaryWaitProvider = (*Provider)(nil)
 	_ runtime.InterruptedTurnResetProvider  = (*Provider)(nil)
+	_ runtime.TransportCapabilityProvider   = (*Provider)(nil)
 )
 
 // New creates a composite provider. defaultSP handles sessions not
@@ -65,6 +67,18 @@ func (p *Provider) route(name string) runtime.Provider {
 		return p.acpSP
 	}
 	return p.defaultSP
+}
+
+// SupportsTransport reports whether this provider can route the requested
+// session transport.
+func (p *Provider) SupportsTransport(transport string) bool {
+	if transport != "acp" {
+		return true
+	}
+	if provider, ok := p.acpSP.(runtime.TransportCapabilityProvider); ok {
+		return provider.SupportsTransport(transport)
+	}
+	return false
 }
 
 // DetectTransport reports the backend currently hosting the named session.
@@ -160,6 +174,30 @@ func (p *Provider) IsRunning(name string) bool {
 		return p.defaultSP.IsRunning(name)
 	}
 	return p.acpSP.IsRunning(name)
+}
+
+// IsDeadRuntimeSession checks both backends for a positive dead-artifact
+// report because ListRunning is also merged across both backends.
+func (p *Provider) IsDeadRuntimeSession(name string) (bool, error) {
+	primary := p.route(name)
+	if dead, err := providerDeadRuntimeSession(primary, name); dead || err != nil {
+		return dead, err
+	}
+	p.mu.RLock()
+	isACP := p.routes[name]
+	p.mu.RUnlock()
+	if isACP {
+		return providerDeadRuntimeSession(p.defaultSP, name)
+	}
+	return providerDeadRuntimeSession(p.acpSP, name)
+}
+
+func providerDeadRuntimeSession(sp runtime.Provider, name string) (bool, error) {
+	checker, ok := sp.(runtime.DeadRuntimeSessionChecker)
+	if !ok {
+		return false, nil
+	}
+	return checker.IsDeadRuntimeSession(name)
 }
 
 // IsAttached delegates to the routed backend.
@@ -271,26 +309,6 @@ func (p *Provider) ListRunning(prefix string) ([]string, error) {
 		runtime.BackendListResult{Label: "default", Names: defaultList, Err: dErr},
 		runtime.BackendListResult{Label: "acp", Names: acpList, Err: aErr},
 	)
-}
-
-// SessionNameForAgent asks routed backends that can resolve live agent/template
-// identities for their current runtime session name.
-func (p *Provider) SessionNameForAgent(agentName string) (string, bool) {
-	if resolver, ok := p.defaultSP.(interface {
-		SessionNameForAgent(string) (string, bool)
-	}); ok {
-		if name, found := resolver.SessionNameForAgent(agentName); found {
-			return name, true
-		}
-	}
-	if resolver, ok := p.acpSP.(interface {
-		SessionNameForAgent(string) (string, bool)
-	}); ok {
-		if name, found := resolver.SessionNameForAgent(agentName); found {
-			return name, true
-		}
-	}
-	return "", false
 }
 
 // GetLastActivity delegates to the routed backend.

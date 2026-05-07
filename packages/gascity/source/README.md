@@ -29,22 +29,27 @@ See the full install guide at [docs/getting-started/installation.md](docs/gettin
 Gas City requires the following tools on your system. `gc init` and
 `gc start` check for these automatically and report any that are missing.
 
-| Dependency              | Required            | Min Version | Install (macOS)                                           | Install (Linux)                                           |
-| ----------------------- | ------------------- | ----------- | --------------------------------------------------------- | --------------------------------------------------------- |
-| tmux                    | Always              | —           | `brew install tmux`                                       | `apt install tmux`                                        |
-| git                     | Always              | —           | `brew install git`                                        | `apt install git`                                         |
-| jq                      | Always              | —           | `brew install jq`                                         | `apt install jq`                                          |
-| pgrep                   | Always              | —           | (included in macOS)                                       | `apt install procps`                                      |
-| lsof                    | Always              | —           | (included in macOS)                                       | `apt install lsof`                                        |
-| dolt                    | Beads provider `bd` | 1.86.1      | `brew install dolt`                                       | [releases](https://github.com/dolthub/dolt/releases)      |
-| bd                      | Beads provider `bd` | 1.0.0       | [releases](https://github.com/gastownhall/beads/releases) | [releases](https://github.com/gastownhall/beads/releases) |
-| flock                   | Beads provider `bd` | —           | `brew install flock`                                      | `apt install util-linux`                                  |
-| claude / codex / gemini | Per provider        | —           | See provider docs                                         | See provider docs                                         |
+| Dependency | Required | Min Version | Install (macOS) | Install (Linux) |
+|------------|----------|-------------|-----------------|-----------------|
+| tmux | Always | — | `brew install tmux` | `apt install tmux` |
+| git | Always | — | `brew install git` | `apt install git` |
+| jq | Always | — | `brew install jq` | `apt install jq` |
+| pgrep | Always | — | (included in macOS) | `apt install procps` |
+| lsof | Always | — | (included in macOS) | `apt install lsof` |
+| dolt | Beads provider `bd` | 1.86.2 or newer | `brew install dolt` | [releases](https://github.com/dolthub/dolt/releases) |
+| bd | Beads provider `bd` | 1.0.0 | [releases](https://github.com/gastownhall/beads/releases) | [releases](https://github.com/gastownhall/beads/releases) |
+| flock | Beads provider `bd` | — | `brew install flock` | `apt install util-linux` |
+| claude / codex / gemini | Per provider | — | See provider docs | See provider docs |
 
 The `bd` (beads) provider is the default. It uses managed Dolt by default.
 To keep `bd` but use doltlite storage, set `[beads] backend = "doltlite"`.
 To use a file-based store instead (no dolt/bd/flock needed), set
 `GC_BEADS=file` or add `[beads] provider = "file"` to your `city.toml`.
+
+Managed Dolt checks require a final Dolt 1.86.2 or newer. Earlier and
+pre-release builds can miss the upstream GC/writer deadlock fix in
+dolthub/dolt commit `ccf7bde206`, which can hang `dolt_backup sync` under
+heavy write load.
 
 Install from Homebrew:
 

@@ -45,6 +45,11 @@ type agentBuildParams struct {
 	// desired-state build so per-agent resolution does not rescan the store.
 	sessionBeads *sessionBeadSnapshot
 
+	// assignedWorkBeads is the actionable assigned-work snapshot for this
+	// build. Pool new-tier materialization uses it to avoid treating sessions
+	// that already own work as available generic capacity.
+	assignedWorkBeads []beads.Bead
+
 	// beadNames caches qualifiedName → session_name mappings resolved
 	// during this build cycle. Populated lazily by resolveSessionName.
 	beadNames map[string]string
@@ -220,19 +225,10 @@ func effectiveOverlayDirs(cityDirs []string, rigDirs map[string][]string, rigNam
 
 // templateNameFor returns the configuration template name for an agent.
 // For pool instances, this is the original template name (PoolName).
-// For regular agents, use the configured agent identity rather than the
-// resolved session identity. Named sessions can have their own identity
-// (for example rig/crew-mcp) while inheriting attachments from a template
-// agent (for example rig/crew); hidden materializer commands must target the
-// configured template so `gc internal ... --agent` can resolve it.
+// For regular agents, it's the qualified name.
 func templateNameFor(cfgAgent *config.Agent, qualifiedName string) string {
 	if cfgAgent.PoolName != "" {
 		return cfgAgent.PoolName
-	}
-	if cfgAgent != nil {
-		if template := cfgAgent.QualifiedName(); template != "" {
-			return template
-		}
 	}
 	return qualifiedName
 }

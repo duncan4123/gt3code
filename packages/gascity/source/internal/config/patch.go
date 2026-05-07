@@ -41,7 +41,7 @@ type AgentPatch struct {
 	// PromptTemplate overrides the prompt template path.
 	// Relative paths resolve against the city directory.
 	PromptTemplate *string `toml:"prompt_template,omitempty"`
-	// Session overrides the session transport ("acp").
+	// Session overrides the session transport ("acp" or "tmux").
 	Session *string `toml:"session,omitempty"`
 	// Provider overrides the provider name.
 	Provider *string `toml:"provider,omitempty"`
@@ -124,9 +124,9 @@ type AgentPatch struct {
 	MaxActiveSessions *int `toml:"max_active_sessions,omitempty"`
 	// MinActiveSessions overrides the minimum number of sessions to keep alive.
 	MinActiveSessions *int `toml:"min_active_sessions,omitempty"`
-	// ScaleCheck overrides the command template whose output determines desired
-	// session count. Supports the same Go template placeholders as
-	// Agent.scale_check.
+	// ScaleCheck overrides the command template whose output reports new
+	// unassigned session demand for bead-backed reconciliation. Supports the
+	// same Go template placeholders as Agent.scale_check.
 	ScaleCheck *string `toml:"scale_check,omitempty"`
 	// OptionDefaults adds or overrides provider option defaults for this agent.
 	// Keys are option keys, values are choice values. Merges additively
@@ -193,8 +193,12 @@ type ProviderPatch struct {
 	Base **string `toml:"base,omitempty"`
 	// Command overrides the provider command.
 	Command *string `toml:"command,omitempty"`
+	// ACPCommand overrides the provider command for ACP transport sessions.
+	ACPCommand *string `toml:"acp_command,omitempty"`
 	// Args overrides the provider args.
 	Args []string `toml:"args,omitempty"`
+	// ACPArgs overrides the provider args for ACP transport sessions.
+	ACPArgs []string `toml:"acp_args,omitempty"`
 	// ArgsAppend overrides the provider args_append list.
 	ArgsAppend []string `toml:"args_append,omitempty"`
 	// OptionsSchemaMerge overrides the options_schema merge mode.
@@ -256,10 +260,6 @@ func applyNamedSessionPatch(cfg *City, patch *NamedSessionPatch) error {
 	}
 	for i := range cfg.NamedSessions {
 		s := &cfg.NamedSessions[i]
-		if s.TemplateQualifiedName() == target || s.QualifiedName() == target {
-			applyNamedSessionPatchFields(s, patch)
-			return nil
-		}
 		if s.Dir == patch.Dir && s.Template == patch.Template {
 			applyNamedSessionPatchFields(s, patch)
 			return nil
@@ -497,9 +497,16 @@ func applyProviderPatch(cfg *City, patch *ProviderPatch) error {
 		if patch.Command != nil {
 			newSpec.Command = *patch.Command
 		}
+		if patch.ACPCommand != nil {
+			newSpec.ACPCommand = *patch.ACPCommand
+		}
 		if len(patch.Args) > 0 {
 			newSpec.Args = make([]string, len(patch.Args))
 			copy(newSpec.Args, patch.Args)
+		}
+		if patch.ACPArgs != nil {
+			newSpec.ACPArgs = make([]string, len(patch.ACPArgs))
+			copy(newSpec.ACPArgs, patch.ACPArgs)
 		}
 		if len(patch.ArgsAppend) > 0 {
 			newSpec.ArgsAppend = make([]string, len(patch.ArgsAppend))
@@ -533,9 +540,16 @@ func applyProviderPatch(cfg *City, patch *ProviderPatch) error {
 	if patch.Command != nil {
 		spec.Command = *patch.Command
 	}
+	if patch.ACPCommand != nil {
+		spec.ACPCommand = *patch.ACPCommand
+	}
 	if len(patch.Args) > 0 {
 		spec.Args = make([]string, len(patch.Args))
 		copy(spec.Args, patch.Args)
+	}
+	if patch.ACPArgs != nil {
+		spec.ACPArgs = make([]string, len(patch.ACPArgs))
+		copy(spec.ACPArgs, patch.ACPArgs)
 	}
 	if len(patch.ArgsAppend) > 0 {
 		spec.ArgsAppend = make([]string, len(patch.ArgsAppend))

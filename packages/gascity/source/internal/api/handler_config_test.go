@@ -12,26 +12,16 @@ import (
 
 func TestHandleConfigGet(t *testing.T) {
 	fs := newFakeState(t)
-	oldBaseURL := configEffectiveAPIBaseURLHook
-	oldClientFactory := configEffectiveAPIClientFactory
-	t.Cleanup(func() {
-		configEffectiveAPIBaseURLHook = oldBaseURL
-		configEffectiveAPIClientFactory = oldClientFactory
-	})
-	configEffectiveAPIBaseURLHook = func() (string, error) { return "http://127.0.0.1:8372", nil }
-	configEffectiveAPIClientFactory = func(baseURL string) effectiveAPIConfigClient {
-		return fakeConfigAPIClient{}
-	}
 	fs.cfg.Workspace.Provider = "claude"
 	fs.cfg.Agents[0].MinActiveSessions = intPtr(0)
 	fs.cfg.Agents[0].MaxActiveSessions = intPtr(3)
-	fs.cfg.NamedSessions = []config.NamedSession{{
-		Template: fs.cfg.Agents[0].Name,
-		Dir:      fs.cfg.Agents[0].Dir,
-		Mode:     "on_demand",
-	}}
 	fs.cfg.Providers = map[string]config.ProviderSpec{
-		"custom": {DisplayName: "Custom", Command: "custom-cli"},
+		"custom": {
+			DisplayName: "Custom",
+			Command:     "custom-cli",
+			ACPCommand:  "custom-cli-acp",
+			ACPArgs:     []string{"rpc", "--stdio"},
+		},
 	}
 	h := newTestCityHandler(t, fs)
 
@@ -55,17 +45,11 @@ func TestHandleConfigGet(t *testing.T) {
 	if resp.Workspace.Provider != "claude" {
 		t.Errorf("workspace.provider = %q, want %q", resp.Workspace.Provider, "claude")
 	}
-	if resp.EffectiveAPIURL != "http://127.0.0.1:8372" {
-		t.Errorf("effective_api_url = %q, want %q", resp.EffectiveAPIURL, "http://127.0.0.1:8372")
-	}
 	if len(resp.Agents) != 1 {
 		t.Errorf("agents count = %d, want 1", len(resp.Agents))
 	}
 	if !resp.Agents[0].IsPool {
 		t.Error("expected config agent to expose is_pool=true")
-	}
-	if resp.Agents[0].NamedSessionMode != "on_demand" {
-		t.Errorf("agents[0].named_session_mode = %q, want %q", resp.Agents[0].NamedSessionMode, "on_demand")
 	}
 	if len(resp.Rigs) != 1 {
 		t.Errorf("rigs count = %d, want 1", len(resp.Rigs))
@@ -73,42 +57,11 @@ func TestHandleConfigGet(t *testing.T) {
 	if _, ok := resp.Providers["custom"]; !ok {
 		t.Error("expected 'custom' in providers")
 	}
-}
-
-type fakeConfigAPIClient struct{}
-
-func (fakeConfigAPIClient) ListCities() ([]CityInfo, error) {
-	return []CityInfo{{Name: "test-city", Path: "/tmp/test-city", Running: true}}, nil
-}
-
-func TestHandleConfigGet_OmitsNamedSessionModeWhenNoNamedSession(t *testing.T) {
-	fs := newFakeState(t)
-	fs.cfg.Agents[0].MinActiveSessions = intPtr(0)
-	fs.cfg.Agents[0].MaxActiveSessions = intPtr(1)
-	h := newTestCityHandler(t, fs)
-
-	req := httptest.NewRequest("GET", cityURL(fs, "/config"), nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusOK, w.Body.String())
+	if resp.Providers["custom"].ACPCommand != "custom-cli-acp" {
+		t.Errorf("providers.custom.acp_command = %q, want %q", resp.Providers["custom"].ACPCommand, "custom-cli-acp")
 	}
-
-	var raw map[string]any
-	if err := json.NewDecoder(w.Body).Decode(&raw); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	agents, ok := raw["agents"].([]any)
-	if !ok || len(agents) == 0 {
-		t.Fatalf("agents = %#v, want non-empty array", raw["agents"])
-	}
-	agent0, ok := agents[0].(map[string]any)
-	if !ok {
-		t.Fatalf("agent[0] = %#v, want object", agents[0])
-	}
-	if got := agent0["named_session_mode"]; got != "on_demand" {
-		t.Fatalf("named_session_mode = %#v, want %q", got, "on_demand")
+	if resp.Providers["custom"].ACPArgs == nil || len(*resp.Providers["custom"].ACPArgs) != 2 || (*resp.Providers["custom"].ACPArgs)[0] != "rpc" || (*resp.Providers["custom"].ACPArgs)[1] != "--stdio" {
+		t.Errorf("providers.custom.acp_args = %#v, want [rpc --stdio]", resp.Providers["custom"].ACPArgs)
 	}
 }
 
@@ -144,24 +97,43 @@ func TestHandleConfigGet_UsesEffectiveWorkspaceIdentity(t *testing.T) {
 	}
 }
 
-func TestConfigAgentNamedSessionMode_DefaultsImplicitAndPoolToOnDemand(t *testing.T) {
-	if got := configAgentNamedSessionMode(config.Agent{
-		Name:     "dog",
-		Implicit: true,
-	}, nil); got != "on_demand" {
-		t.Fatalf("implicit mode = %q, want on_demand", got)
+func TestHandleConfigGetPreservesExplicitEmptyACPArgs(t *testing.T) {
+	fs := newFakeState(t)
+	fs.cfg.Providers = map[string]config.ProviderSpec{
+		"custom": {
+			Command:    "custom-cli",
+			ACPCommand: "custom-cli-acp",
+			ACPArgs:    []string{},
+		},
 	}
-	if got := configAgentNamedSessionMode(config.Agent{
-		Name:              "polecat",
-		MaxActiveSessions: intPtr(5),
-	}, nil); got != "on_demand" {
-		t.Fatalf("pool mode = %q, want on_demand", got)
+	h := newTestCityHandler(t, fs)
+
+	req := httptest.NewRequest("GET", cityURL(fs, "/config"), nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusOK, w.Body.String())
 	}
-	if got := configAgentNamedSessionMode(config.Agent{
-		Name:              "boot",
-		MaxActiveSessions: intPtr(1),
-	}, nil); got != "always" {
-		t.Fatalf("singleton mode = %q, want always", got)
+
+	var resp map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	providers, ok := resp["providers"].(map[string]any)
+	if !ok {
+		t.Fatal("expected providers map")
+	}
+	custom, ok := providers["custom"].(map[string]any)
+	if !ok {
+		t.Fatal("expected custom provider")
+	}
+	acpArgs, ok := custom["acp_args"].([]any)
+	if !ok {
+		t.Fatalf("acp_args = %#v, want empty array field", custom["acp_args"])
+	}
+	if len(acpArgs) != 0 {
+		t.Fatalf("acp_args len = %d, want 0", len(acpArgs))
 	}
 }
 
@@ -245,7 +217,12 @@ func TestHandleConfigExplain(t *testing.T) {
 	fs.cfg.Agents[0].MinActiveSessions = intPtr(0)
 	fs.cfg.Agents[0].MaxActiveSessions = intPtr(3)
 	fs.cfg.Providers = map[string]config.ProviderSpec{
-		"claude": {DisplayName: "My Claude", Command: "my-claude"},
+		"claude": {
+			DisplayName: "My Claude",
+			Command:     "my-claude",
+			ACPCommand:  "my-claude-acp",
+			ACPArgs:     []string{"rpc"},
+		},
 	}
 	h := newTestCityHandler(t, fs)
 
@@ -284,6 +261,13 @@ func TestHandleConfigExplain(t *testing.T) {
 	claude := providers["claude"].(map[string]any)
 	if claude["origin"] != "builtin+city" {
 		t.Errorf("claude origin = %q, want %q", claude["origin"], "builtin+city")
+	}
+	if claude["acp_command"] != "my-claude-acp" {
+		t.Errorf("claude acp_command = %q, want %q", claude["acp_command"], "my-claude-acp")
+	}
+	acpArgs, ok := claude["acp_args"].([]any)
+	if !ok || len(acpArgs) != 1 || acpArgs[0] != "rpc" {
+		t.Errorf("claude acp_args = %#v, want [rpc]", claude["acp_args"])
 	}
 	// A builtin-only provider should have origin "builtin".
 	codex := providers["codex"].(map[string]any)
@@ -374,7 +358,7 @@ func TestHandleConfigGet_V2BindingNameIncludedInAgentName(t *testing.T) {
 	// V2 imported agents carry a BindingName that's runtime-only (json:"-").
 	// The config response still needs to expose it so clients can
 	// reconstruct the same qualified identity that appears in
-	// session.template — otherwise downstream filters (e.g. gasworks-gui's
+	// session.template — otherwise downstream filters (e.g. a real-world app's
 	// CityInfo session bucket) compare "mayor" against "gastown.mayor" and
 	// drop the session.
 	fs := newFakeState(t)

@@ -15,13 +15,21 @@
 // narrow on actual runtime shape and drop malformed frames with a
 // UI error report — same discipline as the pre-migration decoder.
 //
-// See specs/architecture.md §6 "Tooling landscape" (TypeScript
+// See engdocs/architecture/api-control-plane.md §6 "Tooling landscape" (TypeScript
 // section) for why hey-api is the SSE tool even though openapi-fetch
 // still drives REST.
 
 import { client } from "./generated/client.gen";
-import { streamEvents, streamSession, streamSupervisorEvents } from "./generated/sdk.gen";
-import type { CityEventStreamEnvelope, HeartbeatEvent, SupervisorEventStreamEnvelope } from "./api";
+import {
+  streamEvents,
+  streamSession,
+  streamSupervisorEvents,
+} from "./generated/sdk.gen";
+import type {
+  CityEventStreamEnvelope,
+  HeartbeatEvent,
+  SupervisorEventStreamEnvelope,
+} from "./api";
 import { reportUIError } from "./ui";
 
 export interface SSEHandle {
@@ -31,6 +39,8 @@ export interface SSEHandle {
 export type SSEStatus = "connecting" | "live" | "reconnecting";
 
 export interface SSEOptions {
+  afterCursor?: string;
+  afterSeq?: string;
   onStatus?: (status: SSEStatus) => void;
 }
 
@@ -52,7 +62,10 @@ export type SupervisorEventMessage = {
   data: SupervisorEventStreamEnvelope;
 };
 
-export type DashboardEventMessage = HeartbeatMessage | CityEventMessage | SupervisorEventMessage;
+export type DashboardEventMessage =
+  | HeartbeatMessage
+  | CityEventMessage
+  | SupervisorEventMessage;
 
 export interface AgentOutputMessage {
   id?: string;
@@ -77,11 +90,11 @@ function isBaseEventEnvelope(value: unknown): value is {
   type: string;
 } {
   return (
-    isRecord(value) &&
-    typeof value.actor === "string" &&
-    typeof value.seq === "number" &&
-    typeof value.ts === "string" &&
-    typeof value.type === "string"
+    isRecord(value)
+    && typeof value.actor === "string"
+    && typeof value.seq === "number"
+    && typeof value.ts === "string"
+    && typeof value.type === "string"
   );
 }
 
@@ -125,6 +138,7 @@ export function connectEvents(
   opts?: SSEOptions,
 ): SSEHandle {
   const controller = new AbortController();
+  let afterCursor = opts?.afterCursor;
   opts?.onStatus?.("connecting");
   (async () => {
     let attempt = 0;
@@ -137,6 +151,7 @@ export function connectEvents(
       try {
         const { stream } = await streamSupervisorEvents({
           client,
+          query: afterCursor ? { after_cursor: afterCursor } : undefined,
           signal: controller.signal,
           onSseEvent: (frame) => {
             // Any frame = live connection; reset backoff and the
@@ -146,12 +161,16 @@ export function connectEvents(
             errorReported = false;
             opts?.onStatus?.("live");
             const eventName = frame.event ?? "tagged_event";
+            const id = frame.id !== undefined ? String(frame.id) : undefined;
+            if (id) {
+              afterCursor = id;
+            }
             if (eventName === "heartbeat") {
               if (!isHeartbeat(frame.data)) {
                 reportUIError("Invalid supervisor heartbeat frame", frame);
                 return;
               }
-              onEvent({ event: "heartbeat", id: frame.id, data: frame.data });
+              onEvent({ event: "heartbeat", id, data: frame.data });
               return;
             }
             if (eventName === "tagged_event") {
@@ -159,12 +178,13 @@ export function connectEvents(
                 reportUIError("Invalid supervisor event frame", frame);
                 return;
               }
-              onEvent({ event: "tagged_event", id: frame.id, data: frame.data });
+              onEvent({ event: "tagged_event", id, data: frame.data });
               return;
             }
             reportUIError(`Unexpected supervisor SSE event: ${eventName}`, frame);
           },
         });
+        opts?.onStatus?.("live");
         // Drain the underlying async generator so the reader keeps
         // pumping frames into onSseEvent. The values it yields are not
         // used — per-frame dispatch happens in the callback above.
@@ -204,6 +224,7 @@ export function connectCityEvents(
   opts?: SSEOptions,
 ): SSEHandle {
   const controller = new AbortController();
+  let afterSeq = opts?.afterSeq;
   opts?.onStatus?.("connecting");
   (async () => {
     let attempt = 0;
@@ -214,6 +235,7 @@ export function connectCityEvents(
         const { stream } = await streamEvents({
           client,
           path: { cityName: city },
+          query: afterSeq ? { after_seq: afterSeq } : undefined,
           signal: controller.signal,
           onSseEvent: (frame) => {
             attempt = 0;
@@ -221,6 +243,9 @@ export function connectCityEvents(
             opts?.onStatus?.("live");
             const eventName = frame.event ?? "event";
             const id = frame.id !== undefined ? String(frame.id) : undefined;
+            if (id) {
+              afterSeq = id;
+            }
             if (eventName === "heartbeat") {
               if (!isHeartbeat(frame.data)) {
                 reportUIError("Invalid city heartbeat frame", frame);
@@ -240,6 +265,7 @@ export function connectCityEvents(
             reportUIError(`Unexpected city SSE event: ${eventName}`, frame);
           },
         });
+        opts?.onStatus?.("live");
         for await (const _ of stream) {
           void _;
         }

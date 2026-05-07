@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -916,14 +915,18 @@ func (p *Provider) threadSessionStatus(threadID string) string {
 		return ""
 	}
 
-	threads := snapshotThreads(snapshot)
 	cache := make(map[string]string)
-	for _, thread := range threads {
-		id, _ := thread["id"].(string)
-		if id == "" {
+	for _, raw := range snapshotItems(snapshot, "threads") {
+		thread, _ := raw.(map[string]interface{})
+		if thread == nil {
 			continue
 		}
-		cache[id] = threadSessionStatus(snapshot, id)
+		id, _ := thread["id"].(string)
+		session, _ := thread["session"].(map[string]interface{})
+		if session != nil {
+			st, _ := session["status"].(string)
+			cache[id] = st
+		}
 	}
 
 	p.mu.Lock()
@@ -931,10 +934,7 @@ func (p *Provider) threadSessionStatus(threadID string) string {
 	p.snapshotCacheAt = time.Now()
 	p.mu.Unlock()
 
-	if status, ok := cache[threadID]; ok {
-		return status
-	}
-	return "gone"
+	return cache[threadID]
 }
 
 func (p *Provider) cacheSnapshot(snapshot map[string]interface{}) {
@@ -1046,25 +1046,7 @@ func (p *Provider) rpcUpdateThreadMeta(threadID, branch, worktreePath string) er
 	return err
 }
 
-func t3ModelSelection(provider, model, agent, variant string) map[string]interface{} {
-	selection := map[string]interface{}{
-		"provider": provider,
-		"model":    model,
-	}
-	if provider == "opencode" && (agent != "" || variant != "") {
-		options := map[string]interface{}{}
-		if agent != "" {
-			options["agent"] = agent
-		}
-		if variant != "" {
-			options["variant"] = variant
-		}
-		selection["options"] = options
-	}
-	return selection
-}
-
-func (p *Provider) dispatchProjectCreate(projectID, title, workspaceRoot, provider, model, agent, variant string) error {
+func (p *Provider) dispatchProjectCreate(projectID, title, workspaceRoot, provider, model string) error {
 	command := map[string]interface{}{
 		"type":          "project.create",
 		"commandId":     p.nextCommandID("t3bridge-project"),
@@ -1074,7 +1056,10 @@ func (p *Provider) dispatchProjectCreate(projectID, title, workspaceRoot, provid
 		"createdAt":     time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
 	}
 	if provider != "" || model != "" {
-		command["defaultModelSelection"] = t3ModelSelection(provider, model, agent, variant)
+		command["defaultModelSelection"] = map[string]interface{}{
+			"provider": provider,
+			"model":    model,
+		}
 	}
 	return p.rpcDispatchCommand(command)
 }
@@ -1085,8 +1070,6 @@ func (p *Provider) dispatchThreadCreate(
 	title,
 	provider,
 	model,
-	agent,
-	variant,
 	branch,
 	worktreePath string,
 	customMetadata map[string]interface{},
@@ -1097,7 +1080,7 @@ func (p *Provider) dispatchThreadCreate(
 		"threadId":        threadID,
 		"projectId":       projectID,
 		"title":           title,
-		"modelSelection":  t3ModelSelection(provider, model, agent, variant),
+		"modelSelection":  map[string]interface{}{"provider": provider, "model": model},
 		"runtimeMode":     "full-access",
 		"interactionMode": "default",
 		"branch":          nil,
@@ -1145,12 +1128,15 @@ func (p *Provider) dispatchThreadMeta(threadID string, customMetadata map[string
 	return p.rpcDispatchCommand(command)
 }
 
-func (p *Provider) dispatchThreadModelSelection(threadID, provider, model, agent, variant string) error {
+func (p *Provider) dispatchThreadModelSelection(threadID, provider, model string) error {
 	return p.rpcDispatchCommand(map[string]interface{}{
-		"type":           "thread.meta.update",
-		"commandId":      p.nextCommandID("t3bridge-model"),
-		"threadId":       threadID,
-		"modelSelection": t3ModelSelection(provider, model, agent, variant),
+		"type":      "thread.meta.update",
+		"commandId": p.nextCommandID("t3bridge-model"),
+		"threadId":  threadID,
+		"modelSelection": map[string]interface{}{
+			"provider": provider,
+			"model":    model,
+		},
 	})
 }
 
@@ -1173,7 +1159,7 @@ func (p *Provider) dispatchActivity(threadID, kind, summary, tone string, payloa
 	})
 }
 
-func (p *Provider) dispatchTurnStart(threadID, text, provider, model, agent, variant string) error {
+func (p *Provider) dispatchTurnStart(threadID, text, provider, model string) error {
 	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	return p.rpcDispatchCommand(map[string]interface{}{
 		"type":      "thread.turn.start",
@@ -1185,7 +1171,10 @@ func (p *Provider) dispatchTurnStart(threadID, text, provider, model, agent, var
 			"text":        text,
 			"attachments": []interface{}{},
 		},
-		"modelSelection":  t3ModelSelection(provider, model, agent, variant),
+		"modelSelection": map[string]interface{}{
+			"provider": provider,
+			"model":    model,
+		},
 		"runtimeMode":     "full-access",
 		"interactionMode": "default",
 		"createdAt":       now,
@@ -1448,12 +1437,6 @@ func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state string, se
 		if port := sessionEnv["GC_DOLT_PORT"]; port != "" {
 			meta["gc.doltPort"] = port
 		}
-		if agent := strings.TrimSpace(sessionEnv["GC_OPENCODE_AGENT"]); agent != "" {
-			meta["gc.openCodeAgent"] = agent
-		}
-		if variant := strings.TrimSpace(sessionEnv["GC_OPENCODE_VARIANT"]); variant != "" {
-			meta["gc.openCodeVariant"] = variant
-		}
 	}
 	for key, value := range meta {
 		if str, ok := value.(string); ok && str == "" {
@@ -1548,12 +1531,7 @@ func deriveThreadTitle(name string, envelope StartupEnvelope) string {
 	return name + " · " + shortAgent
 }
 
-func deriveProjectWorkspaceRoot(workDir string, envelope StartupEnvelope, provider string) string {
-	if strings.EqualFold(strings.TrimSpace(provider), "codex") {
-		if root := strings.TrimSpace(workDir); root != "" {
-			return root
-		}
-	}
+func deriveProjectWorkspaceRoot(workDir string, envelope StartupEnvelope) string {
 	if root := strings.TrimSpace(envelope.GC.RigPath); root != "" {
 		return root
 	}
@@ -1603,26 +1581,12 @@ func resolveProviderModel(cfg runtime.Config, envelope StartupEnvelope) (string,
 	return provider, model
 }
 
-func resolveOpenCodeModelOptions(cfg runtime.Config) (string, string) {
-	agent := strings.TrimSpace(cfg.Env["GC_OPENCODE_AGENT"])
-	if agent == "" {
-		agent = strings.TrimSpace(cfg.Env["OPENCODE_AGENT"])
-	}
-	variant := strings.TrimSpace(cfg.Env["GC_OPENCODE_VARIANT"])
-	if variant == "" {
-		variant = strings.TrimSpace(cfg.Env["OPENCODE_VARIANT"])
-	}
-	return agent, variant
-}
-
 func normalizeT3Provider(provider string) string {
 	switch strings.TrimSpace(provider) {
 	case "claude", "claudeAgent":
 		return "claudeAgent"
 	case "codex":
 		return "codex"
-	case "opencode", "kimi-for-coding":
-		return "opencode"
 	default:
 		return strings.TrimSpace(provider)
 	}
@@ -1690,9 +1654,6 @@ func resolveConfigProviderModel(cfg *execStartConfig) (string, string, bool) {
 
 func beadStoreForWatcher(workDir string, env map[string]string) *beads.CachingStore {
 	bd := beads.NewBdStore(workDir, beads.ExecCommandRunnerWithEnv(env))
-	if direct, err := beads.NewDoltliteReadStore(workDir, bd); err == nil {
-		return beads.NewCachingStore(direct, nil)
-	}
 	return beads.NewCachingStore(bd, nil)
 }
 
@@ -1908,124 +1869,26 @@ func (p *Provider) IsRunning(name string) bool {
 	snapshot, err := p.rpcSnapshot()
 	if err != nil {
 		if p.withinRecentStart(name, 30*time.Second) {
-			debugf("t3bridge: IsRunning(%s) — snapshot soft-unavailable during startup grace → true (%v)\n", name, err)
+			fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) — snapshot soft-unavailable during startup grace → true (%v)\n", name, err)
 			return true
 		}
-		debugf("t3bridge: IsRunning(%s) — snapshot error: %v\n", name, err)
+		fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) — snapshot error: %v\n", name, err)
 		return false
 	}
 	thread := snapshotThreadBySessionName(snapshot, name)
 	binding := snapshotThreadBinding(thread)
 	if binding == nil {
-		debugf("t3bridge: IsRunning(%s) — no snapshot binding\n", name)
+		fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) — no snapshot binding\n", name)
 		return false
 	}
-	status := threadSessionStatus(snapshot, binding.ThreadID)
+	status := p.threadSessionStatus(binding.ThreadID)
 	if (status == "none" || status == "gone") && p.withinRecentStart(name, 30*time.Second) {
-		debugf("t3bridge: IsRunning(%s) threadID=%s — startup grace period → true\n", name, binding.ThreadID)
+		fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) threadID=%s — startup grace period → true\n", name, binding.ThreadID)
 		return true
 	}
-	result := status != "gone"
-	debugf("t3bridge: IsRunning(%s) threadID=%s status=%q → %v\n", name, binding.ThreadID, status, result)
+	result := status == "running" || status == "ready"
+	fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) threadID=%s status=%q → %v\n", name, binding.ThreadID, status, result)
 	return result
-}
-
-// SessionNameForAgent returns the live GC session name currently bound to a
-// configured agent/template identity, when the bridge snapshot can prove one.
-func (p *Provider) SessionNameForAgent(agentName string) (string, bool) {
-	agentName = strings.TrimSpace(agentName)
-	if agentName == "" {
-		return "", false
-	}
-	snapshot, err := p.rpcSnapshot()
-	if err != nil {
-		return "", false
-	}
-	var bestName string
-	bestUpdatedAt := ""
-	for _, thread := range snapshotThreads(snapshot) {
-		if deletedAt, ok := thread["deletedAt"]; ok && deletedAt != nil {
-			continue
-		}
-		meta := threadCustomMetadata(thread)
-		if meta["gc.state"] == "archived" {
-			continue
-		}
-		binding := snapshotThreadBinding(thread)
-		if binding == nil {
-			continue
-		}
-		if binding.SessionName != agentName && !metadataMatchesAgent(meta, agentName) {
-			continue
-		}
-		status := p.threadSessionStatus(binding.ThreadID)
-		if status != "running" && status != "ready" {
-			continue
-		}
-		updatedAt, _ := thread["updatedAt"].(string)
-		createdAt, _ := thread["createdAt"].(string)
-		candidate := updatedAt
-		if candidate == "" {
-			candidate = createdAt
-		}
-		if bestName == "" || candidate > bestUpdatedAt {
-			bestName = binding.SessionName
-			bestUpdatedAt = candidate
-		}
-	}
-	return bestName, bestName != ""
-}
-
-func metadataMatchesAgent(meta map[string]string, agentName string) bool {
-	if meta == nil {
-		return false
-	}
-	agentName = strings.TrimSpace(agentName)
-	rig, label := splitAgentIdentity(agentName)
-	if matchesAgentIdentity(meta["gc.agent"], agentName, rig, label) ||
-		matchesAgentIdentity(meta["gc.agentQualified"], agentName, rig, label) ||
-		matchesAgentIdentity(meta["gc.startupTemplate"], agentName, rig, label) {
-		return true
-	}
-	env := ParseSessionEnv(meta["gc.sessionEnv"])
-	return matchesAgentIdentity(env["GC_AGENT"], agentName, rig, label) ||
-		matchesAgentIdentity(env["GC_TEMPLATE"], agentName, rig, label)
-}
-
-func matchesAgentIdentity(value, agentName, rig, label string) bool {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return false
-	}
-	if value == agentName {
-		return true
-	}
-	valueRig, valueLabel := splitAgentIdentity(value)
-	if rig != "" && valueRig == rig && valueLabel == label {
-		return true
-	}
-	return rig == "" && valueRig == "" && valueLabel == label
-}
-
-func splitAgentIdentity(value string) (string, string) {
-	value = strings.TrimSpace(value)
-	rig := ""
-	name := value
-	if before, after, ok := strings.Cut(value, "/"); ok {
-		rig = before
-		name = after
-	}
-	if idx := strings.LastIndex(name, "."); idx >= 0 {
-		name = name[idx+1:]
-	}
-	return rig, name
-}
-
-func debugf(format string, args ...interface{}) {
-	if os.Getenv("GC_T3BRIDGE_DEBUG") != "1" {
-		return
-	}
-	fmt.Fprintf(os.Stderr, format, args...) //nolint:errcheck // best-effort debug logging
 }
 
 // ListRunning enumerates live GC-managed session names from the T3 snapshot.
@@ -2033,7 +1896,7 @@ func (p *Provider) ListRunning(prefix string) ([]string, error) {
 	snapshot, err := p.rpcSnapshot()
 	if err != nil {
 		if isSoftBridgeUnavailable(err) {
-			debugf("t3bridge: ListRunning(%s) — soft-unavailable: %v\n", prefix, err)
+			fmt.Fprintf(os.Stderr, "t3bridge: ListRunning(%s) — soft-unavailable: %v\n", prefix, err)
 			return nil, nil
 		}
 		return nil, err
@@ -2117,9 +1980,8 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	}
 
 	providerName, modelName := resolveProviderModel(cfg, envelope)
-	openCodeAgent, openCodeVariant := resolveOpenCodeModelOptions(cfg)
-	fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) resolved provider=%s model=%s opencode_agent=%s workdir=%s projectRoot=%s agent=%s template=%s\n", //nolint:errcheck
-		name, providerName, modelName, openCodeAgent, cfg.WorkDir, deriveProjectWorkspaceRoot(cfg.WorkDir, envelope, providerName), envelope.GC.Agent, envelope.GC.Template)
+	fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) resolved provider=%s model=%s workdir=%s projectRoot=%s agent=%s template=%s\n", //nolint:errcheck
+		name, providerName, modelName, cfg.WorkDir, deriveProjectWorkspaceRoot(cfg.WorkDir, envelope), envelope.GC.Agent, envelope.GC.Template)
 	if envelope.Runtime.Provider == "" {
 		envelope.Runtime.Provider = providerName
 	}
@@ -2164,10 +2026,6 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 		}
 	}
 
-	if err := runPreStart(ctx, name, cfg, 30*time.Second); err != nil {
-		return fail(fmt.Errorf("t3bridge: running pre_start: %w", err))
-	}
-
 	envelopeJSON, err := json.Marshal(envelope)
 	if err != nil {
 		if worktreePath != "" {
@@ -2189,7 +2047,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	existingBinding := snapshotThreadBinding(existingThread)
 
 	threadTitle := deriveThreadTitle(name, envelope)
-	projectWorkspaceRoot := deriveProjectWorkspaceRoot(cfg.WorkDir, envelope, providerName)
+	projectWorkspaceRoot := deriveProjectWorkspaceRoot(cfg.WorkDir, envelope)
 	projectTitle := deriveProjectTitle(name, projectWorkspaceRoot, envelope)
 
 	projectID := ""
@@ -2210,7 +2068,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 			projectID = existingBinding.ProjectID
 			threadID = existingBinding.ThreadID
 			if reuse.Decision == ReuseDecisionRebind {
-				_ = p.dispatchThreadModelSelection(threadID, providerName, modelName, openCodeAgent, openCodeVariant)
+				_ = p.dispatchThreadModelSelection(threadID, providerName, modelName)
 			}
 			if p.threadSessionStatus(threadID) != "running" {
 				_ = p.dispatchThreadSessionStop(threadID)
@@ -2256,7 +2114,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	if projectID == "" {
 		projectID = uuid.NewString()
 		fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) creating project id=%s title=%s root=%s\n", name, projectID, projectTitle, projectWorkspaceRoot) //nolint:errcheck
-		if err := p.dispatchProjectCreate(projectID, projectTitle, projectWorkspaceRoot, providerName, modelName, openCodeAgent, openCodeVariant); err != nil {
+		if err := p.dispatchProjectCreate(projectID, projectTitle, projectWorkspaceRoot, providerName, modelName); err != nil {
 			return fail(err)
 		}
 	}
@@ -2277,8 +2135,6 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 		threadTitle,
 		providerName,
 		modelName,
-		openCodeAgent,
-		openCodeVariant,
 		createBranch,
 		createWorktreePath,
 		initialGCMetadata,
@@ -2316,7 +2172,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 
 	if prompt := strings.TrimSpace(envelope.Startup.StartupPrompt); prompt != "" {
 		fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) sending startup prompt thread=%s len=%d\n", name, threadID, len(prompt)) //nolint:errcheck
-		if err := p.dispatchTurnStart(threadID, prompt, providerName, modelName, openCodeAgent, openCodeVariant); err != nil {
+		if err := p.dispatchTurnStart(threadID, prompt, providerName, modelName); err != nil {
 			return fail(err)
 		}
 		_ = p.dispatchActivity(threadID, "gc.prompt.sent", "GC startup prompt sent", "info", map[string]interface{}{
@@ -2329,7 +2185,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	}
 	if nudgeText != "" {
 		fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) sending nudge thread=%s len=%d\n", name, threadID, len(nudgeText)) //nolint:errcheck
-		if err := p.dispatchTurnStart(threadID, nudgeText, providerName, modelName, openCodeAgent, openCodeVariant); err != nil {
+		if err := p.dispatchTurnStart(threadID, nudgeText, providerName, modelName); err != nil {
 			return fail(err)
 		}
 		_ = p.dispatchActivity(threadID, "gc.nudge.sent", "GC nudge sent", "info", map[string]interface{}{
@@ -2343,49 +2199,6 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 		})
 	}
 	p.clearSnapshotCache()
-	return nil
-}
-
-func runPreStart(ctx context.Context, name string, cfg runtime.Config, setupTimeout time.Duration) error {
-	if len(cfg.PreStart) == 0 {
-		return nil
-	}
-	setupEnv := make(map[string]string, len(cfg.Env)+1)
-	for k, v := range cfg.Env {
-		setupEnv[k] = v
-	}
-	setupEnv["GC_SESSION"] = name
-	if setupEnv["GC_DIR"] == "" && cfg.WorkDir != "" {
-		setupEnv["GC_DIR"] = cfg.WorkDir
-	}
-	for i, cmd := range cfg.PreStart {
-		if err := runSetupCommand(ctx, cmd, setupEnv, setupTimeout); err != nil {
-			return fmt.Errorf("pre_start[%d]: %w", i, err)
-		}
-	}
-	return nil
-}
-
-func runSetupCommand(ctx context.Context, cmd string, env map[string]string, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	c := exec.CommandContext(ctx, "sh", "-c", cmd)
-	workDir := strings.TrimSpace(env["GC_DIR"])
-	if workDir != "" {
-		c.Dir = workDir
-	}
-	c.Env = os.Environ()
-	for k, v := range env {
-		c.Env = append(c.Env, k+"="+v)
-	}
-	output, err := c.CombinedOutput()
-	if err != nil {
-		detail := strings.TrimSpace(string(output))
-		if detail == "" {
-			return fmt.Errorf("%w (cmd=%q cwd=%q)", err, cmd, workDir)
-		}
-		return fmt.Errorf("%w (cmd=%q cwd=%q output=%q)", err, cmd, workDir, detail)
-	}
 	return nil
 }
 
@@ -2510,7 +2323,7 @@ func (p *Provider) Nudge(name string, content []runtime.ContentBlock) error {
 	if model == "" {
 		model = binding.Model
 	}
-	return p.dispatchTurnStart(binding.ThreadID, text, provider, model, meta["gc.openCodeAgent"], meta["gc.openCodeVariant"])
+	return p.dispatchTurnStart(binding.ThreadID, text, provider, model)
 }
 
 func (p *Provider) SetMeta(name, key, value string) error {

@@ -36,7 +36,6 @@ func (s *Server) buildRigResponse(cfg *config.City, rig config.Rig, sp runtime.P
 	tmpl := cfg.Workspace.SessionTemplate
 	var agentCount, runningCount int
 	var maxActivity time.Time
-	var suspendedCount int
 
 	for _, a := range cfg.Agents {
 		if workdirutil.ConfiguredRigName(cityPath, a, cfg.Rigs) != rig.Name {
@@ -46,18 +45,12 @@ func (s *Server) buildRigResponse(cfg *config.City, rig config.Rig, sp runtime.P
 		for _, ea := range expanded {
 			agentCount++
 			sessionName := agent.SessionNameFor(cityName, ea.qualifiedName, tmpl)
-			if sp.IsRunning(sessionName) {
+			obs := observeProviderSession(sp, sessionName, nil)
+			if obs.Running {
 				runningCount++
 			}
-			suspended := ea.suspended
-			if v, err := sp.GetMeta(sessionName, "suspended"); err == nil && v == "true" {
-				suspended = true
-			}
-			if suspended {
-				suspendedCount++
-			}
-			if lastActivity, err := sp.GetLastActivity(sessionName); err == nil && lastActivity.After(maxActivity) {
-				maxActivity = lastActivity
+			if obs.LastActivity != nil && obs.LastActivity.After(maxActivity) {
+				maxActivity = *obs.LastActivity
 			}
 		}
 	}
@@ -65,7 +58,7 @@ func (s *Server) buildRigResponse(cfg *config.City, rig config.Rig, sp runtime.P
 	resp := rigResponse{
 		Name:         rig.Name,
 		Path:         rig.Path,
-		Suspended:    rig.Suspended || (agentCount > 0 && suspendedCount == agentCount),
+		Suspended:    s.rigSuspended(cfg, rig, sp, cityName, cityPath),
 		Prefix:       rig.Prefix,
 		AgentCount:   agentCount,
 		RunningCount: runningCount,
@@ -93,11 +86,8 @@ func (s *Server) rigSuspended(cfg *config.City, rig config.Rig, sp runtime.Provi
 		for _, ea := range expanded {
 			agentCount++
 			sessionName := agent.SessionNameFor(cityName, ea.qualifiedName, tmpl)
-			suspended := ea.suspended
-			if v, err := sp.GetMeta(sessionName, "suspended"); err == nil && v == "true" {
-				suspended = true
-			}
-			if suspended {
+			obs := observeProviderSession(sp, sessionName, nil)
+			if obs.Suspended {
 				suspendedCount++
 			}
 		}

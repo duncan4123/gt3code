@@ -73,19 +73,17 @@ describe("crew empty states", () => {
       if (path === "/v0/city/{cityName}/sessions") {
         return {
           data: {
-            items: [
-              {
-                active_bead: "",
-                attached: true,
-                id: "s-reviewer",
-                last_active: "2026-04-18T20:00:00Z",
-                last_output: "",
-                pool: "review",
-                rig: "rig-a",
-                running: true,
-                template: "reviewer",
-              },
-            ],
+            items: [{
+              active_bead: "",
+              attached: true,
+              id: "s-reviewer",
+              last_active: "2026-04-18T20:00:00Z",
+              last_output: "",
+              pool: "review",
+              rig: "rig-a",
+              running: true,
+              template: "reviewer",
+            }],
           },
         } as never;
       }
@@ -93,20 +91,12 @@ describe("crew empty states", () => {
         return { data: { pending: false } } as never;
       }
       if (path === "/v0/city/{cityName}/session/{id}/transcript") {
-        const query =
-          (options as { params?: { query?: Record<string, string | undefined> } } | undefined)
-            ?.params?.query ?? {};
+        const query = (options as { params?: { query?: Record<string, string | undefined> } } | undefined)?.params?.query ?? {};
         transcriptQueries.push(query);
         if (query.before) {
           return {
             data: {
-              turns: [
-                {
-                  role: "assistant",
-                  text: "Older transcript turn",
-                  timestamp: "2026-04-18T19:00:00Z",
-                },
-              ],
+              turns: [{ role: "assistant", text: "Older transcript turn", timestamp: "2026-04-18T19:00:00Z" }],
               pagination: {
                 has_older_messages: false,
                 returned_message_count: 1,
@@ -118,13 +108,7 @@ describe("crew empty states", () => {
         }
         return {
           data: {
-            turns: [
-              {
-                role: "assistant",
-                text: "Newest transcript turn",
-                timestamp: "2026-04-18T20:00:00Z",
-              },
-            ],
+            turns: [{ role: "assistant", text: "Newest transcript turn", timestamp: "2026-04-18T20:00:00Z" }],
             pagination: {
               has_older_messages: true,
               returned_message_count: 1,
@@ -142,17 +126,13 @@ describe("crew empty states", () => {
     await renderCrew();
     document.querySelector<HTMLButtonElement>(".agent-log-link")?.click();
     await waitFor(() => {
-      expect(document.getElementById("log-drawer-messages")?.textContent).toContain(
-        "Newest transcript turn",
-      );
+      expect(document.getElementById("log-drawer-messages")?.textContent).toContain("Newest transcript turn");
     });
 
     expect(document.getElementById("log-drawer-loading")).not.toBeNull();
     document.getElementById("log-drawer-older-btn")?.click();
     await waitFor(() => {
-      expect(document.getElementById("log-drawer-messages")?.textContent).toContain(
-        "Older transcript turn",
-      );
+      expect(document.getElementById("log-drawer-messages")?.textContent).toContain("Older transcript turn");
     });
 
     expect(transcriptQueries.map((query) => query.before)).toEqual([undefined, "cursor-1"]);
@@ -160,10 +140,17 @@ describe("crew empty states", () => {
   });
 });
 
+// Slow Blacksmith CI runs have shown the openLogDrawer + loadTranscript
+// chain take ~1.3s while passing runs finish in ~100ms — same VM class,
+// same code. The 1s budget here was missing those slow runs by a few
+// hundred ms even though the chain ultimately completed (the
+// `[crew] Transcript loaded` debug log fires *after* the assertion times
+// out). Five seconds keeps the local cost negligible and absorbs the
+// observed CI variance.
 async function waitFor(assertion: () => void): Promise<void> {
   const started = Date.now();
   let lastError: unknown;
-  while (Date.now() - started < 1000) {
+  while (Date.now() - started < 5000) {
     try {
       assertion();
       return;

@@ -24,11 +24,11 @@ queued formula.
 
 ### Available Formulas
 
-| Formula              | Purpose                                   |
-| -------------------- | ----------------------------------------- |
-| `mol-shutdown-dance` | Interrogation protocol for stuck agents   |
-| `mol-dog-jsonl`      | Export beads to JSONL for backup/analysis |
-| `mol-dog-reaper`     | Clean up stale sessions and processes     |
+| Formula | Purpose |
+|---------|---------|
+| `mol-shutdown-dance` | Interrogation protocol for stuck agents |
+| `mol-dog-jsonl` | Export beads to JSONL for backup/analysis |
+| `mol-dog-reaper` | Clean up stale sessions and processes |
 
 Additional formulas available from included packs (e.g. dolt).
 
@@ -40,11 +40,11 @@ Your primary formula is `mol-shutdown-dance` — a 3-attempt interrogation
 protocol that gives stuck agents multiple chances to prove they're alive
 before killing the session.
 
-| Attempt | Timeout | Message                     |
-| ------- | ------- | --------------------------- |
-| 1       | 60s     | Health check via `gc nudge` |
-| 2       | 120s    | Second health check         |
-| 3       | 240s    | Final warning               |
+| Attempt | Timeout | Message |
+|---------|---------|---------|
+| 1 | 60s | Health check via `gc session nudge` |
+| 2 | 120s | Second health check |
+| 3 | 240s | Final warning |
 
 **If the agent responds ALIVE (or shows active output):** Pardon —
 close the warrant, notify the requester, exit.
@@ -75,17 +75,16 @@ and the pool can't recycle your slot.
 ## Communication
 
 ```bash
-gc nudge <target> "message"                        # Nudge an agent
-gc session peek <target> 50                        # View agent output
+gc session nudge <target> "message"                # Nudge an agent
+gc session peek <target> --lines 50                # View agent output
 gc session list                                    # Check agent status
 ```
 
 ### Communication: Nudge Only, Zero Mail
 
 **Dogs NEVER send mail.** Your results go to:
-
 1. Event beads (for audit trail)
-2. `gc nudge deacon/ "DOG_DONE: <warrant> <result>"` (for immediate notification)
+2. `gc session nudge deacon/ "DOG_DONE: <warrant> <result>"` (for immediate notification)
 3. Escalation via `gc mail send mayor/` ONLY for unresolvable problems
 
 **Never use `gc mail send` for routine reporting.** Every mail creates a permanent
@@ -98,7 +97,7 @@ When you complete a warrant (pardon or execute), notify the requester
 via nudge:
 
 ```bash
-gc nudge {{"{{requester}}"}}/ "DOG_DONE: <target> — <outcome>"
+gc session nudge {{"{{requester}}"}}/ "DOG_DONE: <target> — <outcome>"
 ```
 
 ---
@@ -107,17 +106,18 @@ gc nudge {{"{{requester}}"}}/ "DOG_DONE: <target> — <outcome>"
 
 ### Dog-Specific Commands
 
-| Want to...              | Correct command                            |
-| ----------------------- | ------------------------------------------ |
-| Read formula steps      | `gc bd show <wisp-id>` (shows formula ref) |
-| Find pool work          | `{{ .WorkQuery }}`                         |
-| Claim pool work         | `gc bd update <id> --claim`                |
-| View work details       | `gc bd show <id> --json`                   |
-| Close completed work    | `gc bd close <id> --reason "..."`          |
-| Request target restart  | `gc session kill <target>`                 |
-| List orphan databases   | `gc dolt cleanup`                          |
-| Remove orphan databases | `gc dolt cleanup --force`                  |
-| Exit (return to pool)   | `gc runtime drain-ack && exit`             |
+| Want to... | Correct command |
+|------------|----------------|
+| Read formula steps | `gc bd show <wisp-id>` (shows formula ref) |
+| Find pool work | `{{ .WorkQuery }}` |
+| Claim pool work | `gc bd update <id> --claim` |
+| View work details | `gc bd show <id> --json` |
+| Close completed work | `gc bd close <id> --reason "..."` |
+| Request target restart | `gc session kill <target>` |
+| List orphan databases | `gc dolt cleanup` |
+| Remove orphan databases | `gc dolt cleanup --force` (safe via SQL DROP when dolt is up) |
+| Remove orphan databases (dolt stopped) | `gc dolt cleanup --force --server-down-ok` (**operator/TTY-only**; do **not** use from autonomous/agent contexts — the rm fallback corrupts NBS state if dolt is actually running, #1549) |
+| Exit (return to pool) | `gc runtime drain-ack && exit` |
 
 Working directory: {{ .WorkDir }}
 Mail identity: dog/{{ basename .AgentName }}

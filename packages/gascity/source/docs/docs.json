@@ -92,11 +92,17 @@
       },
       {
         "group": "Guides",
-        "pages": ["guides/index", "guides/migrating-to-pack-vnext", "guides/shareable-packs"]
+        "pages": [
+          "guides/index",
+          "guides/migrating-to-pack-vnext",
+          "guides/shareable-packs"
+        ]
       },
       {
         "group": "Troubleshooting",
-        "pages": ["troubleshooting/dolt-bloat-recovery"]
+        "pages": [
+          "troubleshooting/dolt-bloat-recovery"
+        ]
       },
       {
         "group": "Reference",
@@ -106,6 +112,7 @@
           "reference/config",
           "reference/beads-backends",
           "reference/formula",
+          "reference/trust-boundaries",
           "reference/api",
           "reference/events",
           "schema/index",

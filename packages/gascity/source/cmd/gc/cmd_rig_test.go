@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -15,19 +14,6 @@ import (
 	"github.com/gastownhall/gascity/internal/config"
 	"github.com/gastownhall/gascity/internal/fsys"
 )
-
-func readTestMetadata(t *testing.T, root string) map[string]any {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join(root, ".beads", "metadata.json"))
-	if err != nil {
-		t.Fatalf("read metadata.json: %v", err)
-	}
-	var meta map[string]any
-	if err := json.Unmarshal(data, &meta); err != nil {
-		t.Fatalf("decode metadata.json: %v\n%s", err, data)
-	}
-	return meta
-}
 
 func TestDoRigAdd_Basic(t *testing.T) {
 	cityPath := t.TempDir()
@@ -215,153 +201,6 @@ func TestDoRigAddRouteFailureRollsBackConfig(t *testing.T) {
 	}
 	if _, err := os.Stat(config.SiteBindingPath(cityPath)); err == nil {
 		t.Fatalf(".gc/site.toml should not be left behind after rollback")
-	}
-}
-
-func TestDoRigAdd_DoltliteCreatesCanonicalMetadata(t *testing.T) {
-	cityPath := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(cityPath, ".gc"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cityToml := strings.Join([]string{
-		"[workspace]",
-		`name = "test-city"`,
-		"",
-		"[beads]",
-		`provider = "bd"`,
-		`backend = "doltlite"`,
-		"",
-		"[[agent]]",
-		`name = "mayor"`,
-		"",
-	}, "\n")
-	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte(cityToml), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	rigPath := filepath.Join(t.TempDir(), "demo-rig")
-	if err := os.MkdirAll(rigPath, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Setenv("GC_DOLT", "skip")
-	t.Setenv("GC_BEADS", "bd")
-	var configSeeds []string
-	originalSeedStoreConfig := ensureDoltliteStoreConfigForInit
-	t.Cleanup(func() { ensureDoltliteStoreConfigForInit = originalSeedStoreConfig })
-	ensureDoltliteStoreConfigForInit = func(_, scopeRoot, prefix string) error {
-		configSeeds = append(configSeeds, filepath.Base(scopeRoot)+":"+prefix)
-		return nil
-	}
-
-	var stdout, stderr bytes.Buffer
-	code := doRigAdd(fsys.OSFS{}, cityPath, rigPath, nil, "", "dr", false, false, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("doRigAdd returned %d, stderr: %s", code, stderr.String())
-	}
-
-	meta := readTestMetadata(t, rigPath)
-	for key, want := range map[string]string{
-		"backend":       "doltlite",
-		"database":      "doltlite",
-		"dolt_database": "dr",
-		"dolt_mode":     "embedded",
-	} {
-		if got := fmt.Sprint(meta[key]); got != want {
-			t.Fatalf("metadata[%s] = %q, want %q; full metadata=%v", key, got, want, meta)
-		}
-	}
-	if !reflect.DeepEqual(configSeeds, []string{"demo-rig:dr"}) {
-		t.Fatalf("store config seeds = %v, want demo-rig issue_prefix seed", configSeeds)
-	}
-}
-
-func TestSeedDoltliteBeadsForConfiguredScopesCreatesMetadataForEveryRig(t *testing.T) {
-	cityPath := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(cityPath, ".gc"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	rigs := map[string]string{
-		"gascity":        filepath.Join(t.TempDir(), "gascity"),
-		"beads-doltlite": filepath.Join(t.TempDir(), "beads-doltlite"),
-		"context-mode":   filepath.Join(t.TempDir(), "context-mode"),
-	}
-	for _, path := range rigs {
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cityToml := fmt.Sprintf(`[workspace]
-name = "test-city"
-
-[beads]
-provider = "bd"
-backend = "doltlite"
-
-[[agent]]
-name = "mayor"
-
-[[rigs]]
-name = "gascity"
-path = %q
-prefix = "ga"
-
-[[rigs]]
-name = "beads-doltlite"
-path = %q
-prefix = "bd"
-
-[[rigs]]
-name = "context-mode"
-path = %q
-prefix = "ccm"
-`, rigs["gascity"], rigs["beads-doltlite"], rigs["context-mode"])
-	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte(cityToml), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := config.Load(fsys.OSFS{}, filepath.Join(cityPath, "city.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	configSeeds := map[string]string{}
-	originalSeedStoreConfig := ensureDoltliteStoreConfigForInit
-	t.Cleanup(func() { ensureDoltliteStoreConfigForInit = originalSeedStoreConfig })
-	ensureDoltliteStoreConfigForInit = func(_, scopeRoot, prefix string) error {
-		configSeeds[scopeRoot] = prefix
-		return nil
-	}
-	if err := seedDeferredManagedBeadsBeforeProviderReadiness(cityPath, cfg); err != nil {
-		t.Fatalf("seedDeferredManagedBeadsBeforeProviderReadiness: %v", err)
-	}
-
-	expected := map[string]string{
-		cityPath:               "hq",
-		rigs["gascity"]:        "ga",
-		rigs["beads-doltlite"]: "bd",
-		rigs["context-mode"]:   "ccm",
-	}
-	for root, wantDB := range expected {
-		meta := readTestMetadata(t, root)
-		for key, want := range map[string]string{
-			"backend":       "doltlite",
-			"database":      "doltlite",
-			"dolt_database": wantDB,
-			"dolt_mode":     "embedded",
-		} {
-			if got := fmt.Sprint(meta[key]); got != want {
-				t.Fatalf("%s metadata[%s] = %q, want %q; full metadata=%v", root, key, got, want, meta)
-			}
-		}
-	}
-	expectedPrefixes := map[string]string{
-		cityPath:               "t3",
-		rigs["gascity"]:        "ga",
-		rigs["beads-doltlite"]: "bd",
-		rigs["context-mode"]:   "ccm",
-	}
-	if !reflect.DeepEqual(configSeeds, expectedPrefixes) {
-		t.Fatalf("store config seeds = %v, want %v", configSeeds, expectedPrefixes)
 	}
 }
 

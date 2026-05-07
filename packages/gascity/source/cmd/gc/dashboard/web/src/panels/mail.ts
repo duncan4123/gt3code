@@ -1,5 +1,5 @@
 import type { MailRecord } from "../api";
-import { api, cityScope } from "../api";
+import { api, cityScope, mutationHeaders } from "../api";
 import { logError, logInfo, logWarn } from "../logger";
 import { byId, clear, el } from "../util/dom";
 import { formatAgentAddress, formatTimestamp } from "../util/legacy";
@@ -56,7 +56,7 @@ export async function renderMail(): Promise<void> {
   restoreMailView();
 }
 
-function resetMailNoCity(): void {
+export function resetMailNoCity(): void {
   const loading = byId("mail-loading");
   const threadsEl = byId("mail-threads");
   const empty = byId("mail-empty");
@@ -79,9 +79,7 @@ function resetMailNoCity(): void {
   threadsEl.style.display = "none";
   setMailEmptyMessage("Select a city to view mail");
   empty.style.display = currentTab === "inbox" ? "block" : "none";
-  allEl.append(
-    el("div", { class: "empty-state" }, [el("p", {}, ["Select a city to view mail traffic"])]),
-  );
+  allEl.append(el("div", { class: "empty-state" }, [el("p", {}, ["Select a city to view mail traffic"])]));
 }
 
 function setMailEmptyMessage(message: string): void {
@@ -104,27 +102,21 @@ function renderThreadedInbox(messages: MailRecord[]): void {
   threads.forEach((thread) => {
     const last = thread.messages[thread.messages.length - 1];
     const preview = (last.body ?? "").trim().slice(0, 60);
-    const card = el(
-      "div",
-      { class: `mail-thread${thread.unreadCount > 0 ? " mail-thread-unread" : ""}` },
-      [
-        el("div", { class: "mail-thread-header" }, [
-          el("div", { class: "mail-thread-left" }, [
-            el("span", { class: "mail-from" }, [formatAgentAddress(last.from)]),
-          ]),
-          el("div", { class: "mail-thread-center" }, [
-            el("span", { class: "mail-subject" }, [thread.subject || "(no subject)"]),
-            preview ? el("span", { class: "mail-thread-preview" }, [` — ${preview}`]) : null,
-          ]),
-          el("div", { class: "mail-thread-right" }, [
-            el("span", { class: "mail-time" }, [relativeTime(last.created_at)]),
-            thread.unreadCount > 0
-              ? el("span", { class: "badge badge-unread" }, [`${thread.unreadCount} unread`])
-              : null,
-          ]),
+    const card = el("div", { class: `mail-thread${thread.unreadCount > 0 ? " mail-thread-unread" : ""}` }, [
+      el("div", { class: "mail-thread-header" }, [
+        el("div", { class: "mail-thread-left" }, [
+          el("span", { class: "mail-from" }, [formatAgentAddress(last.from)]),
         ]),
-      ],
-    );
+        el("div", { class: "mail-thread-center" }, [
+          el("span", { class: "mail-subject" }, [thread.subject || "(no subject)"]),
+          preview ? el("span", { class: "mail-thread-preview" }, [` — ${preview}`]) : null,
+        ]),
+        el("div", { class: "mail-thread-right" }, [
+          el("span", { class: "mail-time" }, [relativeTime(last.created_at)]),
+          thread.unreadCount > 0 ? el("span", { class: "badge badge-unread" }, [`${thread.unreadCount} unread`]) : null,
+        ]),
+      ]),
+    ]);
     card.addEventListener("click", () => {
       void openThread(thread.id);
     });
@@ -156,19 +148,15 @@ function renderAllTraffic(messages: MailRecord[]): void {
     tbody.append(row);
   });
 
-  allEl.append(
-    el("table", { class: "mail-all-table" }, [
-      el("thead", {}, [
-        el("tr", {}, [
-          el("th", {}, ["From"]),
-          el("th", {}, ["To"]),
-          el("th", {}, ["Subject"]),
-          el("th", {}, ["Time"]),
-        ]),
-      ]),
-      tbody,
-    ]),
-  );
+  allEl.append(el("table", { class: "mail-all-table" }, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", {}, ["From"]),
+      el("th", {}, ["To"]),
+      el("th", {}, ["Subject"]),
+      el("th", {}, ["Time"]),
+    ])]),
+    tbody,
+  ]));
   allEl.style.display = currentTab === "all" ? "block" : "none";
 }
 
@@ -200,7 +188,7 @@ async function openMessage(messageID: string): Promise<void> {
   }
   currentMessage = res.data;
   await api.POST("/v0/city/{cityName}/mail/{id}/read", {
-    params: { path: { cityName: city, id: messageID } },
+    params: { path: { cityName: city, id: messageID }, header: mutationHeaders },
   });
   currentMessage.read = true;
   showMailDetail(currentMessage, [currentMessage]);
@@ -247,11 +235,7 @@ function switchMailView(mode: "inbox" | "all" | "detail" | "compose"): void {
 }
 
 function restoreMailView(): void {
-  if (
-    byId("mail-compose")?.style.display === "block" ||
-    byId("mail-detail")?.style.display === "block"
-  )
-    return;
+  if (byId("mail-compose")?.style.display === "block" || byId("mail-detail")?.style.display === "block") return;
   switchMailView(currentTab);
 }
 
@@ -330,9 +314,7 @@ export async function openMailComposer(replyTo?: MailRecord): Promise<void> {
     reportUIError("Mail options failed", error, "Could not load recipients");
   }
 
-  byId<HTMLInputElement>("compose-subject")!.value = replyTo
-    ? replySubject(replyTo.subject ?? "")
-    : "";
+  byId<HTMLInputElement>("compose-subject")!.value = replyTo ? replySubject(replyTo.subject ?? "") : "";
   byId<HTMLTextAreaElement>("compose-body")!.value = "";
   byId<HTMLInputElement>("compose-reply-to")!.value = replyTo?.id ?? "";
   byId("mail-compose-title")!.textContent = replyTo ? "Reply" : "New Message";
@@ -360,12 +342,7 @@ async function sendCurrentMessage(): Promise<void> {
 
   if (!to || !subject) {
     showToast("error", "Missing fields", "Recipient and subject are required");
-    logWarn("mail", "Send blocked by missing fields", {
-      bodyLength: body.length,
-      city,
-      subject,
-      to,
-    });
+    logWarn("mail", "Send blocked by missing fields", { bodyLength: body.length, city, subject, to });
     return;
   }
 
@@ -379,11 +356,11 @@ async function sendCurrentMessage(): Promise<void> {
 
   const response = replyTo
     ? await api.POST("/v0/city/{cityName}/mail/{id}/reply", {
-        params: { path: { cityName: city, id: replyTo } },
+        params: { path: { cityName: city, id: replyTo }, header: mutationHeaders },
         body: { body, subject },
       })
     : await api.POST("/v0/city/{cityName}/mail", {
-        params: { path: { cityName: city } },
+        params: { path: { cityName: city }, header: mutationHeaders },
         body: { to, subject, body, from: "dashboard" },
       });
 
@@ -419,7 +396,7 @@ async function archiveMessage(id: string): Promise<void> {
   const city = cityScope();
   if (!city) return;
   const res = await api.POST("/v0/city/{cityName}/mail/{id}/archive", {
-    params: { path: { cityName: city, id } },
+    params: { path: { cityName: city, id }, header: mutationHeaders },
   });
   if (res.error) {
     showToast("error", "Archive failed", res.error.detail ?? "Could not archive message");
@@ -440,7 +417,7 @@ async function toggleUnread(message: MailRecord): Promise<void> {
     ? "/v0/city/{cityName}/mail/{id}/mark-unread"
     : "/v0/city/{cityName}/mail/{id}/read";
   const res = await api.POST(route, {
-    params: { path: { cityName: city, id: message.id } },
+    params: { path: { cityName: city, id: message.id }, header: mutationHeaders },
   });
   if (res.error) {
     showToast("error", "Update failed", res.error.detail ?? "Could not update message");
@@ -460,10 +437,7 @@ function syncMailDetailControls(): void {
 }
 
 function mailSubviewOpen(): boolean {
-  return (
-    byId("mail-detail")?.style.display === "block" ||
-    byId("mail-compose")?.style.display === "block"
-  );
+  return byId("mail-detail")?.style.display === "block" || byId("mail-compose")?.style.display === "block";
 }
 
 function replySubject(subject: string): string {

@@ -4,7 +4,7 @@
 // every panel re-fetches against the new scope.
 
 import { api, cityScope } from "../api";
-import { getCachedCities, setCachedCities } from "../state";
+import { getCachedCities, markCachedCitiesUnknown, setCachedCities } from "../state";
 import { byId, clear, el } from "../util/dom";
 
 export async function renderCityTabs(): Promise<void> {
@@ -13,16 +13,16 @@ export async function renderCityTabs(): Promise<void> {
 
   const { data, error } = await api.GET("/v0/cities");
   if (!error && data?.items) {
-    setCachedCities(
-      data.items.map((city) => ({
-        error: city.error ?? undefined,
-        name: city.name ?? "",
-        path: city.path ?? undefined,
-        phasesCompleted: city.phases_completed ?? [],
-        running: city.running === true,
-        status: city.status ?? undefined,
-      })),
-    );
+    setCachedCities(data.items.map((city) => ({
+      error: city.error ?? undefined,
+      name: city.name ?? "",
+      path: city.path ?? undefined,
+      phasesCompleted: city.phases_completed ?? [],
+      running: city.running === true,
+      status: city.status ?? undefined,
+    })));
+  } else {
+    markCachedCitiesUnknown();
   }
   const cachedCityItems = getCachedCities();
   if (error || cachedCityItems.length === 0) {
@@ -41,7 +41,10 @@ export async function renderCityTabs(): Promise<void> {
         href: basePath,
         class: `city-tab${selected === "" ? " active" : ""}`,
       },
-      [el("span", { class: "city-dot running" }), " Supervisor"],
+      [
+        el("span", { class: "city-dot running" }),
+        " Supervisor",
+      ],
     ),
   );
   for (const city of cachedCityItems) {
@@ -53,7 +56,10 @@ export async function renderCityTabs(): Promise<void> {
         href: `${basePath}?city=${encodeURIComponent(city.name)}`,
         class: `city-tab${current ? " active" : ""}${running ? "" : " stopped"}`,
       },
-      [el("span", { class: `city-dot${running ? " running" : ""}` }), ` ${city.name}`],
+      [
+        el("span", { class: `city-dot${running ? " running" : ""}` }),
+        ` ${city.name}`,
+      ],
     );
     nav.append(tab);
   }

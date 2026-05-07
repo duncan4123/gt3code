@@ -4,7 +4,6 @@
 > authority for the shipped command or doctor surface.
 >
 > **Durable truth lives in:**
->
 > - `docs/packv2/doc-directory-conventions.md`
 > - `docs/packv2/skew-analysis.md`
 > - `docs/packv2/doc-conformance-matrix.md`
