@@ -43,6 +43,31 @@ describe("parseGcMeta", () => {
     ).toBe("explicit-session");
   });
 
+  it("parses richer bead metadata for sidebar cards", () => {
+    expect(
+      parseGcMeta({
+        "gc.agent": "t3code/polecat",
+        "gc.bead": "t3-123",
+        "gc.beadTitle": "Restore GC sidebar",
+        "gc.beadStatus": "in_progress",
+        "gc.beadType": "task",
+        "gc.beadPriority": "1",
+        "gc.beadAssignee": "t3code/polecat",
+        "gc.beadLabels": "gc:merge,sidebar",
+        "gc.beadDescription": "Bring back the hover card.",
+      }),
+    ).toMatchObject({
+      bead: "t3-123",
+      beadTitle: "Restore GC sidebar",
+      beadStatus: "in_progress",
+      beadType: "task",
+      beadPriority: "1",
+      beadAssignee: "t3code/polecat",
+      beadLabels: "gc:merge,sidebar",
+      beadDescription: "Bring back the hover card.",
+    });
+  });
+
   it("ignores invalid serialized GC session env metadata", () => {
     expect(
       parseGcMeta({
@@ -564,6 +589,80 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(cityResult.rigGroups.map((group) => group.id)).toEqual(["gc"]);
     expect(cityResult.rigGroups[0]?.agentGroups[0]).toMatchObject({
       qualifiedName: "deacon",
+      namedSessionMode: "on_demand",
+    });
+  });
+
+  it("seeds configured agent folders only under the matching rig project", () => {
+    const config = {
+      workspace: {
+        name: "gc",
+        suspended: false,
+      },
+      rigs: [
+        {
+          name: "t3code",
+          path: "/data/projects/t3code",
+          suspended: false,
+        },
+        {
+          name: "beads-doltlite",
+          path: "/data/projects/t3code/packages/beads-doltlite",
+          suspended: false,
+        },
+      ],
+      agents: [
+        {
+          name: "gastown.crew",
+          dir: "t3code",
+          suspended: false,
+          is_pool: true,
+          min_active_sessions: 1,
+          max_active_sessions: 3,
+        },
+        {
+          name: "polecat",
+          dir: "beads-doltlite",
+          suspended: false,
+          named_session_mode: "on_demand",
+        },
+      ],
+    } as const;
+
+    const packageProjectResult = groupThreadsByRigAndAgent([], {
+      config,
+      projectCwd: "/data/projects/t3code/packages/gascity",
+      projectName: "gascity",
+    });
+
+    expect(packageProjectResult.rigGroups).toEqual([]);
+
+    const repositoryProjectResult = groupThreadsByRigAndAgent([], {
+      config,
+      projectCwd: "/data/projects/t3code",
+      projectName: "t3code",
+    });
+
+    expect(repositoryProjectResult.rigGroups.map((group) => group.id)).toEqual(["t3code"]);
+    expect(
+      repositoryProjectResult.rigGroups.find((group) => group.id === "t3code")?.agentGroups[0],
+    ).toMatchObject({
+      qualifiedName: "t3code/gastown.crew",
+      minActiveSessions: 1,
+      maxActiveSessions: 3,
+    });
+
+    const beadsProjectResult = groupThreadsByRigAndAgent([], {
+      config,
+      projectCwd: "/data/projects/t3code/packages/beads-doltlite",
+      projectName: "beads-doltlite",
+    });
+
+    expect(beadsProjectResult.rigGroups.map((group) => group.id)).toEqual(["beads-doltlite"]);
+    expect(
+      beadsProjectResult.rigGroups.find((group) => group.id === "beads-doltlite")?.agentGroups[0],
+    ).toMatchObject({
+      qualifiedName: "beads-doltlite/polecat",
       namedSessionMode: "on_demand",
     });
   });

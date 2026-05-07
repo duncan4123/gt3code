@@ -69,6 +69,7 @@ import {
 } from "@t3tools/client-runtime";
 import { Link, useLocation, useNavigate, useParams, useRouter } from "@tanstack/react-router";
 import {
+  type SidebarGcThreadGroupingMode,
   type SidebarProjectSortOrder,
   type SidebarThreadSortOrder,
 } from "@t3tools/contracts/settings";
@@ -166,6 +167,7 @@ import {
   getSidebarThreadIdsToPrewarm,
   normalizeThreadSearchQuery,
   resolveMissingGcRigProjects,
+  resolveMissingGcWorkspaceProject,
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
   partitionProjectThreadsForSidebar,
@@ -233,6 +235,10 @@ const SIDEBAR_LIST_ANIMATION_OPTIONS = {
   easing: "ease-out",
 } as const;
 const EMPTY_THREAD_JUMP_LABELS = new Map<string, string>();
+const GC_THREAD_GROUPING_MODE_LABELS: Record<SidebarGcThreadGroupingMode, string> = {
+  agent: "Group GC by agent",
+  convoy: "Group GC by convoy",
+};
 const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> = {
   repository: "Group by repository",
   repository_path: "Group by repository path",
@@ -304,6 +310,213 @@ function buildGcThreadGroups(
     }
     return left.label.localeCompare(right.label);
   });
+}
+
+function omitNestedGcThreadGroups(agentGroup: SidebarGcAgentGroup): SidebarGcAgentGroup {
+  const next = { ...agentGroup };
+  delete next.threadGroups;
+  return next;
+}
+
+function buildGcPrimaryThreadGroups(
+  agentGroups: readonly SidebarGcAgentGroup[],
+  threadById: ReadonlyMap<ThreadId, SidebarThreadSummary>,
+): readonly SidebarGcThreadGroup[] {
+  const groups = new Map<string, SidebarGcThreadGroup>();
+
+  for (const agentGroup of agentGroups) {
+    for (const threadId of agentGroup.threadIds) {
+      const thread = threadById.get(threadId);
+      const meta = parseGcMeta(thread?.customMetadata);
+      const convoyId = meta.convoy?.trim();
+      const groupId = convoyId ? `convoy:${convoyId}` : "convoy:none";
+      const existing = groups.get(groupId);
+      const nextAgentGroup: SidebarGcAgentGroup = {
+        ...omitNestedGcThreadGroups(agentGroup),
+        threadIds: [threadId],
+      };
+
+      if (existing) {
+        const existingAgentGroups = existing.agentGroups ?? [];
+        const agentIndex = existingAgentGroups.findIndex(
+          (entry) => entry.qualifiedName === agentGroup.qualifiedName,
+        );
+        const nextAgentGroups =
+          agentIndex >= 0
+            ? existingAgentGroups.map((entry, index) =>
+                index === agentIndex
+                  ? { ...entry, threadIds: [...entry.threadIds, threadId] }
+                  : entry,
+              )
+            : [...existingAgentGroups, nextAgentGroup];
+        groups.set(groupId, {
+          ...existing,
+          threadIds: [...existing.threadIds, threadId],
+          agentGroups: nextAgentGroups,
+        });
+        continue;
+      }
+
+      const convoyStatus = meta.convoyStatus?.trim();
+      const convoyProgressLabel = formatGcConvoyProgress(meta);
+      groups.set(groupId, {
+        id: groupId,
+        label: convoyId ? meta.convoyTitle?.trim() || convoyId : "No convoy",
+        kind: "convoy",
+        ...(convoyStatus ? { status: convoyStatus } : {}),
+        ...(convoyProgressLabel ? { progressLabel: convoyProgressLabel } : {}),
+        threadIds: [threadId],
+        agentGroups: [nextAgentGroup],
+      });
+    }
+  }
+
+  return [...groups.values()].toSorted((left, right) => {
+    if (left.id === "convoy:none") return 1;
+    if (right.id === "convoy:none") return -1;
+    return left.label.localeCompare(right.label);
+  });
+}
+
+function gcStatusBadgeClassName(status: string | undefined): string {
+  switch (status) {
+    case "closed":
+      return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
+    case "in_progress":
+      return "bg-blue-500/15 text-blue-600 dark:text-blue-400";
+    case "open":
+      return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
+function splitGcLabels(labels: string | undefined): string[] {
+  return (labels ?? "")
+    .split(",")
+    .map((label) => label.trim())
+    .filter(Boolean);
+}
+
+function GcThreadHoverCard({
+  meta,
+  title,
+}: {
+  meta: ReturnType<typeof parseGcMeta>;
+  title: string;
+}) {
+  const labels = splitGcLabels(meta.beadLabels);
+  const convoyProgress = formatGcConvoyProgress(meta);
+  const beadTitle = meta.beadTitle?.trim() || meta.bead?.trim() || title;
+  const hasBead = Boolean(meta.bead);
+  const hasConvoy = Boolean(meta.convoy);
+
+  if (!meta.isGcManaged || (!hasBead && !hasConvoy)) {
+    return <>{title}</>;
+  }
+
+  return (
+    <div className="min-w-[220px] max-w-[300px] space-y-2 text-xs">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-semibold leading-snug text-foreground">{beadTitle}</div>
+          {meta.agent ? (
+            <div className="mt-0.5 truncate text-[10px] text-muted-foreground/70">
+              {meta.agent}
+            </div>
+          ) : null}
+        </div>
+        {meta.beadStatus ? (
+          <span
+            className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium ${gcStatusBadgeClassName(
+              meta.beadStatus,
+            )}`}
+          >
+            {meta.beadStatus}
+          </span>
+        ) : null}
+      </div>
+
+      {meta.beadDescription ? (
+        <p className="line-clamp-3 text-muted-foreground">{meta.beadDescription}</p>
+      ) : null}
+
+      {hasBead ? (
+        <div className="space-y-0.5 text-muted-foreground">
+          <div className="flex justify-between gap-3">
+            <span>ID</span>
+            <span className="truncate font-mono text-foreground/80">{meta.bead}</span>
+          </div>
+          {meta.beadType ? (
+            <div className="flex justify-between gap-3">
+              <span>Type</span>
+              <span className="truncate text-foreground/80">{meta.beadType}</span>
+            </div>
+          ) : null}
+          {meta.beadPriority ? (
+            <div className="flex justify-between gap-3">
+              <span>Priority</span>
+              <span className="truncate text-foreground/80">P{meta.beadPriority}</span>
+            </div>
+          ) : null}
+          {meta.beadAssignee ? (
+            <div className="flex justify-between gap-3">
+              <span>Assignee</span>
+              <span className="truncate text-foreground/80">{meta.beadAssignee}</span>
+            </div>
+          ) : null}
+          {meta.formula ? (
+            <div className="flex justify-between gap-3">
+              <span>Formula</span>
+              <span className="truncate text-foreground/80">{meta.formula}</span>
+            </div>
+          ) : null}
+          {meta.molecule ? (
+            <div className="flex justify-between gap-3">
+              <span>Molecule</span>
+              <span className="truncate font-mono text-foreground/80">{meta.molecule}</span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {labels.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {labels.map((label) => (
+            <span
+              key={label}
+              className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {hasConvoy ? (
+        <div className="space-y-0.5 border-t border-border/50 pt-1.5 text-muted-foreground">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium text-foreground/80">Convoy</span>
+            {meta.convoyStatus ? (
+              <span
+                className={`rounded px-1 py-0 text-[9px] ${gcStatusBadgeClassName(
+                  meta.convoyStatus,
+                )}`}
+              >
+                {meta.convoyStatus}
+              </span>
+            ) : null}
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="truncate">{meta.convoyTitle ?? meta.convoy}</span>
+            {convoyProgress ? (
+              <span className="shrink-0 font-mono text-foreground/80">{convoyProgress}</span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function formatProjectMemberActionLabel(
@@ -468,6 +681,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       lastVisitedAt,
     },
   });
+  const gcMeta = parseGcMeta(thread.customMetadata);
   const pr = resolveThreadPr(thread.branch, gitStatus.data);
   const prStatus = prStatusIndicator(pr, gitStatus.data?.sourceControlProvider);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
@@ -686,12 +900,19 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                     className="min-w-0 flex-1 truncate text-xs"
                     data-testid={`thread-title-${thread.id}`}
                   >
+                    {gcMeta.isGcManaged ? (
+                      <span className="mr-1 inline-flex items-center rounded bg-violet-500/15 px-1 py-0 text-[8px] font-semibold tracking-wide text-violet-600 uppercase dark:bg-violet-400/15 dark:text-violet-400/80">
+                        {gcMeta.agent && /-\d+$/.test(gcMeta.agent)
+                          ? "pool"
+                          : (gcMeta.agentLabel ?? gcMeta.agent ?? "GC")}
+                      </span>
+                    ) : null}
                     {thread.title}
                   </span>
                 }
               />
               <TooltipPopup side="top" className="max-w-80 whitespace-normal leading-tight">
-                {thread.title}
+                <GcThreadHoverCard meta={gcMeta} title={thread.title} />
               </TooltipPopup>
             </Tooltip>
           )}
@@ -860,6 +1081,7 @@ interface SidebarProjectThreadListProps {
   gcAgentStartsInFlight: ReadonlySet<string>;
   gcRigMutationsInFlight: ReadonlySet<string>;
   gcCityMutationInFlight: boolean;
+  gcThreadGroupingMode: SidebarGcThreadGroupingMode;
   gcAgentActionStateByAgent: ReadonlyMap<string, GcAgentActionState>;
   gcRigActionStateByRig: ReadonlyMap<string, "resume" | "suspend">;
   gcCityActionState: "resume" | "suspend" | null;
@@ -926,6 +1148,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     gcAgentStartsInFlight,
     gcRigMutationsInFlight,
     gcCityMutationInFlight,
+    gcThreadGroupingMode,
     gcAgentActionStateByAgent,
     gcRigActionStateByRig,
     gcCityActionState,
@@ -965,6 +1188,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
           gcAgentStartsInFlight={gcAgentStartsInFlight}
           gcRigMutationsInFlight={gcRigMutationsInFlight}
           gcCityMutationInFlight={gcCityMutationInFlight}
+          gcThreadGroupingMode={gcThreadGroupingMode}
           gcAgentActionStateByAgent={gcAgentActionStateByAgent}
           gcRigActionStateByRig={gcRigActionStateByRig}
           gcCityActionState={gcCityActionState}
@@ -1095,6 +1319,7 @@ interface SidebarProjectItemProps {
   gcAgentStartsInFlight: ReadonlySet<string>;
   gcRigMutationsInFlight: ReadonlySet<string>;
   gcCityMutationInFlight: boolean;
+  gcThreadGroupingMode: SidebarGcThreadGroupingMode;
   gcAgentActionStateByAgent: ReadonlyMap<string, GcAgentActionState>;
   gcRigActionStateByRig: ReadonlyMap<string, "resume" | "suspend">;
   gcCityActionState: "resume" | "suspend" | null;
@@ -1141,6 +1366,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     gcAgentStartsInFlight,
     gcRigMutationsInFlight,
     gcCityMutationInFlight,
+    gcThreadGroupingMode,
     gcAgentActionStateByAgent,
     gcRigActionStateByRig,
     gcCityActionState,
@@ -1430,61 +1656,61 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         hiddenStandaloneThreads.map((thread) => resolveProjectThreadStatus(thread)),
       ),
       renderedThreads: visibleStandaloneThreads,
-      rigGroups: rigGroups.map(
-        (rigGroup): SidebarGcRigGroup => ({
+      rigGroups: rigGroups.map((rigGroup): SidebarGcRigGroup => {
+        const threadById = new Map<ThreadId, SidebarThreadSummary>();
+        const agentGroups = rigGroup.agentGroups.map((agentGroup) => {
+          for (const thread of agentGroup.threads) {
+            threadById.set(thread.id, thread);
+          }
+          return {
+            id: agentGroup.id,
+            label: agentGroup.label,
+            qualifiedName: agentGroup.qualifiedName,
+            isSuspended: agentGroup.isSuspended,
+            isPool: agentGroup.isPool,
+            ...(typeof agentGroup.minActiveSessions === "number"
+              ? { minActiveSessions: agentGroup.minActiveSessions }
+              : {}),
+            ...(typeof agentGroup.maxActiveSessions === "number"
+              ? { maxActiveSessions: agentGroup.maxActiveSessions }
+              : {}),
+            ...(agentGroup.wakeMode ? { wakeMode: agentGroup.wakeMode } : {}),
+            ...(agentGroup.namedSessionMode ? { namedSessionMode: agentGroup.namedSessionMode } : {}),
+            ...(agentGroup.scope ? { scope: agentGroup.scope } : {}),
+            ...(agentGroup.provider ? { provider: agentGroup.provider } : {}),
+            ...(agentGroup.description ? { description: agentGroup.description } : {}),
+            ...(agentGroup.workDir ? { workDir: agentGroup.workDir } : {}),
+            ...(agentGroup.promptTemplate ? { promptTemplate: agentGroup.promptTemplate } : {}),
+            ...(agentGroup.startCommand ? { startCommand: agentGroup.startCommand } : {}),
+            ...(agentGroup.defaultSlingFormula
+              ? { defaultSlingFormula: agentGroup.defaultSlingFormula }
+              : {}),
+            runtimeState: resolveGcAgentRuntimeState({
+              isPool: agentGroup.isPool,
+              isSuspended: agentGroup.isSuspended,
+              ...(agentGroup.namedSessionMode ? { namedSessionMode: agentGroup.namedSessionMode } : {}),
+              ...(gcAgentActionStateByAgent.get(agentGroup.qualifiedName)
+                ? { actionState: gcAgentActionStateByAgent.get(agentGroup.qualifiedName) }
+                : {}),
+              ...(gcAgentStartsInFlight.has(agentGroup.qualifiedName) ? { startPending: true } : {}),
+              threads: agentGroup.threads.map((thread) => ({
+                latestTurn: thread.latestTurn ?? null,
+                session: thread.session ?? null,
+              })),
+            }),
+            threadIds: agentGroup.threads.map((thread) => thread.id),
+            threadGroups: buildGcThreadGroups(agentGroup.threads),
+          };
+        });
+        return {
           id: rigGroup.id,
           label: rigGroup.label,
           kind: rigGroup.kind,
           isSuspended: rigGroup.isSuspended,
-          agentGroups: rigGroup.agentGroups.map((agentGroup) => {
-            return {
-              id: agentGroup.id,
-              label: agentGroup.label,
-              qualifiedName: agentGroup.qualifiedName,
-              isSuspended: agentGroup.isSuspended,
-              isPool: agentGroup.isPool,
-              ...(typeof agentGroup.minActiveSessions === "number"
-                ? { minActiveSessions: agentGroup.minActiveSessions }
-                : {}),
-              ...(typeof agentGroup.maxActiveSessions === "number"
-                ? { maxActiveSessions: agentGroup.maxActiveSessions }
-                : {}),
-              ...(agentGroup.wakeMode ? { wakeMode: agentGroup.wakeMode } : {}),
-              ...(agentGroup.namedSessionMode
-                ? { namedSessionMode: agentGroup.namedSessionMode }
-                : {}),
-              ...(agentGroup.scope ? { scope: agentGroup.scope } : {}),
-              ...(agentGroup.provider ? { provider: agentGroup.provider } : {}),
-              ...(agentGroup.description ? { description: agentGroup.description } : {}),
-              ...(agentGroup.workDir ? { workDir: agentGroup.workDir } : {}),
-              ...(agentGroup.promptTemplate ? { promptTemplate: agentGroup.promptTemplate } : {}),
-              ...(agentGroup.startCommand ? { startCommand: agentGroup.startCommand } : {}),
-              ...(agentGroup.defaultSlingFormula
-                ? { defaultSlingFormula: agentGroup.defaultSlingFormula }
-                : {}),
-              runtimeState: resolveGcAgentRuntimeState({
-                isPool: agentGroup.isPool,
-                isSuspended: agentGroup.isSuspended,
-                ...(agentGroup.namedSessionMode
-                  ? { namedSessionMode: agentGroup.namedSessionMode }
-                  : {}),
-                ...(gcAgentActionStateByAgent.get(agentGroup.qualifiedName)
-                  ? { actionState: gcAgentActionStateByAgent.get(agentGroup.qualifiedName) }
-                  : {}),
-                ...(gcAgentStartsInFlight.has(agentGroup.qualifiedName)
-                  ? { startPending: true }
-                  : {}),
-                threads: agentGroup.threads.map((thread) => ({
-                  latestTurn: thread.latestTurn ?? null,
-                  session: thread.session ?? null,
-                })),
-              }),
-              threadIds: agentGroup.threads.map((thread) => thread.id),
-              threadGroups: buildGcThreadGroups(agentGroup.threads),
-            };
-          }),
-        }),
-      ),
+          agentGroups,
+          threadGroups: buildGcPrimaryThreadGroups(agentGroups, threadById),
+        };
+      }),
       showEmptyThreadState:
         projectExpanded &&
         visibleProjectThreads.length === 0 &&
@@ -2414,6 +2640,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         gcAgentStartsInFlight={gcAgentStartsInFlight}
         gcRigMutationsInFlight={gcRigMutationsInFlight}
         gcCityMutationInFlight={gcCityMutationInFlight}
+        gcThreadGroupingMode={gcThreadGroupingMode}
         gcAgentActionStateByAgent={gcAgentActionStateByAgent}
         gcRigActionStateByRig={gcRigActionStateByRig}
         gcCityActionState={gcCityActionState}
@@ -2579,16 +2806,20 @@ type SortableProjectHandleProps = Pick<
 function ProjectSortMenu({
   projectSortOrder,
   threadSortOrder,
+  gcThreadGroupingMode,
   projectGroupingMode,
   onProjectSortOrderChange,
   onThreadSortOrderChange,
+  onGcThreadGroupingModeChange,
   onProjectGroupingModeChange,
 }: {
   projectSortOrder: SidebarProjectSortOrder;
   threadSortOrder: SidebarThreadSortOrder;
+  gcThreadGroupingMode: SidebarGcThreadGroupingMode;
   projectGroupingMode: SidebarProjectGroupingMode;
   onProjectSortOrderChange: (sortOrder: SidebarProjectSortOrder) => void;
   onThreadSortOrderChange: (sortOrder: SidebarThreadSortOrder) => void;
+  onGcThreadGroupingModeChange: (mode: SidebarGcThreadGroupingMode) => void;
   onProjectGroupingModeChange: (mode: SidebarProjectGroupingMode) => void;
 }) {
   return (
@@ -2635,6 +2866,29 @@ function ProjectSortMenu({
           >
             {(
               Object.entries(SIDEBAR_THREAD_SORT_LABELS) as Array<[SidebarThreadSortOrder, string]>
+            ).map(([value, label]) => (
+              <MenuRadioItem key={value} value={value} className="min-h-7 py-1 sm:text-xs">
+                {label}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuGroup>
+        <MenuGroup>
+          <div className="px-2 pt-2 pb-1 font-medium text-muted-foreground sm:text-xs">
+            Group GC threads
+          </div>
+          <MenuRadioGroup
+            value={gcThreadGroupingMode}
+            onValueChange={(value) => {
+              if (value === "agent" || value === "convoy") {
+                onGcThreadGroupingModeChange(value);
+              }
+            }}
+          >
+            {(
+              Object.entries(GC_THREAD_GROUPING_MODE_LABELS) as Array<
+                [SidebarGcThreadGroupingMode, string]
+              >
             ).map(([value, label]) => (
               <MenuRadioItem key={value} value={value} className="min-h-7 py-1 sm:text-xs">
                 {label}
@@ -2788,6 +3042,7 @@ interface SidebarProjectsContentProps {
   handleDesktopUpdateButtonClick: () => void;
   projectSortOrder: SidebarProjectSortOrder;
   threadSortOrder: SidebarThreadSortOrder;
+  gcThreadGroupingMode: SidebarGcThreadGroupingMode;
   projectGroupingMode: SidebarProjectGroupingMode;
   updateSettings: ReturnType<typeof useUpdateSettings>["updateSettings"];
   openAddProject: () => void;
@@ -2862,6 +3117,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     handleDesktopUpdateButtonClick,
     projectSortOrder,
     threadSortOrder,
+    gcThreadGroupingMode,
     projectGroupingMode,
     updateSettings,
     openAddProject,
@@ -2935,6 +3191,12 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     },
     [updateSettings],
   );
+  const handleGcThreadGroupingModeChange = useCallback(
+    (groupingMode: SidebarGcThreadGroupingMode) => {
+      updateSettings({ sidebarGcThreadGroupingMode: groupingMode });
+    },
+    [updateSettings],
+  );
   const handleProjectGroupingModeChange = useCallback(
     (groupingMode: SidebarProjectGroupingMode) => {
       updateSettings({ sidebarProjectGroupingMode: groupingMode });
@@ -2999,9 +3261,11 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
             <ProjectSortMenu
               projectSortOrder={projectSortOrder}
               threadSortOrder={threadSortOrder}
+              gcThreadGroupingMode={gcThreadGroupingMode}
               projectGroupingMode={projectGroupingMode}
               onProjectSortOrderChange={handleProjectSortOrderChange}
               onThreadSortOrderChange={handleThreadSortOrderChange}
+              onGcThreadGroupingModeChange={handleGcThreadGroupingModeChange}
               onProjectGroupingModeChange={handleProjectGroupingModeChange}
             />
             <Tooltip>
@@ -3132,6 +3396,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                         gcAgentStartsInFlight={gcAgentStartsInFlight}
                         gcRigMutationsInFlight={gcRigMutationsInFlight}
                         gcCityMutationInFlight={gcCityMutationInFlight}
+                        gcThreadGroupingMode={gcThreadGroupingMode}
                         gcAgentActionStateByAgent={gcAgentActionStateByAgent}
                         gcRigActionStateByRig={gcRigActionStateByRig}
                         gcCityActionState={gcCityActionState}
@@ -3179,6 +3444,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 gcAgentStartsInFlight={gcAgentStartsInFlight}
                 gcRigMutationsInFlight={gcRigMutationsInFlight}
                 gcCityMutationInFlight={gcCityMutationInFlight}
+                gcThreadGroupingMode={gcThreadGroupingMode}
                 gcAgentActionStateByAgent={gcAgentActionStateByAgent}
                 gcRigActionStateByRig={gcRigActionStateByRig}
                 gcCityActionState={gcCityActionState}
@@ -3227,6 +3493,7 @@ export default function Sidebar() {
   const isOnSettings = pathname.startsWith("/settings");
   const sidebarThreadSortOrder = useSettings((s) => s.sidebarThreadSortOrder);
   const sidebarProjectSortOrder = useSettings((s) => s.sidebarProjectSortOrder);
+  const sidebarGcThreadGroupingMode = useSettings((s) => s.sidebarGcThreadGroupingMode);
   const sidebarProjectGroupingMode = useSettings((s) => s.sidebarProjectGroupingMode);
   const projectGroupingSettings = useSettings((settings) => ({
     sidebarProjectGroupingMode: settings.sidebarProjectGroupingMode,
@@ -3481,24 +3748,33 @@ export default function Sidebar() {
       return;
     }
 
-    const missingRigs = resolveMissingGcRigProjects({
-      projects,
-      gcConfig,
-      pendingCwds: pendingGcRigProjectCwdsRef.current,
-    });
-    for (const rig of missingRigs) {
-      const normalizedRigPath = rig.path.trim().replace(/\/+$/, "");
-      if (!normalizedRigPath) {
+    const missingProjects = [
+      ...[
+        resolveMissingGcWorkspaceProject({
+          projects,
+          gcConfig,
+          pendingCwds: pendingGcRigProjectCwdsRef.current,
+        }),
+      ].flatMap((project) => (project ? [project] : [])),
+      ...resolveMissingGcRigProjects({
+        projects,
+        gcConfig,
+        pendingCwds: pendingGcRigProjectCwdsRef.current,
+      }).map((rig) => ({ name: rig.name, path: rig.path })),
+    ];
+    for (const project of missingProjects) {
+      const normalizedProjectPath = project.path.trim().replace(/\/+$/, "");
+      if (!normalizedProjectPath) {
         continue;
       }
-      pendingGcRigProjectCwdsRef.current.add(normalizedRigPath);
+      pendingGcRigProjectCwdsRef.current.add(normalizedProjectPath);
       void api.orchestration
         .dispatchCommand({
           type: "project.create",
           commandId: newCommandId(),
           projectId: newProjectId(),
-          title: rig.name,
-          workspaceRoot: rig.path,
+          title: project.name,
+          workspaceRoot: project.path,
           defaultModelSelection: {
             instanceId: ProviderInstanceId.make("codex"),
             model: "gpt-5.5",
@@ -3506,14 +3782,14 @@ export default function Sidebar() {
           createdAt: new Date().toISOString(),
         })
         .catch((error) => {
-          pendingGcRigProjectCwdsRef.current.delete(normalizedRigPath);
+          pendingGcRigProjectCwdsRef.current.delete(normalizedProjectPath);
           toastManager.add({
             type: "error",
-            title: `Failed to add GC rig "${rig.name}"`,
+            title: `Failed to add GC project "${project.name}"`,
             description:
               error instanceof Error
                 ? error.message
-                : `An error occurred while creating the ${rig.name} project.`,
+                : `An error occurred while creating the ${project.name} project.`,
           });
         });
     }
@@ -3522,12 +3798,16 @@ export default function Sidebar() {
   // Build a mapping from physical project key → logical project key for
   // cross-environment grouping.  Projects that share a repositoryIdentity
   // canonicalKey are treated as one logical project in the sidebar.
+  const effectiveProjectGroupingSettings = useMemo(
+    () => projectGroupingSettings,
+    [projectGroupingSettings],
+  );
   const physicalToLogicalKey = useMemo(() => {
     return buildPhysicalToLogicalProjectKeyMap({
       projects: orderedProjects,
-      settings: projectGroupingSettings,
+      settings: effectiveProjectGroupingSettings,
     });
-  }, [orderedProjects, projectGroupingSettings]);
+  }, [effectiveProjectGroupingSettings, orderedProjects]);
   const projectPhysicalKeyByScopedRef = useMemo(
     () =>
       new Map(
@@ -3542,7 +3822,7 @@ export default function Sidebar() {
   const sidebarProjects = useMemo<SidebarProjectSnapshot[]>(() => {
     return buildSidebarProjectSnapshots({
       projects: orderedProjects,
-      settings: projectGroupingSettings,
+      settings: effectiveProjectGroupingSettings,
       primaryEnvironmentId,
       resolveEnvironmentLabel: (environmentId) => {
         const rt = savedEnvironmentRuntimeById[environmentId];
@@ -3551,8 +3831,8 @@ export default function Sidebar() {
       },
     });
   }, [
+    effectiveProjectGroupingSettings,
     orderedProjects,
-    projectGroupingSettings,
     primaryEnvironmentId,
     savedEnvironmentRegistry,
     savedEnvironmentRuntimeById,
@@ -4403,6 +4683,7 @@ export default function Sidebar() {
             handleDesktopUpdateButtonClick={handleDesktopUpdateButtonClick}
             projectSortOrder={sidebarProjectSortOrder}
             threadSortOrder={sidebarThreadSortOrder}
+            gcThreadGroupingMode={sidebarGcThreadGroupingMode}
             projectGroupingMode={sidebarProjectGroupingMode}
             updateSettings={updateSettings}
             openAddProject={openAddProjectCommandPalette}

@@ -25,3 +25,4 @@ __screenshots__/
 .tanstack
 squashfs-root/
 .vercel
+.backups/

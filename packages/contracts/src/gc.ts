@@ -34,6 +34,18 @@ export const GcThreadMeta = Schema.Struct({
   bead: Schema.optional(Schema.String),
   /** Current bead title. */
   beadTitle: Schema.optional(Schema.String),
+  /** Current bead status. */
+  beadStatus: Schema.optional(Schema.String),
+  /** Current bead type. */
+  beadType: Schema.optional(Schema.String),
+  /** Current bead priority. */
+  beadPriority: Schema.optional(Schema.String),
+  /** Current bead assignee. */
+  beadAssignee: Schema.optional(Schema.String),
+  /** Current bead labels, comma-separated. */
+  beadLabels: Schema.optional(Schema.String),
+  /** Current bead description. */
+  beadDescription: Schema.optional(Schema.String),
   /** Convoy ID. */
   convoy: Schema.optional(Schema.String),
   /** Convoy title. */
@@ -112,6 +124,12 @@ export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMe
       city: undefined,
       bead: undefined,
       beadTitle: undefined,
+      beadStatus: undefined,
+      beadType: undefined,
+      beadPriority: undefined,
+      beadAssignee: undefined,
+      beadLabels: undefined,
+      beadDescription: undefined,
       convoy: undefined,
       convoyTitle: undefined,
       convoyStatus: undefined,
@@ -143,6 +161,12 @@ export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMe
     city: customMetadata["gc.city"],
     bead: customMetadata["gc.bead"],
     beadTitle: customMetadata["gc.beadTitle"],
+    beadStatus: customMetadata["gc.beadStatus"],
+    beadType: customMetadata["gc.beadType"],
+    beadPriority: customMetadata["gc.beadPriority"],
+    beadAssignee: customMetadata["gc.beadAssignee"],
+    beadLabels: customMetadata["gc.beadLabels"],
+    beadDescription: customMetadata["gc.beadDescription"],
     convoy: customMetadata["gc.convoy"],
     convoyTitle: customMetadata["gc.convoyTitle"],
     convoyStatus: customMetadata["gc.convoyStatus"],
@@ -195,6 +219,7 @@ export function isGcActivityKind(kind: string): kind is GcActivityKind {
 
 export const GcConfigWorkspace = Schema.Struct({
   name: Schema.String,
+  path: Schema.optional(Schema.String),
   provider: Schema.optional(Schema.String),
   suspended: Schema.Boolean,
   session_template: Schema.optional(Schema.String),
@@ -491,6 +516,31 @@ function findConfiguredAgent(
   });
 }
 
+function normalizeGcPath(value: string | null | undefined): string | null {
+  const normalized = normalizeMetadataValue(value ?? undefined);
+  if (!normalized) {
+    return null;
+  }
+  const path = normalized.replace(/\\/g, "/").replace(/\/+$/, "");
+  return path.length > 0 ? path : null;
+}
+
+function projectContextMatchesRigPath(projectCwds: ReadonlySet<string>, rigPath: string): boolean {
+  const normalizedRigPath = normalizeGcPath(rigPath);
+  if (!normalizedRigPath) {
+    return false;
+  }
+
+  for (const projectCwd of projectCwds) {
+    const normalizedProjectCwd = normalizeGcPath(projectCwd);
+    if (normalizedProjectCwd && normalizedProjectCwd === normalizedRigPath) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /** Partition threads into rig folders, agent folders, and standalone threads. */
 export function groupThreadsByRigAndAgent<
   TThread extends {
@@ -613,7 +663,7 @@ export function groupThreadsByRigAndAgent<
   );
   let cityScopedRigGroupId: string | null = null;
   const relevantRigs = options?.config?.rigs.filter(
-    (rig) => projectCwds.size === 0 || projectCwds.has(normalizeMetadataValue(rig.path) ?? ""),
+    (rig) => projectCwds.size === 0 || projectContextMatchesRigPath(projectCwds, rig.path),
   );
   if (relevantRigs && relevantRigs.length > 0) {
     const relevantRigNames = new Set(relevantRigs.map((rig) => rig.name));

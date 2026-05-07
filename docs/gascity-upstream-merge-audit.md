@@ -1,176 +1,170 @@
 # Gas City Upstream Merge Audit
 
-Date: 2026-05-06
+Date: 2026-05-07
+
+Formula: `mol-gascity-upstream-merge`
 
 ## Scope
 
-Audit target:
-
 - repo: `/data/projects/t3code`
-- branch: `ship`
+- target branch: `ship`
 - upstream ref: `upstream/main`
+- T3Code integration branch required by formula:
+  `integration/gascity-upstream-sync`
+- runtime city: `/data/projects/t3code/packages/gascity-config/config`
+- package source: `packages/gascity/source`
+- package wrapper: `packages/gascity`
 
-Observed refs:
+Observed refs after `git fetch --prune --all`:
 
-```bash
-git branch --show-current
-# ship
-
-git rev-list --left-right --count upstream/main...ship
-# 0 116
-
-git merge-base ship upstream/main
-# 35721d9a08b225c4a3752f322ae4daccbeaa564e
-
-git rev-parse ship
-# 5bd92c799a0163015afb969918439f859e318f0d
-
-git rev-parse upstream/main
-# 35721d9a08b225c4a3752f322ae4daccbeaa564e
+```text
+target   91200a45a9190584d80780bd281c5b873cb15a38
+upstream a74ed8ed32c2a949ec6fc91b9ae57c25ac96359a
+base     0e388706470fdf8df7b5b5ae37f12bbeea777e06
+ahead/behind upstream/main...ship: 10 125
 ```
 
-## Executive Read
+## Current Working Tree
 
-There is no new upstream delta to merge on 2026-05-06. `upstream/main` is
-already the direct ancestor of `ship`. The audit question is therefore not
-"what incoming upstream change will break us today?" but "what fork features
-must be preserved when the next upstream refresh happens?"
+The working tree is dirty with in-scope fork work. This blocks any direct
+merge into `ship`.
 
-The answer: preserve the bundled Gas City tree, the native T3 bridge, the
-doltlite/beads backend work, and the T3 host-app integration around them.
+Dirty in-scope paths include:
 
-## Findings
+- `apps/server/src/gc/Layers/GcApiClient.ts`
+- `apps/web/src/components/Sidebar*.tsx`
+- `packages/contracts/src/gc.ts`
+- `packages/contracts/src/settings.ts`
+- `packages/gascity-config/config/city.toml`
+- `packages/gascity/source/cmd/gc/*`
+- `packages/gascity/source/internal/beads/doltlite_read_store.go`
+- `packages/gascity/source/internal/events/recorder.go`
+- `packages/gascity/source/internal/runtime/t3bridge/provider.go`
 
-### 1. Current merge pressure from upstream is zero
+Untracked state:
 
-Evidence:
+- `.backups/hq-doltlite-gc-20260506-070552/hq.db`
 
-- `upstream/main...ship` reports `0 116`
-- merge-base equals `upstream/main`
+Decision: do not merge upstream in this tree until the dirty work is committed,
+stashed, or moved to the declared integration branch.
 
-Implication:
+## Upstream Delta
 
-- a merge from `upstream/main` into `ship` today should be a no-op
-- any real conflict work will happen when upstream advances later, or when the
-  bundled package is refreshed from a newer upstream snapshot
+Upstream commits not on `ship`:
 
-### 2. The durable fork delta is broad and multi-layered
+- `536dcad19` Reduce timeline row rerenders
+- `25c9d267a` Stabilize git workspace and terminal tests
+- `1498335e3` Optimize MessagesTimeline work row stability
+- `166bce038` Feature/intellij editors
+- `a2ff50dbb` Add process and trace diagnostics views
+- `499f1463d` Split server CLI into focused submodules
+- `22384ae97` Adopt Effect JSON and DateTime idioms
+- `449e1aaa4` Make changed-files header sticky in chat timeline
+- `6c79039ce` Cache desktop build assets in CI and release workflows
+- `a74ed8ed3` Revert "Cache desktop build assets in CI and release workflows"
 
-The `ship`-only delta spans at least four layers:
+High-risk overlap:
 
-1. bundled source import: `packages/gascity/source/`
-2. backend/runtime dependencies: `packages/beads-doltlite/source/`
-3. T3 host integration: `apps/server/*`, `apps/web/*`
-4. operating docs/contracts: `docs/*.md`
+- upstream refactors server CLI and diagnostics surfaces
+- upstream changes web timeline/rendering paths
+- upstream does not contain the fork-owned GC bridge/server module paths
+- upstream does not contain the fork-owned `packages/beads-doltlite` package
+- upstream does not contain the fork-owned `packages/gascity` package source
 
-Implication:
+## Blocking Finding
 
-- future merge work cannot be scoped to just the bundled Go package
-- T3-side scripts, UI, runtime notes, and backend packaging must be reviewed in
-  the same pass
+A mechanical merge from `upstream/main` would conflict semantically with the
+fork-owned GC/T3 bridge. Diffing `ship..upstream/main` shows upstream lacks or
+would remove these fork-owned surfaces:
 
-### 3. T3 bridge remains a merge hot spot
-
-Existing bundled history docs already identify these areas as sensitive:
-
-- `packages/gascity/source/cmd/gc/template_resolve.go`
-- `packages/gascity/source/cmd/gc/providers.go`
-- `packages/gascity/source/cmd/gc/session_beads.go`
-- `packages/gascity/source/internal/runtime/t3bridge/`
-
-Why:
-
-- bridge landing came in multiple follow-up commits, not one stable drop
-- previous merge fallout already required explicit restore commits for session
-  beads and lifecycle behavior
-- the bundled docs already warn that `template_resolve.go` and session-bead
-  paths are conflict-prone
-
-### 4. Doltlite/backend work is first-class fork behavior, not incidental drift
-
-Recent `ship`-only commits show active backend integration work after the
-bundle landed:
-
-- `6c62a1be3` `Fix doltlite rig store initialization`
-- `aae4d7ba2` `fix(beads): report configured backend`
-- `06911b4cc` `fix: link bd builds against doltlite`
-- `74c8cdaac` `fix(gc): carry rig stores in one-shot start`
-- `3f271abcf` `fix(gascity): extend beads init timeout`
-- `ff21b17a8` `fix(gascity): support runtime help`
-
-Implication:
-
-- upstream sync must not revert T3Code toward managed-Dolt-only assumptions
-- smoke checks after any future merge need explicit backend coverage, not just
-  generic CLI sanity
-
-### 5. Host-app integration is coupled to the forked runtime
-
-Changed paths outside the bundle include:
-
-- `apps/server/scripts/generate-gc-client.ts`
-- `apps/server/scripts/patch-doltlite.mjs`
+- `apps/server/src/gc/**`
+- `apps/web/src/components/GcContextSidebar.tsx`
+- `apps/web/src/components/GcPanel.tsx`
+- `apps/web/src/components/SidebarGcFolders.tsx`
 - `apps/web/src/components/sidebar/gcSidebarControls.ts`
-- `apps/web/src/session-logic.ts`
-- `apps/web/src/session-logic.test.ts`
+- `apps/web/src/lib/gcThreadContext.ts`
+- `apps/web/src/lib/orchestrationReactQuery.ts`
+- `packages/beads-doltlite/**`
+- many T3 persistence sidecar migrations used by the fork
 
-Implication:
+Decision: block direct merge. Use a reasoned synthesize merge on
+`integration/gascity-upstream-sync`.
 
-- a package refresh that compiles inside `packages/gascity/source/` can still
-  break T3 if generated client shape, sidebar semantics, or patching scripts
-  drift
+## T3 Bridge Contract Inventory
 
-## Required Preservation Set
+| Part | Direction | Source markers | Failure if lost | Smoke check | Status |
+| --- | --- | --- | --- | --- | --- |
+| GC API client contract | GC -> T3 | `packages/contracts/src/gc.ts`, `apps/server/src/gc/Services/GcApiClient.ts` | Sidebar/API calls disappear | `bun gc status`, RPC `gc.getConfig` | preserve |
+| GC API implementation | GC -> T3 | `apps/server/src/gc/Layers/GcApiClient.ts` | lifecycle controls fail | `getLifecycleStatus`, start/stop buttons | dirty, preserve |
+| GC context provider | GC -> T3 | `apps/server/src/gc/Layers/GcContextProvider.ts` | right sidebar loses bead/formula/env context | open GC managed thread | preserve |
+| Thread binding lookup | bidirectional | `apps/server/src/gc/peek.ts` | session->thread resolution fails | `findThreadBinding` | preserve |
+| Folder metadata | GC -> T3 | `apps/server/src/gc/folderMetadata.ts` | virtual folders collapse | sidebar with rig project | preserve |
+| Provider env handoff | T3 -> GC provider | `ProviderCommandReactor.ts`, `packages/contracts/src/provider.ts` | agents lose `GC_SESSION_NAME` etc. | provider start input includes env | preserve |
+| Custom metadata store | GC -> T3 web | `apps/web/src/store.ts` | GC threads vanish or stop updating | metadata-only update | preserve |
+| Terminal/project env | T3 -> shell | `ChatView.tsx`, project script launchers | shells lack GC env | terminal env audit | preserve |
+| Sidebar GC folders | GC -> T3 UI | `Sidebar.tsx`, `SidebarGcFolders.tsx` | rigs/pools/named sessions missing | sidebar shows rig/project folders | dirty, preserve |
+| Right sidebar panel | GC -> T3 UI | `GcPanel.tsx`, `GcContextSidebar.tsx`, chat route | no bead/formula/convoy/runtime panel | `panel=gc` route | preserve |
+| FTS5 search | T3 persistence -> UI | `orchestrationReactQuery.ts`, FTS migrations | sidebar search degraded | message text search | preserve |
+| Projection sidecar | T3 persistence | `NodeSqliteClient.ts`, migrations, `packages/doltlite/index.ts` | read model missing columns/tables | fresh dev DB migrations | preserve |
+| OpenCode/Kimi defaults | shared config | `city.toml`, `pack.toml`, settings | wrong provider/model for agents | config show provider rows | dirty, preserve |
+| Bundled runner env | T3 -> GC | `scripts/gascity-runner.ts`, bundled env helpers | wrong binary/db/backend | `bun gascity:path` | preserve |
+| t3bridge provider | GC -> T3 | `packages/gascity/source/internal/runtime/t3bridge` | GC sessions cannot start T3 threads | session start via t3bridge | dirty, preserve |
+| Dolt backend | beads storage | beads/gascity backend paths | managed Dolt compatibility lost | bd init backend=dolt | preserve |
+| doltlite backend | beads storage | `packages/doltlite`, `packages/beads-doltlite`, `doltlite_read_store.go` | current runtime backend breaks | bd/gc against doltlite DB | dirty, preserve |
 
-Before landing any future upstream refresh, verify parity for:
+## Difference Ledger
 
-- bundled Gas City source tree under `packages/gascity/source/`
-- native T3 provider behavior under `internal/runtime/t3bridge/`
-- provider/template/session-bead lifecycle wiring
-- dual backend support for managed Dolt and doltlite
-- rig-store initialization and backend provenance reporting
-- T3 server/web integration scripts and sidebar/session behavior
-- operator docs that explain bridge and backend contracts
+| Surface | Upstream change | Fork feature affected | Decision | Verification |
+| --- | --- | --- | --- | --- |
+| `apps/server/src/cli*` | upstream splits CLI into focused modules | GC server layer imports/wiring | synthesize upstream CLI split while preserving GC layers | targeted server tests |
+| `apps/server/src/gc/**` | absent upstream | GC API client, context, generated client | keep fork; port to any new server architecture manually | GC RPC smoke |
+| `apps/server/src/persistence/Migrations/*` | upstream has later migration shape, fork has sidecar/FTS/provider-instance work | projection sidecar, FTS5, provider instance IDs | synthesize; never drop sidecar/FTS migrations silently | fresh dev DB boot |
+| `apps/web/src/components/Sidebar.tsx` | upstream timeline/sidebar changes overlap with fork GC virtual folders | rig/project grouping, pool controls, thread rows | synthesize; keep top-level project semantics and GC virtual folders | sidebar tests/manual UI |
+| `apps/web/src/components/SidebarGcFolders.tsx` | absent upstream | GC agent/rig/session controls | keep fork | sidebar renders configured agents |
+| `apps/web/src/components/GcContextSidebar.tsx` | absent upstream | right sidebar context panel | keep fork | `panel=gc` route |
+| `apps/web/src/components/chat/MessagesTimeline*` | upstream performance work | GC activity cards and timeline entries | synthesize if timeline touched | timeline tests |
+| `packages/gascity/**` | absent upstream T3Code | bundled GC build/runtime | keep fork; sync from Gas City rig formula, not T3 upstream | `bun build:gascity-tools` |
+| `packages/beads-doltlite/**` | absent upstream T3Code | doltlite-backed beads | keep fork; sync from beads-doltlite rig formula | bd doltlite smoke |
+| `packages/doltlite/**` | absent upstream T3Code | linked libdoltlite client | keep fork | native build smoke |
+| `packages/gascity-config/**` | absent upstream T3Code | bundled city/rig/packs/providers | keep fork; sync via HQ formula | `bun gc config show` |
 
-See [docs/gascity-fork-feature-ledger.md](/data/projects/t3code/docs/gascity-fork-feature-ledger.md)
-for the detailed inventory.
+## Rig Sync Plan
 
-## Recommended Upmerge Shape
+See `docs/gascity-rig-repo-matrix.md`.
 
-When upstream advances, use this sequence:
+Summary:
 
-1. Refresh refs and re-run divergence check against the exact target SHA.
-2. Create a scratch worktree from current `ship`.
-3. Merge the newer `upstream/main` in scratch, never in the primary dirty tree.
-4. Reconcile hot paths first:
-   `template_resolve.go`, `providers.go`, `session_beads.go`,
-   `beads_provider_lifecycle.go`, `internal/runtime/t3bridge/`, and API/status
-   handlers.
-5. Re-check T3 host integration paths after bundled-code conflicts are settled.
-6. Re-run backend smoke checks against HQ and each rig store if storage-opening
-   behavior changed.
+- `gascity`: repo-backed rig, dirty, requires `mol-rig-upstream-sync` before
+  package source can be refreshed.
+- `beads-doltlite`: repo-backed rig, dirty docs, requires
+  `mol-rig-upstream-sync` before package source can be refreshed.
+- `context-mode`: repo-backed rig but suspended and separate from Gas City
+  update; defer unless bridge/context-mode package interaction is in scope.
+- T3Code package assembly must occur on
+  `integration/gascity-upstream-sync`, not directly on `ship`.
 
-Bundled references already carrying the detailed playbook:
+## Result Of This Run
 
-- `packages/gascity/source/engdocs/contributors/safe-upmerge-formula.md`
-- `packages/gascity/source/engdocs/contributors/t3-session-bridge-merge-checklist.md`
-- `packages/gascity/source/engdocs/contributors/t3-session-bridge-history-summary.md`
+Formula execution status: audit complete, merge blocked.
 
-## What I Did Not Do
+Blocked because:
 
-- no build, compile, or test run
-- no manual HQ/rig backend smoke tests
-- no actual merge or rebase
+1. dirty in-scope fork work exists on `ship`
+2. upstream has a real delta now
+3. upstream lacks the fork GC bridge/package surfaces
+4. rig-local sync formula outputs have not been produced for `gascity` and
+   `beads-doltlite`
 
-Reason:
+No merge, rebase, checkout, or conflict resolution was performed.
 
-- current task was audit/documentation
-- workspace instructions explicitly say not to run tests/builds unless asked
-- there is no incoming upstream delta to land today
+## Next Merge Procedure
 
-## Conclusion
-
-As of 2026-05-06, `ship` does not need an upstream merge from `upstream/main`.
-The useful output is the preservation map for the next sync. The highest-risk
-paths remain the T3 bridge, session/beads lifecycle wiring, doltlite backend
-behavior, and the T3 host-app integration that depends on them.
+1. Commit or stash current dirty work as fork-preservation commits.
+2. Create/check out `integration/gascity-upstream-sync`.
+3. Run `mol-rig-upstream-sync` in `/data/projects/gascity`.
+4. Run `mol-rig-upstream-sync` in `/data/projects/beads-doltlite`.
+5. Consume audited rig outputs into T3 packages.
+6. Merge/synthesize upstream T3Code changes, preserving every bridge entry in
+   this audit and `docs/gascity-fork-feature-ledger.md`.
+7. Run focused smoke checks. Do not run full `bun typecheck` unless explicitly
+   requested.

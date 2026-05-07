@@ -465,6 +465,7 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
   return {
     workspace: {
       name: workspaceName,
+      path: cityPath,
       ...(typeof workspaceRaw.provider === "string" ? { provider: workspaceRaw.provider } : {}),
       suspended: Boolean(workspaceRaw.suspended),
       ...(typeof workspaceRaw.session_template === "string"

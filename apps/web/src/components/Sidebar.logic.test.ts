@@ -11,6 +11,7 @@ import {
   partitionProjectThreadsForSidebar,
   resolveAdjacentThreadId,
   resolveMissingGcRigProjects,
+  resolveMissingGcWorkspaceProject,
   getFallbackThreadIdAfterDelete,
   getVisibleThreadsForProject,
   getProjectSortTimestamp,
@@ -233,7 +234,7 @@ describe("thread search helpers", () => {
 });
 
 describe("resolveMissingGcRigProjects", () => {
-  it("returns rigs whose paths do not yet exist as projects", () => {
+  it("returns rigs whose exact paths do not yet exist as projects", () => {
     const missing = resolveMissingGcRigProjects({
       projects: [
         {
@@ -255,6 +256,32 @@ describe("resolveMissingGcRigProjects", () => {
     expect(missing.map((rig) => rig.name)).toEqual(["beads"]);
   });
 
+  it("does not treat parent project paths as existing nested rig projects", () => {
+    const missing = resolveMissingGcRigProjects({
+      projects: [
+        {
+          id: ProjectId.make("project-repo"),
+          name: "t3code",
+          cwd: "/data/projects/t3code",
+        },
+      ],
+      gcConfig: {
+        workspace: { name: "gc", suspended: false },
+        rigs: [
+          { name: "t3code", path: "/data/projects/t3code", suspended: false },
+          {
+            name: "beads-doltlite",
+            path: "/data/projects/t3code/packages/beads-doltlite",
+            suspended: false,
+          },
+        ],
+        agents: [],
+      },
+    });
+
+    expect(missing.map((rig) => rig.name)).toEqual(["beads-doltlite"]);
+  });
+
   it("skips rigs already pending creation", () => {
     const missing = resolveMissingGcRigProjects({
       projects: [],
@@ -267,6 +294,57 @@ describe("resolveMissingGcRigProjects", () => {
     });
 
     expect(missing).toEqual([]);
+  });
+});
+
+describe("resolveMissingGcWorkspaceProject", () => {
+  it("returns the GC workspace when its project does not exist", () => {
+    const missing = resolveMissingGcWorkspaceProject({
+      projects: [
+        {
+          id: ProjectId.make("project-rig"),
+          name: "gascity",
+          cwd: "/data/projects/t3code/packages/gascity",
+        },
+      ],
+      gcConfig: {
+        workspace: {
+          name: "config",
+          path: "/data/projects/t3code/packages/gascity-config/config",
+          suspended: false,
+        },
+        rigs: [],
+        agents: [],
+      },
+    });
+
+    expect(missing).toEqual({
+      name: "config",
+      path: "/data/projects/t3code/packages/gascity-config/config",
+    });
+  });
+
+  it("skips the GC workspace when its exact project exists", () => {
+    const missing = resolveMissingGcWorkspaceProject({
+      projects: [
+        {
+          id: ProjectId.make("project-config"),
+          name: "config",
+          cwd: "/data/projects/t3code/packages/gascity-config/config",
+        },
+      ],
+      gcConfig: {
+        workspace: {
+          name: "config",
+          path: "/data/projects/t3code/packages/gascity-config/config",
+          suspended: false,
+        },
+        rigs: [],
+        agents: [],
+      },
+    });
+
+    expect(missing).toBeNull();
   });
 });
 

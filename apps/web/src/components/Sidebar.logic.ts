@@ -12,7 +12,7 @@ import {
   toSortableTimestamp,
   type ThreadSortInput,
 } from "../lib/threadSort";
-import type { SidebarThreadSummary, Thread } from "../types";
+import type { Project, SidebarThreadSummary, Thread } from "../types";
 import { cn } from "../lib/utils";
 import { isLatestTurnSettled, isSessionActivelyRunning } from "../session-logic";
 
@@ -24,6 +24,7 @@ export const SIDEBAR_THREAD_PREWARM_LIMIT = 10;
 export type SidebarNewThreadEnvMode = "local" | "worktree";
 type SidebarProject = {
   id: string;
+  environmentId: Project["environmentId"];
   name: string;
   cwd: string;
   createdAt?: string | undefined;
@@ -83,7 +84,7 @@ export function countGcAgents(
 }
 
 export function normalizeWorkspacePath(path: string): string {
-  return path.trim().replace(/\/+$/, "");
+  return path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
 export function resolveMissingGcRigProjects<TProject extends Pick<SidebarProject, "cwd">>(input: {
@@ -110,6 +111,34 @@ export function resolveMissingGcRigProjects<TProject extends Pick<SidebarProject
       !pendingCwds.has(normalizedRigPath)
     );
   });
+}
+
+export function resolveMissingGcWorkspaceProject<
+  TProject extends Pick<SidebarProject, "cwd">,
+>(input: {
+  projects: readonly TProject[];
+  gcConfig: GcConfigResult | null;
+  pendingCwds?: ReadonlySet<string>;
+}): { name: string; path: string } | null {
+  const workspacePath = normalizeWorkspacePath(input.gcConfig?.workspace.path ?? "");
+  if (!input.gcConfig || workspacePath.length === 0) {
+    return null;
+  }
+
+  const existingCwds = input.projects
+    .map((project) => normalizeWorkspacePath(project.cwd))
+    .filter((cwd) => cwd.length > 0);
+  if (
+    existingCwds.some((cwd) => cwd === workspacePath) ||
+    (input.pendingCwds ?? new Set<string>()).has(workspacePath)
+  ) {
+    return null;
+  }
+
+  return {
+    name: input.gcConfig.workspace.name,
+    path: workspacePath,
+  };
 }
 
 export function dedupeProjectsByWorkspacePath<TProject extends Pick<SidebarProject, "cwd">>(
