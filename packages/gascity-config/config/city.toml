@@ -136,3 +136,7 @@ mode = "always"
 dir = "context-mode"
 template = "refinery"
 mode = "always"
+
+[beads]
+provider = "bd"
+backend = "doltlite"
