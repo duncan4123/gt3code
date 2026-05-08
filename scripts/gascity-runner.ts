@@ -443,6 +443,7 @@ function copyRuntimeFile(
 }
 
 function runGc(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
+  const gcApiUrl = resolveGcApiUrl(runtime);
   const env = {
     ...process.env,
     GC_HOME: runtime.rootDir,
@@ -454,7 +455,7 @@ function runGc(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
     BD_BIN: runtime.bdBinaryPath,
     T3CODE_WORKTREES_DIR: runtime.worktreesDir,
     GC_WORKTREES_DIR: runtime.worktreesDir,
-    GC_API_URL: "http://127.0.0.1:8372",
+    GC_API_URL: gcApiUrl,
   };
   prepareRuntimeEnv(env, dirname(runtime.gcBinaryPath));
   const result = spawnSync(runtime.gcBinaryPath, ["--city", runtime.cityDir, ...args], {
@@ -463,6 +464,18 @@ function runGc(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
     stdio: "inherit",
   });
   process.exit(result.status ?? 1);
+}
+
+function resolveGcApiUrl(runtime: RuntimePaths): string {
+  const supervisorTomlPath = join(runtime.rootDir, "supervisor.toml");
+  if (existsSync(supervisorTomlPath)) {
+    const data = readFileSync(supervisorTomlPath, "utf8");
+    const port = /^\s*port\s*=\s*(\d+)\s*$/m.exec(data)?.[1];
+    if (port) {
+      return `http://127.0.0.1:${port}`;
+    }
+  }
+  return "http://127.0.0.1:8372";
 }
 
 function prepareRuntimeEnv(env: NodeJS.ProcessEnv, binDir: string): void {
@@ -511,7 +524,7 @@ function printRuntime(runtime: RuntimePaths): void {
   console.log(`BD_BIN=${runtime.bdBinaryPath}`);
   console.log(`DOLTLITE_LIBRARY=${runtime.doltliteLibraryPath}`);
   console.log(`T3CODE_WORKTREES_DIR=${runtime.worktreesDir}`);
-  console.log("GC_API_URL=http://127.0.0.1:8372");
+  console.log(`GC_API_URL=${resolveGcApiUrl(runtime)}`);
 }
 
 function printHelp(): void {

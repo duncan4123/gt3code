@@ -1659,6 +1659,21 @@ func cmdSessionNudge(args []string, delivery nudgeDeliveryMode, stdout, stderr i
 	target := args[0]
 	message := strings.Join(args[1:], " ")
 
+	if delivery != nudgeDeliveryQueue {
+		cityPath, err := resolveCity()
+		if err == nil {
+			if c := apiClient(cityPath); c != nil {
+				if err := c.SubmitSessionAccepted(target, message, session.SubmitIntentDefault); err == nil {
+					fmt.Fprintf(stdout, "Nudged %s\n", target) //nolint:errcheck // best-effort stdout
+					return 0
+				} else if !api.ShouldFallback(err) {
+					fmt.Fprintf(stderr, "gc session nudge: %v\n", err) //nolint:errcheck // best-effort stderr
+					return 1
+				}
+			}
+		}
+	}
+
 	targetInfo, err := resolveNudgeTarget(target)
 	if err != nil {
 		fmt.Fprintf(stderr, "gc session nudge: %v\n", err) //nolint:errcheck // best-effort stderr

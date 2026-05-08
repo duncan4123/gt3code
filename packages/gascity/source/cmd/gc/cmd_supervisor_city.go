@@ -111,11 +111,26 @@ func registeredCityEntry(cityPath string) (supervisor.CityEntry, bool, error) {
 		return supervisor.CityEntry{}, false, err
 	}
 	for _, entry := range entries {
-		if samePath(entry.Path, normalized) {
+		if samePath(entry.Path, normalized) || registeredCityEntryAliasesPath(entry.Path, normalized) {
 			return entry, true, nil
 		}
 	}
 	return supervisor.CityEntry{}, false, nil
+}
+
+func registeredCityEntryAliasesPath(entryPath, cityPath string) bool {
+	entryCityToml, err := filepath.EvalSymlinks(filepath.Join(entryPath, "city.toml"))
+	if err != nil {
+		return false
+	}
+	targetCityToml, err := filepath.Abs(filepath.Join(cityPath, "city.toml"))
+	if err != nil {
+		return false
+	}
+	if resolved, evalErr := filepath.EvalSymlinks(targetCityToml); evalErr == nil {
+		targetCityToml = resolved
+	}
+	return samePath(entryCityToml, targetCityToml)
 }
 
 func cityUsesManagedReconciler(cityPath string) bool {
@@ -515,10 +530,7 @@ var supervisorCityRunningHook = supervisorCityRunning
 
 func supervisorCityAPIClient(cityPath string) *api.Client {
 	entry, registered, err := registeredCityEntry(cityPath)
-	if err != nil || !registered || supervisorAliveHook() == 0 {
-		return nil
-	}
-	if running, _, known := supervisorCityRunningHook(cityPath); !known || !running {
+	if err != nil || !registered {
 		return nil
 	}
 	baseURL, err := supervisorAPIBaseURL()
