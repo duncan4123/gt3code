@@ -36,7 +36,8 @@ func loadSessionBeads(store beads.Store) ([]beads.Bead, error) {
 		return nil, nil
 	}
 	all, err := store.List(beads.ListQuery{
-		Label: sessionBeadLabel,
+		Label:      sessionBeadLabel,
+		SkipParent: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("listing session beads: %w", err)
@@ -53,7 +54,11 @@ func loadSessionBeads(store beads.Store) ([]beads.Bead, error) {
 	// Limit the fallback to stores that opt in, because tests and other stores
 	// may use type=session rows that are not part of the gc session index.
 	if fallback, ok := store.(sessionTypeFallbackStore); ok && fallback.NeedsSessionTypeFallback() {
-		typed, typeErr := store.List(beads.ListQuery{Type: sessionBeadType})
+		typed, typeErr := store.List(beads.ListQuery{
+			Type:       sessionBeadType,
+			SkipLabels: true,
+			SkipParent: true,
+		})
 		if typeErr == nil {
 			for _, b := range typed {
 				byID[b.ID] = b

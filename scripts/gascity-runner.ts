@@ -5,9 +5,11 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  readlinkSync,
   readFileSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -115,6 +117,7 @@ function installRuntime(options: { readonly overwriteConfig: boolean }): Runtime
   if (doltliteLibrarySource) {
     copyRuntimeFile(doltliteLibrarySource, runtime.doltliteLibraryPath);
   }
+  ensureRuntimeCommandLinks(runtime);
   prepareActiveCity(defaultCityRoot, {
     bdBinaryPath: runtime.bdBinaryPath,
     initializeStores: true,
@@ -135,6 +138,7 @@ function ensureRuntimeInstalled(): RuntimePaths {
   const bdBinarySource = process.env.BD_BINARY ?? findBuiltBdBinaryPath();
   const doltliteLibrarySource = process.env.DOLTLITE_LIBRARY ?? findBuiltDoltliteLibraryPath();
   if (runtimeMatchesSources(runtime, { gcBinarySource, bdBinarySource, doltliteLibrarySource })) {
+    ensureRuntimeCommandLinks(runtime);
     prepareActiveCity(runtime.cityDir, { initializeStores: false });
     return runtime;
   }
@@ -422,6 +426,39 @@ function readJsonObject(filePath: string): Record<string, unknown> {
 
 function copyRuntimeBinary(sourcePath: string, targetPath: string): void {
   copyRuntimeFile(sourcePath, targetPath, { executable: true });
+}
+
+function ensureRuntimeCommandLinks(runtime: RuntimePaths): void {
+  if (process.platform === "win32") return;
+  const linkTargets = [
+    { command: "gc", target: runtime.gcBinaryPath },
+    { command: "bd", target: runtime.bdBinaryPath },
+  ] as const;
+  const userBinDirs = [
+    join(homedir(), "go", "bin"),
+    join(homedir(), ".local", "bin"),
+  ];
+  for (const binDir of userBinDirs) {
+    mkdirSync(binDir, { recursive: true });
+    for (const { command, target } of linkTargets) {
+      ensureRuntimeCommandLink(join(binDir, command), target);
+    }
+  }
+}
+
+function ensureRuntimeCommandLink(linkPath: string, targetPath: string): void {
+  if (existsSync(linkPath)) {
+    try {
+      if (readlinkSync(linkPath) === targetPath) {
+        return;
+      }
+      rmSync(linkPath, { force: true });
+    } catch {
+      const backupPath = `${linkPath}.pre-t3code-${new Date().toISOString().replaceAll(/[:.]/g, "")}`;
+      renameSync(linkPath, backupPath);
+    }
+  }
+  symlinkSync(targetPath, linkPath);
 }
 
 function copyRuntimeFile(

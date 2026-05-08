@@ -565,6 +565,7 @@ define OPT_FEATURE_FLAGS {} ; # -DSQLITE_OMIT/ENABLE flags.
 define OPT_SHELL {
   -DSQLITE_DQS=0
   -DSQLITE_ENABLE_FTS4
+  -DSQLITE_ENABLE_FTS5
   -DSQLITE_ENABLE_RTREE
   -DSQLITE_ENABLE_EXPLAIN_COMMENTS
   -DSQLITE_ENABLE_UNKNOWN_SQL_FUNCTION
@@ -2042,7 +2043,7 @@ proc sqlite-check-tcl {} {
       }
     }
     if {![file-isexec $with_tclsh]} {
-      proj-warn "Cannot find a usable tclsh (tried: $tryThese)
+      proj-warn "Cannot find a usable tclsh (tried: $tryThese)"
     }
   }
   define TCLSH_CMD $with_tclsh

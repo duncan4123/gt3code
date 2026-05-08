@@ -17,8 +17,29 @@ export CGO_ENABLED
 # tags: `go test -tags=regression,$BEADS_BUILD_TAGS ...`
 export BEADS_BUILD_TAGS="gms_pure_go"
 
+# If a packaged doltlite build is available, link mattn/go-sqlite3 against it
+# so doltlite tests exercise dolt_* SQL functions instead of plain SQLite.
+DOLTLITE_ROOT=""
+for dir in "$PWD/../../doltlite" "$PWD/../../doltlite/source" "/data/projects/doltlite"; do
+    if [[ -f "$dir/libdoltlite.a" || -f "$dir/build/libdoltlite.a" ]]; then
+        DOLTLITE_ROOT="$dir"
+        break
+    fi
+done
+if [[ -n "$DOLTLITE_ROOT" ]]; then
+    DOLTLITE_INCLUDE_DIR="$DOLTLITE_ROOT"
+    [[ -d "$DOLTLITE_ROOT/build" ]] && DOLTLITE_INCLUDE_DIR="$DOLTLITE_ROOT/build"
+    DOLTLITE_STATIC_LIB="$DOLTLITE_ROOT/libdoltlite.a"
+    [[ -f "$DOLTLITE_ROOT/build/libdoltlite.a" ]] && DOLTLITE_STATIC_LIB="$DOLTLITE_ROOT/build/libdoltlite.a"
+    export CGO_CFLAGS="${CGO_CFLAGS:+$CGO_CFLAGS }-I$DOLTLITE_INCLUDE_DIR"
+    export CGO_LDFLAGS="${CGO_LDFLAGS:+$CGO_LDFLAGS }$DOLTLITE_STATIC_LIB -lz -lpthread -lm"
+    export BEADS_BUILD_TAGS="$BEADS_BUILD_TAGS,libsqlite3"
+fi
+
 # Propagate the tag via GOFLAGS so every subsequent bare `go` invocation
 # picks it up automatically. Idempotent: re-sourcing is a no-op.
 if [[ "${GOFLAGS:-}" != *gms_pure_go* ]]; then
     export GOFLAGS="${GOFLAGS:+$GOFLAGS }-tags=${BEADS_BUILD_TAGS}"
+elif [[ "$BEADS_BUILD_TAGS" == *libsqlite3* && "${GOFLAGS:-}" != *libsqlite3* ]]; then
+    export GOFLAGS="${GOFLAGS} -tags=${BEADS_BUILD_TAGS}"
 fi

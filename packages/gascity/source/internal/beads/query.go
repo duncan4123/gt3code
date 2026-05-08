@@ -40,7 +40,13 @@ type ListQuery struct {
 	// implementations ignore it. Use it only for lifecycle gates that must
 	// observe external mutations immediately.
 	Live bool
-	Sort SortOrder
+	// SkipLabels avoids hydrating label slices when the caller only needs the
+	// selector match and core bead fields.
+	SkipLabels bool
+	// SkipParent avoids joining parent-child dependencies when the caller does
+	// not need Bead.ParentID.
+	SkipParent bool
+	Sort       SortOrder
 }
 
 // ReadyQuery describes optional filters for ready-work lookup. A zero-value

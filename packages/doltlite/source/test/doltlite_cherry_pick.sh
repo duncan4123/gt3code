@@ -26,7 +26,7 @@ SELECT dolt_checkout('main');" | $DOLTLITE "$DB" > /dev/null 2>&1
 
 # Cherry-pick the feat commit onto main
 run_test_match "cp_basic_hash" \
-  "SELECT dolt_cherry_pick((SELECT hash FROM dolt_branches WHERE name='feat'));" \
+  "SELECT dolt_cherry_pick('feat');" \
   "^[0-9a-f]{40}$" "$DB"
 run_test "cp_basic_count" "SELECT count(*) FROM t;" "2" "$DB"
 run_test "cp_basic_val" "SELECT v FROM t WHERE id=2;" "feat_row" "$DB"
@@ -86,7 +86,7 @@ UPDATE t SET v='main_val' WHERE id=1;
 SELECT dolt_commit('-A','-m','main modifies row 1');" | $DOLTLITE "$DB" > /dev/null 2>&1
 
 run_test_match "cp_conflict_msg" \
-  "SELECT dolt_cherry_pick((SELECT hash FROM dolt_branches WHERE name='feat'));" \
+  "SELECT dolt_cherry_pick('feat');" \
   "conflict|rolled back" "$DB"
 run_test "cp_conflict_resolved" "SELECT count(*) FROM dolt_conflicts;" "0" "$DB"
 run_test "cp_conflict_ours" "SELECT v FROM t WHERE id=1;" "main_val" "$DB"
@@ -104,7 +104,7 @@ SELECT dolt_commit('-A','-m','feat modifies row 1');
 SELECT dolt_checkout('main');
 UPDATE t SET v='main_val' WHERE id=1;
 SELECT dolt_commit('-A','-m','main modifies row 1');
-SELECT dolt_cherry_pick((SELECT hash FROM dolt_branches WHERE name='feat'));
+SELECT dolt_cherry_pick('feat');
 SELECT 'TX|' || (SELECT count(*) FROM dolt_conflicts) || '|' ||
        (SELECT v FROM t WHERE id=1);
 SQL
@@ -137,7 +137,7 @@ SELECT dolt_commit('-A','-m','main updates row 1');" | $DOLTLITE "$DB" > /dev/nu
 
 # Cherry-pick should cleanly add row 3 without conflicting with row 1 change
 run_test_match "cp_noc_hash" \
-  "SELECT dolt_cherry_pick((SELECT hash FROM dolt_branches WHERE name='feat'));" \
+  "SELECT dolt_cherry_pick('feat');" \
   "^[0-9a-f]{40}$" "$DB"
 
 run_test "cp_noc_count" "SELECT count(*) FROM t;" "3" "$DB"
@@ -182,7 +182,7 @@ INSERT INTO t VALUES(2,'feat_data');
 SELECT dolt_commit('-A','-m','feat add');
 SELECT dolt_checkout('main');" | $DOLTLITE "$DB" > /dev/null 2>&1
 
-echo "SELECT dolt_cherry_pick((SELECT hash FROM dolt_branches WHERE name='feat'));" | $DOLTLITE "$DB" > /dev/null 2>&1
+echo "SELECT dolt_cherry_pick('feat');" | $DOLTLITE "$DB" > /dev/null 2>&1
 
 # Verify data persists after reopen
 run_test "cp_persist_count" "SELECT count(*) FROM t;" "2" "$DB"
@@ -343,7 +343,7 @@ SELECT dolt_commit('-A','-m','feat add');
 SELECT dolt_checkout('main');" | $DOLTLITE "$DB" > /dev/null 2>&1
 
 # Cherry-pick feat onto main
-echo "SELECT dolt_cherry_pick((SELECT hash FROM dolt_branches WHERE name='feat'));" | $DOLTLITE "$DB" > /dev/null 2>&1
+echo "SELECT dolt_cherry_pick('feat');" | $DOLTLITE "$DB" > /dev/null 2>&1
 run_test "combo_after_cp" "SELECT count(*) FROM t;" "2" "$DB"
 
 # Now revert the cherry-pick
@@ -485,7 +485,7 @@ SELECT dolt_commit('-A','-m','feat: add t2');
 SELECT dolt_checkout('main');" | $DOLTLITE "$DB" > /dev/null 2>&1
 
 run_test_match "cp_newtbl_hash" \
-  "SELECT dolt_cherry_pick((SELECT hash FROM dolt_branches WHERE name='feat'));" \
+  "SELECT dolt_cherry_pick('feat');" \
   "^[0-9a-f]{40}$" "$DB"
 
 run_test "cp_newtbl_t" "SELECT count(*) FROM t;" "1" "$DB"
@@ -517,6 +517,135 @@ run_test "cp_violation_none" "SELECT count(*) FROM dolt_constraint_violations;" 
 run_test "cp_violation_state" \
   "SELECT group_concat(id || ':' || u || ':' || v, ',') FROM (SELECT id,u,v FROM t ORDER BY id);" \
   "1:9:main1,2:2:base2" "$DB"
+
+rm -f "$DB"
+
+DB=/tmp/test_cp_fk_tables_$$.db; rm -f "$DB"
+echo "CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
+INSERT INTO t VALUES(1,10);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m','init');
+SELECT dolt_branch('feat');
+SELECT dolt_checkout('feat');
+CREATE TABLE p(id INTEGER PRIMARY KEY, u INT UNIQUE);
+CREATE TABLE c(id INTEGER PRIMARY KEY, u INT, FOREIGN KEY(u) REFERENCES p(u));
+INSERT INTO p VALUES(1,100);
+INSERT INTO c VALUES(1,100);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m','feat_add_fk_tables');
+SELECT dolt_checkout('main');
+CREATE TABLE t_new(id INTEGER PRIMARY KEY, v INT CHECK(v > 0));
+INSERT INTO t_new SELECT * FROM t;
+DROP TABLE t;
+ALTER TABLE t_new RENAME TO t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m','main_check');" | $DOLTLITE "$DB" > /dev/null 2>&1
+
+run_test_match "cp_fk_tables_hash" \
+  "SELECT dolt_cherry_pick('feat');" \
+  "^[0-9a-f]{40}$" "$DB"
+run_test "cp_fk_tables_parent" "SELECT count(*) FROM p;" "1" "$DB"
+run_test "cp_fk_tables_child" "SELECT count(*) FROM c;" "1" "$DB"
+run_test "cp_fk_tables_fk" "SELECT count(*) FROM pragma_foreign_key_list('c');" "1" "$DB"
+
+rm -f "$DB"
+
+DB=/tmp/test_cp_recreate_fk_family_$$.db; rm -f "$DB"
+echo "CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
+INSERT INTO t VALUES(1,10);
+CREATE TABLE p(id INTEGER PRIMARY KEY, u INT UNIQUE);
+CREATE TABLE c(id INTEGER PRIMARY KEY, u INT, FOREIGN KEY(u) REFERENCES p(u));
+INSERT INTO p VALUES(1,100);
+INSERT INTO c VALUES(1,100);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m','init');
+SELECT dolt_branch('feat');
+SELECT dolt_checkout('feat');
+DROP TABLE c;
+DROP TABLE p;
+CREATE TABLE p(id INTEGER PRIMARY KEY, u INT UNIQUE, label TEXT);
+CREATE TABLE c(id INTEGER PRIMARY KEY, u INT, FOREIGN KEY(u) REFERENCES p(u));
+INSERT INTO p VALUES(2,200,'x');
+INSERT INTO c VALUES(2,200);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m','feat_recreate_fk_family');
+SELECT dolt_checkout('main');
+CREATE TABLE t_new(id INTEGER PRIMARY KEY, v INT CHECK(v > 0));
+INSERT INTO t_new SELECT * FROM t;
+DROP TABLE t;
+ALTER TABLE t_new RENAME TO t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m','main_check');" | $DOLTLITE "$DB" > /dev/null 2>&1
+
+run_test_match "cp_recreate_fk_family_hash" \
+  "SELECT dolt_cherry_pick('feat');" \
+  "^[0-9a-f]{40}$" "$DB"
+run_test "cp_recreate_fk_family_parent" "SELECT count(*) FROM p;" "1" "$DB"
+run_test "cp_recreate_fk_family_child" "SELECT count(*) FROM c;" "1" "$DB"
+run_test "cp_recreate_fk_family_fk" "SELECT count(*) FROM pragma_foreign_key_list('c');" "1" "$DB"
+run_test "cp_recreate_fk_family_schema" "SELECT instr(sql,'label TEXT')>0 FROM sqlite_master WHERE type='table' AND name='p';" "1" "$DB"
+run_test "cp_recreate_fk_family_parent_unique_index_live" "SELECT count(*) FROM p INDEXED BY sqlite_autoindex_p_1 WHERE u=200;" "1" "$DB"
+run_test "cp_recreate_fk_family_fk_check_clean" "SELECT count(*) FROM pragma_foreign_key_check;" "0" "$DB"
+
+rm -f "$DB"
+
+DB=/tmp/test_cp_self_ref_fk_$$.db; rm -f "$DB"
+echo "PRAGMA foreign_keys=ON;
+CREATE TABLE t(id INTEGER PRIMARY KEY, parent_id INT, FOREIGN KEY(parent_id) REFERENCES t(id) ON DELETE CASCADE);
+INSERT INTO t VALUES(1,NULL),(2,1);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m','init');
+SELECT dolt_branch('feat');
+SELECT dolt_checkout('feat');
+INSERT INTO t VALUES(3,2);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m','feat_add_descendant');
+SELECT dolt_checkout('main');
+INSERT INTO t VALUES(10,NULL);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m','main_add_root');" | $DOLTLITE "$DB" > /dev/null 2>&1
+
+run_test_match "cp_self_ref_fk_hash" \
+  "PRAGMA foreign_keys=ON; SELECT dolt_cherry_pick('feat');" \
+  "^[0-9a-f]{40}$" "$DB"
+run_test "cp_self_ref_fk_delete_cascades" \
+  "PRAGMA foreign_keys=ON; DELETE FROM t WHERE id=1; SELECT group_concat(id || ':' || ifnull(parent_id,-1), ',') FROM (SELECT id,parent_id FROM t ORDER BY id);" \
+  "10:-1" "$DB"
+run_test "cp_self_ref_fk_reopen_state" \
+  "PRAGMA foreign_keys=ON; SELECT group_concat(id || ':' || ifnull(parent_id,-1), ',') FROM (SELECT id,parent_id FROM t ORDER BY id);" \
+  "10:-1" "$DB"
+
+rm -f "$DB"
+
+DB=/tmp/test_cp_fk_chain_$$.db; rm -f "$DB"
+echo "PRAGMA foreign_keys=ON;
+CREATE TABLE gp(id INTEGER PRIMARY KEY);
+CREATE TABLE p(id INTEGER PRIMARY KEY, gp_id INT, FOREIGN KEY(gp_id) REFERENCES gp(id) ON DELETE CASCADE);
+CREATE TABLE c(id INTEGER PRIMARY KEY, p_id INT, FOREIGN KEY(p_id) REFERENCES p(id) ON DELETE CASCADE);
+INSERT INTO gp VALUES(1);
+INSERT INTO p VALUES(1,1);
+INSERT INTO c VALUES(1,1);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m','init');
+SELECT dolt_branch('feat');
+SELECT dolt_checkout('feat');
+INSERT INTO c VALUES(2,1);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m','feat_add_child');
+SELECT dolt_checkout('main');
+INSERT INTO gp VALUES(2);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m','main_add_root');" | $DOLTLITE "$DB" > /dev/null 2>&1
+
+run_test_match "cp_fk_chain_hash" \
+  "PRAGMA foreign_keys=ON; SELECT dolt_cherry_pick('feat');" \
+  "^[0-9a-f]{40}$" "$DB"
+run_test "cp_fk_chain_delete_cascades" \
+  "PRAGMA foreign_keys=ON; DELETE FROM gp WHERE id=1; SELECT (SELECT count(*) FROM gp) || '|' || (SELECT count(*) FROM p) || '|' || (SELECT count(*) FROM c);" \
+  "1|0|0" "$DB"
+run_test "cp_fk_chain_reopen_state" \
+  "PRAGMA foreign_keys=ON; SELECT (SELECT count(*) FROM gp) || '|' || (SELECT count(*) FROM p) || '|' || (SELECT count(*) FROM c);" \
+  "1|0|0" "$DB"
 
 rm -f "$DB"
 

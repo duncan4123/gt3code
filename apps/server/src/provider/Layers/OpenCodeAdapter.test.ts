@@ -46,6 +46,7 @@ const runtimeMock = {
   state: {
     startCalls: [] as string[],
     sessionCreateUrls: [] as string[],
+    serverEnvironments: [] as Array<NodeJS.ProcessEnv | undefined>,
     authHeaders: [] as Array<string | null>,
     abortCalls: [] as string[],
     closeCalls: [] as string[],
@@ -59,6 +60,7 @@ const runtimeMock = {
   reset() {
     this.state.startCalls.length = 0;
     this.state.sessionCreateUrls.length = 0;
+    this.state.serverEnvironments.length = 0;
     this.state.authHeaders.length = 0;
     this.state.abortCalls.length = 0;
     this.state.closeCalls.length = 0;
@@ -89,8 +91,9 @@ const OpenCodeRuntimeTestDouble: OpenCodeRuntimeShape = {
         exitCode: Effect.never,
       };
     }),
-  connectToOpenCodeServer: ({ serverUrl }) =>
+  connectToOpenCodeServer: ({ serverUrl, environment }) =>
     Effect.gen(function* () {
+      runtimeMock.state.serverEnvironments.push(environment);
       const url = serverUrl ?? "http://127.0.0.1:4301";
       // Unconditionally register a scope finalizer for test observability —
       // preserves the `closeCalls` / `closeError` probes that the existing
@@ -316,6 +319,33 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
       ]);
       assert.deepEqual(sessions, []);
     }),
+  );
+
+  it.effect("merges session env over provider instance env", () =>
+    Effect.gen(function* () {
+      const adapter = yield* makeOpenCodeAdapter(openCodeAdapterTestSettings, {
+        environment: {
+          GC_AGENT: "provider-agent",
+          PROVIDER_ONLY: "yes",
+        },
+      });
+
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId: asThreadId("thread-gc-env"),
+        env: {
+          GC_AGENT: "gascity/polecat",
+          GC_SESSION_NAME: "gascity--polecat",
+        },
+        runtimeMode: "full-access",
+      });
+
+      assert.deepEqual(runtimeMock.state.serverEnvironments.at(-1), {
+        GC_AGENT: "gascity/polecat",
+        GC_SESSION_NAME: "gascity--polecat",
+        PROVIDER_ONLY: "yes",
+      });
+    }).pipe(Effect.provideService(OpenCodeRuntime, OpenCodeRuntimeTestDouble)),
   );
 
   it.effect("completes streamEvents when the adapter scope closes", () =>

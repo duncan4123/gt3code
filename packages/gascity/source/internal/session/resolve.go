@@ -130,6 +130,7 @@ func listSessionBeadsByMetadata(store beads.Store, key, value string, allowClose
 	raw, err := store.List(beads.ListQuery{
 		Metadata:      map[string]string{key: value},
 		IncludeClosed: allowClosed,
+		SkipParent:    true,
 	})
 	if err != nil {
 		return nil, err

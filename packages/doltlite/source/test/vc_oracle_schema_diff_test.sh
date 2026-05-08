@@ -190,6 +190,85 @@ SELECT dolt_add('-A');
 SELECT dolt_commit('-m', 'drop_t');
 " "HEAD~1" "HEAD"
 
+# Two tables exist; drop one. Issue #738 boiled down: this exact
+# shape was reported as 'unknown operation'. Now expected: one row
+# with from_table_name='t', empty to_create_statement; the surviving
+# 'u' table doesn't appear.
+oracle "drop_one_of_two_tables" "
+$SEED
+CREATE TABLE u(id INTEGER PRIMARY KEY, x TEXT);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'add_u');
+DROP TABLE t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'drop_t');
+" "HEAD~1" "HEAD"
+
+# Two tables dropped in a single commit.
+oracle "drop_multiple_in_one_commit" "
+$SEED
+CREATE TABLE u(id INTEGER PRIMARY KEY, x TEXT);
+CREATE TABLE w(id INTEGER PRIMARY KEY, y TEXT);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'add_u_w');
+DROP TABLE t;
+DROP TABLE u;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'drop_t_u');
+" "HEAD~1" "HEAD"
+
+# Drop a populated table — schema diff is data-agnostic, the row
+# count shouldn't affect output.
+oracle "drop_table_with_data" "
+$SEED
+INSERT INTO t VALUES (2, 20), (3, 30), (4, 40);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'add_rows');
+DROP TABLE t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'drop_with_data');
+" "HEAD~1" "HEAD"
+
+# Drop using the single-arg range-syntax form 'from..to'.
+# oracle_query is needed because the standard 'oracle' helper always
+# passes at least two arguments to dolt_schema_diff(...).
+oracle_query "drop_via_range_syntax" "
+$SEED
+DROP TABLE t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'drop_t');
+" "SELECT CONCAT('ROW|', from_table_name, '|', to_table_name, '|',
+       CASE WHEN from_create_statement IS NULL OR from_create_statement='' THEN 'N' ELSE 'Y' END, '|',
+       CASE WHEN to_create_statement   IS NULL OR to_create_statement=''   THEN 'N' ELSE 'Y' END
+     ) FROM dolt_schema_diff('HEAD~1..HEAD');"
+
+# Issue #738's exact shape: filter the diff by table_name. dolt-
+# replay needs this filter so it can ask 'is THIS named table
+# dropped between these two refs?' without paging through the
+# whole diff.
+oracle "drop_filter_by_table_name" "
+$SEED
+CREATE TABLE u(id INTEGER PRIMARY KEY, x TEXT);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'add_u');
+DROP TABLE t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'drop_t');
+" "HEAD~1" "HEAD" "t"
+
+# Drop a table the filter is asking about, BUT also keep an unrelated
+# table around. Filter should suppress the unrelated row too.
+oracle "drop_filter_excludes_other_changes" "
+$SEED
+CREATE TABLE u(id INTEGER PRIMARY KEY, x TEXT);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'add_u');
+DROP TABLE t;
+ALTER TABLE u ADD COLUMN extra TEXT;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'drop_t_alter_u');
+" "HEAD~1" "HEAD" "t"
+
 echo "--- modified table (add column) ---"
 
 oracle "modified_add_col" "
@@ -303,6 +382,46 @@ SELECT dolt_add('-A');
 SELECT dolt_commit('-m', 'multi');
 " "HEAD~1" "HEAD"
 
+# Issue #739 wants to enumerate "which tables changed?" without a
+# table_name filter. Cover the combinations a consumer needs to
+# handle: add+drop+modify in one commit, two modifications side-
+# by-side, rename column with a peer change.
+oracle "multi_change_add_drop_modify" "
+$SEED
+CREATE TABLE u(id INTEGER PRIMARY KEY, x INT);
+INSERT INTO u VALUES(1,10);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'add_u');
+ALTER TABLE t ADD COLUMN extra TEXT;
+DROP TABLE u;
+CREATE TABLE w(id INTEGER PRIMARY KEY, z TEXT);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'add_drop_modify');
+" "HEAD~1" "HEAD"
+
+# Modify two existing tables in one commit. Rename column on one,
+# add column on another. Both rows must appear in a no-filter diff.
+oracle "modify_two_tables_one_commit" "
+$SEED
+CREATE TABLE u(id INTEGER PRIMARY KEY, x INT);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'add_u');
+ALTER TABLE t RENAME COLUMN v TO vv;
+ALTER TABLE u ADD COLUMN y TEXT;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'modify_two');
+" "HEAD~1" "HEAD"
+
+# Rename a column AND add another in the same table in the same
+# commit. Should emit a single 'modified' row for that table.
+oracle "rename_and_add_col_same_commit" "
+$SEED
+ALTER TABLE t RENAME COLUMN v TO vv;
+ALTER TABLE t ADD COLUMN extra TEXT;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'rename_plus_add');
+" "HEAD~1" "HEAD"
+
 echo "--- no changes ---"
 
 oracle "no_changes" "
@@ -325,6 +444,16 @@ CREATE TABLE u(id INTEGER PRIMARY KEY);
 SELECT dolt_add('-A');
 SELECT dolt_commit('-m', 'feat_add');
 " "main" "feat"
+
+oracle "branch_from_tag_diff" "
+$SEED
+SELECT dolt_tag('v1');
+SELECT dolt_branch('tagfeat', 'v1');
+SELECT dolt_checkout('tagfeat');
+ALTER TABLE t ADD COLUMN extra TEXT;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'tagfeat_add_col');
+" "v1" "tagfeat"
 
 echo "--- tag refs ---"
 
@@ -370,6 +499,254 @@ SELECT dolt_commit('-m', 'add_u');
       CASE WHEN from_create_statement IS NULL OR from_create_statement='' THEN 'N' ELSE 'Y' END, '|', \
       CASE WHEN to_create_statement   IS NULL OR to_create_statement=''   THEN 'N' ELSE 'Y' END \
     ) FROM dolt_schema_diff('HEAD~1..HEAD') ORDER BY from_table_name, to_table_name;"
+
+echo "--- merge parent refs ---"
+
+oracle "first_parent_to_merge" "
+$SEED
+SELECT dolt_checkout('-b', 'feat');
+CREATE TABLE u(id INTEGER PRIMARY KEY, x TEXT);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'feat_add_u');
+SELECT dolt_checkout('main');
+INSERT INTO t VALUES (2, 20);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'main_data_only');
+SELECT dolt_merge('feat');
+" "HEAD^1" "HEAD"
+
+oracle "second_parent_to_merge" "
+$SEED
+SELECT dolt_checkout('-b', 'feat');
+INSERT INTO t VALUES (2, 20);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'feat_data_only');
+SELECT dolt_checkout('main');
+CREATE TABLE m(id INTEGER PRIMARY KEY, y TEXT);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'main_add_m');
+SELECT dolt_merge('feat');
+" "HEAD^2" "HEAD"
+
+echo "--- same-name drop / recreate ---"
+
+oracle "drop_recreate_same_name" "
+$SEED
+DROP TABLE t;
+CREATE TABLE t(id INTEGER PRIMARY KEY, vv TEXT, extra INT);
+INSERT INTO t VALUES (1, 'recreated', 7);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'recreate_t');
+" "HEAD~1" "HEAD"
+
+echo "--- replay after schema changes ---"
+
+oracle "merge_replay_add_table_plus_check" "
+CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1, 10);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'c1');
+SELECT dolt_checkout('-b', 'feat');
+CREATE TABLE u(id INTEGER PRIMARY KEY, w TEXT);
+INSERT INTO u VALUES (1, 'x');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'feat_add_u');
+SELECT dolt_checkout('main');
+CREATE TABLE t_new(id INTEGER PRIMARY KEY, v INT CHECK (v > 0));
+INSERT INTO t_new SELECT * FROM t;
+DROP TABLE t;
+ALTER TABLE t_new RENAME TO t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'main_check');
+SELECT dolt_merge('feat');
+" "HEAD^1" "HEAD" "u"
+
+oracle "cherrypick_replay_add_table_plus_check" "
+CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1, 10);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'c1');
+SELECT dolt_checkout('-b', 'feat');
+CREATE TABLE u(id INTEGER PRIMARY KEY, w TEXT);
+INSERT INTO u VALUES (1, 'x');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'feat_add_u');
+SELECT dolt_checkout('main');
+CREATE TABLE t_new(id INTEGER PRIMARY KEY, v INT CHECK (v > 0));
+INSERT INTO t_new SELECT * FROM t;
+DROP TABLE t;
+ALTER TABLE t_new RENAME TO t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'main_check');
+SELECT dolt_cherry_pick('feat');
+" "HEAD~1" "HEAD" "u"
+
+oracle "revert_schema_change_with_later_added_table" "
+CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1, 10);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'c1');
+CREATE TABLE t_new(id INTEGER PRIMARY KEY, v INT CHECK (v > 0));
+INSERT INTO t_new SELECT * FROM t;
+DROP TABLE t;
+ALTER TABLE t_new RENAME TO t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'main_check');
+CREATE TABLE u(id INTEGER PRIMARY KEY, w TEXT);
+INSERT INTO u VALUES (1, 'x');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'add_u');
+SELECT dolt_revert((SELECT commit_hash FROM dolt_log WHERE message='main_check' LIMIT 1));
+" "HEAD~1" "HEAD" "t"
+
+oracle "rebase_replay_add_table_plus_check" "
+CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1, 10);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'c1');
+SELECT dolt_checkout('-b', 'feat');
+CREATE TABLE u(id INTEGER PRIMARY KEY, w TEXT);
+INSERT INTO u VALUES (1, 'x');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'feat_add_u');
+SELECT dolt_checkout('main');
+CREATE TABLE t_new(id INTEGER PRIMARY KEY, v INT CHECK (v > 0));
+INSERT INTO t_new SELECT * FROM t;
+DROP TABLE t;
+ALTER TABLE t_new RENAME TO t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'main_check');
+SELECT dolt_checkout('feat');
+SELECT dolt_rebase('main');
+" "main" "feat" "u"
+
+oracle "merge_replay_multi_pk_add_table_plus_check" "
+CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1, 10);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'c1');
+SELECT dolt_checkout('-b', 'feat');
+CREATE TABLE u(a INTEGER, b INTEGER, w TEXT, PRIMARY KEY(a, b));
+INSERT INTO u VALUES (1, 1, 'x');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'feat_add_u');
+SELECT dolt_checkout('main');
+CREATE TABLE t_new(id INTEGER PRIMARY KEY, v INT CHECK (v > 0));
+INSERT INTO t_new SELECT * FROM t;
+DROP TABLE t;
+ALTER TABLE t_new RENAME TO t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'main_check');
+SELECT dolt_merge('feat');
+" "HEAD^1" "HEAD" "u"
+
+oracle "cherrypick_replay_multi_pk_add_table_plus_check" "
+CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1, 10);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'c1');
+SELECT dolt_checkout('-b', 'feat');
+CREATE TABLE u(a INTEGER, b INTEGER, w TEXT, PRIMARY KEY(a, b));
+INSERT INTO u VALUES (1, 1, 'x');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'feat_add_u');
+SELECT dolt_checkout('main');
+CREATE TABLE t_new(id INTEGER PRIMARY KEY, v INT CHECK (v > 0));
+INSERT INTO t_new SELECT * FROM t;
+DROP TABLE t;
+ALTER TABLE t_new RENAME TO t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'main_check');
+SELECT dolt_cherry_pick('feat');
+" "HEAD~1" "HEAD" "u"
+
+oracle "rebase_replay_multi_pk_add_table_plus_check" "
+CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1, 10);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'c1');
+SELECT dolt_checkout('-b', 'feat');
+CREATE TABLE u(a INTEGER, b INTEGER, w TEXT, PRIMARY KEY(a, b));
+INSERT INTO u VALUES (1, 1, 'x');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'feat_add_u');
+SELECT dolt_checkout('main');
+CREATE TABLE t_new(id INTEGER PRIMARY KEY, v INT CHECK (v > 0));
+INSERT INTO t_new SELECT * FROM t;
+DROP TABLE t;
+ALTER TABLE t_new RENAME TO t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'main_check');
+SELECT dolt_checkout('feat');
+SELECT dolt_rebase('main');
+" "main" "feat" "u"
+
+oracle "merge_replay_fk_tables_plus_check" "
+CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1, 10);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'init');
+SELECT dolt_checkout('-b', 'feat');
+CREATE TABLE p(id INTEGER PRIMARY KEY, u INT UNIQUE);
+CREATE TABLE c(id INTEGER PRIMARY KEY, u INT, FOREIGN KEY (u) REFERENCES p(u));
+INSERT INTO p VALUES (1, 100);
+INSERT INTO c VALUES (1, 100);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'feat_add_fk_tables');
+SELECT dolt_checkout('main');
+CREATE TABLE t_new(id INTEGER PRIMARY KEY, v INT CHECK (v > 0));
+INSERT INTO t_new SELECT * FROM t;
+DROP TABLE t;
+ALTER TABLE t_new RENAME TO t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'main_check');
+SELECT dolt_merge('feat');
+" "HEAD^1" "HEAD" "p,c"
+
+oracle "cherrypick_replay_fk_tables_plus_check" "
+CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1, 10);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'init');
+SELECT dolt_checkout('-b', 'feat');
+CREATE TABLE p(id INTEGER PRIMARY KEY, u INT UNIQUE);
+CREATE TABLE c(id INTEGER PRIMARY KEY, u INT, FOREIGN KEY (u) REFERENCES p(u));
+INSERT INTO p VALUES (1, 100);
+INSERT INTO c VALUES (1, 100);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'feat_add_fk_tables');
+SELECT dolt_checkout('main');
+CREATE TABLE t_new(id INTEGER PRIMARY KEY, v INT CHECK (v > 0));
+INSERT INTO t_new SELECT * FROM t;
+DROP TABLE t;
+ALTER TABLE t_new RENAME TO t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'main_check');
+SELECT dolt_cherry_pick('feat');
+" "HEAD~1" "HEAD" "p,c"
+
+oracle "rebase_replay_fk_tables_plus_check" "
+CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
+INSERT INTO t VALUES (1, 10);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'init');
+SELECT dolt_checkout('-b', 'feat');
+CREATE TABLE p(id INTEGER PRIMARY KEY, u INT UNIQUE);
+CREATE TABLE c(id INTEGER PRIMARY KEY, u INT, FOREIGN KEY (u) REFERENCES p(u));
+INSERT INTO p VALUES (1, 100);
+INSERT INTO c VALUES (1, 100);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'feat_add_fk_tables');
+SELECT dolt_checkout('main');
+CREATE TABLE t_new(id INTEGER PRIMARY KEY, v INT CHECK (v > 0));
+INSERT INTO t_new SELECT * FROM t;
+DROP TABLE t;
+ALTER TABLE t_new RENAME TO t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'main_check');
+SELECT dolt_checkout('feat');
+SELECT dolt_rebase('main');
+" "main" "feat" "p,c"
 
 echo "--- error paths ---"
 

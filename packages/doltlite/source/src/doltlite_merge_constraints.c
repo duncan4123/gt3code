@@ -159,6 +159,87 @@ static int fetchRowByBlobKey(
   return rc;
 }
 
+static int tableHasRowid(sqlite3 *db, const char *zTable);
+
+static int fkRefreshAppendName(char ***pazNames, int *pnNames, const char *zName){
+  char **azNames = *pazNames;
+  int nNames = *pnNames;
+  int i;
+  char **azNew;
+
+  if( !zName || !zName[0] ) return SQLITE_OK;
+  for(i=0; i<nNames; i++){
+    if( strcmp(azNames[i], zName)==0 ) return SQLITE_OK;
+  }
+
+  azNew = sqlite3_realloc64(azNames, (sqlite3_uint64)(nNames+1) * sizeof(char*));
+  if( !azNew ) return SQLITE_NOMEM;
+  azNames = azNew;
+  azNames[nNames] = sqlite3_mprintf("%s", zName);
+  if( !azNames[nNames] ) return SQLITE_NOMEM;
+  *pazNames = azNames;
+  *pnNames = nNames + 1;
+  return SQLITE_OK;
+}
+
+static void fkRefreshFreeNames(char **azNames, int nNames){
+  int i;
+  for(i=0; i<nNames; i++) sqlite3_free(azNames[i]);
+  sqlite3_free(azNames);
+}
+
+/* Same-name drop/recreate replay can leave parent unique indexes stale until
+** reopen. If FK check reports rows, rebuild just the child/parent tables
+** mentioned there and re-check before treating them as real violations. */
+static int fkRefreshCandidateTables(sqlite3 *db, int *pChanged){
+  sqlite3_stmt *pStmt = 0;
+  char **azNames = 0;
+  int nNames = 0;
+  int rc, stepRc, i;
+
+  if( pChanged ) *pChanged = 0;
+
+  rc = sqlite3_prepare_v2(db, "PRAGMA main.foreign_key_check", -1, &pStmt, 0);
+  if( rc!=SQLITE_OK ) return rc;
+  while( (stepRc = sqlite3_step(pStmt))==SQLITE_ROW ){
+    const char *zChild = (const char*)sqlite3_column_text(pStmt, 0);
+    const char *zParent = (const char*)sqlite3_column_text(pStmt, 2);
+    rc = fkRefreshAppendName(&azNames, &nNames, zChild);
+    if( rc==SQLITE_OK ) rc = fkRefreshAppendName(&azNames, &nNames, zParent);
+    if( rc!=SQLITE_OK ){
+      sqlite3_finalize(pStmt);
+      fkRefreshFreeNames(azNames, nNames);
+      return rc;
+    }
+  }
+  sqlite3_finalize(pStmt);
+  if( stepRc!=SQLITE_DONE ){
+    fkRefreshFreeNames(azNames, nNames);
+    return stepRc;
+  }
+
+  for(i=0; i<nNames; i++){
+    char *zSql;
+    if( !tableHasRowid(db, azNames[i]) ){
+      continue;
+    }
+    zSql = sqlite3_mprintf("REINDEX \"%w\"", azNames[i]);
+    if( !zSql ){
+      fkRefreshFreeNames(azNames, nNames);
+      return SQLITE_NOMEM;
+    }
+    rc = sqlite3_exec(db, zSql, 0, 0, 0);
+    sqlite3_free(zSql);
+    if( rc!=SQLITE_OK ){
+      fkRefreshFreeNames(azNames, nNames);
+      return rc;
+    }
+  }
+  fkRefreshFreeNames(azNames, nNames);
+  if( pChanged ) *pChanged = (nNames>0);
+  return SQLITE_OK;
+}
+
 typedef struct MergePkInfo MergePkInfo;
 struct MergePkInfo {
   int nPk;
@@ -691,35 +772,6 @@ static int tableHasRowid(sqlite3 *db, const char *zTable){
   sqlite3_free(zQuery);
   if( pStmt ) sqlite3_finalize(pStmt);
   return rc == SQLITE_OK ? 1 : 0;
-}
-
-/* Emit a descriptive error and return SQLITE_ERROR. Used when a
-** walker refuses to process a WITHOUT ROWID table. Writes a
-** user-facing message into *ppzErrMsg (owned by sqlite3_free)
-** so the merge function can surface it via sqlite3_result_error
-** instead of falling back to the generic "SQL logic error"
-** text. Safe to pass a NULL ppzErrMsg. */
-static int refuseWithoutRowid(
-  sqlite3 *db,
-  char **ppzErrMsg,
-  const char *zTable,
-  const char *zWhich
-){
-  char *zMsg = sqlite3_mprintf(
-      "constraint-violation detection on WITHOUT ROWID tables is not "
-      "yet supported (%s check on \"%s\"); see GitHub issue #495. "
-      "Drop WITHOUT ROWID or use INTEGER PRIMARY KEY to keep merges flowing.",
-      zWhich, zTable);
-  if( zMsg ){
-    sqlite3_log(SQLITE_ERROR, "%s", zMsg);
-    if( ppzErrMsg && !*ppzErrMsg ){
-      *ppzErrMsg = zMsg;
-    }else{
-      sqlite3_free(zMsg);
-    }
-  }
-  (void)db;
-  return SQLITE_ERROR;
 }
 
 /* Resolve a (zTable, rowid) pair to the raw prolly row by looking
@@ -1643,6 +1695,7 @@ int doltliteDetectMergeFkViolations(
   char **pzErrMsg,
   int *pnFound
 ){
+  sqlite3_stmt *pQuick = 0;
   sqlite3_stmt *pTbls = 0;
   struct TableEntry *aAnc = 0;
   int nAnc = 0;
@@ -1655,6 +1708,43 @@ int doltliteDetectMergeFkViolations(
   (void)pzErrMsg;
 
   if( pnFound ) *pnFound = 0;
+
+  rc = sqlite3_prepare_v2(db, "PRAGMA main.foreign_key_check", -1, &pQuick, 0);
+  if( rc!=SQLITE_OK ){
+    return rc;
+  }
+  stepRc = sqlite3_step(pQuick);
+  sqlite3_finalize(pQuick);
+  pQuick = 0;
+  if( stepRc==SQLITE_DONE ){
+    return SQLITE_OK;
+  }
+  if( stepRc!=SQLITE_ROW ){
+    return stepRc;
+  }
+
+  {
+    int didRefresh = 0;
+    rc = fkRefreshCandidateTables(db, &didRefresh);
+    if( rc!=SQLITE_OK ){
+      return rc;
+    }
+    if( didRefresh ){
+      rc = sqlite3_prepare_v2(db, "PRAGMA main.foreign_key_check", -1, &pQuick, 0);
+      if( rc!=SQLITE_OK ){
+        return rc;
+      }
+      stepRc = sqlite3_step(pQuick);
+      sqlite3_finalize(pQuick);
+      pQuick = 0;
+      if( stepRc==SQLITE_DONE ){
+        return SQLITE_OK;
+      }
+      if( stepRc!=SQLITE_ROW ){
+        return stepRc;
+      }
+    }
+  }
 
   if( pAncCatHash && !prollyHashIsEmpty(pAncCatHash) ){
     if( doltliteLoadCatalog(db, pAncCatHash, &aAnc, &nAnc, &iNextAnc)==SQLITE_OK ){

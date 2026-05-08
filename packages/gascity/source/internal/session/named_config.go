@@ -314,7 +314,8 @@ func listConfiguredNamedSessionBeadsByMetadata(store beads.Store, key, value str
 		return nil, nil
 	}
 	items, err := store.List(beads.ListQuery{
-		Metadata: map[string]string{key: value},
+		Metadata:   map[string]string{key: value},
+		SkipParent: true,
 	})
 	if err != nil {
 		return nil, err
@@ -370,7 +371,10 @@ func NamedSessionResolutionCandidates(store beads.Store, spec NamedSessionSpec) 
 	if identity == "" && sessionName == "" {
 		return nil, nil
 	}
-	items, err := store.List(beads.ListQuery{Label: LabelSession})
+	items, err := store.List(beads.ListQuery{
+		Label:      LabelSession,
+		SkipParent: true,
+	})
 	if err != nil {
 		return nil, err
 	}

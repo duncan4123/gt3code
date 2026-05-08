@@ -615,7 +615,11 @@ func collectAssignedWorkBeadsWithStores(
 			// unassigned pool work that needs to be reopened. This pass runs
 			// across every store before any ready handoff probes, so already
 			// active work never waits behind unrelated ready scans.
-			if inProgress, err := listForControllerDemand(source.store, beads.ListQuery{Status: "in_progress"}); err == nil {
+			if inProgress, err := listForControllerDemand(source.store, beads.ListQuery{
+				Status:     "in_progress",
+				SkipLabels: true,
+				SkipParent: true,
+			}); err == nil {
 				appendInProgressWorkUnique(cfg, &result, &resultStores, &resultStoreRefs, inProgress, seen, source.store, source.ref)
 			} else {
 				errs = append(errs, fmt.Errorf("List(in_progress): %w", err))

@@ -59,7 +59,6 @@ static int initCursorAtRoot(ProllyCursor *cur, ProllyCacheEntry **ppRoot){
   if( rc!=SQLITE_OK ) return rc;
 
   cur->iLevel = 0;
-  cur->nLevel = 1;
   cur->aLevel[0].pEntry = pRoot;
   cur->aLevel[0].idx = 0;
   if( ppRoot ) *ppRoot = pRoot;
@@ -85,7 +84,6 @@ static int descendToChild(ProllyCursor *cur, int childSlot,
 
   cur->aLevel[cur->iLevel].pEntry = pChild;
   cur->aLevel[cur->iLevel].idx = childIdx;
-  cur->nLevel = cur->iLevel + 1;
   if( ppChild ) *ppChild = pChild;
   return SQLITE_OK;
 }
@@ -272,36 +270,13 @@ int prollyCursorPrev(ProllyCursor *cur){
 }
 
 int prollyCursorSeekInt(ProllyCursor *cur, i64 intKey, int *pRes){
-  int rc;
-  ProllyCacheEntry *pEntry = 0;
-  int leafRes;
-  int leafIdx;
-
-  rc = initCursorAtRoot(cur, &pEntry);
-  if( rc!=SQLITE_OK ) return rc;
-  if( cur->eState==PROLLY_CURSOR_EOF ){
-    cur->eState = PROLLY_CURSOR_INVALID;
-    *pRes = -1;
-    return SQLITE_OK;
-  }
-
-
-  while( pEntry->node.level>0 ){
-    int searchRes;
-    int idx = prollyNodeSearchInt(&pEntry->node, intKey, &searchRes);
-    idx = childIndexForSearchResult(idx, searchRes, pEntry->node.nItems);
-    cur->aLevel[cur->iLevel].idx = idx;
-    rc = descendToChild(cur, idx, 0, &pEntry);
-    if( rc!=SQLITE_OK ) return rc;
-  }
-
-  if( pEntry->node.nItems==0 ){
-    cur->eState = PROLLY_CURSOR_EOF;
-    *pRes = -1;
-    return SQLITE_OK;
-  }
-  leafIdx = prollyNodeSearchInt(&pEntry->node, intKey, &leafRes);
-  return finalizeSeekOnLeaf(cur, pEntry, leafIdx, leafRes, pRes);
+  /* INT keys live on disk as sortable 8-byte big-endian bytes (see
+  ** prollyNodeIntKey/prollyEncodeIntKey), so an int seek is just a
+  ** blob seek over the encoded form — same algorithm, no separate
+  ** descent path. */
+  u8 keyBuf[8];
+  prollyEncodeIntKey(intKey, keyBuf);
+  return prollyCursorSeekBlob(cur, keyBuf, 8, pRes);
 }
 
 int prollyCursorSeekBlob(ProllyCursor *cur,
@@ -369,81 +344,6 @@ void prollyCursorValue(ProllyCursor *cur, const u8 **ppVal, int *pnVal){
   prollyNodeValue(&pLeaf->node, idx, ppVal, pnVal);
 }
 
-int prollyCursorSave(ProllyCursor *cur){
-  if( cur->eState!=PROLLY_CURSOR_VALID ){
-    cur->hasSavedPosition = 0;
-    return SQLITE_OK;
-  }
-
-
-  if( cur->iLevel < 0 || cur->iLevel >= PROLLY_CURSOR_MAX_DEPTH
-   || !cur->aLevel[cur->iLevel].pEntry ){
-    cur->hasSavedPosition = 0;
-    cur->eState = PROLLY_CURSOR_INVALID;
-    return SQLITE_OK;
-  }
-
-
-  if( cur->flags & PROLLY_NODE_INTKEY ){
-    cur->iSavedIntKey = prollyCursorIntKey(cur);
-  } else {
-    const u8 *pKey;
-    int nKey;
-    prollyCursorKey(cur, &pKey, &nKey);
-    if( cur->pSavedKey ){
-      sqlite3_free(cur->pSavedKey);
-      cur->pSavedKey = 0;
-    }
-    cur->pSavedKey = (u8*)sqlite3_malloc(nKey);
-    if( cur->pSavedKey==0 ){
-      return SQLITE_NOMEM;
-    }
-    memcpy(cur->pSavedKey, pKey, nKey);
-    cur->nSavedKey = nKey;
-  }
-
-
-  prollyCursorReleaseAll(cur);
-
-  cur->hasSavedPosition = 1;
-  cur->eState = PROLLY_CURSOR_INVALID;
-  return SQLITE_OK;
-}
-
-int prollyCursorRestore(ProllyCursor *cur, int *pDifferentRow){
-  int rc;
-  int res;
-
-  if( !cur->hasSavedPosition ){
-    *pDifferentRow = 1;
-    cur->eState = PROLLY_CURSOR_INVALID;
-    return SQLITE_OK;
-  }
-
-  if( cur->flags & PROLLY_NODE_INTKEY ){
-    rc = prollyCursorSeekInt(cur, cur->iSavedIntKey, &res);
-  } else {
-    rc = prollyCursorSeekBlob(cur, cur->pSavedKey, cur->nSavedKey, &res);
-  }
-  if( rc!=SQLITE_OK ) return rc;
-
-  if( res==0 ){
-    *pDifferentRow = 0;
-  } else {
-    *pDifferentRow = 1;
-  }
-
-
-  if( cur->pSavedKey ){
-    sqlite3_free(cur->pSavedKey);
-    cur->pSavedKey = 0;
-    cur->nSavedKey = 0;
-  }
-  cur->hasSavedPosition = 0;
-
-  return SQLITE_OK;
-}
-
 void prollyCursorReleaseAll(ProllyCursor *cur){
   int i;
   for(i=0; i<PROLLY_CURSOR_MAX_DEPTH; i++){
@@ -453,7 +353,6 @@ void prollyCursorReleaseAll(ProllyCursor *cur){
       cur->aLevel[i].idx = 0;
     }
   }
-  cur->nLevel = 0;
   cur->iLevel = 0;
 
   cur->eState = PROLLY_CURSOR_INVALID;
@@ -461,13 +360,6 @@ void prollyCursorReleaseAll(ProllyCursor *cur){
 
 void prollyCursorClose(ProllyCursor *cur){
   prollyCursorReleaseAll(cur);
-  if( cur->pSavedKey ){
-    sqlite3_free(cur->pSavedKey);
-    cur->pSavedKey = 0;
-    cur->nSavedKey = 0;
-  }
-  cur->hasSavedPosition = 0;
-  cur->eState = PROLLY_CURSOR_INVALID;
 }
 
 #endif

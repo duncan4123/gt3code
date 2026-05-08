@@ -4,20 +4,20 @@ global_fragments = ["command-glossary", "operational-awareness"]
 
 [[rigs]]
 name = "gascity"
-suspended = true
+suspended = false
 includes = ["packs/gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
-suspended = true
+suspended = false
 
 [[rigs.overrides]]
 agent = "refinery"
-suspended = true
+suspended = false
 
 [[rigs.overrides]]
 agent = "witness"
-suspended = true
+suspended = false
 
 [[rigs]]
 name = "beads-doltlite"
@@ -54,6 +54,12 @@ suspended = true
 [[rigs.overrides]]
 agent = "witness"
 suspended = true
+
+[[rigs]]
+name = "t3code"
+prefix = "t3"
+suspended = false
+includes = ["packs/gastown"]
 
 [patches]
 
@@ -139,6 +145,24 @@ name = "polecat"
 suspended = false
 provider = "codex"
 
+[[patches.agent]]
+dir = "t3code"
+name = "witness"
+suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = "t3code"
+name = "refinery"
+suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = "t3code"
+name = "polecat"
+suspended = false
+provider = "codex"
+
 [[patches.named_session]]
 template = "mayor"
 mode = "always"
@@ -163,6 +187,11 @@ mode = "always"
 
 [[patches.named_session]]
 dir = "context-mode"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
+dir = "t3code"
 template = "refinery"
 mode = "always"
 

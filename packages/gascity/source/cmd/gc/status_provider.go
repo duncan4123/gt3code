@@ -18,7 +18,14 @@ type statusProvider struct {
 }
 
 func newStatusSessionProvider() runtime.Provider {
-	return &statusProvider{base: newSessionProvider()}
+	return newBoundedStatusProvider(newSessionProvider())
+}
+
+func newBoundedStatusProvider(base runtime.Provider) runtime.Provider {
+	if sp, ok := base.(*statusProvider); ok {
+		return sp
+	}
+	return &statusProvider{base: base}
 }
 
 func (p *statusProvider) shouldDegrade() bool {
@@ -148,6 +155,12 @@ func (p *statusProvider) ListRunning(prefix string) ([]string, error) {
 		}{value: value, err: err}
 	})
 	return result.value, result.err
+}
+
+func (p *statusProvider) RouteACP(name string) {
+	if router, ok := p.base.(interface{ RouteACP(string) }); ok {
+		router.RouteACP(name)
+	}
 }
 
 func (p *statusProvider) GetLastActivity(name string) (time.Time, error) {

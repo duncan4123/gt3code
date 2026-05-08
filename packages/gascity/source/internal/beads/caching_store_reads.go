@@ -180,7 +180,9 @@ func (c *CachingStore) refreshCachedBeads(query ListQuery, startSeq uint64, item
 			}
 		}
 		c.beads[item.ID] = cloneBead(item)
-		c.deps[item.ID] = depsFromBeadFields(item)
+		if !query.SkipParent {
+			c.deps[item.ID] = depsFromBeadFields(item)
+		}
 		delete(c.dirty, item.ID)
 		delete(c.deletedSeq, item.ID)
 		if !recentLocalMutation(c.localBeadAt[item.ID], now) {

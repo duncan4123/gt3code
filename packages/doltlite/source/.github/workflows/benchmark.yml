@@ -4,7 +4,6 @@ on:
   push:
     branches: [master]
   pull_request:
-    branches: [master]
 
 permissions:
   contents: read
@@ -44,34 +43,43 @@ jobs:
       id: bench
       run: |
         cd build
-        bash ../test/sysbench_compare.sh > /tmp/bench_results.md
+        # Capture script exit code separately from the output capture.
+        # Piping to `tee` would mask a ceiling-check failure (tee always
+        # exits 0), letting the job report green on a regression. Stash
+        # the rc and propagate it after the PR-comment step has run, so
+        # results are still visible on a failing run.
+        set +e
+        BENCH_SECTION_MODE=wrapped bash ../test/sysbench_compare.sh > /tmp/bench_results.md
+        bench_rc=$?
+        set -e
         cat /tmp/bench_results.md
-        {
-          echo "results<<EOF"
-          cat /tmp/bench_results.md
-          echo "EOF"
-        } >> "$GITHUB_OUTPUT"
+        echo "bench_rc=$bench_rc" >> "$GITHUB_OUTPUT"
 
     - name: Comment PR with results
       continue-on-error: true
       uses: actions/github-script@v7
       with:
         script: |
-          const body = `${{ steps.bench.outputs.results }}`;
+          // Read from file so the multi-line markdown (and any backticks /
+          // template-literal-unsafe chars in it) never has to round-trip
+          // through YAML scalars or JS template-literal parsing.
+          const fs = require('fs');
+          const body = fs.readFileSync('/tmp/bench_results.md', 'utf8');
 
           if (!context.issue.number) {
             console.log('No PR context (push event) — skipping comment');
             return;
           }
 
-          // Find existing benchmark comment
+          // Find existing classic benchmark comment
           const comments = await github.rest.issues.listComments({
             owner: context.repo.owner,
             repo: context.repo.repo,
             issue_number: context.issue.number,
           });
           const botComment = comments.data.find(c =>
-            c.body.includes('Sysbench-Style Benchmark')
+            c.body.includes('<!-- benchmark:classic -->') ||
+            c.body.includes('## Sysbench-Style Benchmark: Doltlite vs SQLite')
           );
 
           if (botComment) {
@@ -89,3 +97,11 @@ jobs:
               body: body,
             });
           }
+
+    - name: Enforce ceiling
+      run: |
+        rc="${{ steps.bench.outputs.bench_rc }}"
+        if [ "$rc" != "0" ]; then
+          echo "Benchmark exceeded performance ceiling (rc=$rc)" >&2
+          exit "$rc"
+        fi

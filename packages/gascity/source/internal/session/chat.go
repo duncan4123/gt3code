@@ -828,6 +828,7 @@ func (m *Manager) TranscriptPath(id string, searchPaths []string) (string, error
 	all, err := m.store.List(beads.ListQuery{
 		Label:         LabelSession,
 		IncludeClosed: b.Status == "closed",
+		SkipParent:    true,
 	})
 	if err != nil {
 		return "", fmt.Errorf("listing sessions: %w", err)

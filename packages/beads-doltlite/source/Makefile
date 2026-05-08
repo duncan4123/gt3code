@@ -32,7 +32,7 @@ endif
 # workspace repo. If present, link bd against libdoltlite so mattn/go-sqlite3
 # exposes doltlite SQL functions (e.g. dolt_checkout()) instead of plain SQLite.
 DOLTLITE_ROOT := $(firstword \
-	$(foreach dir,../../doltlite/source /data/projects/doltlite,\
+	$(foreach dir,../../doltlite ../../doltlite/source /data/projects/doltlite,\
 		$(if $(or $(wildcard $(dir)/libdoltlite.a),$(wildcard $(dir)/build/libdoltlite.a)),$(dir),)))
 DOLTLITE_INCLUDE_DIR := $(firstword $(wildcard $(DOLTLITE_ROOT)/build) $(wildcard $(DOLTLITE_ROOT)))
 DOLTLITE_STATIC_LIB := $(firstword $(wildcard $(DOLTLITE_ROOT)/libdoltlite.a) $(wildcard $(DOLTLITE_ROOT)/build/libdoltlite.a))

@@ -14,3 +14,16 @@ export function mergeProviderInstanceEnvironment(
   }
   return next;
 }
+
+export function mergeProviderSessionEnvironment(
+  baseEnv: NodeJS.ProcessEnv | undefined,
+  sessionEnv: Record<string, string> | undefined,
+): NodeJS.ProcessEnv {
+  if (!sessionEnv || Object.keys(sessionEnv).length === 0) {
+    return baseEnv ?? process.env;
+  }
+  return {
+    ...(baseEnv ?? process.env),
+    ...sessionEnv,
+  };
+}

@@ -53,7 +53,7 @@ func TestDoCityStatusTimesOutSlowProvider(t *testing.T) {
 	statusProviderCallTimeout = 20 * time.Millisecond
 	t.Cleanup(func() { statusProviderCallTimeout = oldTimeout })
 
-	base := newBlockingStatusProvider(200 * time.Millisecond)
+	base := newBlockingStatusProvider(time.Second)
 	if err := base.Start(context.Background(), "mayor", runtime.Config{Command: "echo"}); err != nil {
 		t.Fatal(err)
 	}
@@ -72,11 +72,38 @@ func TestDoCityStatusTimesOutSlowProvider(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr: %s", code, stderr.String())
 	}
-	if elapsed := time.Since(start); elapsed > 150*time.Millisecond {
-		t.Fatalf("doCityStatus took %v, want <150ms", elapsed)
+	if elapsed := time.Since(start); elapsed > 400*time.Millisecond {
+		t.Fatalf("doCityStatus took %v, want bounded status call", elapsed)
 	}
 	if !strings.Contains(stdout.String(), "0/1 agents running") {
 		t.Fatalf("stdout missing degraded status summary, got:\n%s", stdout.String())
+	}
+}
+
+func TestNewStatusSessionProviderForCityBoundsProviderCalls(t *testing.T) {
+	oldBuild := buildSessionProviderByName
+	oldTimeout := statusProviderCallTimeout
+	t.Cleanup(func() {
+		buildSessionProviderByName = oldBuild
+		statusProviderCallTimeout = oldTimeout
+	})
+
+	statusProviderCallTimeout = 20 * time.Millisecond
+	buildSessionProviderByName = func(string, config.SessionConfig, string, string) (runtime.Provider, error) {
+		return newBlockingStatusProvider(time.Second), nil
+	}
+
+	sp := newStatusSessionProviderForCity(&config.City{
+		Workspace: config.Workspace{Name: "city"},
+		Session:   config.SessionConfig{Provider: "fake"},
+	}, t.TempDir())
+
+	start := time.Now()
+	if sp.IsRunning("mayor") {
+		t.Fatal("IsRunning() = true, want degraded false")
+	}
+	if elapsed := time.Since(start); elapsed > 400*time.Millisecond {
+		t.Fatalf("IsRunning took %v, want bounded status call", elapsed)
 	}
 }
 
@@ -85,7 +112,7 @@ func TestDoRigStatusTimesOutSlowProvider(t *testing.T) {
 	statusProviderCallTimeout = 20 * time.Millisecond
 	t.Cleanup(func() { statusProviderCallTimeout = oldTimeout })
 
-	base := newBlockingStatusProvider(200 * time.Millisecond)
+	base := newBlockingStatusProvider(time.Second)
 	if err := base.Start(context.Background(), "frontend--polecat", runtime.Config{Command: "echo"}); err != nil {
 		t.Fatal(err)
 	}
@@ -102,8 +129,8 @@ func TestDoRigStatusTimesOutSlowProvider(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr: %s", code, stderr.String())
 	}
-	if elapsed := time.Since(start); elapsed > 150*time.Millisecond {
-		t.Fatalf("doRigStatus took %v, want <150ms", elapsed)
+	if elapsed := time.Since(start); elapsed > 400*time.Millisecond {
+		t.Fatalf("doRigStatus took %v, want bounded status call", elapsed)
 	}
 	if !strings.Contains(stdout.String(), "stopped") {
 		t.Fatalf("stdout missing degraded stopped status, got:\n%s", stdout.String())

@@ -551,10 +551,33 @@ LIBOBJS0 = alter.o analyze.o attach.o auth.o \
 #
 # Prolly tree engine objects (when DOLTLITE_PROLLY=1)
 #
-PROLLY_OBJS = prolly_hash.o prolly_hashset.o prolly_arena.o prolly_node.o prolly_cache.o \
+#
+# BLAKE3 SIMD object selection. The vendored BLAKE3 ships a runtime
+# dispatcher that picks the best path on the current CPU; we only need
+# to compile the SIMD source files that are valid for the target
+# architecture. We probe via $(CC) (not $(B.cc)) because the wasm
+# cross-compile path overrides only CC on the make command line, while
+# B.cc stays bound to the host's cc from the autoconf-generated
+# Makefile.
+#
+BLAKE3_TARGET_TRIPLE := $(shell $(CC) -dumpmachine 2>/dev/null)
+ifneq (,$(findstring wasm,$(BLAKE3_TARGET_TRIPLE))$(findstring emscripten,$(BLAKE3_TARGET_TRIPLE)))
+  # emcc/wasm32: SIMD intrinsics need -msimd128, which we don't want
+  # to require. Stick to portable; dispatch.c compiles down to direct
+  # portable calls when neither IS_X86 nor BLAKE3_USE_NEON is set.
+  BLAKE3_SIMD_OBJS =
+else ifneq (,$(filter x86_64% amd64% i686% i386%,$(BLAKE3_TARGET_TRIPLE)))
+  BLAKE3_SIMD_OBJS = blake3_sse2.o blake3_sse41.o blake3_avx2.o blake3_avx512.o
+else ifneq (,$(filter aarch64% arm64%,$(BLAKE3_TARGET_TRIPLE)))
+  BLAKE3_SIMD_OBJS = blake3_neon.o
+else
+  BLAKE3_SIMD_OBJS =
+endif
+
+PROLLY_OBJS = prolly_hash.o prolly_xxhash.o blake3.o blake3_portable.o blake3_dispatch.o $(BLAKE3_SIMD_OBJS) prolly_hashset.o prolly_node.o prolly_cache.o \
               chunk_store.o prolly_cursor.o prolly_mutmap.o prolly_chunker.o \
-              prolly_mutate.o prolly_diff.o prolly_three_way_diff.o prolly_btree.o pager_shim.o sortkey.o \
-              doltlite.o doltlite_commit.o doltlite_ref.o doltlite_log.o doltlite_status.o \
+              prolly_mutate.o prolly_diff.o prolly_three_way_diff.o prolly_three_way_merge.o prolly_btree.o pager_shim.o sortkey.o \
+              doltlite.o doltlite_commit.o doltlite_ref.o doltlite_log.o doltlite_commit_ancestors.o doltlite_status.o \
               doltlite_diff.o doltlite_diff_table.o doltlite_branch.o doltlite_tag.o doltlite_ancestor.o doltlite_merge.o doltlite_schema_merge.o doltlite_conflicts.o \
               doltlite_gc.o doltlite_chunk_walk.o doltlite_history.o doltlite_at.o doltlite_blame.o doltlite_schema_diff.o doltlite_schemas.o doltlite_diff_stat.o doltlite_record.o \
               doltlite_ignore.o doltlite_hashof.o \
@@ -723,8 +746,8 @@ SRC = \
 SRC += \
   $(TOP)/src/prolly_hash.c \
   $(TOP)/src/prolly_hash.h \
-  $(TOP)/src/prolly_arena.c \
-  $(TOP)/src/prolly_arena.h \
+  $(TOP)/src/prolly_xxhash.c \
+  $(TOP)/src/prolly_xxhash.h \
   $(TOP)/src/prolly_node.c \
   $(TOP)/src/prolly_node.h \
   $(TOP)/src/prolly_cache.c \
@@ -743,6 +766,8 @@ SRC += \
   $(TOP)/src/prolly_diff.h \
   $(TOP)/src/prolly_three_way_diff.c \
   $(TOP)/src/prolly_three_way_diff.h \
+  $(TOP)/src/prolly_three_way_merge.c \
+  $(TOP)/src/prolly_three_way_merge.h \
   $(TOP)/src/prolly_btree.c \
   $(TOP)/src/pager_shim.c \
   $(TOP)/src/pager_shim.h \
@@ -976,7 +1001,7 @@ HDR = \
 # Prolly tree engine headers
 HDR += \
    $(TOP)/src/prolly_hash.h \
-   $(TOP)/src/prolly_arena.h \
+   $(TOP)/src/prolly_xxhash.h \
    $(TOP)/src/prolly_node.h \
    $(TOP)/src/prolly_cache.h \
    $(TOP)/src/chunk_store.h \
@@ -986,6 +1011,7 @@ HDR += \
    $(TOP)/src/prolly_mutate.h \
    $(TOP)/src/prolly_diff.h \
    $(TOP)/src/prolly_three_way_diff.h \
+   $(TOP)/src/prolly_three_way_merge.h \
    $(TOP)/src/pager_shim.h \
    $(TOP)/src/sortkey.h
 # Reminder: sqlite_cfg.h is typically created by the configure script
@@ -1281,14 +1307,65 @@ btree.o:	$(TOP)/src/btree.c $(DEPS_OBJ_COMMON) $(TOP)/src/pager.h
 	$(T.cc.sqlite) -c $(TOP)/src/btree.c
 
 # Prolly tree engine compilation rules
-prolly_hash.o:	$(TOP)/src/prolly_hash.c $(DEPS_OBJ_COMMON)
-	$(T.cc.sqlite) -c $(TOP)/src/prolly_hash.c
+prolly_hash.o:	$(TOP)/src/prolly_hash.c $(DEPS_OBJ_COMMON) \
+		$(TOP)/ext/blake3/blake3.h
+	$(T.cc.sqlite) -I$(TOP)/ext/blake3 -c $(TOP)/src/prolly_hash.c
+
+prolly_xxhash.o:	$(TOP)/src/prolly_xxhash.c $(DEPS_OBJ_COMMON)
+	$(T.cc.sqlite) -c $(TOP)/src/prolly_xxhash.c
+
+# Vendored BLAKE3 sources use C99 mid-block declarations that the
+# rest of doltlite's tree bans via -Wdeclaration-after-statement.
+# Disable that warning for the blake3/ ext sources only.
+BLAKE3_CFLAGS = -Wno-declaration-after-statement -I$(TOP)/ext/blake3
+
+blake3.o:	$(TOP)/ext/blake3/blake3.c $(TOP)/ext/blake3/blake3.h \
+		$(TOP)/ext/blake3/blake3_impl.h
+	$(T.cc.sqlite) $(BLAKE3_CFLAGS) -c $(TOP)/ext/blake3/blake3.c
+
+blake3_portable.o:	$(TOP)/ext/blake3/blake3_portable.c \
+		$(TOP)/ext/blake3/blake3.h \
+		$(TOP)/ext/blake3/blake3_impl.h
+	$(T.cc.sqlite) $(BLAKE3_CFLAGS) -c $(TOP)/ext/blake3/blake3_portable.c
+
+blake3_dispatch.o:	$(TOP)/ext/blake3/blake3_dispatch.c \
+		$(TOP)/ext/blake3/blake3.h \
+		$(TOP)/ext/blake3/blake3_impl.h
+	$(T.cc.sqlite) $(BLAKE3_CFLAGS) -c $(TOP)/ext/blake3/blake3_dispatch.c
+
+# BLAKE3 SIMD source files. Each needs its own -m flag so the
+# corresponding intrinsics header is enabled even when the rest of
+# the tree is compiled with a baseline ISA. The dispatcher only calls
+# these at runtime when the host CPU advertises support, so it's safe
+# to compile them unconditionally on x86_64.
+blake3_sse2.o:	$(TOP)/ext/blake3/blake3_sse2.c \
+		$(TOP)/ext/blake3/blake3.h \
+		$(TOP)/ext/blake3/blake3_impl.h
+	$(T.cc.sqlite) $(BLAKE3_CFLAGS) -msse2 -c $(TOP)/ext/blake3/blake3_sse2.c
+
+blake3_sse41.o:	$(TOP)/ext/blake3/blake3_sse41.c \
+		$(TOP)/ext/blake3/blake3.h \
+		$(TOP)/ext/blake3/blake3_impl.h
+	$(T.cc.sqlite) $(BLAKE3_CFLAGS) -msse4.1 -c $(TOP)/ext/blake3/blake3_sse41.c
+
+blake3_avx2.o:	$(TOP)/ext/blake3/blake3_avx2.c \
+		$(TOP)/ext/blake3/blake3.h \
+		$(TOP)/ext/blake3/blake3_impl.h
+	$(T.cc.sqlite) $(BLAKE3_CFLAGS) -mavx2 -c $(TOP)/ext/blake3/blake3_avx2.c
+
+blake3_avx512.o:	$(TOP)/ext/blake3/blake3_avx512.c \
+		$(TOP)/ext/blake3/blake3.h \
+		$(TOP)/ext/blake3/blake3_impl.h
+	$(T.cc.sqlite) $(BLAKE3_CFLAGS) -mavx512f -mavx512vl -c $(TOP)/ext/blake3/blake3_avx512.c
+
+# NEON is part of the AArch64 baseline, so no extra -m flag is needed.
+blake3_neon.o:	$(TOP)/ext/blake3/blake3_neon.c \
+		$(TOP)/ext/blake3/blake3.h \
+		$(TOP)/ext/blake3/blake3_impl.h
+	$(T.cc.sqlite) $(BLAKE3_CFLAGS) -c $(TOP)/ext/blake3/blake3_neon.c
 
 prolly_hashset.o:	$(TOP)/src/prolly_hashset.c $(DEPS_OBJ_COMMON)
 	$(T.cc.sqlite) -c $(TOP)/src/prolly_hashset.c
-
-prolly_arena.o:	$(TOP)/src/prolly_arena.c $(DEPS_OBJ_COMMON)
-	$(T.cc.sqlite) -c $(TOP)/src/prolly_arena.c
 
 prolly_node.o:	$(TOP)/src/prolly_node.c $(DEPS_OBJ_COMMON)
 	$(T.cc.sqlite) -c $(TOP)/src/prolly_node.c
@@ -1316,6 +1393,9 @@ prolly_diff.o:	$(TOP)/src/prolly_diff.c $(DEPS_OBJ_COMMON)
 
 prolly_three_way_diff.o:	$(TOP)/src/prolly_three_way_diff.c $(DEPS_OBJ_COMMON)
 	$(T.cc.sqlite) -c $(TOP)/src/prolly_three_way_diff.c
+
+prolly_three_way_merge.o:	$(TOP)/src/prolly_three_way_merge.c $(DEPS_OBJ_COMMON)
+	$(T.cc.sqlite) -c $(TOP)/src/prolly_three_way_merge.c
 
 prolly_btree.o:	$(TOP)/src/prolly_btree.c $(DEPS_OBJ_COMMON)
 	$(T.cc.sqlite) -c $(TOP)/src/prolly_btree.c
@@ -1352,6 +1432,9 @@ doltlite_commit.o:	$(TOP)/src/doltlite_commit.c $(DEPS_OBJ_COMMON)
 
 doltlite_log.o:	$(TOP)/src/doltlite_log.c $(DEPS_OBJ_COMMON)
 	$(T.cc.sqlite) -c $(TOP)/src/doltlite_log.c
+
+doltlite_commit_ancestors.o:	$(TOP)/src/doltlite_commit_ancestors.c $(DEPS_OBJ_COMMON)
+	$(T.cc.sqlite) -c $(TOP)/src/doltlite_commit_ancestors.c
 
 doltlite_status.o:	$(TOP)/src/doltlite_status.c $(DEPS_OBJ_COMMON)
 	$(T.cc.sqlite) -c $(TOP)/src/doltlite_status.c
@@ -2749,6 +2832,10 @@ sqlite3session.o:	$(TOP)/ext/session/sqlite3session.c $(DEPS_EXT_COMMON)
 
 stmt.o:	$(TOP)/ext/misc/stmt.c $(DEPS_EXT_COMMON)
 	$(T.cc.extension) -c $(TOP)/ext/misc/stmt.c
+
+$(AUXTEST): $(TOP)/test/c/$(AUXTEST).c
+	$(T.cc.sqlite) -o $@ $(TOP)/test/c/$(AUXTEST).c sqlite3.o $(LDFLAGS.libsqlite3)
+
 
 #
 # Windows section

@@ -89,6 +89,126 @@ oracle_error() {
   fi
 }
 
+oracle_error_poststate() {
+  local name="$1" dl_setup="$2" dl_call="$3" dl_query="$4" dolt_setup="${5:-$2}" dolt_call="${6:-$3}" dolt_query="${7:-$4}"
+  local dir="$TMPROOT/${name}_posterr"
+  mkdir -p "$dir/dl" "$dir/dt"
+
+  local dl_rc
+  vc_oracle_run_doltlite_script "$dir/dl/db" "$dir/dl.out" "$dir/dl.err" "$dl_setup
+$dl_call"
+  dl_rc=$?
+  local dl_out
+  dl_out=$(
+    printf ".headers off\n.mode list\n.separator '\t'\n%s\n" "$dl_query" \
+      | "$DOLTLITE" "$dir/dl/db" 2>"$dir/dl.post.err" \
+      | tr -d '\r' \
+      | grep '^Q|'
+  )
+
+  local dt_rc
+  vc_oracle_run_dolt_script_for_error "$dir/dt" "$dir/dt.out" "$dir/dt.err" "$(vc_oracle_translate_for_dolt "$dolt_setup
+$dolt_call")"
+  dt_rc=$?
+  local dt_out
+  (
+    cd "$dir/dt" || exit 1
+    printf "%s\n" "$dolt_query" | "$DOLT" sql -c -r csv 2>"$dir/dt.post.err"
+  ) > "$dir/dt.raw"
+  dt_out=$(tail -n +2 "$dir/dt.raw" | tr -d '"\r' | grep '^Q|')
+
+  if [ "$dl_rc" -ne 0 ] && [ "$dt_rc" -ne 0 ] && [ "$dl_out" = "$dt_out" ]; then
+    pass=$((pass+1))
+  else
+    fail=$((fail+1))
+    FAILED_NAMES="$FAILED_NAMES $name"
+    echo "  FAIL: $name"
+    echo "    doltlite rc: $dl_rc"
+    echo "    dolt rc:     $dt_rc"
+    echo "    doltlite:"; echo "$dl_out" | sed 's/^/      /'
+    echo "    dolt:";     echo "$dt_out" | sed 's/^/      /'
+  fi
+}
+
+oracle_same_session() {
+  local name="$1" dl_setup="$2" dl_query="$3" dolt_setup="${4:-$2}" dolt_query="${5:-$3}"
+  local dir="$TMPROOT/${name}_ss"
+  mkdir -p "$dir/dl" "$dir/dt"
+
+  local dl_out
+  dl_out=$(
+    {
+      printf "%s\n.headers off\n.mode list\n.separator '\t'\n%s\n" "$dl_setup" "$dl_query"
+    } | "$DOLTLITE" "$dir/dl/db" 2>&1 \
+      | tr -d '\r' \
+      | awk '/^Q\|/ {print; next} /[Nn]o such savepoint:|SAVEPOINT .*does not exist/ {print "E|savepoint"}'
+  )
+
+  local dt_out
+  dt_out=$(
+    cd "$dir/dt" || exit 1
+    vc_oracle_init_repo
+    {
+      printf '%s\n' "$(vc_oracle_translate_for_dolt "$dolt_setup")"
+      printf '%s\n' "$dolt_query"
+    } | "$DOLT" sql -c -r csv 2>&1 \
+      | tail -n +2 \
+      | tr -d '"\r' \
+      | awk '/^Q\|/ {print; next} /[Nn]o such savepoint:|SAVEPOINT .*does not exist/ {print "E|savepoint"}'
+  )
+
+  if [ "$dl_out" = "$dt_out" ]; then
+    pass=$((pass+1))
+  else
+    fail=$((fail+1))
+    FAILED_NAMES="$FAILED_NAMES $name"
+    echo "  FAIL: $name"
+    echo "    doltlite:"; echo "$dl_out" | sed 's/^/      /'
+    echo "    dolt:";     echo "$dt_out" | sed 's/^/      /'
+  fi
+}
+
+oracle_reopen() {
+  local name="$1" setup="$2" dl_query="$3" dolt_query="${4:-$3}"
+  local dir="$TMPROOT/${name}_reopen"
+  mkdir -p "$dir/dl" "$dir/dt"
+
+  local dl_rc
+  vc_oracle_run_doltlite_script "$dir/dl/db" "$dir/dl.out" "$dir/dl.err" "$setup"
+  dl_rc=$?
+  local dl_out
+  dl_out=$(
+    printf ".headers off\n.mode list\n.separator '\t'\n%s\n" "$dl_query" \
+      | "$DOLTLITE" "$dir/dl/db" 2>"$dir/dl.post.err" \
+      | tr -d '\r' \
+      | grep '^Q|'
+  )
+
+  local dolt_setup
+  dolt_setup=$(vc_oracle_translate_for_dolt "$setup")
+  local dt_rc
+  vc_oracle_run_dolt_script "$dir/dt" "$dir/dt.out" "$dir/dt.err" "$dolt_setup"
+  dt_rc=$?
+  local dt_out
+  (
+    cd "$dir/dt" || exit 1
+    printf "%s\n" "$dolt_query" | "$DOLT" sql -c -r csv 2>"$dir/dt.post.err"
+  ) > "$dir/dt.raw"
+  dt_out=$(tr -d '"\r' < "$dir/dt.raw" | grep '^Q|')
+
+  if [ "$dl_rc" -eq 0 ] && [ "$dt_rc" -eq 0 ] && [ "$dl_out" = "$dt_out" ]; then
+    pass=$((pass+1))
+  else
+    fail=$((fail+1))
+    FAILED_NAMES="$FAILED_NAMES $name"
+    echo "  FAIL: $name"
+    echo "    doltlite rc: $dl_rc"
+    echo "    dolt rc:     $dt_rc"
+    echo "    doltlite:"; echo "$dl_out" | sed 's/^/      /'
+    echo "    dolt:";     echo "$dt_out" | sed 's/^/      /'
+  fi
+}
+
 echo "=== Version Control Oracle Tests: dolt_add ==="
 echo ""
 
@@ -197,6 +317,196 @@ SELECT dolt_commit('-m', 'seed');
 DROP TABLE t;
 SELECT dolt_add('-A');
 "
+
+echo "--- schema edge cases ---"
+
+oracle "renamed_and_modified_table" "
+CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+ALTER TABLE a RENAME TO b;
+INSERT INTO b VALUES (2, 'x');
+SELECT dolt_add('b');
+"
+
+oracle "stage_renamed_and_modified_table" "
+CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'seed');
+ALTER TABLE a RENAME TO b;
+INSERT INTO b VALUES (2, 'x');
+SELECT dolt_add('b');
+"
+
+oracle "recreated_same_name_table" "
+CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'seed');
+DROP TABLE a;
+CREATE TABLE a(k INTEGER PRIMARY KEY, n INTEGER);
+INSERT INTO a VALUES (7, 70);
+SELECT dolt_add('a');
+"
+
+oracle "stage_recreated_table_as_modified" "
+CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'seed');
+DROP TABLE a;
+CREATE TABLE a(k INTEGER PRIMARY KEY, n INTEGER);
+INSERT INTO a VALUES (7, 70);
+SELECT dolt_add('a');
+"
+
+oracle "all_mixed_deleted_and_modified" "
+CREATE TABLE a(id INTEGER PRIMARY KEY);
+CREATE TABLE b(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1);
+INSERT INTO b VALUES (1, 'base');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'seed');
+DROP TABLE a;
+INSERT INTO b VALUES (2, 'x');
+SELECT dolt_add('-A');
+"
+
+oracle_error_poststate "mixed_valid_missing_preserves_working" "
+CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+ALTER TABLE a RENAME TO b;
+INSERT INTO b VALUES (2, 'x');
+" "SELECT dolt_add('b', 'missing');" "
+SELECT 'Q|' || table_name || '|' || staged || '|' || status
+  FROM dolt_status
+ ORDER BY table_name, staged, status;" \
+"CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+ALTER TABLE a RENAME TO b;
+INSERT INTO b VALUES (2, 'x');
+" "CALL dolt_add('b', 'missing');" "
+SELECT concat('Q|', table_name, '|', staged, '|', status)
+  FROM dolt_status
+ ORDER BY table_name, staged, status;"
+
+oracle_error_poststate "missing_with_valid_path_preserves_unstaged_state" "
+CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+CREATE TABLE b(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+INSERT INTO b VALUES (1, 'base');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'seed');
+DROP TABLE a;
+INSERT INTO b VALUES (2, 'x');
+" "SELECT dolt_add('a', 'missing');" "
+SELECT 'Q|' || table_name || '|' || staged || '|' || status
+  FROM dolt_status
+ ORDER BY table_name, staged, status;" \
+"CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+CREATE TABLE b(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+INSERT INTO b VALUES (1, 'base');
+CALL dolt_add('-A');
+CALL dolt_commit('-m', 'seed');
+DROP TABLE a;
+INSERT INTO b VALUES (2, 'x');
+" "CALL dolt_add('a', 'missing');" "
+SELECT concat('Q|', table_name, '|', staged, '|', status)
+  FROM dolt_status
+ ORDER BY table_name, staged, status;"
+
+echo "--- savepoint and reopen parity ---"
+
+oracle_same_session "stage_dropped_table_savepoint_invalidated" "
+CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'seed');
+SAVEPOINT sp1;
+DROP TABLE a;
+SELECT dolt_add('a');
+" "ROLLBACK TO sp1;
+SELECT 'Q|' || table_name || '|' || staged || '|' || status
+  FROM dolt_status
+ ORDER BY table_name, staged, status;" \
+"CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+CALL dolt_add('-A');
+CALL dolt_commit('-m', 'seed');
+SAVEPOINT sp1;
+DROP TABLE a;
+CALL dolt_add('a');
+" "ROLLBACK TO sp1;
+SELECT concat('Q|', table_name, '|', staged, '|', status)
+  FROM dolt_status
+ ORDER BY table_name, staged, status;"
+
+oracle_same_session "stage_recreated_table_savepoint_invalidated" "
+CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'seed');
+SAVEPOINT sp1;
+DROP TABLE a;
+CREATE TABLE a(k INTEGER PRIMARY KEY, n INTEGER);
+INSERT INTO a VALUES (7, 70);
+SELECT dolt_add('a');
+" "ROLLBACK TO sp1;
+SELECT 'Q|' || table_name || '|' || staged || '|' || status
+  FROM dolt_status
+ ORDER BY table_name, staged, status;" \
+"CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+CALL dolt_add('-A');
+CALL dolt_commit('-m', 'seed');
+SAVEPOINT sp1;
+DROP TABLE a;
+CREATE TABLE a(k INTEGER PRIMARY KEY, n INTEGER);
+INSERT INTO a VALUES (7, 70);
+CALL dolt_add('a');
+" "ROLLBACK TO sp1;
+SELECT concat('Q|', table_name, '|', staged, '|', status)
+  FROM dolt_status
+ ORDER BY table_name, staged, status;"
+
+oracle_reopen "stage_renamed_and_modified_table_persists" "
+CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'seed');
+ALTER TABLE a RENAME TO b;
+INSERT INTO b VALUES (2, 'x');
+SELECT dolt_add('b');
+" "SELECT 'Q|' || table_name || '|' || staged || '|' || status
+     FROM dolt_status
+    ORDER BY table_name, staged, status;" \
+"SELECT concat('Q|', table_name, '|', staged, '|', status)
+   FROM dolt_status
+  ORDER BY table_name, staged, status;"
+
+oracle_reopen "stage_recreated_table_persists" "
+CREATE TABLE a(id INTEGER PRIMARY KEY, s TEXT);
+INSERT INTO a VALUES (1, 'base');
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'seed');
+DROP TABLE a;
+CREATE TABLE a(k INTEGER PRIMARY KEY, n INTEGER);
+INSERT INTO a VALUES (7, 70);
+SELECT dolt_add('a');
+" "SELECT 'Q|' || table_name || '|' || staged || '|' || status
+     FROM dolt_status
+    ORDER BY table_name, staged, status;
+SELECT 'Q|' || group_concat(name || ':' || replace(lower(type), 'integer', 'int'), '|')
+  FROM pragma_table_info('a');
+SELECT 'Q|' || k || '|' || n FROM a;" \
+"SELECT concat('Q|', table_name, '|', staged, '|', status)
+   FROM dolt_status
+  ORDER BY table_name, staged, status;
+SELECT concat('Q|', group_concat(concat(column_name, ':', replace(lower(column_type), 'integer', 'int')) ORDER BY ordinal_position SEPARATOR '|'))
+  FROM information_schema.columns
+ WHERE table_schema = database() AND table_name = 'a';
+SELECT concat('Q|', k, '|', n) FROM a;"
 
 echo "--- noop and clean states ---"
 

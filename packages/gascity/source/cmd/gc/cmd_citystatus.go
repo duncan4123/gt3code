@@ -68,7 +68,7 @@ type StatusSummaryJSON struct {
 
 var (
 	observeSessionTargetForStatus = workerObserveSessionTargetWithConfig
-	openCityStoreAtForStatus      = openCityStoreAt
+	openCityStoreAtForStatus      = openCityStoreAtForStatusDefault
 )
 
 var controllerStatusStandaloneFallbackTimeout = 250 * time.Millisecond

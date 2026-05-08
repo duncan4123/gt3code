@@ -30,7 +30,6 @@ struct ProllyNode {
   const u32 *aValOff;
   const u8 *pKeyData;
   const u8 *pValData;
-  ProllyHash addr;
 };
 
 int prollyNodeParse(ProllyNode *pNode, const u8 *pData, int nData);
@@ -47,6 +46,12 @@ int prollyNodeSearchBlob(const ProllyNode *pNode,
                          const u8 *pKey, int nKey, int *pRes);
 
 int prollyNodeSearchInt(const ProllyNode *pNode, i64 intKey, int *pRes);
+
+/* Encodes an i64 into the sortable 8-byte big-endian form used by
+** PROLLY_NODE_INTKEY on-disk layout (sign-flipped, so unsigned byte
+** lex order matches signed integer order). The inverse of
+** prollyNodeIntKey at the byte level. */
+void prollyEncodeIntKey(i64 v, u8 buf[8]);
 
 typedef struct ProllyNodeBuilder ProllyNodeBuilder;
 struct ProllyNodeBuilder {
@@ -75,8 +80,6 @@ int prollyNodeBuilderFinish(ProllyNodeBuilder *b, u8 **ppOut, int *pnOut);
 void prollyNodeBuilderReset(ProllyNodeBuilder *b);
 
 void prollyNodeBuilderFree(ProllyNodeBuilder *b);
-
-void prollyNodeComputeHash(const u8 *pData, int nData, ProllyHash *pOut);
 
 int prollyCompareKeys(
   u8 flags,

@@ -4,7 +4,6 @@ on:
   push:
     branches: [master]
   pull_request:
-    branches: [master]
 
 jobs:
   build-and-test:
@@ -68,6 +67,10 @@ jobs:
       run: cd build && bash ../test/large_scale_test.sh ./doltlite --quick
       timeout-minutes: 5
 
+    - name: Chunk size distribution
+      run: cd build && bash ../test/chunk_distribution_test.sh ./doltlite
+      timeout-minutes: 5
+
     - name: Multi-table test
       run: cd build && bash ../test/multi_table_test.sh ./doltlite --quick
       timeout-minutes: 5
@@ -78,6 +81,10 @@ jobs:
 
     - name: Config tests
       run: cd build && bash ../test/config_test.sh ./doltlite
+      timeout-minutes: 2
+
+    - name: BLAKE3 known-answer test
+      run: cd build && bash ../test/blake3_kat_test.sh ./doltlite
       timeout-minutes: 2
 
     - name: Remote integration tests
@@ -270,7 +277,12 @@ jobs:
         mkdir -p build && cd build
         ../configure
         make doltlite
-        make sqlite3
+        # The SQL oracle compares doltlite to STOCK SQLite. Build the
+        # sqlite3 CLI with DOLTLITE_PROLLY=0 so it has the upstream
+        # btree/pager/wal — without this flag, main.mk swaps in the
+        # prolly engine and the "oracle" is doltlite-vs-doltlite,
+        # which trivially passes regardless of doltlite divergence.
+        make DOLTLITE_PROLLY=0 sqlite3
 
     - name: Version control oracle tests (vs Dolt)
       run: |

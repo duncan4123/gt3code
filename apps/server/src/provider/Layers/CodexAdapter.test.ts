@@ -276,6 +276,36 @@ validationLayer("CodexAdapterLive validation", (it) => {
       });
     }),
   );
+
+  it.effect("merges session env over provider instance env", () =>
+    Effect.gen(function* () {
+      validationRuntimeFactory.factory.mockClear();
+      const codexConfig = Schema.decodeSync(CodexSettings)({});
+      const adapter = yield* makeCodexAdapter(codexConfig, {
+        makeRuntime: validationRuntimeFactory.factory,
+        environment: {
+          GC_AGENT: "provider-agent",
+          PROVIDER_ONLY: "yes",
+        },
+      });
+
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-gc-env"),
+        env: {
+          GC_AGENT: "gascity/polecat",
+          GC_SESSION_NAME: "gascity--polecat",
+        },
+        runtimeMode: "full-access",
+      });
+
+      assert.deepStrictEqual(validationRuntimeFactory.factory.mock.calls[0]?.[0]?.environment, {
+        GC_AGENT: "gascity/polecat",
+        GC_SESSION_NAME: "gascity--polecat",
+        PROVIDER_ONLY: "yes",
+      });
+    }),
+  );
 });
 
 const sessionRuntimeFactory = makeRuntimeFactory();

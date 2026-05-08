@@ -3,10 +3,12 @@
 
 #include "sqliteInt.h"
 #include "prolly_hash.h"
+#include "prolly_cursor.h"
 #include "chunk_store.h"
 #include "doltlite_commit.h"
 #include "doltlite_internal.h"
 #include "doltlite_ignore.h"
+#include "prolly_cursor.h"
 
 typedef struct StatusRow StatusRow;
 struct StatusRow {
@@ -48,7 +50,7 @@ static int statusTableName(sqlite3 *db, const struct TableEntry *pEntry, char **
     return SQLITE_NOTFOUND;
   }
   *pzName = doltliteResolveTableNumber(db, pEntry->iTable);
-  return *pzName ? SQLITE_OK : SQLITE_NOMEM;
+  return *pzName ? SQLITE_OK : SQLITE_NOTFOUND;
 }
 
 static struct TableEntry *findCatalogEntry(
@@ -74,16 +76,154 @@ static int addRow(DoltliteStatusCursor *pCur, const char *zName,
   return SQLITE_OK;
 }
 
-/* Detect a rename by iTable identity: a table that keeps the same
-** rootpage number and data hash but gains a new name is the same
-** table renamed. Without this detection, a rename would show up as
-** "deleted <old> + new table <new>" which is noisy and loses the
-** continuity git status gets from rename heuristics. */
-static int isRenamePair(const struct TableEntry *pA, const struct TableEntry *pB){
+static int statusLoadLiveTableSql(
+  sqlite3 *db,
+  const char *zName,
+  int *pFound,
+  char **pzSql
+){
+  sqlite3_stmt *pStmt = 0;
+  char *zQuery;
+  int rc;
+
+  *pFound = 0;
+  *pzSql = 0;
+  zQuery = sqlite3_mprintf(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND tbl_name='%q'",
+    zName
+  );
+  if( !zQuery ) return SQLITE_NOMEM;
+  rc = sqlite3_prepare_v2(db, zQuery, -1, &pStmt, 0);
+  sqlite3_free(zQuery);
+  if( rc!=SQLITE_OK ) return rc;
+  if( sqlite3_step(pStmt)==SQLITE_ROW ){
+    const unsigned char *zSql = sqlite3_column_text(pStmt, 0);
+    *pFound = 1;
+    if( zSql ){
+      *pzSql = sqlite3_mprintf("%s", zSql);
+      if( !*pzSql ){
+        sqlite3_finalize(pStmt);
+        return SQLITE_NOMEM;
+      }
+    }
+  }
+  sqlite3_finalize(pStmt);
+  return SQLITE_OK;
+}
+
+static int statusSchemaHashMatchesRename(
+  const ProllyHash *pOldSchemaHash,
+  const char *zCurrentSql,
+  const char *zOldName
+){
+  static const char *azFmt[] = {
+    "CREATE TABLE %w%s",
+    "CREATE TABLE \"%w\"%s",
+    "CREATE TABLE `%w`%s",
+    "CREATE TABLE [%w]%s"
+  };
+  const char *zParen;
+  int i;
+
+  if( !pOldSchemaHash || !zCurrentSql || !zOldName ) return 0;
+  zParen = strchr(zCurrentSql, '(');
+  if( !zParen ) return 0;
+
+  for(i=0; i<(int)(sizeof(azFmt)/sizeof(azFmt[0])); i++){
+    char *zCandidate = sqlite3_mprintf(azFmt[i], zOldName, zParen);
+    if( zCandidate ){
+      ProllyHash h;
+      prollyHashCompute(zCandidate, (int)strlen(zCandidate), &h);
+      sqlite3_free(zCandidate);
+      if( prollyHashCompare(&h, pOldSchemaHash)==0 ){
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+static int statusRootsShareAnyKey(
+  sqlite3 *db,
+  const struct TableEntry *pOld,
+  const struct TableEntry *pNew
+){
+  ChunkStore *cs;
+  ProllyCache *cache;
+  ProllyCursor curOld, curNew;
+  int rc, res;
+
+  if( !pOld || !pNew ) return 0;
+  if( prollyHashIsEmpty(&pOld->root) || prollyHashIsEmpty(&pNew->root) ) return 0;
+
+  cs = doltliteGetChunkStore(db);
+  cache = doltliteGetCache(db);
+  if( !cs || !cache ) return 0;
+
+  prollyCursorInit(&curOld, cs, cache, &pOld->root, pOld->flags);
+  rc = prollyCursorFirst(&curOld, &res);
+  if( rc!=SQLITE_OK || res!=0 || !prollyCursorIsValid(&curOld) ){
+    prollyCursorClose(&curOld);
+    return 0;
+  }
+
+  prollyCursorInit(&curNew, cs, cache, &pNew->root, pNew->flags);
+  if( pOld->flags & BTREE_INTKEY ){
+    i64 iKey = prollyCursorIntKey(&curOld);
+    rc = prollyCursorSeekInt(&curNew, iKey, &res);
+  }else{
+    const u8 *pKey = 0;
+    int nKey = 0;
+    prollyCursorKey(&curOld, &pKey, &nKey);
+    rc = prollyCursorSeekBlob(&curNew, pKey, nKey, &res);
+  }
+
+  prollyCursorClose(&curOld);
+  if( rc!=SQLITE_OK ){
+    prollyCursorClose(&curNew);
+    return 0;
+  }
+
+  rc = (res==0 && prollyCursorIsValid(&curNew));
+  prollyCursorClose(&curNew);
+  return rc;
+}
+
+/* Detect a rename by stable table identity plus name-insensitive CREATE
+** TABLE SQL. This preserves rename+edit classification while rejecting
+** drop+create churn that happens to reuse the same table number. */
+static int isRenamePair(
+  sqlite3 *db,
+  struct TableEntry *aFrom, int nFrom,
+  struct TableEntry *aTo, int nTo,
+  const struct TableEntry *pA,
+  const struct TableEntry *pB
+){
+  int rc;
+  int foundLive = 0;
+  char *zLiveSql = 0;
+  int bMatch = 0;
+
   if( pA->iTable != pB->iTable ) return 0;
   if( !pA->zName || !pB->zName ) return 0;
   if( strcmp(pA->zName, pB->zName)==0 ) return 0;
-  return prollyHashCompare(&pA->root, &pB->root)==0;
+  if( doltliteFindTableByName(aFrom, nFrom, pB->zName)!=0 ) return 0;
+  if( doltliteFindTableByName(aTo, nTo, pA->zName)!=0 ) return 0;
+  if( prollyHashCompare(&pA->root, &pB->root)==0 ){
+    bMatch = 1;
+    goto rename_done;
+  }
+
+  rc = statusLoadLiveTableSql(db, pB->zName, &foundLive, &zLiveSql);
+  if( rc!=SQLITE_OK || !foundLive ) goto rename_done;
+  if( statusSchemaHashMatchesRename(&pA->schemaHash, zLiveSql, pA->zName)
+   && statusRootsShareAnyKey(db, pA, pB) ){
+    bMatch = 1;
+  }
+
+rename_done:
+  sqlite3_free(zLiveSql);
+  return bMatch;
 }
 
 static int compareCatalogs(
@@ -104,7 +244,7 @@ static int compareCatalogs(
       if( aFrom[i].iTable<=1 || fromHandled[i] ) continue;
       for(j=0; j<nTo; j++){
         if( aTo[j].iTable<=1 || toHandled[j] ) continue;
-        if( isRenamePair(&aFrom[i], &aTo[j]) ){
+        if( isRenamePair(db, aFrom, nFrom, aTo, nTo, &aFrom[i], &aTo[j]) ){
           char *zCompound = sqlite3_mprintf("%s -> %s", aFrom[i].zName, aTo[j].zName);
           if( !zCompound ) return SQLITE_NOMEM;
           rc = addRow(pCur, zCompound, staged, "renamed");
@@ -155,15 +295,15 @@ static int compareCatalogs(
       }
       rc = addRow(pCur, zName, staged, "new table");
     }else{
+      int bRootChanged =
+        prollyHashCompare(&pFrom->root, &aTo[i].root)!=0;
+      int bSchemaChanged =
+        !prollyHashIsEmpty(&pFrom->schemaHash)
+        && !prollyHashIsEmpty(&aTo[i].schemaHash)
+        && prollyHashCompare(&pFrom->schemaHash, &aTo[i].schemaHash)!=0;
       rc = SQLITE_OK;
-      if(prollyHashCompare(&pFrom->root, &aTo[i].root)!=0){
+      if( bRootChanged || bSchemaChanged ){
         rc = addRow(pCur, zName, staged, "modified");
-      }
-      if(rc==SQLITE_OK
-       && !prollyHashIsEmpty(&pFrom->schemaHash)
-       && !prollyHashIsEmpty(&aTo[i].schemaHash)
-       && prollyHashCompare(&pFrom->schemaHash, &aTo[i].schemaHash)!=0){
-        rc = addRow(pCur, zName, staged, "schema modified");
       }
     }
     sqlite3_free(zName);

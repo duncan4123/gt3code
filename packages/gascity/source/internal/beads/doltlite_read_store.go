@@ -50,7 +50,7 @@ func NewDoltliteReadStore(dir string, backing *BdStore) (*DoltliteReadStore, err
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(0)
+	db.SetMaxIdleConns(1)
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -171,7 +171,7 @@ func (s *DoltliteReadStore) PoolDemandCount(template string) (int, error) {
 		return 0, nil
 	}
 	query := `SELECT COUNT(*) FROM issues i
-		WHERE json_extract(i.metadata, '$.gc.routed_to') = ?
+		WHERE json_extract(i.metadata, '$."gc.routed_to"') = ?
 		AND (i.assignee IS NULL OR i.assignee = '')
 		AND (
 			(i.status = 'in_progress')
@@ -211,11 +211,11 @@ func (s *DoltliteReadStore) DefaultWorkQueryHasReadyWork(targets []string, ident
 		return false, nil
 	}
 	for _, target := range compactStrings(targets) {
-		ok, err := s.existsReadyIssue(`json_extract(i.metadata, '$.gc.routed_to') = ? AND (i.assignee IS NULL OR i.assignee = '')`, target)
+		ok, err := s.existsReadyIssue(`json_extract(i.metadata, '$."gc.routed_to"') = ? AND (i.assignee IS NULL OR i.assignee = '')`, target)
 		if ok || err != nil {
 			return ok, err
 		}
-		ok, err = s.existsIssue(`i.status = 'open' AND i.issue_type = 'molecule' AND json_extract(i.metadata, '$.gc.routed_to') = ? AND (i.assignee IS NULL OR i.assignee = '')`, target)
+		ok, err = s.existsIssue(`i.status = 'open' AND i.issue_type = 'molecule' AND json_extract(i.metadata, '$."gc.routed_to"') = ? AND (i.assignee IS NULL OR i.assignee = '')`, target)
 		if ok || err != nil {
 			return ok, err
 		}
@@ -235,6 +235,23 @@ func compactStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func sqliteJSONPath(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "$"
+	}
+	if strings.IndexFunc(key, func(r rune) bool {
+		return !(r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9')
+	}) == -1 {
+		return "$." + key
+	}
+	encoded, err := json.Marshal(key)
+	if err != nil {
+		return "$"
+	}
+	return "$." + string(encoded)
 }
 
 func (s *DoltliteReadStore) existsReadyIssue(extraWhere string, args ...any) (bool, error) {
@@ -332,6 +349,7 @@ func scanDep(rows interface{ Scan(...any) error }) (Dep, error) {
 func (s *DoltliteReadStore) queryIssues(query ListQuery, extraWhere string, extraArgs []any, limit int) ([]Bead, error) {
 	where := []string{}
 	args := []any{}
+	needParent := !query.SkipParent || query.ParentID != ""
 	if !query.IncludeClosed && query.Status != "closed" {
 		where = append(where, "i.status != 'closed'")
 	}
@@ -357,7 +375,7 @@ func (s *DoltliteReadStore) queryIssues(query ListQuery, extraWhere string, extr
 	}
 	for k, v := range query.Metadata {
 		where = append(where, "json_extract(i.metadata, ?) = ?")
-		args = append(args, "$."+k, v)
+		args = append(args, sqliteJSONPath(k), v)
 	}
 	if !query.CreatedBefore.IsZero() {
 		where = append(where, "i.created_at < ?")
@@ -367,11 +385,16 @@ func (s *DoltliteReadStore) queryIssues(query ListQuery, extraWhere string, extr
 		where = append(where, extraWhere)
 		args = append(args, extraArgs...)
 	}
+	parentColumn := "''"
+	parentJoin := ""
+	if needParent {
+		parentColumn = "COALESCE(pc.depends_on_id, '')"
+		parentJoin = " LEFT JOIN dependencies pc ON pc.issue_id = i.id AND pc.type = 'parent-child'"
+	}
 	sqlText := `SELECT i.id, i.title, i.status, i.issue_type, i.priority, i.created_at,
 		COALESCE(i.assignee, ''), i.description, COALESCE(i.metadata, '{}'),
-		COALESCE(pc.depends_on_id, '')
-		FROM issues i
-		LEFT JOIN dependencies pc ON pc.issue_id = i.id AND pc.type = 'parent-child'`
+		` + parentColumn + `
+		FROM issues i` + parentJoin
 	if len(where) > 0 {
 		sqlText += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -399,8 +422,10 @@ func (s *DoltliteReadStore) queryIssues(query ListQuery, extraWhere string, extr
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if err := s.hydrateLabels(beads); err != nil {
-		return nil, err
+	if !query.SkipLabels {
+		if err := s.hydrateLabels(beads); err != nil {
+			return nil, err
+		}
 	}
 	return beads, nil
 }
