@@ -1,5 +1,7 @@
 # T3 Sidebar — Gas City Integration Design
 
+Audit reference: `docs/t3-gascity-sidebar-audit.md`
+
 ## Context
 
 Convoy `t3-50e` implemented the foundation: `customMetadata` on threads, GC badges in sidebar, lifecycle state pills (drained/stopped), thread reuse on restart, and gc.\* metadata propagation from gc-session-t3.
