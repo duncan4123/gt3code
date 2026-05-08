@@ -192,6 +192,7 @@ import {
   type SidebarGcThreadGroup,
 } from "./SidebarGcFolders";
 import {
+  gcSessionNameForQualifiedAgent,
   resolveGcAgentRuntimeState,
   type GcAgentActionState,
   type GcWakeMode,
@@ -1101,6 +1102,7 @@ interface SidebarProjectThreadListProps {
   ) => void;
   onAdjustGcAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustGcAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onWakeGcAgentSession: (agent: string) => void;
   onToggleGcAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleGcAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
@@ -1157,6 +1159,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     onToggleGcAgentSuspended,
     onAdjustGcAgentMinActiveSessions,
     onAdjustGcAgentMaxActiveSessions,
+    onWakeGcAgentSession,
     onToggleGcAgentWakeMode,
     onToggleGcAgentSessionMode,
   } = props;
@@ -1197,6 +1200,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
           onToggleAgentSuspended={onToggleGcAgentSuspended}
           onAdjustAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
           onAdjustAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+          onWakeAgentSession={onWakeGcAgentSession}
           onToggleAgentWakeMode={onToggleGcAgentWakeMode}
           onToggleAgentSessionMode={onToggleGcAgentSessionMode}
           renderThreadRows={(threadIds, indentClassName) =>
@@ -1351,6 +1355,7 @@ interface SidebarProjectItemProps {
   ) => void;
   onAdjustGcAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustGcAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onWakeGcAgentSession: (agent: string) => void;
   onToggleGcAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleGcAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
@@ -1387,6 +1392,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     onToggleGcAgentSuspended,
     onAdjustGcAgentMinActiveSessions,
     onAdjustGcAgentMaxActiveSessions,
+    onWakeGcAgentSession,
     onToggleGcAgentWakeMode,
     onToggleGcAgentSessionMode,
   } = props;
@@ -2649,6 +2655,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         onToggleGcAgentSuspended={onToggleGcAgentSuspended}
         onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
         onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+        onWakeGcAgentSession={onWakeGcAgentSession}
         onToggleGcAgentWakeMode={onToggleGcAgentWakeMode}
         onToggleGcAgentSessionMode={onToggleGcAgentSessionMode}
       />
@@ -3102,6 +3109,7 @@ interface SidebarProjectsContentProps {
   ) => void;
   onAdjustGcAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustGcAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onWakeGcAgentSession: (agent: string) => void;
   onToggleGcAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleGcAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
@@ -3166,6 +3174,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     onToggleGcAgentSuspended,
     onAdjustGcAgentMinActiveSessions,
     onAdjustGcAgentMaxActiveSessions,
+    onWakeGcAgentSession,
     onToggleGcAgentWakeMode,
     onToggleGcAgentSessionMode,
   } = props;
@@ -3419,6 +3428,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                         onToggleGcAgentSuspended={onToggleGcAgentSuspended}
                         onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
                         onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+                        onWakeGcAgentSession={onWakeGcAgentSession}
                         onToggleGcAgentWakeMode={onToggleGcAgentWakeMode}
                         onToggleGcAgentSessionMode={onToggleGcAgentSessionMode}
                       />
@@ -3465,6 +3475,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 onToggleGcAgentSuspended={onToggleGcAgentSuspended}
                 onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
                 onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+                onWakeGcAgentSession={onWakeGcAgentSession}
                 onToggleGcAgentWakeMode={onToggleGcAgentWakeMode}
                 onToggleGcAgentSessionMode={onToggleGcAgentSessionMode}
               />
@@ -4034,6 +4045,30 @@ export default function Sidebar() {
       }
     },
     [clearGcAgentActionState, refreshGcConfig, setGcAgentActionState],
+  );
+
+  const handleWakeGcAgentSession = useCallback(
+    async (agent: string) => {
+      const api = readLocalApi();
+      if (!api?.gc?.wakeSession) {
+        return;
+      }
+      setGcAgentActionState(agent, { kind: "wake" });
+      try {
+        await api.gc.wakeSession({ sessionName: gcSessionNameForQualifiedAgent(agent) });
+        void waitForAgentStart(agent);
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to wake ${agent}`,
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        clearGcAgentActionState(agent);
+      }
+    },
+    [clearGcAgentActionState, refreshGcConfig, setGcAgentActionState, waitForAgentStart],
   );
 
   const handleGcAgentWakeModeChange = useCallback(
@@ -4732,6 +4767,7 @@ export default function Sidebar() {
             onToggleGcAgentSuspended={handleGcAgentSuspendedChange}
             onAdjustGcAgentMinActiveSessions={handleGcAgentMinActiveSessionsChange}
             onAdjustGcAgentMaxActiveSessions={handleGcAgentMaxActiveSessionsChange}
+            onWakeGcAgentSession={handleWakeGcAgentSession}
             onToggleGcAgentWakeMode={handleGcAgentWakeModeChange}
             onToggleGcAgentSessionMode={handleGcAgentSessionModeChange}
           />

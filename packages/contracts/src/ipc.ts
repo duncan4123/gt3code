@@ -78,6 +78,7 @@ import type {
   GcStopSessionInput,
   GcSubmitSessionInput,
   GcSubmitSessionResult,
+  GcWakeSessionInput,
   GcGetThreadContextInput,
   GcThreadContextResult,
 } from "./gc.ts";
@@ -365,6 +366,7 @@ export interface LocalApi {
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
     submitSession: (input: GcSubmitSessionInput) => Promise<GcSubmitSessionResult>;
     stopSession: (input: GcStopSessionInput) => Promise<GcSessionActionResult>;
+    wakeSession: (input: GcWakeSessionInput) => Promise<GcSessionActionResult>;
     respondToPending: (input: GcRespondToPendingInput) => Promise<GcSessionActionResult>;
     setAgentSuspended: (input: GcSetAgentSuspendedInput) => Promise<GcConfigResult>;
     setAgentMaxActiveSessions: (input: GcSetAgentMaxActiveSessionsInput) => Promise<GcConfigResult>;
@@ -470,6 +472,7 @@ export interface EnvironmentApi {
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
     submitSession: (input: GcSubmitSessionInput) => Promise<GcSubmitSessionResult>;
     stopSession: (input: GcStopSessionInput) => Promise<GcSessionActionResult>;
+    wakeSession: (input: GcWakeSessionInput) => Promise<GcSessionActionResult>;
     respondToPending: (input: GcRespondToPendingInput) => Promise<GcSessionActionResult>;
     setAgentSuspended: (input: GcSetAgentSuspendedInput) => Promise<GcConfigResult>;
     setAgentMaxActiveSessions: (input: GcSetAgentMaxActiveSessionsInput) => Promise<GcConfigResult>;

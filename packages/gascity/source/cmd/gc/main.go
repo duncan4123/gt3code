@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gastownhall/gascity/internal/agent"
 	"github.com/gastownhall/gascity/internal/beads"
 	beadsexec "github.com/gastownhall/gascity/internal/beads/exec"
 	"github.com/gastownhall/gascity/internal/citylayout"
@@ -288,9 +287,6 @@ var cliStoreCache struct {
 func cliSessionName(cityPath, cityName, agentName, sessionTemplate string) string {
 	if strings.TrimSpace(cityPath) == "" {
 		return sessionName(nil, cityName, agentName, sessionTemplate)
-	}
-	if cityUsesDoltliteBeadsBackend(cityPath) || statusCityHasDoltliteMetadata(cityPath) {
-		return agent.SessionNameFor(cityName, agentName, sessionTemplate)
 	}
 	cliStoreCache.mu.Lock()
 	if cliStoreCache.path != cityPath {
@@ -909,7 +905,7 @@ func resolveStoreScopeRoot(cityPath, storePath string) string {
 func openBdStoreAt(storePath, cityPath string) (beads.Store, error) {
 	if filepath.Clean(storePath) == filepath.Clean(cityPath) {
 		store := bdStoreForCity(storePath, cityPath)
-		if direct, err := beads.NewDoltliteReadStore(storePath, store); err == nil {
+		if direct, ok := openOptimizedDoltliteStore(storePath, store); ok {
 			return direct, nil
 		}
 		return store, nil
@@ -919,7 +915,7 @@ func openBdStoreAt(storePath, cityPath string) (beads.Store, error) {
 		cfg = nil
 	}
 	store := bdStoreForRig(storePath, cityPath, cfg)
-	if direct, err := beads.NewDoltliteReadStore(storePath, store); err == nil {
+	if direct, ok := openOptimizedDoltliteStore(storePath, store); ok {
 		return direct, nil
 	}
 	return store, nil

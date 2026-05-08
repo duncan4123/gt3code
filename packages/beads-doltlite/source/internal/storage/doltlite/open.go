@@ -47,7 +47,7 @@ func OpenSQL(ctx context.Context, dir, database, branch string) (*sql.DB, func()
 		return nil, nil, err
 	}
 	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	db.SetMaxIdleConns(0)
 	db.SetConnMaxIdleTime(0)
 	db.SetConnMaxLifetime(0)
 

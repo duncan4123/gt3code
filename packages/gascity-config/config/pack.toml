@@ -71,8 +71,7 @@ provider = "codex"
 dir = ""
 name = "boot"
 suspended = false
-provider = "kimi-for-coding"
-option_defaults = { model = "kimi-for-coding/k2p6", agent = "build" }
+provider = "codex"
 
 [[patches.agent]]
 dir = ""

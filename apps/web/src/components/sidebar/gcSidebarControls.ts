@@ -13,6 +13,9 @@ export type GcAgentActionState =
       kind: "suspend";
     }
   | {
+      kind: "wake";
+    }
+  | {
       kind: "pool-size";
       maxActiveSessions: number;
     }
@@ -127,6 +130,9 @@ export function resolveGcAgentRuntimeState(input: {
   }
   if (actionState?.kind === "suspend") {
     return { label: "Suspending", tone: "warning" };
+  }
+  if (actionState?.kind === "wake") {
+    return { label: "Waking", tone: "info" };
   }
   if (actionState?.kind === "session-mode") {
     return {

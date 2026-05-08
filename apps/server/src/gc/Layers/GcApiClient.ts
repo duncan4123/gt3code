@@ -2369,6 +2369,20 @@ const makeGcApiClient = Effect.gen(function* () {
       );
     });
 
+  const wakeSession: GcApiClientShape["wakeSession"] = (sessionName) =>
+    Effect.promise(async () => {
+      const normalizedSessionName = sanitizeKey(sessionName);
+      if (useCityScopedRoutes) {
+        const cityName = await requireGcCityName();
+        return postJson<GcSessionActionResult>(
+          buildGcCityPath(cityName, `/session/${encodeURIComponent(normalizedSessionName)}/wake`),
+        );
+      }
+      return postJson<GcSessionActionResult>(
+        `/v0/session/${escapePathSegments(normalizedSessionName)}/wake`,
+      );
+    });
+
   const respondToPending: GcApiClientShape["respondToPending"] = (sessionName, response) =>
     Effect.promise(async () => {
       const normalizedSessionName = sanitizeKey(sessionName);
@@ -2868,6 +2882,7 @@ const makeGcApiClient = Effect.gen(function* () {
     setControllerRunning,
     submitSession,
     stopSession,
+    wakeSession,
     respondToPending,
     setAgentSuspended,
     setAgentMaxActiveSessions,

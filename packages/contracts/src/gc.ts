@@ -1049,6 +1049,11 @@ export const GcStopSessionInput = Schema.Struct({
 });
 export type GcStopSessionInput = typeof GcStopSessionInput.Type;
 
+export const GcWakeSessionInput = Schema.Struct({
+  sessionName: TrimmedNonEmptyString,
+});
+export type GcWakeSessionInput = typeof GcWakeSessionInput.Type;
+
 export const GcRespondToPendingInput = Schema.Struct({
   threadId: ThreadId,
   action: TrimmedNonEmptyString,
@@ -1268,5 +1273,10 @@ export class GcSetAgentMinActiveSessionsError extends Schema.TaggedErrorClass<Gc
 
 export class GcSetAgentWakeModeError extends Schema.TaggedErrorClass<GcSetAgentWakeModeError>()(
   "GcSetAgentWakeModeError",
+  { message: Schema.String },
+) {}
+
+export class GcWakeSessionError extends Schema.TaggedErrorClass<GcWakeSessionError>()(
+  "GcWakeSessionError",
   { message: Schema.String },
 ) {}

@@ -4,38 +4,38 @@ global_fragments = ["command-glossary", "operational-awareness"]
 
 [[rigs]]
 name = "gascity"
-suspended = false
+suspended = true
 includes = ["packs/gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "refinery"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "witness"
-suspended = false
+suspended = true
 
 [[rigs]]
 name = "beads-doltlite"
 prefix = "bd"
-suspended = false
+suspended = true
 includes = ["packs/gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "refinery"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "witness"
-suspended = false
+suspended = true
 
 [[rigs]]
 name = "context-mode"
@@ -45,15 +45,15 @@ includes = ["packs/gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "refinery"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "witness"
-suspended = false
+suspended = true
 
 [patches]
 
@@ -74,18 +74,13 @@ provider = "codex"
 dir = ""
 name = "boot"
 suspended = false
-provider = "kimi-for-coding"
-
-[patches.agent.option_defaults]
-agent = "build"
-model = "kimi-for-coding/k2p6"
+provider = "codex"
 
 [[patches.agent]]
 dir = ""
 name = "dog"
 suspended = false
 provider = "codex"
-
 [patches.agent.env]
 GC_MODEL = "gpt-5.4-mini"
 
@@ -93,22 +88,56 @@ GC_MODEL = "gpt-5.4-mini"
 dir = "gascity"
 name = "refinery"
 suspended = false
+provider = "codex"
 
 [[patches.agent]]
 dir = "gascity"
 name = "witness"
 suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = "gascity"
+name = "polecat"
+suspended = false
+provider = "codex"
 
 [[patches.agent]]
 dir = "beads-doltlite"
 name = "polecat"
 suspended = false
+provider = "codex"
 wake_mode = "fresh"
+
+[[patches.agent]]
+dir = "beads-doltlite"
+name = "refinery"
+suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = "beads-doltlite"
+name = "witness"
+suspended = false
+provider = "codex"
 
 [[patches.agent]]
 dir = "context-mode"
 name = "witness"
 suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = "context-mode"
+name = "refinery"
+suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = "context-mode"
+name = "polecat"
+suspended = false
+provider = "codex"
 
 [[patches.named_session]]
 template = "mayor"
@@ -140,3 +169,6 @@ mode = "always"
 [beads]
 provider = "bd"
 backend = "doltlite"
+
+[session]
+provider = "t3bridge"

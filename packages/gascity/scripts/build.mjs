@@ -34,6 +34,8 @@ const stampPath = path.join(
 );
 const sourceRoot = resolveSourceRoot();
 const doltliteBuildDir = resolveDoltliteBuildDir();
+const goBuildTags = "libsqlite3,gascity_native_beads";
+const goToolchain = process.env.GOTOOLCHAIN || "go1.26.2+auto";
 
 mkdirSync(path.dirname(outputPath), { recursive: true });
 const cgoFlags = appendFlag(process.env.CGO_CFLAGS, `-I${doltliteBuildDir}`);
@@ -50,7 +52,8 @@ const stamp = {
   goarch,
   cgoFlags,
   cgoLdFlags,
-  goflags: appendFlag(process.env.GOFLAGS, "-tags=libsqlite3"),
+  goflags: appendFlag(process.env.GOFLAGS, `-tags=${goBuildTags}`),
+  goToolchain,
   sourceRoot,
   doltliteBuildDir,
 };
@@ -80,7 +83,8 @@ const result = spawnSync("go", ["build", "-o", outputPath, "./cmd/gc"], {
     CGO_LDFLAGS: cgoLdFlags,
     GOOS: goos,
     GOARCH: goarch,
-    GOFLAGS: appendFlag(process.env.GOFLAGS, "-tags=libsqlite3"),
+    GOFLAGS: appendFlag(process.env.GOFLAGS, `-tags=${goBuildTags}`),
+    GOTOOLCHAIN: goToolchain,
   },
   stdio: "inherit",
 });

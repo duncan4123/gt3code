@@ -153,6 +153,7 @@ export interface WsRpcClient {
     readonly getThreadContext: RpcUnaryMethod<typeof WS_METHODS.gcGetThreadContext>;
     readonly submitSession: RpcUnaryMethod<typeof WS_METHODS.gcSubmitSession>;
     readonly stopSession: RpcUnaryMethod<typeof WS_METHODS.gcStopSession>;
+    readonly wakeSession: RpcUnaryMethod<typeof WS_METHODS.gcWakeSession>;
     readonly respondToPending: RpcUnaryMethod<typeof WS_METHODS.gcRespondToPending>;
     readonly setAgentSuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetAgentSuspended>;
     readonly setAgentMaxActiveSessions: RpcUnaryMethod<
@@ -331,6 +332,8 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.gcSubmitSession](input)),
       stopSession: (input) =>
         transport.request((client) => client[WS_METHODS.gcStopSession](input)),
+      wakeSession: (input) =>
+        transport.request((client) => client[WS_METHODS.gcWakeSession](input)),
       respondToPending: (input) =>
         transport.request((client) => client[WS_METHODS.gcRespondToPending](input)),
       setAgentSuspended: (input) =>

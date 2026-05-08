@@ -19,6 +19,7 @@ import (
 	"github.com/gastownhall/gascity/internal/citylayout"
 	"github.com/gastownhall/gascity/internal/config"
 	"github.com/gastownhall/gascity/internal/fsys"
+	"github.com/gastownhall/gascity/internal/gcexec"
 	"github.com/gastownhall/gascity/internal/nudgequeue"
 	"github.com/gastownhall/gascity/internal/runtime"
 	"github.com/gastownhall/gascity/internal/session"
@@ -36,6 +37,7 @@ const (
 	defaultNudgePollInterval        = 2 * time.Second
 	defaultNudgePollQuiescence      = 3 * time.Second
 	defaultNudgePollStartGrace      = 15 * time.Second
+	defaultNudgePollMaxRuntime      = 10 * time.Minute
 	defaultNudgeWaitIdleTimeout     = 30 * time.Second
 )
 
@@ -438,8 +440,13 @@ func cmdNudgePoll(args []string, sessionName string, interval, quiescence time.D
 		fmt.Fprintf(stderr, "gc nudge poll: opening city store for %q\n", target.agentKey()) //nolint:errcheck
 		return 1
 	}
+	startedAt := time.Now()
 	var missingSince time.Time
 	for {
+		if time.Since(startedAt) > defaultNudgePollMaxRuntime {
+			fmt.Fprintf(stderr, "gc nudge poll: exiting after max runtime %s for %s\n", defaultNudgePollMaxRuntime, target.sessionName) //nolint:errcheck
+			return 0
+		}
 		obs, err := workerObserveNudgeTarget(target, store, sp)
 		if err != nil {
 			fmt.Fprintf(stderr, "gc nudge poll: %v\n", err) //nolint:errcheck
@@ -931,7 +938,7 @@ func ensureNudgePoller(cityPath, agentName, sessionName string) error {
 		if running, _ := existingPollerPID(pidPath); running {
 			return nil
 		}
-		exe, err := os.Executable()
+		exe, err := gcexec.Current()
 		if err != nil {
 			return err
 		}

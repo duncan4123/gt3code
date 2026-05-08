@@ -2076,6 +2076,31 @@ run_bd_doltlite() {
     )
 }
 
+doltlite_maintenance_due() {
+    local dir="$1"
+    local stamp="$dir/.beads/doltlite/.gc-maintenance.stamp"
+    local interval="${GC_DOLTLITE_MAINTENANCE_INTERVAL_SECONDS:-86400}"
+    local now last
+    [ "$interval" -gt 0 ] 2>/dev/null || return 0
+    [ -f "$stamp" ] || return 0
+    now=$(date +%s 2>/dev/null || echo 0)
+    last=$(stat -c %Y "$stamp" 2>/dev/null || echo 0)
+    [ $((now - last)) -ge "$interval" ]
+}
+
+run_doltlite_existing_db_maintenance() {
+    local dir="$1"
+    local stamp="$dir/.beads/doltlite/.gc-maintenance.stamp"
+    if ! doltlite_maintenance_due "$dir"; then
+        return 0
+    fi
+    echo "gc-beads-bd: running doltlite maintenance for $dir" >&2
+    run_bd_doltlite "$dir" flatten --force --json >/dev/null 2>&1 || echo "warning: bd flatten failed for $dir" >&2
+    run_bd_doltlite "$dir" gc --skip-decay --force --json >/dev/null 2>&1 || echo "warning: bd gc failed for $dir" >&2
+    mkdir -p "$dir/.beads/doltlite" 2>/dev/null || true
+    date +%s > "$stamp" 2>/dev/null || true
+}
+
 op_init_doltlite() {
     local dir="$1"
     local prefix="$2"
@@ -2102,6 +2127,8 @@ op_init_doltlite() {
         run_bd_doltlite "$dir" init --quiet --backend=doltlite -p "$prefix" --database "$database" --skip-hooks --skip-agents || die "bd init failed for $dir"
     elif ! metadata_is_doltlite "$metadata_path" || [ "$(read_existing_dolt_database "$metadata_path")" != "$database" ]; then
         write_doltlite_metadata "$dir" "$database"
+    else
+        run_doltlite_existing_db_maintenance "$dir"
     fi
     run_bd_doltlite "$dir" config set issue_prefix "$prefix" 2>/dev/null || true
     run_bd_doltlite "$dir" config set types.custom "${GC_BEADS_CUSTOM_TYPES:-molecule,convoy,message,event,gate,merge-request,agent,role,rig,session,spec,convergence}" 2>/dev/null || true

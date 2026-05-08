@@ -86,6 +86,7 @@ export interface GcApiClientShape {
     message: string,
   ) => Effect.Effect<GcSubmitSessionResult, Error>;
   readonly stopSession: (sessionName: string) => Effect.Effect<GcSessionActionResult, Error>;
+  readonly wakeSession: (sessionName: string) => Effect.Effect<GcSessionActionResult, Error>;
   readonly respondToPending: (
     sessionName: string,
     response: {

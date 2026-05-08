@@ -50,6 +50,7 @@ func NewDoltliteReadStore(dir string, backing *BdStore) (*DoltliteReadStore, err
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(0)
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -95,6 +96,47 @@ func (s *DoltliteReadStore) List(query ListQuery) ([]Bead, error) {
 		return nil, fmt.Errorf("bd list: %w", ErrQueryRequiresScan)
 	}
 	return s.queryIssues(query, "", nil, query.Limit)
+}
+
+func (s *DoltliteReadStore) ListOpen(status ...string) ([]Bead, error) {
+	query := ListQuery{AllowScan: true}
+	if len(status) > 0 {
+		query.Status = strings.TrimSpace(status[0])
+	}
+	return s.List(query)
+}
+
+func (s *DoltliteReadStore) Children(parentID string, opts ...QueryOpt) ([]Bead, error) {
+	return s.List(ListQuery{
+		ParentID:      parentID,
+		IncludeClosed: HasOpt(opts, IncludeClosed),
+		AllowScan:     true,
+		Sort:          SortCreatedAsc,
+	})
+}
+
+func (s *DoltliteReadStore) ListByLabel(label string, limit int, opts ...QueryOpt) ([]Bead, error) {
+	return s.List(ListQuery{
+		Label:         label,
+		Limit:         limit,
+		IncludeClosed: HasOpt(opts, IncludeClosed),
+	})
+}
+
+func (s *DoltliteReadStore) ListByAssignee(assignee, status string, limit int) ([]Bead, error) {
+	return s.List(ListQuery{
+		Assignee: assignee,
+		Status:   status,
+		Limit:    limit,
+	})
+}
+
+func (s *DoltliteReadStore) ListByMetadata(filters map[string]string, limit int, opts ...QueryOpt) ([]Bead, error) {
+	return s.List(ListQuery{
+		Metadata:      filters,
+		Limit:         limit,
+		IncludeClosed: HasOpt(opts, IncludeClosed),
+	})
 }
 
 func (s *DoltliteReadStore) Ready(query ...ReadyQuery) ([]Bead, error) {

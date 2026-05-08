@@ -316,12 +316,12 @@ func buildDesiredStateWithSessionBeads(
 			fmt.Fprintf(stderr, "assignedWorkBeads: PARTIAL — store query failed, drain decisions suppressed\n") //nolint:errcheck
 		}
 		if len(assignedWorkBeads) > 0 {
-			fmt.Fprintf(stderr, "assignedWorkBeads: %d beads found\n", len(assignedWorkBeads)) //nolint:errcheck
+			reconcileDebugf(stderr, "assignedWorkBeads: %d beads found\n", len(assignedWorkBeads))
 			for _, wb := range assignedWorkBeads {
-				fmt.Fprintf(stderr, "  %s assignee=%s routed=%s status=%s\n", wb.ID, wb.Assignee, wb.Metadata["gc.routed_to"], wb.Status) //nolint:errcheck
+				reconcileDebugf(stderr, "  %s assignee=%s routed=%s status=%s\n", wb.ID, wb.Assignee, wb.Metadata["gc.routed_to"], wb.Status)
 			}
 		} else {
-			fmt.Fprintf(stderr, "assignedWorkBeads: 0 beads (rigStores=%d)\n", len(rigStores)) //nolint:errcheck
+			reconcileDebugf(stderr, "assignedWorkBeads: 0 beads (rigStores=%d)\n", len(rigStores))
 		}
 		scaleCheckCounts, poolScaleCheckPartialTemplates = evaluatePendingPoolsMap(cfg, pendingPools, stderr, trace)
 		if len(defaultScaleTargets) > 0 {
@@ -428,13 +428,13 @@ func buildDesiredStateWithSessionBeads(
 			if !assignedWorkIndexReachableFromAgent(cityPath, cfg, spec.Agent, assignedWorkStoreRefs, i) {
 				continue
 			}
-			fmt.Fprintf(stderr, "namedWorkReady: %s matched by bead %s (assignee=%s status=%s)\n", identity, wb.ID, assignee, wb.Status) //nolint:errcheck
+			reconcileDebugf(stderr, "namedWorkReady: %s matched by bead %s (assignee=%s status=%s)\n", identity, wb.ID, assignee, wb.Status)
 			namedWorkReady[identity] = true
 			break
 		}
 	}
 	if len(assignedWorkBeads) > 0 {
-		fmt.Fprintf(stderr, "namedWorkReady: %d assigned beads, %d named specs, ready=%v\n", len(assignedWorkBeads), len(namedSpecs), namedWorkReady) //nolint:errcheck
+		reconcileDebugf(stderr, "namedWorkReady: %d assigned beads, %d named specs, ready=%v\n", len(assignedWorkBeads), len(namedSpecs), namedWorkReady)
 	}
 	for identity, spec := range namedSpecs {
 		canonicalBead, hasCanonical := findCanonicalNamedSessionBead(bp.sessionBeads, spec)

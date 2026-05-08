@@ -14,6 +14,7 @@ import (
 	"github.com/gastownhall/gascity/internal/beads"
 	"github.com/gastownhall/gascity/internal/citylayout"
 	"github.com/gastownhall/gascity/internal/fsys"
+	"github.com/gastownhall/gascity/internal/gcexec"
 	"github.com/gastownhall/gascity/internal/nudgequeue"
 	"github.com/gastownhall/gascity/internal/runtime"
 )
@@ -460,7 +461,7 @@ func deferredSubmitAgentKey(b beads.Bead) string {
 
 var (
 	startSessionSubmitPoller      = ensureSessionSubmitPoller
-	sessionSubmitPollerExecutable = os.Executable
+	sessionSubmitPollerExecutable = gcexec.Current
 )
 
 func ensureSessionSubmitPoller(cityPath, agentName, sessionName string) error {
@@ -473,7 +474,7 @@ func ensureSessionSubmitPoller(cityPath, agentName, sessionName string) error {
 		if err != nil {
 			return err
 		}
-		if isGoTestExecutable(exe) {
+		if gcexec.IsGoTestExecutable(exe) {
 			return fmt.Errorf("refusing to start nudge poller with Go test binary %q", exe)
 		}
 		cmd := exec.Command(exe, "nudge", "poll", "--city", cityPath, "--session", sessionName, agentName)
@@ -496,10 +497,6 @@ func ensureSessionSubmitPoller(cityPath, agentName, sessionName string) error {
 		}
 		return cmd.Process.Release()
 	})
-}
-
-func isGoTestExecutable(path string) bool {
-	return strings.HasSuffix(filepath.Base(path), ".test")
 }
 
 func sessionSubmitPollerPIDPath(cityPath, sessionName string) string {

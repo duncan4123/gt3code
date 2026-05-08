@@ -5,6 +5,7 @@ import {
   MinusIcon,
   PlayIcon,
   PlusIcon,
+  RotateCcwIcon,
   SquareIcon,
 } from "lucide-react";
 import { Fragment, type ReactNode, useState } from "react";
@@ -94,6 +95,7 @@ interface SidebarGcFoldersProps {
   ) => void;
   onAdjustAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onWakeAgentSession: (agent: string) => void;
   onToggleAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
   renderThreadRows: (threadIds: readonly ThreadId[], indentClassName?: string) => ReactNode;
@@ -146,6 +148,17 @@ function gcAgentSourceLabel(agentGroup: SidebarGcAgentGroup): string {
     return "built-in";
   }
   return agentGroup.scope ?? "agent";
+}
+
+const NON_WAKEABLE_AGENT_RUNTIME_LABELS = new Set(["Running", "Ready", "Connecting", "Starting"]);
+
+function canWakeAgentSession(agentGroup: SidebarGcAgentGroup): boolean {
+  return (
+    Boolean(agentGroup.namedSessionMode) &&
+    !agentGroup.isPool &&
+    !agentGroup.isSuspended &&
+    !NON_WAKEABLE_AGENT_RUNTIME_LABELS.has(agentGroup.runtimeState.label)
+  );
 }
 
 export function SidebarGcFolders(props: SidebarGcFoldersProps) {
@@ -210,10 +223,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
       agentGroup.qualifiedName,
       agentGroup.isSuspended,
     );
-    const hasScaleControls =
-      agentGroup.isPool ||
-      typeof agentGroup.minActiveSessions === "number" ||
-      typeof agentGroup.maxActiveSessions === "number";
+    const hasScaleControls = agentGroup.isPool;
     const showNamedSessionModeControl = Boolean(agentGroup.namedSessionMode);
     const nextNamedSessionMode = !showNamedSessionModeControl
       ? null
@@ -244,6 +254,12 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
       canAdjustPoolSize &&
       typeof agentGroup.minActiveSessions === "number" &&
       agentGroup.minActiveSessions > 0;
+    const canWakeSession =
+      canWakeAgentSession(agentGroup) &&
+      !rigGroup.isSuspended &&
+      !isMutating &&
+      !actionState &&
+      !props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName);
     const sourceLabel = gcAgentSourceLabel(agentGroup);
     const fragmentKey = `${options.keyPrefix ?? ""}${agentGroup.qualifiedName}`;
 
@@ -285,6 +301,36 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 {agentGroup.runtimeState.label}
               </Badge>
             </button>
+            {canWakeAgentSession(agentGroup) ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      data-thread-selection-safe
+                      data-testid={`gc-agent-wake-${gcControlTestIdSuffix(fragmentKey)}`}
+                      data-gc-agent={agentGroup.qualifiedName}
+                      aria-label={`Wake ${agentGroup.qualifiedName}`}
+                      disabled={!canWakeSession}
+                      className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-50"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        props.onWakeAgentSession(agentGroup.qualifiedName);
+                      }}
+                    >
+                      {actionState?.kind === "wake" ||
+                      props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName) ? (
+                        <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
+                      ) : (
+                        <RotateCcwIcon className="size-3.5 shrink-0" />
+                      )}
+                    </button>
+                  }
+                />
+                <TooltipPopup side="top">Wake session</TooltipPopup>
+              </Tooltip>
+            ) : null}
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -771,10 +817,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               agentGroup.qualifiedName,
               agentGroup.isSuspended,
             );
-            const hasScaleControls =
-              agentGroup.isPool ||
-              typeof agentGroup.minActiveSessions === "number" ||
-              typeof agentGroup.maxActiveSessions === "number";
+            const hasScaleControls = agentGroup.isPool;
             const showNamedSessionModeControl = Boolean(agentGroup.namedSessionMode);
             const nextNamedSessionMode = !showNamedSessionModeControl
               ? null
@@ -800,6 +843,12 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 : agentGroup.wakeMode === "fresh"
                   ? "resume"
                   : null;
+            const canWakeSession =
+              canWakeAgentSession(agentGroup) &&
+              !rigGroup.isSuspended &&
+              !isMutating &&
+              !actionState &&
+              !props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName);
             const sourceLabel = gcAgentSourceLabel(agentGroup);
             return (
               <Fragment key={`agent-${rigGroup.id}-${agentGroup.id}`}>
@@ -1003,6 +1052,29 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                             >
                               {agentGroup.runtimeState.label}
                             </Badge>
+                            {canWakeAgentSession(agentGroup) ? (
+                              <button
+                                type="button"
+                                data-thread-selection-safe
+                                data-testid={`gc-agent-wake-${testIdSuffix}`}
+                                data-gc-agent={agentGroup.qualifiedName}
+                                aria-label={`Wake ${agentGroup.qualifiedName}`}
+                                disabled={!canWakeSession}
+                                className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-50"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  props.onWakeAgentSession(agentGroup.qualifiedName);
+                                }}
+                              >
+                                {actionState?.kind === "wake" ||
+                                props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName) ? (
+                                  <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
+                                ) : (
+                                  <RotateCcwIcon className="size-3.5 shrink-0" />
+                                )}
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               data-thread-selection-safe

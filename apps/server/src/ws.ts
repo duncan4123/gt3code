@@ -779,6 +779,8 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               Effect.flatMap((sessionName) => gcApi.stopSession(sessionName)),
             ),
           ),
+        [WS_METHODS.gcWakeSession]: (input) =>
+          observeGcRpcEffect(WS_METHODS.gcWakeSession, gcApi.wakeSession(input.sessionName)),
         [WS_METHODS.gcRespondToPending]: (input) =>
           observeGcRpcEffect(
             WS_METHODS.gcRespondToPending,

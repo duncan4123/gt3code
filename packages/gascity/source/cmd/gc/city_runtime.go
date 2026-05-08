@@ -1280,12 +1280,12 @@ func (cr *CityRuntime) beadReconcileTick(ctx context.Context, result DesiredStat
 	mergeNamedSessionDemand(poolDesired, result.NamedSessionDemand, cr.cfg)
 	for tmpl, count := range poolDesired {
 		if count > 0 {
-			fmt.Fprintf(cr.stderr, "poolDesired: %s = %d\n", tmpl, count) //nolint:errcheck
+			reconcileDebugf(cr.stderr, "poolDesired: %s = %d\n", tmpl, count)
 		}
 	}
 	for tmpl, count := range result.ScaleCheckCounts {
 		if count > 0 {
-			fmt.Fprintf(cr.stderr, "scaleCheck: %s = %d\n", tmpl, count) //nolint:errcheck
+			reconcileDebugf(cr.stderr, "scaleCheck: %s = %d\n", tmpl, count)
 		}
 	}
 	if sweepUndesiredPoolSessionBeads(

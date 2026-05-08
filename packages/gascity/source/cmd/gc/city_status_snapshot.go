@@ -1,12 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/gastownhall/gascity/internal/beads"
@@ -50,30 +48,12 @@ func openCityStatusStore(cityPath string, stderr io.Writer) (beads.Store, int) {
 	if cityPath == "" {
 		return nil, 0
 	}
-	if cityUsesDoltliteBeadsBackend(cityPath) || statusCityHasDoltliteMetadata(cityPath) {
-		return nil, 0
-	}
 	opened, err := openCityStoreAtForStatus(cityPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "gc status: opening bead store: %v\n", err) //nolint:errcheck // best-effort stderr
 		return nil, 1
 	}
 	return opened, 0
-}
-
-func statusCityHasDoltliteMetadata(cityPath string) bool {
-	data, err := os.ReadFile(filepath.Join(cityPath, ".beads", "metadata.json"))
-	if err != nil {
-		return false
-	}
-	var meta struct {
-		Backend  string `json:"backend"`
-		Database string `json:"database"`
-	}
-	if err := json.Unmarshal(data, &meta); err != nil {
-		return false
-	}
-	return strings.TrimSpace(meta.Backend) == "doltlite" || strings.TrimSpace(meta.Database) == "doltlite"
 }
 
 func collectCityStatusSnapshot(sp runtime.Provider, cfg *config.City, cityPath string, store beads.Store, stderr io.Writer) cityStatusSnapshot {

@@ -46,6 +46,13 @@ const (
 	snapshotCacheTTL         = 10 * time.Second
 )
 
+func debugf(format string, args ...interface{}) {
+	if os.Getenv("GC_T3BRIDGE_DEBUG") == "" {
+		return
+	}
+	fmt.Fprintf(os.Stderr, format, args...)
+}
+
 // Provider wraps an exec.Provider, moving the T3-specific lifecycle and turn
 // operations into native Go WebSocket calls while leaving a small helper
 // surface on the internal exec shim.
@@ -990,10 +997,7 @@ func (p *Provider) rpcSnapshot() (map[string]interface{}, error) {
 }
 
 func (p *Provider) nextCommandID(prefix string) string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.reqSeq++
-	return fmt.Sprintf("%s-%d", prefix, p.reqSeq)
+	return fmt.Sprintf("%s-%s", prefix, uuid.NewString())
 }
 
 // rpcCreateWorktree calls git.createWorktree via WebSocket. Returns (worktreePath, branch, error).
@@ -1869,25 +1873,25 @@ func (p *Provider) IsRunning(name string) bool {
 	snapshot, err := p.rpcSnapshot()
 	if err != nil {
 		if p.withinRecentStart(name, 30*time.Second) {
-			fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) — snapshot soft-unavailable during startup grace → true (%v)\n", name, err)
+			debugf("t3bridge: IsRunning(%s) — snapshot soft-unavailable during startup grace → true (%v)\n", name, err)
 			return true
 		}
-		fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) — snapshot error: %v\n", name, err)
+		debugf("t3bridge: IsRunning(%s) — snapshot error: %v\n", name, err)
 		return false
 	}
 	thread := snapshotThreadBySessionName(snapshot, name)
 	binding := snapshotThreadBinding(thread)
 	if binding == nil {
-		fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) — no snapshot binding\n", name)
+		debugf("t3bridge: IsRunning(%s) — no snapshot binding\n", name)
 		return false
 	}
 	status := p.threadSessionStatus(binding.ThreadID)
 	if (status == "none" || status == "gone") && p.withinRecentStart(name, 30*time.Second) {
-		fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) threadID=%s — startup grace period → true\n", name, binding.ThreadID)
+		debugf("t3bridge: IsRunning(%s) threadID=%s — startup grace period → true\n", name, binding.ThreadID)
 		return true
 	}
 	result := status == "running" || status == "ready"
-	fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) threadID=%s status=%q → %v\n", name, binding.ThreadID, status, result)
+	debugf("t3bridge: IsRunning(%s) threadID=%s status=%q → %v\n", name, binding.ThreadID, status, result)
 	return result
 }
 

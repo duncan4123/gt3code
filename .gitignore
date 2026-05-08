@@ -26,3 +26,5 @@ __screenshots__/
 squashfs-root/
 .vercel
 .backups/
+.beads-migration-source/
+.beads.server-dolt-backup-*/

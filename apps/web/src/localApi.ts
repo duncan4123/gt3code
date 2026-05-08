@@ -186,6 +186,7 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
             getThreadContext: rpcClient.gc.getThreadContext,
             submitSession: rpcClient.gc.submitSession,
             stopSession: rpcClient.gc.stopSession,
+            wakeSession: rpcClient.gc.wakeSession,
             respondToPending: rpcClient.gc.respondToPending,
             setAgentSuspended: rpcClient.gc.setAgentSuspended,
             setAgentMaxActiveSessions: rpcClient.gc.setAgentMaxActiveSessions,
