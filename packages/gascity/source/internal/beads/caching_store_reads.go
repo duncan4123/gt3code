@@ -14,6 +14,71 @@ type poolDemandCounterStore interface {
 	PoolDemandCount(template string) (int, error)
 }
 
+type orderRunHotPathStore interface {
+	LastOrderRun(name string) (time.Time, error)
+	HasOpenOrderRun(name string) (bool, error)
+}
+
+func (c *CachingStore) LastOrderRun(name string) (time.Time, error) {
+	if store, ok := c.backing.(orderRunHotPathStore); ok {
+		return store.LastOrderRun(name)
+	}
+	results, err := c.List(ListQuery{
+		Label:         "order-run:" + name,
+		Limit:         1,
+		IncludeClosed: true,
+		Sort:          SortCreatedDesc,
+	})
+	if err != nil {
+		return time.Time{}, err
+	}
+	if len(results) == 0 {
+		return time.Time{}, nil
+	}
+	return results[0].CreatedAt, nil
+}
+
+func (c *CachingStore) HasOpenOrderRun(name string) (bool, error) {
+	if store, ok := c.backing.(orderRunHotPathStore); ok {
+		return store.HasOpenOrderRun(name)
+	}
+	results, err := c.List(ListQuery{
+		Label: "order-run:" + name,
+		Sort:  SortCreatedDesc,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, b := range results {
+		if b.Status != "closed" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (c *CachingStore) GetSessionBead(id string) (Bead, error) {
+	if store, ok := c.backing.(interface {
+		GetSessionBead(id string) (Bead, error)
+	}); ok {
+		return store.GetSessionBead(id)
+	}
+	return c.Get(id)
+}
+
+func (c *CachingStore) ListSessionBeads() ([]Bead, error) {
+	if store, ok := c.backing.(interface {
+		ListSessionBeads() ([]Bead, error)
+	}); ok {
+		return store.ListSessionBeads()
+	}
+	return c.List(ListQuery{
+		Label:      "gc:session",
+		SkipLabels: true,
+		SkipParent: true,
+	})
+}
+
 // List returns beads matching the query. Active-bead queries are served from
 // cache when available. IncludeClosed queries merge cached active results with
 // backing-store history when possible, preserving partial backing rows when bd

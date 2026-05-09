@@ -171,7 +171,18 @@ func sessionName(id string, b beads.Bead) string {
 }
 
 func (m *Manager) loadSessionBead(id string, allowClosed bool) (beads.Bead, string, error) {
-	b, err := m.store.Get(id)
+	type sessionBeadGetter interface {
+		GetSessionBead(id string) (beads.Bead, error)
+	}
+	var (
+		b   beads.Bead
+		err error
+	)
+	if getter, ok := m.store.(sessionBeadGetter); ok {
+		b, err = getter.GetSessionBead(id)
+	} else {
+		b, err = m.store.Get(id)
+	}
 	if err != nil {
 		return beads.Bead{}, "", fmt.Errorf("getting session: %w", err)
 	}

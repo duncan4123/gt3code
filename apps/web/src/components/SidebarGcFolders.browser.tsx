@@ -23,6 +23,7 @@ function makeRigGroups(): SidebarGcRigGroup[] {
           id: "t3code/refinery",
           label: "refinery",
           qualifiedName: "t3code/refinery",
+          isExplicitlySuspended: false,
           isSuspended: false,
           isPool: false,
           runtimeState: { label: "Running", tone: "success" },
@@ -32,6 +33,7 @@ function makeRigGroups(): SidebarGcRigGroup[] {
           id: "t3code/witness",
           label: "witness",
           qualifiedName: "t3code/witness",
+          isExplicitlySuspended: true,
           isSuspended: true,
           isPool: false,
           runtimeState: { label: "Suspended", tone: "muted" },
@@ -49,6 +51,7 @@ function makeRigGroups(): SidebarGcRigGroup[] {
           id: "mayor",
           label: "mayor",
           qualifiedName: "mayor",
+          isExplicitlySuspended: false,
           isSuspended: false,
           isPool: false,
           runtimeState: { label: "Running", tone: "success" },
@@ -58,6 +61,7 @@ function makeRigGroups(): SidebarGcRigGroup[] {
           id: "deacon",
           label: "deacon",
           qualifiedName: "deacon",
+          isExplicitlySuspended: true,
           isSuspended: true,
           isPool: false,
           runtimeState: { label: "Suspended", tone: "muted" },
@@ -222,6 +226,63 @@ describe("SidebarGcFolders", () => {
     }
   });
 
+  it("labels agents inherited from a suspended rig as rig suspended", async () => {
+    const toggleCalls: Array<[string, boolean]> = [];
+    const { host, screen } = await renderSidebarGcFolders({
+      rigGroups: [
+        {
+          id: "test-rig",
+          label: "test-rig",
+          kind: "rig",
+          isSuspended: true,
+          agentGroups: [
+            {
+              id: "test-rig/refinery",
+              label: "refinery",
+              qualifiedName: "test-rig/refinery",
+              isExplicitlySuspended: false,
+              isSuspended: true,
+              isPool: false,
+              runtimeState: { label: "Suspended", tone: "muted" },
+              threadIds: [],
+            },
+            {
+              id: "test-rig/witness",
+              label: "witness",
+              qualifiedName: "test-rig/witness",
+              isExplicitlySuspended: true,
+              isSuspended: true,
+              isPool: false,
+              runtimeState: { label: "Suspended", tone: "muted" },
+              threadIds: [],
+            },
+          ],
+        },
+      ],
+      onToggleAgentSuspended: (agent, suspended) => {
+        toggleCalls.push([agent, suspended]);
+      },
+    });
+
+    try {
+      await expect
+        .element(page.getByTestId("gc-agent-status-test-rig--refinery"))
+        .toHaveTextContent("Rig suspended");
+      await expect
+        .element(page.getByTestId("gc-agent-status-test-rig--witness"))
+        .toHaveTextContent("Suspended");
+      await expect
+        .element(page.getByTestId("gc-agent-toggle-test-rig--refinery"))
+        .toHaveAttribute("data-gc-action-icon", "stop");
+
+      await page.getByTestId("gc-agent-toggle-test-rig--refinery").click();
+      expect(toggleCalls).toContainEqual(["test-rig/refinery", true]);
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+
   it("hides workspace agent folders and threads when the workspace folder is collapsed", async () => {
     const { host, screen } = await renderSidebarGcFolders();
 
@@ -297,6 +358,7 @@ describe("SidebarGcFolders", () => {
               id: "t3code/polecat",
               label: "polecat",
               qualifiedName: "t3code/polecat",
+              isExplicitlySuspended: false,
               isSuspended: false,
               isPool: true,
               minActiveSessions: 1,
@@ -366,6 +428,7 @@ describe("SidebarGcFolders", () => {
               id: "t3code/witness",
               label: "witness",
               qualifiedName: "t3code/witness",
+              isExplicitlySuspended: false,
               isSuspended: false,
               isPool: false,
               minActiveSessions: 1,
@@ -408,6 +471,7 @@ describe("SidebarGcFolders", () => {
               id: "t3code/crew",
               label: "crew",
               qualifiedName: "t3code/crew",
+              isExplicitlySuspended: false,
               isSuspended: false,
               isPool: false,
               runtimeState: { label: "Running", tone: "success" },

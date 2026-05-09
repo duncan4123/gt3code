@@ -441,7 +441,7 @@ func (m *memoryOrderDispatcher) dispatchOne(ctx context.Context, store beads.Sto
 	// Defer order matters: doneInflight runs last, after Close makes the
 	// tracking bead outcome observable to a waiting drain.
 	defer m.doneInflight()
-	defer store.Close(trackingID) //nolint:errcheck // best-effort close
+	defer closeOrderTrackingBead(store, trackingID)
 
 	timeout := effectiveTimeout(a, m.maxTimeout)
 	childCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -458,6 +458,15 @@ func (m *memoryOrderDispatcher) dispatchOne(ctx context.Context, store beads.Sto
 		m.dispatchExec(childCtx, store, target, a, cityPath, trackingID)
 	} else {
 		m.dispatchWisp(childCtx, store, a, cityPath, trackingID)
+	}
+}
+
+func closeOrderTrackingBead(store beads.Store, trackingID string) {
+	closed := "closed"
+	// Order tracking beads are controller-internal. Use status update instead
+	// of Close so bd on_close hooks do not recursively launch gc autoclose work.
+	if err := store.Update(trackingID, beads.UpdateOpts{Status: &closed}); err == nil {
+		return
 	}
 }
 
@@ -732,6 +741,11 @@ func (m *memoryOrderDispatcher) rigSuspendedByName(rigName string) bool {
 // exists for this order. Open tracking beads represent in-flight dispatch and
 // must block condition/event orders that do not consult LastRun.
 func (m *memoryOrderDispatcher) hasOpenWorkStrict(store beads.Store, scopedName string) (bool, error) {
+	if reader, ok := store.(interface {
+		HasOpenOrderRun(name string) (bool, error)
+	}); ok {
+		return reader.HasOpenOrderRun(scopedName)
+	}
 	results, err := store.List(beads.ListQuery{
 		Label: "order-run:" + scopedName,
 		Sort:  beads.SortCreatedDesc,

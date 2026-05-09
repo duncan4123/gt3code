@@ -1500,6 +1500,25 @@ func TestBdStoreUpdateWithLabels(t *testing.T) {
 	}
 }
 
+func TestBdStoreUpdateWithLabelsRetriesDoltliteDatabaseLocked(t *testing.T) {
+	calls := 0
+	runner := func(_, _ string, _ ...string) ([]byte, error) {
+		calls++
+		if calls == 1 {
+			return nil, fmt.Errorf("exit status 1: failed to update issue: database is locked")
+		}
+		return []byte(`{"id":"bd-42"}`), nil
+	}
+	s := beads.NewBdStore("/city", runner)
+	err := s.Update("bd-42", beads.UpdateOpts{Labels: []string{"pool:hw/polecat"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+}
+
 func TestBdStoreUpdateNoLabels(t *testing.T) {
 	var gotArgs []string
 	runner := func(_, _ string, args ...string) ([]byte, error) {
@@ -1564,6 +1583,28 @@ func TestBdStoreSetMetadataBatchRetriesDoltSerializationFailure(t *testing.T) {
 	err := s.SetMetadataBatch("bd-42", map[string]string{"state": "active"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+}
+
+func TestBdStoreCreateRetriesDoltliteDatabaseLocked(t *testing.T) {
+	calls := 0
+	runner := func(_, _ string, _ ...string) ([]byte, error) {
+		calls++
+		if calls == 1 {
+			return nil, fmt.Errorf("exit status 1: failed to create issue: database is locked")
+		}
+		return []byte(`{"id":"bd-42","title":"session","status":"open","issue_type":"session","created_at":"2025-01-15T10:30:00Z"}`), nil
+	}
+	s := beads.NewBdStore("/city", runner)
+	created, err := s.Create(beads.Bead{Title: "session", Type: "session"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ID != "bd-42" {
+		t.Fatalf("created.ID = %q, want bd-42", created.ID)
 	}
 	if calls != 2 {
 		t.Fatalf("calls = %d, want 2", calls)

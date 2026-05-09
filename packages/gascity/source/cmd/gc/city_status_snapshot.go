@@ -57,12 +57,6 @@ func openCityStatusStore(cityPath string, stderr io.Writer) (beads.Store, int) {
 }
 
 func openCityStoreAtForStatusDefault(cityPath string) (beads.Store, error) {
-	if cityUsesDoltliteBeadsBackend(cityPath) {
-		store := bdStoreForCity(cityPath, cityPath)
-		if direct, err := beads.NewDoltliteReadStore(cityPath, store); err == nil {
-			return direct, nil
-		}
-	}
 	return openCityStoreAt(cityPath)
 }
 

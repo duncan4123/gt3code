@@ -35,6 +35,7 @@ export interface SidebarGcAgentGroup {
   id: string;
   label: string;
   qualifiedName: string;
+  isExplicitlySuspended: boolean;
   isSuspended: boolean;
   isPool: boolean;
   minActiveSessions?: number;
@@ -161,6 +162,19 @@ function canWakeAgentSession(agentGroup: SidebarGcAgentGroup): boolean {
   );
 }
 
+function gcAgentEffectiveRuntimeState(
+  rigGroup: SidebarGcRigGroup,
+  agentGroup: SidebarGcAgentGroup,
+): SidebarGcAgentGroup["runtimeState"] {
+  if (rigGroup.kind === "rig" && rigGroup.isSuspended && !agentGroup.isExplicitlySuspended) {
+    return {
+      label: "Rig suspended",
+      tone: "muted",
+    };
+  }
+  return agentGroup.runtimeState;
+}
+
 export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   const [collapsedRigIds, setCollapsedRigIds] = useState<Set<string>>(() => new Set());
   const [collapsedAgentIds, setCollapsedAgentIds] = useState<Set<string>>(() => new Set());
@@ -218,10 +232,11 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   ) => {
     const isMutating = props.gcAgentMutationsInFlight.has(agentGroup.qualifiedName);
     const actionState = props.gcAgentActionStateByAgent.get(agentGroup.qualifiedName);
+    const displayRuntimeState = gcAgentEffectiveRuntimeState(rigGroup, agentGroup);
     const actionLabel = gcConfigToggleLabel(
       "agent",
       agentGroup.qualifiedName,
-      agentGroup.isSuspended,
+      agentGroup.isExplicitlySuspended,
     );
     const hasScaleControls = agentGroup.isPool;
     const showNamedSessionModeControl = Boolean(agentGroup.namedSessionMode);
@@ -295,10 +310,10 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 size="sm"
                 variant="outline"
                 className={`rounded-full px-1.5 text-[.55rem] tracking-wide uppercase ${statusBadgeClassName(
-                  agentGroup.runtimeState.tone,
+                  displayRuntimeState.tone,
                 )}`}
               >
-                {agentGroup.runtimeState.label}
+                {displayRuntimeState.label}
               </Badge>
             </button>
             {canWakeAgentSession(agentGroup) ? (
@@ -342,7 +357,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                     data-gc-action-icon={
                       isMutating
                         ? "loading"
-                        : agentGroup.isSuspended
+                        : agentGroup.isExplicitlySuspended
                           ? "play"
                           : "stop"
                     }
@@ -354,14 +369,14 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                       event.stopPropagation();
                       props.onToggleAgentSuspended(
                         agentGroup.qualifiedName,
-                        !agentGroup.isSuspended,
+                        !agentGroup.isExplicitlySuspended,
                         agentGroup,
                       );
                     }}
                   >
                     {isMutating ? (
                       <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
-                    ) : agentGroup.isSuspended ? (
+                    ) : agentGroup.isExplicitlySuspended ? (
                       <PlayIcon className="size-3.5 shrink-0" />
                     ) : (
                       <SquareIcon className="size-3.5 shrink-0" />
@@ -811,11 +826,12 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
             rigGroup.agentGroups.map((agentGroup) => {
             const isMutating = props.gcAgentMutationsInFlight.has(agentGroup.qualifiedName);
             const actionState = props.gcAgentActionStateByAgent.get(agentGroup.qualifiedName);
+            const displayRuntimeState = gcAgentEffectiveRuntimeState(rigGroup, agentGroup);
             const testIdSuffix = gcControlTestIdSuffix(agentGroup.qualifiedName);
             const actionLabel = gcConfigToggleLabel(
               "agent",
               agentGroup.qualifiedName,
-              agentGroup.isSuspended,
+              agentGroup.isExplicitlySuspended,
             );
             const hasScaleControls = agentGroup.isPool;
             const showNamedSessionModeControl = Boolean(agentGroup.namedSessionMode);
@@ -888,10 +904,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         </span>
                       ) : null}
                     </button>
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <div className="ml-auto flex items-center gap-1">
+                    <div className="ml-auto flex items-center gap-1">
                             {nextWakeMode ? (
                               <button
                                 type="button"
@@ -1047,110 +1060,127 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                               variant="outline"
                               data-testid={`gc-agent-status-${testIdSuffix}`}
                               className={`rounded-full px-1.5 tracking-wide uppercase ${statusBadgeClassName(
-                                agentGroup.runtimeState.tone,
+                                displayRuntimeState.tone,
                               )}`}
                             >
-                              {agentGroup.runtimeState.label}
+                              {displayRuntimeState.label}
                             </Badge>
                             {canWakeAgentSession(agentGroup) ? (
-                              <button
-                                type="button"
-                                data-thread-selection-safe
-                                data-testid={`gc-agent-wake-${testIdSuffix}`}
-                                data-gc-agent={agentGroup.qualifiedName}
-                                aria-label={`Wake ${agentGroup.qualifiedName}`}
-                                disabled={!canWakeSession}
-                                className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-50"
-                                onClick={(event) => {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  props.onWakeAgentSession(agentGroup.qualifiedName);
-                                }}
-                              >
-                                {actionState?.kind === "wake" ||
-                                props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName) ? (
-                                  <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
-                                ) : (
-                                  <RotateCcwIcon className="size-3.5 shrink-0" />
-                                )}
-                              </button>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <button
+                                      type="button"
+                                      data-thread-selection-safe
+                                      data-testid={`gc-agent-wake-${testIdSuffix}`}
+                                      data-gc-agent={agentGroup.qualifiedName}
+                                      aria-label={`Wake ${agentGroup.qualifiedName}`}
+                                      disabled={!canWakeSession}
+                                      className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-50"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        props.onWakeAgentSession(agentGroup.qualifiedName);
+                                      }}
+                                    >
+                                      {actionState?.kind === "wake" ||
+                                      props.gcAgentStartsInFlight?.has(
+                                        agentGroup.qualifiedName,
+                                      ) ? (
+                                        <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
+                                      ) : (
+                                        <RotateCcwIcon className="size-3.5 shrink-0" />
+                                      )}
+                                    </button>
+                                  }
+                                />
+                                <TooltipPopup side="top">Wake session</TooltipPopup>
+                              </Tooltip>
                             ) : null}
-                            <button
-                              type="button"
-                              data-thread-selection-safe
-                              data-testid={`gc-agent-toggle-${testIdSuffix}`}
-                              data-gc-agent={agentGroup.qualifiedName}
-                              data-gc-action-icon={
-                                isMutating ? "loading" : agentGroup.isSuspended ? "play" : "stop"
-                              }
-                              aria-label={actionLabel}
-                              disabled={isMutating}
-                              className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                props.onToggleAgentSuspended(
-                                  agentGroup.qualifiedName,
-                                  !agentGroup.isSuspended,
-                                  agentGroup,
-                                );
-                              }}
-                            >
-                              {isMutating ? (
-                                <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
-                              ) : agentGroup.isSuspended ? (
-                                <PlayIcon className="size-3.5 shrink-0" />
-                              ) : (
-                                <SquareIcon className="size-3.5 shrink-0" />
-                              )}
-                            </button>
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <button
+                                    type="button"
+                                    data-thread-selection-safe
+                                    data-testid={`gc-agent-toggle-${testIdSuffix}`}
+                                    data-gc-agent={agentGroup.qualifiedName}
+                                    data-gc-action-icon={
+                                      isMutating
+                                        ? "loading"
+                                        : agentGroup.isExplicitlySuspended
+                                          ? "play"
+                                          : "stop"
+                                    }
+                                    aria-label={actionLabel}
+                                    disabled={isMutating}
+                                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      props.onToggleAgentSuspended(
+                                        agentGroup.qualifiedName,
+                                        !agentGroup.isExplicitlySuspended,
+                                        agentGroup,
+                                      );
+                                    }}
+                                  >
+                                    {isMutating ? (
+                                      <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
+                                    ) : agentGroup.isExplicitlySuspended ? (
+                                      <PlayIcon className="size-3.5 shrink-0" />
+                                    ) : (
+                                      <SquareIcon className="size-3.5 shrink-0" />
+                                    )}
+                                  </button>
+                                }
+                              />
+                              <TooltipPopup side="top">
+                                <div className="space-y-1">
+                                  <div>{actionLabel}</div>
+                                  {agentGroup.description ? (
+                                    <div className="max-w-72 text-[10px] text-muted-foreground">
+                                      {agentGroup.description}
+                                    </div>
+                                  ) : null}
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {actionState?.kind === "pool-size"
+                                      ? `Updating pool size to max ${actionState.maxActiveSessions}.`
+                                      : actionState?.kind === "pool-min"
+                                        ? `Updating pool minimum to ${actionState.minActiveSessions}.`
+                                        : actionState?.kind === "wake-mode"
+                                          ? `Switching wake mode to ${actionState.wakeMode}.`
+                                          : actionState?.kind === "session-mode"
+                                            ? actionState.targetMode === "always"
+                                              ? "Switching named session mode to auto-start."
+                                              : "Switching named session mode to on-demand."
+                                            : `${displayRuntimeState.label}. ${
+                                                agentGroup.namedSessionMode === "always"
+                                                  ? "Named session auto-start is enabled."
+                                                  : agentGroup.namedSessionMode === "on_demand"
+                                                    ? "Named session starts on demand."
+                                                    : agentGroup.isPool &&
+                                                        typeof agentGroup.maxActiveSessions ===
+                                                          "number"
+                                                      ? `Pool capacity is ${agentGroup.maxActiveSessions}.`
+                                                      : "No named session mode configured."
+                                              }`}
+                                  </div>
+                                  <div className="max-w-72 space-y-0.5 text-[10px] text-muted-foreground/80">
+                                    <div>
+                                      scope {agentGroup.scope ?? "unknown"} · source {sourceLabel}
+                                      {agentGroup.provider ? ` · provider ${agentGroup.provider}` : ""}
+                                    </div>
+                                    {agentGroup.defaultSlingFormula ? (
+                                      <div>formula {agentGroup.defaultSlingFormula}</div>
+                                    ) : null}
+                                    {agentGroup.workDir ? <div>work {agentGroup.workDir}</div> : null}
+                                    {agentGroup.startCommand ? <div>starts via command</div> : null}
+                                  </div>
+                                </div>
+                              </TooltipPopup>
+                            </Tooltip>
                           </div>
-                        }
-                      />
-                      <TooltipPopup side="top">
-                        <div className="space-y-1">
-                          <div>{actionLabel}</div>
-                          {agentGroup.description ? (
-                            <div className="max-w-72 text-[10px] text-muted-foreground">
-                              {agentGroup.description}
-                            </div>
-                          ) : null}
-                          <div className="text-[10px] text-muted-foreground">
-                            {actionState?.kind === "pool-size"
-                              ? `Updating pool size to max ${actionState.maxActiveSessions}.`
-                              : actionState?.kind === "pool-min"
-                                ? `Updating pool minimum to ${actionState.minActiveSessions}.`
-                                : actionState?.kind === "wake-mode"
-                                  ? `Switching wake mode to ${actionState.wakeMode}.`
-                                  : actionState?.kind === "session-mode"
-                                    ? actionState.targetMode === "always"
-                                      ? "Switching named session mode to auto-start."
-                                      : "Switching named session mode to on-demand."
-                                    : `${agentGroup.runtimeState.label}. ${
-                                        agentGroup.namedSessionMode === "always"
-                                          ? "Named session auto-start is enabled."
-                                          : agentGroup.namedSessionMode === "on_demand"
-                                            ? "Named session starts on demand."
-                                            : agentGroup.isPool &&
-                                                typeof agentGroup.maxActiveSessions === "number"
-                                              ? `Pool capacity is ${agentGroup.maxActiveSessions}.`
-                                              : "No named session mode configured."
-                                      }`}
-                          </div>
-                          <div className="max-w-72 space-y-0.5 text-[10px] text-muted-foreground/80">
-                            <div>
-                              scope {agentGroup.scope ?? "unknown"} · source {sourceLabel}
-                              {agentGroup.provider ? ` · provider ${agentGroup.provider}` : ""}
-                            </div>
-                            {agentGroup.defaultSlingFormula ? (
-                              <div>formula {agentGroup.defaultSlingFormula}</div>
-                            ) : null}
-                            {agentGroup.workDir ? <div>work {agentGroup.workDir}</div> : null}
-                            {agentGroup.startCommand ? <div>starts via command</div> : null}
-                          </div>
-                        </div>
-                      </TooltipPopup>
-                    </Tooltip>
                   </div>
                 </SidebarMenuSubItem>
                 {!collapsedAgentIds.has(agentGroup.qualifiedName) &&

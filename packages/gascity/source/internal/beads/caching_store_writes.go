@@ -206,30 +206,42 @@ func (c *CachingStore) CloseAll(ids []string, metadata map[string]string) (int, 
 
 // SetMetadata sets a single metadata key-value on a bead.
 func (c *CachingStore) SetMetadata(id, key, value string) error {
-	if err := c.backing.SetMetadata(id, key, value); err != nil {
+	if err := c.SetMetadataBatch(id, map[string]string{key: value}); err != nil {
 		return err
 	}
-
-	c.mu.Lock()
-	c.noteLocalMutationLocked(id)
-	if b, ok := c.beads[id]; ok {
-		if b.Metadata == nil {
-			b.Metadata = make(map[string]string)
-		}
-		b.Metadata[key] = value
-		c.beads[id] = b
-		delete(c.dirty, id)
-		delete(c.deletedSeq, id)
-	}
-	c.markFreshLocked(time.Now())
-	c.updateStatsLocked()
-	c.mu.Unlock()
 	return nil
+}
+
+func (c *CachingStore) cachedMetadataDiff(id string, kvs map[string]string) map[string]string {
+	if len(kvs) == 0 {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	b, ok := c.beads[id]
+	if !ok {
+		changed := make(map[string]string, len(kvs))
+		for k, v := range kvs {
+			changed[k] = v
+		}
+		return changed
+	}
+	changed := make(map[string]string, len(kvs))
+	for k, v := range kvs {
+		if b.Metadata[k] != v {
+			changed[k] = v
+		}
+	}
+	return changed
 }
 
 // SetMetadataBatch sets multiple metadata key-values on a bead.
 func (c *CachingStore) SetMetadataBatch(id string, kvs map[string]string) error {
-	if err := c.backing.SetMetadataBatch(id, kvs); err != nil {
+	changed := c.cachedMetadataDiff(id, kvs)
+	if len(changed) == 0 {
+		return nil
+	}
+	if err := c.backing.SetMetadataBatch(id, changed); err != nil {
 		return err
 	}
 
@@ -237,9 +249,9 @@ func (c *CachingStore) SetMetadataBatch(id string, kvs map[string]string) error 
 	c.noteLocalMutationLocked(id)
 	if b, ok := c.beads[id]; ok {
 		if b.Metadata == nil {
-			b.Metadata = make(map[string]string, len(kvs))
+			b.Metadata = make(map[string]string, len(changed))
 		}
-		for k, v := range kvs {
+		for k, v := range changed {
 			b.Metadata[k] = v
 		}
 		c.beads[id] = b

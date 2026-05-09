@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -18,7 +19,20 @@ import (
 // Writes and less common operations delegate to the normal bd CLI store.
 type DoltliteReadStore struct {
 	*BdStore
-	db *sql.DB
+	db              *sql.DB
+	orderRunMu      sync.Mutex
+	orderRunLastRun map[string]time.Time
+	orderRunOpen    map[string]bool
+	orderRunHash    string
+	sessionMu       sync.Mutex
+	sessionCache    []Bead
+	sessionHash     string
+	readyMu         sync.Mutex
+	readyCache      map[string][]Bead
+	readyHash       string
+	poolDemandMu    sync.Mutex
+	poolDemandCache map[string]int
+	poolDemandHash  string
 }
 
 func (s *DoltliteReadStore) NeedsSessionTypeFallback() bool { return true }
@@ -45,7 +59,7 @@ func NewDoltliteReadStore(dir string, backing *BdStore) (*DoltliteReadStore, err
 	if _, err := os.Stat(dbPath); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite3", dbPath+"?_busy_timeout=10000")
+	db, err := sql.Open("sqlite3", "file:"+dbPath+"?mode=ro&_busy_timeout=10000")
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +103,59 @@ func (s *DoltliteReadStore) Get(id string) (Bead, error) {
 		return Bead{}, fmt.Errorf("getting bead %q: %w", id, ErrNotFound)
 	}
 	return beads[0], nil
+}
+
+func (s *DoltliteReadStore) GetSessionBead(id string) (Bead, error) {
+	sessions, err := s.ListSessionBeads()
+	if err == nil {
+		for _, session := range sessions {
+			if session.ID == id {
+				return session, nil
+			}
+		}
+	}
+	beads, err := s.queryIssues(ListQuery{
+		AllowScan:     true,
+		IncludeClosed: true,
+		SkipLabels:    true,
+		SkipParent:    true,
+	}, "i.id = ?", []any{id}, 1)
+	if err != nil {
+		return Bead{}, err
+	}
+	if len(beads) == 0 {
+		return Bead{}, fmt.Errorf("getting session bead %q: %w", id, ErrNotFound)
+	}
+	if beads[0].Type != "session" && beads[0].Type != "" {
+		return Bead{}, fmt.Errorf("getting session bead %q: %w", id, ErrNotFound)
+	}
+	if beads[0].Type == "" {
+		return s.Get(id)
+	}
+	return beads[0], nil
+}
+
+func (s *DoltliteReadStore) ListSessionBeads() ([]Bead, error) {
+	hash, err := s.currentDoltHash()
+	if err != nil {
+		return nil, err
+	}
+	s.sessionMu.Lock()
+	defer s.sessionMu.Unlock()
+	if hash != "" && hash == s.sessionHash && s.sessionCache != nil {
+		return cloneBeads(s.sessionCache), nil
+	}
+	rows, err := s.queryIssues(ListQuery{
+		Type:       "session",
+		SkipLabels: true,
+		SkipParent: true,
+	}, "", nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	s.sessionCache = cloneBeads(rows)
+	s.sessionHash = hash
+	return rows, nil
 }
 
 func (s *DoltliteReadStore) List(query ListQuery) ([]Bead, error) {
@@ -141,28 +208,103 @@ func (s *DoltliteReadStore) ListByMetadata(filters map[string]string, limit int,
 
 func (s *DoltliteReadStore) Ready(query ...ReadyQuery) ([]Bead, error) {
 	rq := readyQueryFromArgs(query)
-	q := ListQuery{Status: "open", AllowScan: true, IncludeClosed: false, Limit: 0}
+	cacheKey := fmt.Sprintf("%s\x00%d", rq.Assignee, rq.Limit)
+	hash, err := s.currentDoltHash()
+	if err != nil {
+		return nil, err
+	}
+	s.readyMu.Lock()
+	if hash != "" && hash == s.readyHash && s.readyCache != nil {
+		if cached, ok := s.readyCache[cacheKey]; ok {
+			s.readyMu.Unlock()
+			return cloneBeads(cached), nil
+		}
+	}
+	s.readyMu.Unlock()
+
+	q := ListQuery{Status: "open", AllowScan: true, IncludeClosed: false, Limit: 0, SkipLabels: true, SkipParent: true}
 	if rq.Assignee != "" {
 		q.Assignee = rq.Assignee
 	}
 	if rq.Limit > 0 {
 		q.Limit = rq.Limit
 	}
-	beads, err := s.queryIssues(q, `NOT EXISTS (
-		SELECT 1 FROM dependencies d
-		JOIN issues blocker ON blocker.id = d.depends_on_id
-		WHERE d.issue_id = i.id AND d.type = 'blocks' AND blocker.status != 'closed'
-	)`, nil, 0)
+	candidateLimit := q.Limit
+	if candidateLimit > 0 {
+		candidateLimit *= 4
+		if candidateLimit < 100 {
+			candidateLimit = 100
+		}
+	}
+	candidates, err := s.queryIssues(q, `i.issue_type NOT IN ('merge-request','gate','molecule','message','session','agent','role','rig')`, nil, candidateLimit)
 	if err != nil {
 		return nil, err
 	}
-	out := beads[:0]
-	for _, b := range beads {
+	blocked, err := s.blockedIssueIDs(candidates)
+	if err != nil {
+		return nil, err
+	}
+	out := candidates[:0]
+	for _, b := range candidates {
+		if blocked[b.ID] {
+			continue
+		}
 		if !IsReadyExcludedType(b.Type) {
 			out = append(out, b)
+			if q.Limit > 0 && len(out) >= q.Limit {
+				break
+			}
 		}
 	}
+	s.readyMu.Lock()
+	if hash != "" {
+		if hash != s.readyHash || s.readyCache == nil {
+			s.readyHash = hash
+			s.readyCache = make(map[string][]Bead)
+		}
+		s.readyCache[cacheKey] = cloneBeads(out)
+	}
+	s.readyMu.Unlock()
 	return out, nil
+}
+
+func (s *DoltliteReadStore) blockedIssueIDs(candidates []Bead) (map[string]bool, error) {
+	blocked := make(map[string]bool)
+	if len(candidates) == 0 {
+		return blocked, nil
+	}
+	for start := 0; start < len(candidates); start += 500 {
+		end := start + 500
+		if end > len(candidates) {
+			end = len(candidates)
+		}
+		placeholders := strings.TrimRight(strings.Repeat("?,", end-start), ",")
+		args := make([]any, 0, end-start)
+		for _, candidate := range candidates[start:end] {
+			args = append(args, candidate.ID)
+		}
+		rows, err := s.db.Query(`SELECT d.issue_id
+			FROM dependencies d
+			JOIN issues blocker ON blocker.id = d.depends_on_id
+			WHERE d.type = 'blocks'
+			AND blocker.status != 'closed'
+			AND d.issue_id IN (`+placeholders+`)`, args...)
+		if err != nil {
+			return blocked, err
+		}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return blocked, err
+			}
+			blocked[id] = true
+		}
+		if err := rows.Close(); err != nil {
+			return blocked, err
+		}
+	}
+	return blocked, nil
 }
 
 func (s *DoltliteReadStore) PoolDemandCount(template string) (int, error) {
@@ -170,6 +312,18 @@ func (s *DoltliteReadStore) PoolDemandCount(template string) (int, error) {
 	if template == "" {
 		return 0, nil
 	}
+	hash, err := s.currentDoltHash()
+	if err != nil {
+		return 0, err
+	}
+	s.poolDemandMu.Lock()
+	if hash != "" && hash == s.poolDemandHash && s.poolDemandCache != nil {
+		if count, ok := s.poolDemandCache[template]; ok {
+			s.poolDemandMu.Unlock()
+			return count, nil
+		}
+	}
+	s.poolDemandMu.Unlock()
 	query := `SELECT COUNT(*) FROM issues i
 		WHERE json_extract(i.metadata, '$."gc.routed_to"') = ?
 		AND (i.assignee IS NULL OR i.assignee = '')
@@ -190,7 +344,242 @@ func (s *DoltliteReadStore) PoolDemandCount(template string) (int, error) {
 	if err := s.db.QueryRow(query, template).Scan(&count); err != nil {
 		return 0, err
 	}
+	s.poolDemandMu.Lock()
+	if hash != "" {
+		if hash != s.poolDemandHash || s.poolDemandCache == nil {
+			s.poolDemandHash = hash
+			s.poolDemandCache = make(map[string]int)
+		}
+		s.poolDemandCache[template] = count
+	}
+	s.poolDemandMu.Unlock()
 	return count, nil
+}
+
+func (s *DoltliteReadStore) LastOrderRun(name string) (time.Time, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return time.Time{}, nil
+	}
+	hash, err := s.currentDoltHash()
+	if err != nil {
+		return time.Time{}, err
+	}
+	s.orderRunMu.Lock()
+	defer s.orderRunMu.Unlock()
+	if s.orderRunLastRun == nil || hash == "" || hash != s.orderRunHash {
+		lastRun, openRuns, err := s.loadOrderRuns()
+		if err != nil {
+			return time.Time{}, err
+		}
+		s.orderRunLastRun = lastRun
+		s.orderRunOpen = openRuns
+		s.orderRunHash = hash
+	}
+	return s.orderRunLastRun[name], nil
+}
+
+func (s *DoltliteReadStore) loadOrderRuns() (map[string]time.Time, map[string]bool, error) {
+	rows, err := s.db.Query(`SELECT l.label, MAX(i.created_at), MAX(CASE WHEN i.status != 'closed' THEN 1 ELSE 0 END)
+		FROM labels l
+		JOIN issues i ON i.id = l.issue_id
+		WHERE l.label >= 'order-run:' AND l.label < 'order-run;'
+		GROUP BY l.label`)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	lastRun := make(map[string]time.Time)
+	openRuns := make(map[string]bool)
+	for rows.Next() {
+		var label string
+		var createdRaw any
+		var open int
+		if err := rows.Scan(&label, &createdRaw, &open); err != nil {
+			return nil, nil, err
+		}
+		name := strings.TrimPrefix(label, "order-run:")
+		if name != "" {
+			lastRun[name] = parseDBTime(createdRaw).Truncate(time.Second)
+			openRuns[name] = open > 0
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	return lastRun, openRuns, nil
+}
+
+func (s *DoltliteReadStore) HasOpenOrderRun(name string) (bool, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false, nil
+	}
+	hash, err := s.currentDoltHash()
+	if err != nil {
+		return false, err
+	}
+	s.orderRunMu.Lock()
+	defer s.orderRunMu.Unlock()
+	if s.orderRunOpen == nil || hash == "" || hash != s.orderRunHash {
+		lastRun, openRuns, err := s.loadOrderRuns()
+		if err != nil {
+			return false, err
+		}
+		s.orderRunLastRun = lastRun
+		s.orderRunOpen = openRuns
+		s.orderRunHash = hash
+	}
+	return s.orderRunOpen[name], nil
+}
+
+func (s *DoltliteReadStore) currentDoltHash() (string, error) {
+	var hash sql.NullString
+	if err := s.db.QueryRow("SELECT dolt_hashof('HEAD')").Scan(&hash); err != nil {
+		return "", fmt.Errorf("doltlite hash HEAD: %w", err)
+	}
+	head := ""
+	if hash.Valid {
+		head = strings.TrimSpace(hash.String)
+	}
+	var dataVersion int64
+	if err := s.db.QueryRow("PRAGMA data_version").Scan(&dataVersion); err != nil {
+		return "", fmt.Errorf("doltlite data version: %w", err)
+	}
+	return fmt.Sprintf("head=%s;data=%d", head, dataVersion), nil
+}
+
+func (s *DoltliteReadStore) resetOrderRunCache() {
+	s.orderRunMu.Lock()
+	defer s.orderRunMu.Unlock()
+	s.orderRunLastRun = nil
+	s.orderRunOpen = nil
+	s.orderRunHash = ""
+	s.sessionMu.Lock()
+	s.sessionCache = nil
+	s.sessionHash = ""
+	s.sessionMu.Unlock()
+	s.readyMu.Lock()
+	s.readyCache = nil
+	s.readyHash = ""
+	s.readyMu.Unlock()
+	s.poolDemandMu.Lock()
+	s.poolDemandCache = nil
+	s.poolDemandHash = ""
+	s.poolDemandMu.Unlock()
+}
+
+func (s *DoltliteReadStore) Create(b Bead) (Bead, error) {
+	created, err := s.BdStore.Create(b)
+	if err == nil && hasOrderRunLabel(created.Labels) {
+		s.resetOrderRunCache()
+	}
+	return created, err
+}
+
+func hasOrderRunLabel(labels []string) bool {
+	for _, label := range labels {
+		if strings.HasPrefix(label, "order-run:") {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *DoltliteReadStore) Update(id string, opts UpdateOpts) error {
+	err := s.BdStore.Update(id, opts)
+	if err == nil {
+		s.resetOrderRunCache()
+	}
+	return err
+}
+
+func (s *DoltliteReadStore) Close(id string) error {
+	err := s.BdStore.Close(id)
+	if err == nil {
+		s.resetOrderRunCache()
+	}
+	return err
+}
+
+func (s *DoltliteReadStore) CloseAll(ids []string, metadata map[string]string) (int, error) {
+	n, err := s.BdStore.CloseAll(ids, metadata)
+	if err == nil && n > 0 {
+		s.resetOrderRunCache()
+	}
+	return n, err
+}
+
+func (s *DoltliteReadStore) Reopen(id string) error {
+	err := s.BdStore.Reopen(id)
+	if err == nil {
+		s.resetOrderRunCache()
+	}
+	return err
+}
+
+func (s *DoltliteReadStore) Delete(id string) error {
+	err := s.BdStore.Delete(id)
+	if err == nil {
+		s.resetOrderRunCache()
+	}
+	return err
+}
+
+func (s *DoltliteReadStore) SetMetadataBatch(id string, kvs map[string]string) error {
+	if len(kvs) == 0 {
+		return nil
+	}
+	current, err := s.GetSessionBead(id)
+	if err != nil {
+		rows, queryErr := s.queryIssues(ListQuery{
+			AllowScan:     true,
+			IncludeClosed: true,
+			SkipLabels:    true,
+			SkipParent:    true,
+		}, "i.id = ?", []any{id}, 1)
+		if queryErr != nil {
+			return queryErr
+		}
+		if len(rows) == 0 {
+			return fmt.Errorf("setting metadata on %q: %w", id, ErrNotFound)
+		}
+		current = rows[0]
+	}
+	changed := make(map[string]string, len(kvs))
+	for k, v := range kvs {
+		if current.Metadata[k] != v {
+			changed[k] = v
+		}
+	}
+	if len(changed) == 0 {
+		return nil
+	}
+	err = s.BdStore.SetMetadataBatch(id, changed)
+	if err == nil {
+		s.resetOrderRunCache()
+	}
+	return err
+}
+
+func (s *DoltliteReadStore) SetMetadata(id, key, value string) error {
+	return s.SetMetadataBatch(id, map[string]string{key: value})
+}
+
+func (s *DoltliteReadStore) DepAdd(id, dep, depType string) error {
+	err := s.BdStore.DepAdd(id, dep, depType)
+	if err == nil {
+		s.resetOrderRunCache()
+	}
+	return err
+}
+
+func (s *DoltliteReadStore) DepRemove(id, dep string) error {
+	err := s.BdStore.DepRemove(id, dep)
+	if err == nil {
+		s.resetOrderRunCache()
+	}
+	return err
 }
 
 // DefaultWorkQueryHasReadyWork mirrors config.Agent.EffectiveWorkQuery for the
@@ -233,6 +622,17 @@ func compactStrings(values []string) []string {
 		}
 		seen[value] = true
 		out = append(out, value)
+	}
+	return out
+}
+
+func cloneBeads(values []Bead) []Bead {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]Bead, len(values))
+	for i := range values {
+		out[i] = cloneBead(values[i])
 	}
 	return out
 }

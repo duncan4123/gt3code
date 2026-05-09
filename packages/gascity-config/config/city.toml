@@ -61,6 +61,24 @@ prefix = "t3"
 suspended = false
 includes = ["packs/gastown"]
 
+[[rigs]]
+name = "test-rig"
+prefix = "tr"
+suspended = false
+includes = ["packs/gastown"]
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = false
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = false
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = false
+
 [patches]
 
 [[patches.agent]]
@@ -163,6 +181,25 @@ name = "polecat"
 suspended = false
 provider = "codex"
 
+[[patches.agent]]
+dir = "test-rig"
+name = "witness"
+suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = "test-rig"
+name = "refinery"
+suspended = false
+provider = "codex"
+
+[[patches.agent]]
+dir = "test-rig"
+name = "polecat"
+suspended = false
+provider = "codex"
+
+wake_mode = "resume"
 [[patches.named_session]]
 template = "mayor"
 mode = "always"
@@ -192,6 +229,11 @@ mode = "always"
 
 [[patches.named_session]]
 dir = "t3code"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
+dir = "test-rig"
 template = "refinery"
 mode = "always"
 

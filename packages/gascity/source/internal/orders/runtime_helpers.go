@@ -6,11 +6,18 @@ import (
 	"github.com/gastownhall/gascity/internal/beads"
 )
 
+type orderRunReader interface {
+	LastOrderRun(name string) (time.Time, error)
+}
+
 // LastRunFuncForStore returns the latest order-run bead time for one store.
 func LastRunFuncForStore(store beads.Store) LastRunFunc {
 	return func(name string) (time.Time, error) {
 		if store == nil {
 			return time.Time{}, nil
+		}
+		if reader, ok := store.(orderRunReader); ok {
+			return reader.LastOrderRun(name)
 		}
 		label := "order-run:" + name
 		results, err := store.List(beads.ListQuery{

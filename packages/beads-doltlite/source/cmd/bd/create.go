@@ -524,28 +524,15 @@ var createCmd = &cobra.Command{
 			// If error getting parent or parent has no source_repo, continue with default
 		}
 
-		if err := store.CreateIssue(ctx, issue, actor); err != nil {
-			FatalError("%v", err)
-		}
-
-		// Track whether any post-create writes occurred. CreateIssue commits
-		// the issue to Dolt internally, but subsequent AddDependency/AddLabel
-		// calls only write to the working set. A follow-up Dolt commit is
-		// needed to persist them (GH#2009).
-		postCreateWrites := false
-
 		// If parent was specified, add parent-child dependency
+		var createDependencies []*types.Dependency
 		if parentID != "" {
 			dep := &types.Dependency{
 				IssueID:     issue.ID,
 				DependsOnID: parentID,
 				Type:        types.DepParentChild,
 			}
-			if err := store.AddDependency(ctx, dep, actor); err != nil {
-				WarnError("failed to add parent-child dependency %s -> %s: %v", issue.ID, parentID, err)
-			} else {
-				postCreateWrites = true
-			}
+			createDependencies = append(createDependencies, dep)
 		}
 
 		// Merge inherited parent labels with user-specified labels (GH#2100)
@@ -558,15 +545,6 @@ var createCmd = &cobra.Command{
 				if !seen[l] {
 					labels = append(labels, l)
 				}
-			}
-		}
-
-		// Add labels if specified
-		for _, label := range labels {
-			if err := store.AddLabel(ctx, issue.ID, label, actor); err != nil {
-				WarnError("failed to add label %s: %v", label, err)
-			} else {
-				postCreateWrites = true
 			}
 		}
 
@@ -618,11 +596,7 @@ var createCmd = &cobra.Command{
 				dep.IssueID = dependsOnID
 				dep.DependsOnID = issue.ID
 			}
-			if err := store.AddDependency(ctx, dep, actor); err != nil {
-				WarnError("failed to add dependency %s -> %s: %v", issue.ID, dependsOnID, err)
-			} else {
-				postCreateWrites = true
-			}
+			createDependencies = append(createDependencies, dep)
 		}
 
 		// Add waits-for dependency if specified
@@ -651,11 +625,42 @@ var createCmd = &cobra.Command{
 				Type:        types.DepWaitsFor,
 				Metadata:    string(metaJSON),
 			}
-			if err := store.AddDependency(ctx, dep, actor); err != nil {
-				WarnError("failed to add waits-for dependency %s -> %s: %v", issue.ID, waitsFor, err)
-			} else {
-				postCreateWrites = true
+			createDependencies = append(createDependencies, dep)
+		}
+
+		// Create plus labels/dependencies must be atomic. The old flow created
+		// the issue first, then added labels in separate write transactions; when
+		// concurrent bd processes hit SQLite/doltlite locks this left partially
+		// labelled issues. Use one storage transaction for every create-side
+		// write so lock retries cover the complete operation.
+		atomicCreate := len(labels) > 0 || len(createDependencies) > 0
+		if atomicCreate {
+			if err := store.RunInTransaction(ctx, "bd: create issue", func(tx storage.Transaction) error {
+				if err := tx.CreateIssue(ctx, issue, actor); err != nil {
+					return err
+				}
+				for _, label := range labels {
+					if err := tx.AddLabel(ctx, issue.ID, label, actor); err != nil {
+						return fmt.Errorf("add label %s: %w", label, err)
+					}
+				}
+				for _, dep := range createDependencies {
+					if dep.IssueID == "" {
+						dep.IssueID = issue.ID
+					}
+					if dep.DependsOnID == "" {
+						dep.DependsOnID = issue.ID
+					}
+					if err := tx.AddDependency(ctx, dep, actor); err != nil {
+						return fmt.Errorf("add dependency %s -> %s: %w", dep.IssueID, dep.DependsOnID, err)
+					}
+				}
+				return nil
+			}); err != nil {
+				FatalError("%v", err)
 			}
+		} else if err := store.CreateIssue(ctx, issue, actor); err != nil {
+			FatalError("%v", err)
 		}
 
 		// Commit to Dolt. In DoltStore mode, CreateIssue commits the issue
@@ -663,7 +668,7 @@ var createCmd = &cobra.Command{
 		// a separate commit. In EmbeddedDoltStore mode, CreateIssue writes
 		// to the working set without a Dolt commit, so we always commit
 		// everything together at the end.
-		if isEmbeddedMode() || postCreateWrites {
+		if !atomicCreate && isEmbeddedMode() {
 			commitMsg := fmt.Sprintf("bd: create %s", issue.ID)
 			if err := store.Commit(ctx, commitMsg); err != nil && !isDoltNothingToCommit(err) {
 				WarnError("failed to commit: %v", err)

@@ -1451,8 +1451,11 @@ func doSlingNudge(a *config.Agent, cityName, cityPath string, cfg *config.City,
 // socket doesn't exist (supervisor model), falls back to sending
 // "reload" to the supervisor socket.
 func pokeController(cityPath string) error {
-	_, err := sendControllerCommand(cityPath, "poke")
+	_, err := sendControllerCommandWithTimeouts(cityPath, "poke", 500*time.Millisecond, 500*time.Millisecond, 250*time.Millisecond)
 	if err == nil {
+		return nil
+	}
+	if errors.Is(err, errControllerUnresponsive) {
 		return nil
 	}
 	// Fall back to supervisor reload.

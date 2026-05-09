@@ -1672,6 +1672,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             id: agentGroup.id,
             label: agentGroup.label,
             qualifiedName: agentGroup.qualifiedName,
+            isExplicitlySuspended: agentGroup.isExplicitlySuspended,
             isSuspended: agentGroup.isSuspended,
             isPool: agentGroup.isPool,
             ...(typeof agentGroup.minActiveSessions === "number"

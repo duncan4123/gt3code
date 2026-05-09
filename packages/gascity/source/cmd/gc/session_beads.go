@@ -35,8 +35,20 @@ func loadSessionBeads(store beads.Store) ([]beads.Bead, error) {
 	if store == nil {
 		return nil, nil
 	}
+	type sessionBeadLister interface {
+		ListSessionBeads() ([]beads.Bead, error)
+	}
+	if lister, ok := store.(sessionBeadLister); ok {
+		all, err := lister.ListSessionBeads()
+		if err != nil {
+			return nil, fmt.Errorf("listing session beads: %w", err)
+		}
+		sort.Slice(all, func(i, j int) bool { return all[i].CreatedAt.Before(all[j].CreatedAt) })
+		return all, nil
+	}
 	all, err := store.List(beads.ListQuery{
 		Label:      sessionBeadLabel,
+		SkipLabels: true,
 		SkipParent: true,
 	})
 	if err != nil {
@@ -1427,6 +1439,14 @@ func syncSessionBeadsWithSnapshotAndRigStores(
 			if spec, conflict, err := findConflictingNamedSessionSpecForBead(cfg, cityName, b); err != nil {
 				fmt.Fprintf(stderr, "session beads: checking named-session conflict for %s: %v\n", b.ID, err) //nolint:errcheck
 			} else if conflict {
+				if spec.Agent != nil && (spec.Agent.Suspended || agentInSuspendedRig(cityPath, spec.Agent, cfg.Rigs, buildSuspendedRigPaths(cfg))) {
+					if closeSessionBeadIfRuntimeStoppedAndUnassigned(store, rigStores, sp, cfg, b, "suspended-conflict", "suspended named-session conflict", now, stderr) {
+						if idx, ok := indexBySessionName[sn]; ok {
+							openBeads[idx].Status = "closed"
+						}
+					}
+					continue
+				}
 				fmt.Fprintf(stderr, "session beads: live bead %s blocks configured named session %q; leaving it open\n", b.ID, spec.Identity) //nolint:errcheck
 				continue
 			}

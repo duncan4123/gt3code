@@ -3,7 +3,9 @@
 package doltlite_test
 
 import (
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -208,6 +210,158 @@ func TestRunInTransactionCreateIssuesAndDependency(t *testing.T) {
 	}
 	if len(deps) != 1 || deps[0].DependsOnID != second.ID || deps[0].Type != types.DepBlocks {
 		t.Fatalf("deps = %#v, want blocks to %s", deps, second.ID)
+	}
+}
+
+func TestConcurrentWritersSerializeLabels(t *testing.T) {
+	ctx := t.Context()
+	beadsDir := filepath.Join(t.TempDir(), ".beads")
+	store, err := doltlite.New(ctx, beadsDir, "beads", "main")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	if err := store.SetConfig(ctx, "issue_prefix", "bd"); err != nil {
+		t.Fatalf("SetConfig: %v", err)
+	}
+
+	now := time.Now().UTC()
+	issue := &types.Issue{
+		ID:        "bd-label-lock",
+		Title:     "label lock regression",
+		Status:    types.StatusOpen,
+		Priority:  2,
+		IssueType: types.TypeTask,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := store.CreateIssue(ctx, issue, "test"); err != nil {
+		t.Fatalf("CreateIssue: %v", err)
+	}
+
+	const writers = 4
+	var wg sync.WaitGroup
+	errs := make(chan error, writers)
+	for i := 0; i < writers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			st, err := doltlite.New(ctx, beadsDir, "beads", "main")
+			if err != nil {
+				errs <- fmt.Errorf("writer %d open: %w", i, err)
+				return
+			}
+			defer st.Close()
+			if err := st.AddLabel(ctx, issue.ID, fmt.Sprintf("label-%d", i), "test"); err != nil {
+				errs <- fmt.Errorf("writer %d AddLabel: %w", i, err)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	labels, err := store.GetLabels(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("GetLabels: %v", err)
+	}
+	got := map[string]bool{}
+	for _, label := range labels {
+		got[label] = true
+	}
+	for i := 0; i < writers; i++ {
+		want := fmt.Sprintf("label-%d", i)
+		if !got[want] {
+			t.Fatalf("labels = %v, missing %q", labels, want)
+		}
+	}
+}
+
+func TestConcurrentStoresCreateWithLabels(t *testing.T) {
+	ctx := t.Context()
+	beadsDir := filepath.Join(t.TempDir(), ".beads")
+	store, err := doltlite.New(ctx, beadsDir, "beads", "main")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := store.SetConfig(ctx, "issue_prefix", "bd"); err != nil {
+		t.Fatalf("SetConfig: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	const writers = 4
+	var wg sync.WaitGroup
+	errs := make(chan error, writers)
+	ids := make(chan string, writers)
+	for i := 0; i < writers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			st, err := doltlite.New(ctx, beadsDir, "beads", "main")
+			if err != nil {
+				errs <- fmt.Errorf("writer %d open: %w", i, err)
+				return
+			}
+			defer st.Close()
+			now := time.Now().UTC()
+			issue := &types.Issue{
+				Title:     fmt.Sprintf("concurrent create %d", i),
+				Status:    types.StatusOpen,
+				Priority:  2,
+				IssueType: types.TypeTask,
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+			if err := st.RunInTransaction(ctx, "test: create with labels", func(tx storage.Transaction) error {
+				if err := tx.CreateIssue(ctx, issue, "test"); err != nil {
+					return err
+				}
+				if err := tx.AddLabel(ctx, issue.ID, "alpha", "test"); err != nil {
+					return err
+				}
+				return tx.AddLabel(ctx, issue.ID, "beta", "test")
+			}); err != nil {
+				errs <- fmt.Errorf("writer %d create: %w", i, err)
+				return
+			}
+			ids <- issue.ID
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	close(ids)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	check, err := doltlite.New(ctx, beadsDir, "beads", "main")
+	if err != nil {
+		t.Fatalf("New check store: %v", err)
+	}
+	t.Cleanup(func() { _ = check.Close() })
+	for id := range ids {
+		labels, err := check.GetLabels(ctx, id)
+		if err != nil {
+			t.Fatalf("GetLabels(%s): %v", id, err)
+		}
+		got := map[string]bool{}
+		for _, label := range labels {
+			got[label] = true
+		}
+		if !got["alpha"] || !got["beta"] {
+			t.Fatalf("labels for %s = %v, want alpha and beta", id, labels)
+		}
 	}
 }
 

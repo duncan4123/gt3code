@@ -196,6 +196,302 @@ func TestProcessAlive_ReadyCountsAsAlive_WithResultWrappedSnapshot(t *testing.T)
 	}
 }
 
+func TestNudge_DispatchesTurnStartUsingThreadMetadataProviderModel(t *testing.T) {
+	server := newT3BridgeTestServer(t, map[string]interface{}{
+		"threads": []interface{}{
+			map[string]interface{}{
+				"id":        "thread-1",
+				"projectId": "project-1",
+				"provider":  "claudeAgent",
+				"model":     "claude-sonnet-4-6",
+				"customMetadata": map[string]interface{}{
+					"gc.agent":           "gascity/gastown.polecat",
+					"gc.sessionName":     "gastown__polecat-abc123",
+					"gc.runtimeProvider": "codex",
+					"gc.startupModel":    "gpt-5.4-mini",
+				},
+				"session": map[string]interface{}{"status": "ready"},
+			},
+		},
+	})
+	defer server.Close()
+	t.Setenv("T3_BEARER_TOKEN", "test-bearer")
+	t.Setenv("T3_WS_URL", server.wsURL())
+
+	p := &Provider{
+		watchers:     make(map[string]context.CancelFunc),
+		recentStarts: make(map[string]time.Time),
+	}
+	if err := p.Nudge("gastown__polecat-abc123", runtime.TextContent("check mail and continue")); err != nil {
+		t.Fatalf("Nudge: %v", err)
+	}
+
+	turns := server.commandPayloadsByType("thread.turn.start")
+	if len(turns) != 1 {
+		t.Fatalf("thread.turn.start count = %d, want 1: %#v", len(turns), turns)
+	}
+	command := unwrapCommandPayload(turns[0])
+	if command["threadId"] != "thread-1" {
+		t.Fatalf("threadId = %v, want thread-1", command["threadId"])
+	}
+	message, _ := command["message"].(map[string]interface{})
+	if message["text"] != "check mail and continue" {
+		t.Fatalf("message text = %v", message["text"])
+	}
+	modelSelection, _ := command["modelSelection"].(map[string]interface{})
+	if modelSelection["provider"] != "codex" || modelSelection["model"] != "gpt-5.4-mini" {
+		t.Fatalf("modelSelection = %#v, want codex/gpt-5.4-mini", modelSelection)
+	}
+}
+
+func TestNudge_NoopsWhenThreadMissingOrTextEmpty(t *testing.T) {
+	server := newT3BridgeTestServer(t, map[string]interface{}{
+		"threads": []interface{}{
+			map[string]interface{}{
+				"id":        "thread-1",
+				"projectId": "project-1",
+				"customMetadata": map[string]interface{}{
+					"gc.agent":       "mayor",
+					"gc.sessionName": "mayor",
+				},
+				"session": map[string]interface{}{"status": "ready"},
+			},
+		},
+	})
+	defer server.Close()
+	t.Setenv("T3_BEARER_TOKEN", "test-bearer")
+	t.Setenv("T3_WS_URL", server.wsURL())
+
+	p := &Provider{
+		watchers:     make(map[string]context.CancelFunc),
+		recentStarts: make(map[string]time.Time),
+	}
+	if err := p.Nudge("missing", runtime.TextContent("wake")); err != nil {
+		t.Fatalf("Nudge missing thread: %v", err)
+	}
+	if err := p.Nudge("mayor", runtime.TextContent("   ")); err != nil {
+		t.Fatalf("Nudge empty text: %v", err)
+	}
+	if turns := server.commandPayloadsByType("thread.turn.start"); len(turns) != 0 {
+		t.Fatalf("thread.turn.start count = %d, want 0: %#v", len(turns), turns)
+	}
+}
+
+func TestStart_NewThreadSendsConfiguredNudge(t *testing.T) {
+	workDir := t.TempDir()
+	server := newT3BridgeTestServer(t, map[string]interface{}{
+		"projects": []interface{}{
+			map[string]interface{}{
+				"id":            "project-1",
+				"workspaceRoot": workDir,
+			},
+		},
+		"threads": []interface{}{},
+	})
+	defer server.Close()
+	t.Setenv("T3_BEARER_TOKEN", "test-bearer")
+	t.Setenv("T3_WS_URL", server.wsURL())
+
+	p := &Provider{
+		watchers:     make(map[string]context.CancelFunc),
+		recentStarts: make(map[string]time.Time),
+	}
+	cfg := runtime.Config{
+		WorkDir: workDir,
+		Command: "codex",
+		Nudge:   "check assigned work and continue",
+		Env: map[string]string{
+			"GC_CITY_PATH":    "/tmp/gc",
+			"GC_ALIAS":        "mayor",
+			"GC_AGENT":        "mayor",
+			"GC_SESSION_NAME": "mayor",
+			"GC_TEMPLATE":     "mayor",
+			"GC_PROVIDER":     "codex",
+			"GC_MODEL":        "gpt-5.4-mini",
+		},
+	}
+
+	if err := p.Start(context.Background(), "mayor", cfg); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	turns := server.commandPayloadsByType("thread.turn.start")
+	if len(turns) != 1 {
+		t.Fatalf("thread.turn.start count = %d, want 1: %#v", len(turns), turns)
+	}
+	command := unwrapCommandPayload(turns[0])
+	message, _ := command["message"].(map[string]interface{})
+	if message["text"] != cfg.Nudge {
+		t.Fatalf("nudge text = %v, want %q", message["text"], cfg.Nudge)
+	}
+	assertNudgeActivitySource(t, server, "startup")
+}
+
+func TestStart_NewPoolThreadSendsPoolKickoffWhenNudgeEmpty(t *testing.T) {
+	workDir := t.TempDir()
+	rawEnvelope, err := json.Marshal(StartupEnvelope{
+		Version: 1,
+		GC: GCSection{
+			CityPath:    "/tmp/gc",
+			RigName:     "gastown",
+			RigPath:     workDir,
+			Agent:       "gastown/polecat",
+			Template:    "t3-codex-pool",
+			SessionName: "gastown__polecat-abc123",
+		},
+		Runtime: RuntimeSection{
+			Provider: "codex",
+			Model:    "gpt-5.4-mini",
+			WorkDir:  workDir,
+		},
+		Assignment: AssignmentSection{
+			BeadID:    "gc-123",
+			BeadTitle: "Fix the merge",
+		},
+		Resume: ResumeSection{
+			Policy:                 "match-or-recreate",
+			RequiredThreadProvider: "codex",
+			RequiredThreadModel:    "gpt-5.4-mini",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal startup envelope: %v", err)
+	}
+	server := newT3BridgeTestServer(t, map[string]interface{}{
+		"projects": []interface{}{
+			map[string]interface{}{
+				"id":            "project-1",
+				"workspaceRoot": workDir,
+			},
+		},
+		"threads": []interface{}{},
+	})
+	defer server.Close()
+	t.Setenv("T3_BEARER_TOKEN", "test-bearer")
+	t.Setenv("T3_WS_URL", server.wsURL())
+
+	p := &Provider{
+		watchers:     make(map[string]context.CancelFunc),
+		recentStarts: make(map[string]time.Time),
+	}
+	cfg := runtime.Config{
+		WorkDir: workDir,
+		Command: "codex",
+		Env: map[string]string{
+			"GC_CITY_PATH":        "/tmp/gc",
+			"GC_ALIAS":            "gastown__polecat-abc123",
+			"GC_AGENT":            "gastown/polecat",
+			"GC_SESSION_NAME":     "gastown__polecat-abc123",
+			"GC_TEMPLATE":         "t3-codex-pool",
+			"GC_PROVIDER":         "codex",
+			"GC_MODEL":            "gpt-5.4-mini",
+			"GC_STARTUP_ENVELOPE": string(rawEnvelope),
+		},
+	}
+
+	if err := p.Start(context.Background(), "gastown__polecat-abc123", cfg); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	turns := server.commandPayloadsByType("thread.turn.start")
+	if len(turns) != 1 {
+		t.Fatalf("thread.turn.start count = %d, want 1: %#v", len(turns), turns)
+	}
+	command := unwrapCommandPayload(turns[0])
+	message, _ := command["message"].(map[string]interface{})
+	text, _ := message["text"].(string)
+	if !strings.Contains(text, "Begin work now") || !strings.Contains(text, "Fix the merge (gc-123)") {
+		t.Fatalf("pool kickoff text = %q", text)
+	}
+	assertNudgeActivitySource(t, server, "pool-kickoff")
+}
+
+func TestStart_TestRigThreadMetadataUsesT3BridgeFixtureRig(t *testing.T) {
+	const testRigPath = "/data/projects/test-rig"
+	if _, err := os.Stat(testRigPath); err != nil {
+		t.Skipf("test rig fixture unavailable: %v", err)
+	}
+	server := newT3BridgeTestServer(t, map[string]interface{}{
+		"projects": []interface{}{
+			map[string]interface{}{
+				"id":            "project-1",
+				"workspaceRoot": testRigPath,
+			},
+		},
+		"threads": []interface{}{},
+	})
+	defer server.Close()
+	t.Setenv("T3_BEARER_TOKEN", "test-bearer")
+	t.Setenv("T3_WS_URL", server.wsURL())
+
+	p := &Provider{
+		watchers:     make(map[string]context.CancelFunc),
+		recentStarts: make(map[string]time.Time),
+	}
+	rawEnvelope, err := json.Marshal(StartupEnvelope{
+		Version: 1,
+		GC: GCSection{
+			CityPath:    "/data/projects/t3code/packages/gascity-config/config",
+			CityName:    "config",
+			RigName:     "test-rig",
+			RigPath:     testRigPath,
+			Agent:       "test-rig/refinery",
+			Template:    "refinery",
+			SessionName: "test-rig__refinery",
+		},
+		Runtime: RuntimeSection{
+			Provider: "codex",
+			Model:    "gpt-5.4-mini",
+			WorkDir:  testRigPath,
+		},
+		Resume: ResumeSection{
+			Policy:                 "match-or-recreate",
+			RequiredThreadProvider: "codex",
+			RequiredThreadModel:    "gpt-5.4-mini",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal startup envelope: %v", err)
+	}
+	cfg := runtime.Config{
+		WorkDir: testRigPath,
+		Command: "codex",
+		Nudge:   "check test rig nudge flow",
+		Env: map[string]string{
+			"GC_CITY_PATH":        "/data/projects/t3code/packages/gascity-config/config",
+			"GC_RIG":              "test-rig",
+			"GC_RIG_ROOT":         testRigPath,
+			"GC_ALIAS":            "test-rig__refinery",
+			"GC_AGENT":            "test-rig/refinery",
+			"GC_SESSION_NAME":     "test-rig__refinery",
+			"GC_TEMPLATE":         "refinery",
+			"GC_PROVIDER":         "codex",
+			"GC_MODEL":            "gpt-5.4-mini",
+			"GC_STARTUP_ENVELOPE": string(rawEnvelope),
+		},
+	}
+
+	if err := p.Start(context.Background(), "test-rig__refinery", cfg); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	creates := server.commandPayloadsByType("thread.create")
+	if len(creates) != 1 {
+		t.Fatalf("thread.create count = %d, want 1: %#v", len(creates), creates)
+	}
+	command := unwrapCommandPayload(creates[0])
+	if command["worktreePath"] != nil {
+		t.Fatalf("worktreePath = %v, want nil for fixture rig direct workdir", command["worktreePath"])
+	}
+	meta, _ := command["customMetadata"].(map[string]interface{})
+	if meta["gc.rig"] != "test-rig" || meta["gc.rigPath"] != testRigPath {
+		t.Fatalf("customMetadata rig = %v/%v, want test-rig/%s", meta["gc.rig"], meta["gc.rigPath"], testRigPath)
+	}
+	if meta["gc.provider"] != "t3bridge" || meta["gc.runtimeProvider"] != "codex" || meta["gc.startupModel"] != "gpt-5.4-mini" {
+		t.Fatalf("customMetadata provider/model = %#v", meta)
+	}
+}
+
 func TestIsRunning_UsesCachedSnapshotWithinTTL(t *testing.T) {
 	resetBridgeAuthCacheForTest(t)
 	oldDefaults := defaultWSURLCandidates
@@ -786,6 +1082,30 @@ func commandType(payload map[string]interface{}) string {
 		return typ
 	}
 	return ""
+}
+
+func unwrapCommandPayload(payload map[string]interface{}) map[string]interface{} {
+	if nested, _ := payload["command"].(map[string]interface{}); nested != nil {
+		return nested
+	}
+	return payload
+}
+
+func assertNudgeActivitySource(t *testing.T, server *t3BridgeTestServer, want string) {
+	t.Helper()
+	for _, payload := range server.commandPayloadsByType("thread.activity.append") {
+		command := unwrapCommandPayload(payload)
+		activity, _ := command["activity"].(map[string]interface{})
+		if activity["kind"] != "gc.nudge.sent" {
+			continue
+		}
+		payload, _ := activity["payload"].(map[string]interface{})
+		if payload["source"] == want {
+			return
+		}
+		t.Fatalf("gc.nudge.sent source = %v, want %q", payload["source"], want)
+	}
+	t.Fatalf("missing gc.nudge.sent activity; commands=%v", server.commandTypes())
 }
 
 func TestResolveBindingProviderModel_FallsBackToThreadEnvModel(t *testing.T) {

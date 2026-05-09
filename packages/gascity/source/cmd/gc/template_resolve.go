@@ -370,9 +370,11 @@ func resolveTemplate(p *agentBuildParams, cfgAgent *config.Agent, qualifiedName 
 	prependGCBinDirToPATH(env, env["GC_BIN"])
 	env = convergence.ScrubTokenEnv(env)
 	applyAssignedWorkContext(p.beadStore, SessionAssignmentLookup{
-		SessionName: sessName,
-		AgentName:   qualifiedName,
-		Env:         env,
+		SessionName:       sessName,
+		AgentName:         qualifiedName,
+		AssignedWorkBeads: p.assignedWorkBeads,
+		AssignedWorkKnown: p.assignedWorkKnown,
+		Env:               env,
 	})
 
 	// Step 11: Expand session setup templates.
@@ -730,16 +732,18 @@ func templateParamsToConfig(tp TemplateParams) runtime.Config {
 }
 
 type SessionAssignmentLookup struct {
-	SessionName string
-	AgentName   string
-	Env         map[string]string
+	SessionName       string
+	AgentName         string
+	AssignedWorkBeads []beads.Bead
+	AssignedWorkKnown bool
+	Env               map[string]string
 }
 
 func applyAssignedWorkContext(store beads.Store, lookup SessionAssignmentLookup) {
 	if store == nil || lookup.Env == nil {
 		return
 	}
-	workBead, ok := findAssignedWorkBead(store, lookup.SessionName, lookup.AgentName)
+	workBead, ok := findAssignedWorkBead(store, lookup.SessionName, lookup.AgentName, lookup.AssignedWorkBeads, lookup.AssignedWorkKnown)
 	if !ok {
 		return
 	}
@@ -804,13 +808,25 @@ func convoyProgress(store beads.Store, convoyID string) (total int, closed int, 
 	return total, closed, true
 }
 
-func findAssignedWorkBead(store beads.Store, sessionName, agentName string) (beads.Bead, bool) {
+func findAssignedWorkBead(store beads.Store, sessionName, agentName string, assignedWork []beads.Bead, assignedWorkKnown bool) (beads.Bead, bool) {
 	assignees := make([]string, 0, 2)
 	if sessionName != "" {
 		assignees = append(assignees, sessionName)
 	}
 	if agentName != "" && agentName != sessionName {
 		assignees = append(assignees, agentName)
+	}
+	for _, status := range []string{"in_progress", "open"} {
+		for _, assignee := range assignees {
+			for _, candidate := range assignedWork {
+				if candidate.Status == status && candidate.Assignee == assignee {
+					return candidate, true
+				}
+			}
+		}
+	}
+	if assignedWorkKnown {
+		return beads.Bead{}, false
 	}
 	for _, status := range []string{"in_progress", "open"} {
 		for _, assignee := range assignees {

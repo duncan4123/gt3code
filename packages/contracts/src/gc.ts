@@ -343,6 +343,7 @@ export interface VirtualAgentGroup<TThread> {
   qualifiedName: string;
   isConfigured: boolean;
   isPool: boolean;
+  isExplicitlySuspended: boolean;
   isSuspended: boolean;
   minActiveSessions?: number;
   maxActiveSessions?: number;
@@ -608,8 +609,8 @@ export function groupThreadsByRigAndAgent<
     if (existingGroup) {
       existingGroup.isConfigured = true;
       existingGroup.isPool = agent.is_pool ?? existingGroup.isPool;
-      existingGroup.isSuspended =
-        rigGroup.isSuspended || agent.suspended || existingGroup.isSuspended;
+      existingGroup.isExplicitlySuspended = agent.suspended;
+      existingGroup.isSuspended = rigGroup.isSuspended || agent.suspended;
       if (typeof agent.min_active_sessions === "number") {
         existingGroup.minActiveSessions = agent.min_active_sessions;
       }
@@ -634,6 +635,7 @@ export function groupThreadsByRigAndAgent<
       qualifiedName,
       isConfigured: true,
       isPool: agent.is_pool ?? false,
+      isExplicitlySuspended: agent.suspended,
       isSuspended: rigGroup.isSuspended || agent.suspended,
       ...(typeof agent.min_active_sessions === "number"
         ? { minActiveSessions: agent.min_active_sessions }
@@ -819,10 +821,8 @@ export function groupThreadsByRigAndAgent<
       if (configuredAgent) {
         existingAgentGroup.isConfigured = true;
         existingAgentGroup.isPool = configuredAgent.is_pool ?? existingAgentGroup.isPool;
-        existingAgentGroup.isSuspended =
-          ensuredRigGroup.isSuspended ||
-          configuredAgent.suspended ||
-          existingAgentGroup.isSuspended;
+        existingAgentGroup.isExplicitlySuspended = configuredAgent.suspended;
+        existingAgentGroup.isSuspended = ensuredRigGroup.isSuspended || configuredAgent.suspended;
         if (typeof configuredAgent.min_active_sessions === "number") {
           existingAgentGroup.minActiveSessions = configuredAgent.min_active_sessions;
         }
@@ -850,6 +850,7 @@ export function groupThreadsByRigAndAgent<
       qualifiedName: resolvedAgent,
       isConfigured: Boolean(configuredAgent),
       isPool: configuredAgent?.is_pool ?? false,
+      isExplicitlySuspended: configuredAgent?.suspended ?? false,
       isSuspended: ensuredRigGroup.isSuspended || configuredAgent?.suspended || false,
       ...(typeof configuredAgent?.min_active_sessions === "number"
         ? { minActiveSessions: configuredAgent.min_active_sessions }

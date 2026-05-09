@@ -125,6 +125,19 @@ func TestDoltliteReadStoreReadyUsesDoltlite(t *testing.T) {
 	}
 }
 
+func TestDoltliteReadStoreReadyHonorsLimit(t *testing.T) {
+	store, closeStore := newTestDoltliteReadStore(t)
+	defer closeStore()
+
+	rows, err := store.Ready(ReadyQuery{Limit: 1})
+	if err != nil {
+		t.Fatalf("Ready(limit=1): %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("Ready(limit=1) returned %d rows, want 1: %#v", len(rows), rows)
+	}
+}
+
 func TestDoltliteReadStorePoolDemandCount(t *testing.T) {
 	store, closeStore := newTestDoltliteReadStore(t)
 	defer closeStore()
@@ -135,6 +148,144 @@ func TestDoltliteReadStorePoolDemandCount(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("PoolDemandCount = %d, want 1", count)
+	}
+}
+
+func TestDoltliteReadStoreCachesInvalidateOnWorkingSetWrites(t *testing.T) {
+	store, closeStore := newTestDoltliteReadStore(t)
+	defer closeStore()
+
+	sessions, err := store.ListSessionBeads()
+	if err != nil {
+		t.Fatalf("ListSessionBeads before write: %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("session count before write = %d, want 1", len(sessions))
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := store.db.Exec(`
+		INSERT INTO issues (
+			id, title, status, issue_type, priority, created_at, updated_at,
+			description, design, acceptance_criteria, notes, metadata
+		)
+		VALUES (?, ?, 'open', 'session', 2, ?, ?, '', '', '', '', ?)
+	`, "gc-session-2", "session 2", now, now, `{"session_name":"session-2"}`); err != nil {
+		t.Fatalf("insert uncommitted session: %v", err)
+	}
+
+	sessions, err = store.ListSessionBeads()
+	if err != nil {
+		t.Fatalf("ListSessionBeads after write: %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("session count after uncommitted write = %d, want 2", len(sessions))
+	}
+
+	count, err := store.PoolDemandCount("rig/polecat")
+	if err != nil {
+		t.Fatalf("PoolDemandCount before routed write: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("PoolDemandCount before routed write = %d, want 1", count)
+	}
+
+	later := time.Now().UTC().Add(time.Second).Format(time.RFC3339Nano)
+	if _, err := store.db.Exec(`
+		INSERT INTO issues (
+			id, title, status, issue_type, priority, created_at, updated_at,
+			description, design, acceptance_criteria, notes, metadata
+		)
+		VALUES (?, ?, 'open', 'task', 2, ?, ?, '', '', '', '', ?)
+	`, "gc-routed-2", "routed 2", later, later, `{"gc.routed_to":"rig/polecat"}`); err != nil {
+		t.Fatalf("insert uncommitted routed work: %v", err)
+	}
+
+	count, err = store.PoolDemandCount("rig/polecat")
+	if err != nil {
+		t.Fatalf("PoolDemandCount after routed write: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("PoolDemandCount after uncommitted write = %d, want 2", count)
+	}
+}
+
+func TestDoltliteReadStoreReadsOrderRunHotPaths(t *testing.T) {
+	store, closeStore := newTestDoltliteReadStore(t)
+	defer closeStore()
+
+	last, err := store.LastOrderRun("rig/sweep")
+	if err != nil {
+		t.Fatalf("LastOrderRun: %v", err)
+	}
+	if last.IsZero() {
+		t.Fatal("LastOrderRun returned zero time")
+	}
+
+	open, err := store.HasOpenOrderRun("rig/sweep")
+	if err != nil {
+		t.Fatalf("HasOpenOrderRun(open): %v", err)
+	}
+	if open {
+		t.Fatal("HasOpenOrderRun reported open for closed run")
+	}
+
+	open, err = store.HasOpenOrderRun("rig/active")
+	if err != nil {
+		t.Fatalf("HasOpenOrderRun(active): %v", err)
+	}
+	if !open {
+		t.Fatal("HasOpenOrderRun did not find active run")
+	}
+}
+
+func TestDoltliteReadStoreListsQueuedNudgeBeads(t *testing.T) {
+	store, closeStore := newTestDoltliteReadStore(t)
+	defer closeStore()
+
+	rows, err := store.List(ListQuery{
+		Label:      "gc:nudge",
+		SkipParent: true,
+	})
+	if err != nil {
+		t.Fatalf("List queued nudge beads: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("nudge rows = %d, want 1", len(rows))
+	}
+	got := rows[0]
+	if got.ID != "gc-nudge" || got.Type != "chore" {
+		t.Fatalf("nudge bead = %#v", got)
+	}
+	if got.Metadata["state"] != "queued" || got.Metadata["nudge_id"] != "nudge-1" {
+		t.Fatalf("nudge metadata = %#v", got.Metadata)
+	}
+	if !slices.Contains(got.Labels, "agent:gastown/polecat") || !slices.Contains(got.Labels, "nudge:nudge-1") {
+		t.Fatalf("nudge labels = %v", got.Labels)
+	}
+}
+
+func TestDoltliteReadStoreFiltersNudgesByMetadata(t *testing.T) {
+	store, closeStore := newTestDoltliteReadStore(t)
+	defer closeStore()
+
+	rows, err := store.List(ListQuery{
+		Type: "chore",
+		Metadata: map[string]string{
+			"target_session": "gastown__polecat-abc123",
+			"state":          "queued",
+		},
+		SkipLabels: true,
+		SkipParent: true,
+	})
+	if err != nil {
+		t.Fatalf("List nudge by metadata: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ID != "gc-nudge" {
+		t.Fatalf("metadata rows = %#v, want gc-nudge", rows)
+	}
+	if len(rows[0].Labels) != 0 {
+		t.Fatalf("labels hydrated with SkipLabels=true: %v", rows[0].Labels)
 	}
 }
 
@@ -310,6 +461,51 @@ func newTestDoltliteReadStore(t *testing.T) (*DoltliteReadStore, func()) {
 				DependsOnID: "gc-blocker",
 				Type:        "blocks",
 			}},
+		},
+		{
+			ID:        "gc-nudge",
+			Title:     "Queued nudge for gastown/polecat",
+			Status:    "open",
+			IssueType: "chore",
+			CreatedAt: now,
+			Labels:    []string{"gc:nudge", "agent:gastown/polecat", "nudge:nudge-1", "source:wait"},
+			Metadata: map[string]string{
+				"agent":          "gastown/polecat",
+				"message":        "wait satisfied; continue",
+				"nudge_id":       "nudge-1",
+				"source":         "wait",
+				"state":          "queued",
+				"target_session": "gastown__polecat-abc123",
+				"wait_bead_id":   "gc-wait",
+			},
+		},
+		{
+			ID:        "gc-wait",
+			Title:     "Wait for dependency",
+			Status:    "open",
+			IssueType: "task",
+			CreatedAt: now,
+			Labels:    []string{"gc:wait"},
+			Metadata: map[string]string{
+				"nudge_id": "nudge-1",
+				"state":    "ready",
+			},
+		},
+		{
+			ID:        "gc-order-closed",
+			Title:     "order:rig/sweep",
+			Status:    "closed",
+			IssueType: "task",
+			CreatedAt: now.Add(time.Second),
+			Labels:    []string{"order-run:rig/sweep", "gc:order-tracking"},
+		},
+		{
+			ID:        "gc-order-open",
+			Title:     "order:rig/active",
+			Status:    "open",
+			IssueType: "task",
+			CreatedAt: now.Add(2 * time.Second),
+			Labels:    []string{"order-run:rig/active", "gc:order-tracking"},
 		},
 	}
 	for _, issue := range created {

@@ -39,7 +39,18 @@ func (s *DoltliteStore) withDBConn(ctx context.Context, fn func(db versioncontro
 func (s *DoltliteStore) withDBWrite(ctx context.Context, fn func(db versioncontrolops.DBConn) error) error {
 	return s.withExclusiveLock(ctx, func() error {
 		return s.withRetry(ctx, func() error {
-			return s.withDBConn(ctx, fn)
+			if s.closed.Load() {
+				return errClosed
+			}
+			db, cleanup, err := OpenSQL(ctx, s.dataDir, s.database, s.branch)
+			if err != nil {
+				return err
+			}
+			defer func() {
+				_ = cleanup()
+				s.cleanGitRemoteCacheGarbage()
+			}()
+			return fn(db)
 		})
 	})
 }

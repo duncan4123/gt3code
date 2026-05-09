@@ -49,6 +49,7 @@ type agentBuildParams struct {
 	// build. Pool new-tier materialization uses it to avoid treating sessions
 	// that already own work as available generic capacity.
 	assignedWorkBeads []beads.Bead
+	assignedWorkKnown bool
 
 	// beadNames caches qualifiedName → session_name mappings resolved
 	// during this build cycle. Populated lazily by resolveSessionName.

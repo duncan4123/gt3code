@@ -27,10 +27,7 @@ func loadSessionBeadSnapshot(store beads.Store) (*sessionBeadSnapshot, error) {
 	if store == nil {
 		return newSessionBeadSnapshot(nil), nil
 	}
-	all, err := store.List(beads.ListQuery{
-		Label:      sessionBeadLabel,
-		SkipParent: true,
-	})
+	all, err := loadSessionBeads(store)
 	if err != nil {
 		return nil, fmt.Errorf("listing session beads: %w", err)
 	}

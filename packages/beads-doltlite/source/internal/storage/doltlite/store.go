@@ -29,6 +29,13 @@ var _ storage.GarbageCollector = (*DoltliteStore)(nil)
 var _ storage.Flattener = (*DoltliteStore)(nil)
 var _ storage.Compactor = (*DoltliteStore)(nil)
 
+var processWriteLocks sync.Map
+
+func processWriteLock(dataDir string) *sync.Mutex {
+	lockValue, _ := processWriteLocks.LoadOrStore(dataDir, &sync.Mutex{})
+	return lockValue.(*sync.Mutex)
+}
+
 // DoltliteStore implements storage.DoltStorage backed by the doltlite engine.
 // Each method call opens a short-lived connection, executes within an explicit
 // SQL transaction, and closes the connection immediately. This minimizes the
@@ -95,15 +102,16 @@ func New(ctx context.Context, beadsDir, database, branch string, opts ...Option)
 
 	lock := o.lock
 	ownsLock := lock == nil
+	var initProcessLock *sync.Mutex
 	if ownsLock {
+		initProcessLock = processWriteLock(dataDir)
+		initProcessLock.Lock()
 		var err error
 		lock, err = WaitLock(ctx, dataDir)
 		if err != nil {
+			initProcessLock.Unlock()
 			return nil, err
 		}
-	}
-	if lock != nil && ownsLock {
-		defer lock.Unlock()
 	}
 
 	s := &DoltliteStore{
@@ -114,7 +122,15 @@ func New(ctx context.Context, beadsDir, database, branch string, opts ...Option)
 	}
 
 	if err := s.initSchema(ctx); err != nil {
+		if lock != nil && ownsLock {
+			lock.Unlock()
+			initProcessLock.Unlock()
+		}
 		return nil, fmt.Errorf("doltlite: init schema: %w", err)
+	}
+	if lock != nil && ownsLock {
+		lock.Unlock()
+		initProcessLock.Unlock()
 	}
 	if err := s.openPersistentDB(ctx); err != nil {
 		return nil, fmt.Errorf("doltlite: open database: %w", err)
@@ -241,9 +257,16 @@ func (s *DoltliteStore) withConnOnce(ctx context.Context, commit bool, fn func(t
 
 	var db *sql.DB
 	var cleanup func() error
-	db, cleanup, err = s.activeDB(ctx)
-	if err != nil {
-		return
+	if commit {
+		db, cleanup, err = OpenSQL(ctx, s.dataDir, s.database, s.branch)
+		if err != nil {
+			return
+		}
+	} else {
+		db, cleanup, err = s.activeDB(ctx)
+		if err != nil {
+			return
+		}
 	}
 
 	defer func() {
@@ -272,7 +295,7 @@ func (s *DoltliteStore) withConnOnce(ctx context.Context, commit bool, fn func(t
 }
 
 func (s *DoltliteStore) withRetry(ctx context.Context, fn func() error) error {
-	const maxAttempts = 5
+	const maxAttempts = 12
 	var err error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if err = fn(); err == nil {
@@ -284,13 +307,17 @@ func (s *DoltliteStore) withRetry(ctx context.Context, fn func() error) error {
 		select {
 		case <-ctx.Done():
 			return errors.Join(err, ctx.Err())
-		case <-time.After(time.Duration(50*(1<<attempt)) * time.Millisecond):
+		case <-time.After(min(time.Duration(50*(1<<attempt))*time.Millisecond, 2*time.Second)):
 		}
 	}
 	return err
 }
 
 func (s *DoltliteStore) withExclusiveLock(ctx context.Context, fn func() error) error {
+	processLock := processWriteLock(s.dataDir)
+	processLock.Lock()
+	defer processLock.Unlock()
+
 	lock, err := WaitLock(ctx, s.dataDir)
 	if err != nil {
 		return err
@@ -331,6 +358,10 @@ func (s *DoltliteStore) initSchema(ctx context.Context) error {
 	}
 	defer func() { _ = cleanup() }()
 
+	if ready, err := sqliteSchemaReady(ctx, db); err == nil && ready {
+		return nil
+	}
+
 	if err := schema.CreateIgnoredTablesSQLite(ctx, db); err != nil {
 		return fmt.Errorf("ensure ignored tables before migration: %w", err)
 	}
@@ -348,10 +379,42 @@ func (s *DoltliteStore) initSchema(ctx context.Context) error {
 	return nil
 }
 
+func sqliteSchemaReady(ctx context.Context, db *sql.DB) (bool, error) {
+	var current int
+	if err := db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&current); err != nil {
+		return false, err
+	}
+	if current < schema.LatestVersion() {
+		return false, nil
+	}
+	var ignoredTables int
+	if err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM sqlite_master
+		WHERE type = 'table'
+		  AND name IN ('dolt_ignore', 'wisps', 'wisp_labels', 'wisp_events', 'wisp_dependencies', 'wisp_comments')
+	`).Scan(&ignoredTables); err != nil {
+		return false, err
+	}
+	return ignoredTables == 6, nil
+}
+
 // ensureIgnoredTables creates dolt_ignore'd wisp tables if they don't exist.
 // Uses withConn (not withRootConn) because the database is already created.
 func (s *DoltliteStore) ensureIgnoredTables(ctx context.Context) error {
-	return s.withConn(ctx, false, func(tx *sql.Tx) error {
+	var ignoredTables int
+	err := s.withConn(ctx, false, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `
+			SELECT COUNT(*)
+			FROM sqlite_master
+			WHERE type = 'table'
+			  AND name IN ('dolt_ignore', 'wisps', 'wisp_labels', 'wisp_events', 'wisp_dependencies', 'wisp_comments')
+		`).Scan(&ignoredTables)
+	})
+	if err == nil && ignoredTables == 6 {
+		return nil
+	}
+	return s.withConn(ctx, true, func(tx *sql.Tx) error {
 		return schema.CreateIgnoredTablesSQLite(ctx, tx)
 	})
 }

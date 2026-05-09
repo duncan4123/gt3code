@@ -647,7 +647,7 @@ func (s *BdStore) Create(b Bead) (Bead, error) {
 		}
 		args = append(args, "--metadata", string(metaJSON))
 	}
-	out, err := s.runner(s.dir, "bd", args...)
+	out, err := s.runBDTransientWriteOutput(args...)
 	if err != nil {
 		return Bead{}, fmt.Errorf("bd create: %w", err)
 	}
@@ -740,7 +740,7 @@ func (s *BdStore) Update(id string, opts UpdateOpts) error {
 	if len(args) == 3 {
 		return nil
 	}
-	_, err := s.runner(s.dir, "bd", args...)
+	err := s.runBDTransientWrite(args...)
 	if err != nil {
 		if isBdNotFound(err) {
 			return fmt.Errorf("updating bead %q: %w", id, ErrNotFound)
@@ -861,15 +861,21 @@ func (s *BdStore) SetMetadataBatch(id string, kvs map[string]string) error {
 }
 
 func (s *BdStore) runBDTransientWrite(args ...string) error {
+	_, err := s.runBDTransientWriteOutput(args...)
+	return err
+}
+
+func (s *BdStore) runBDTransientWriteOutput(args ...string) ([]byte, error) {
 	var err error
+	var out []byte
 	for attempt := 1; attempt <= bdTransientWriteAttempts; attempt++ {
-		_, err = s.runner(s.dir, "bd", args...)
+		out, err = s.runner(s.dir, "bd", args...)
 		if err == nil || !isBdTransientWriteConflict(err) || attempt == bdTransientWriteAttempts {
-			return err
+			return out, err
 		}
 		time.Sleep(time.Duration(attempt) * 25 * time.Millisecond)
 	}
-	return err
+	return out, err
 }
 
 func isBdTransientWriteConflict(err error) bool {
@@ -878,7 +884,8 @@ func isBdTransientWriteConflict(err error) bool {
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "Error 1213 (40001): serialization failure") ||
-		strings.Contains(msg, "this transaction conflicts with a committed transaction")
+		strings.Contains(msg, "this transaction conflicts with a committed transaction") ||
+		strings.Contains(strings.ToLower(msg), "database is locked")
 }
 
 // Ping verifies the bd binary is accessible by running a no-op command.
@@ -932,7 +939,7 @@ func (s *BdStore) CloseAll(ids []string, metadata map[string]string) (int, error
 // Close sets a bead's status to closed via bd close.
 // Idempotent: closing an already-closed bead returns nil.
 func (s *BdStore) Close(id string) error {
-	_, err := s.runner(s.dir, "bd", "close", "--force", "--json", id)
+	err := s.runBDTransientWrite("close", "--force", "--json", id)
 	if err != nil {
 		// Some bd error paths collapse to a bare exit status without a helpful
 		// not-found string. Re-read the bead to distinguish "already closed" from
@@ -949,7 +956,7 @@ func (s *BdStore) Close(id string) error {
 
 // Reopen sets a closed bead's status to open via bd reopen.
 func (s *BdStore) Reopen(id string) error {
-	_, err := s.runner(s.dir, "bd", "reopen", "--json", id)
+	err := s.runBDTransientWrite("reopen", "--json", id)
 	if err != nil {
 		if isBdNotFound(err) {
 			return fmt.Errorf("reopening bead %q: %w", id, ErrNotFound)
@@ -961,7 +968,7 @@ func (s *BdStore) Reopen(id string) error {
 
 // Delete permanently removes a bead from the store via bd delete.
 func (s *BdStore) Delete(id string) error {
-	_, err := s.runner(s.dir, "bd", "delete", "--force", "--json", id)
+	err := s.runBDTransientWrite("delete", "--force", "--json", id)
 	if err != nil {
 		if isBdNotFound(err) {
 			return fmt.Errorf("deleting bead %q: %w", id, ErrNotFound)

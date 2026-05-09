@@ -312,6 +312,8 @@ func buildDesiredStateWithSessionBeads(
 	var namedDefaultDemand map[string]bool
 	if store != nil {
 		assignedWorkBeads, assignedWorkStores, assignedWorkStoreRefs, storePartial = collectAssignedWorkBeadsWithStores(cfg, store, rigStores, suspendedRigPaths, sessionBeads)
+		bp.assignedWorkBeads = assignedWorkBeads
+		bp.assignedWorkKnown = true
 		if storePartial {
 			fmt.Fprintf(stderr, "assignedWorkBeads: PARTIAL — store query failed, drain decisions suppressed\n") //nolint:errcheck
 		}
@@ -349,7 +351,6 @@ func buildDesiredStateWithSessionBeads(
 			fmt.Fprintf(stderr, "scaleCheck: PARTIAL — scale_check failed for %s, retaining affected sessions\n", strings.Join(sortedBoolMapKeys(scaleCheckPartialTemplates), ",")) //nolint:errcheck
 		}
 		poolWorkBeads := filterAssignedWorkBeadsForPoolDemand(cfg, cityPath, sessionBeads.Open(), assignedWorkBeads, assignedWorkStoreRefs)
-		bp.assignedWorkBeads = poolWorkBeads
 		poolDesiredStates := ComputePoolDesiredStatesTraced(cfg, poolWorkBeads, sessionBeads.Open(), scaleCheckCounts, trace)
 		for _, poolState := range poolDesiredStates {
 			cfgAgent := findAgentByTemplate(cfg, poolState.Template)
@@ -859,6 +860,27 @@ func defaultScaleCheckCounts(targets []defaultScaleCheckTarget) (map[string]int,
 	}
 
 	for key, group := range groups {
+		if counter, ok := group.store.(interface {
+			PoolDemandCount(template string) (int, error)
+		}); ok {
+			handled := true
+			for template := range group.templates {
+				count, err := counter.PoolDemandCount(template)
+				if err != nil {
+					if strings.Contains(err.Error(), "does not support direct query") {
+						handled = false
+						break
+					}
+					errs = append(errs, fmt.Errorf("default scale_check %s template=%s: PoolDemandCount(): %w", key, template, err))
+					partialTemplates = markScaleCheckPartialTemplate(partialTemplates, template)
+					continue
+				}
+				counts[template] = count
+			}
+			if handled {
+				continue
+			}
+		}
 		ready, err := readyForControllerDemand(group.store)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("default scale_check %s templates=%s: Ready(): %w", key, strings.Join(sortedStringSet(group.templates), ","), err))

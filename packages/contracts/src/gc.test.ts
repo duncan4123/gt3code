@@ -229,6 +229,45 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(rigGroups[0]?.agentGroups[1]?.threads).toEqual([]);
     expect(rigGroups[0]?.agentGroups[1]?.isPool).toBe(true);
     expect(rigGroups[0]?.agentGroups[1]?.isSuspended).toBe(true);
+    expect(rigGroups[0]?.agentGroups[1]?.isExplicitlySuspended).toBe(true);
+  });
+
+  it("keeps explicit agent suspension separate from inherited rig suspension", () => {
+    const { rigGroups } = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "city",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "test-rig",
+            path: "/data/projects/test-rig",
+            suspended: true,
+          },
+        ],
+        agents: [
+          {
+            name: "refinery",
+            dir: "test-rig",
+            suspended: false,
+          },
+          {
+            name: "witness",
+            dir: "test-rig",
+            suspended: true,
+          },
+        ],
+      },
+      projectCwd: "/data/projects/test-rig",
+    });
+
+    expect(rigGroups[0]?.isSuspended).toBe(true);
+    expect(rigGroups[0]?.agentGroups.map((group) => group.isSuspended)).toEqual([true, true]);
+    expect(rigGroups[0]?.agentGroups.map((group) => group.isExplicitlySuspended)).toEqual([
+      false,
+      true,
+    ]);
   });
 
   it("includes configured agent folders when a rig has no threads at all", () => {

@@ -203,15 +203,11 @@ func GetBlockingInfoForIssuesInTx(ctx context.Context, tx *sql.Tx, issueIDs []st
 		return
 	}
 
-	// Partition into wisp and perm IDs for routing.
-	var wispIDs, permIDs []string
-	for _, id := range issueIDs {
-		if IsActiveWispInTx(ctx, tx, id) {
-			wispIDs = append(wispIDs, id)
-		} else {
-			permIDs = append(permIDs, id)
-		}
+	wispSet, setErr := WispIDSetInTx(ctx, tx, issueIDs)
+	if setErr != nil {
+		return nil, nil, nil, fmt.Errorf("get blocking info: build wisp set: %w", setErr)
 	}
+	wispIDs, permIDs := partitionByWispSet(issueIDs, wispSet)
 
 	// Process wisp IDs against wisp_dependencies.
 	if len(wispIDs) > 0 {
