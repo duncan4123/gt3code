@@ -156,6 +156,8 @@ describe("SidebarGcFolders", () => {
     try {
       await expect.element(page.getByTestId("gc-rig-folder-t3code")).toBeInTheDocument();
       await expect.element(page.getByTestId("gc-rig-folder-GC")).toBeInTheDocument();
+      await expect.element(page.getByTestId("gc-city-label-GC")).toHaveTextContent("city");
+      await expect.element(page.getByTestId("gc-city-label-t3code")).not.toBeInTheDocument();
       await expect
         .element(page.getByTestId("gc-agent-folder-t3code--refinery"))
         .toBeInTheDocument();
@@ -221,6 +223,48 @@ describe("SidebarGcFolders", () => {
         .toHaveAttribute("aria-expanded", "false");
       await expect
         .element(page.getByTestId("gc-agent-folder-t3code--refinery"))
+        .not.toBeInTheDocument();
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+
+  it("labels top-level multicity folders as cities", async () => {
+    const { host, screen } = await renderSidebarGcFolders({
+      rigGroups: [
+        {
+          id: "gastown",
+          label: "gastown",
+          kind: "rig",
+          isSuspended: false,
+          agentGroups: [
+            {
+              id: "gastown/refinery",
+              label: "refinery",
+              qualifiedName: "gastown/refinery",
+              isExplicitlySuspended: false,
+              isSuspended: false,
+              isPool: false,
+              runtimeState: { label: "Running", tone: "success" },
+              threadIds: [],
+            },
+          ],
+        },
+        {
+          id: "gastown/t3code",
+          label: "gastown/t3code",
+          kind: "rig",
+          isSuspended: false,
+          agentGroups: [],
+        },
+      ],
+    });
+
+    try {
+      await expect.element(page.getByTestId("gc-city-label-gastown")).toHaveTextContent("city");
+      await expect
+        .element(page.getByTestId("gc-city-label-gastown--t3code"))
         .not.toBeInTheDocument();
     } finally {
       await screen.unmount();

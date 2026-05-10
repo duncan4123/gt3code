@@ -183,6 +183,12 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   );
   const workspaceSuspensionHint =
     "Workspace is suspended. Gas City will not start or reconcile agents until GC is resumed.";
+  const cityFolderIds = new Set(
+    props.rigGroups.flatMap((rigGroup) => {
+      const [cityId, childId] = rigGroup.id.split("/");
+      return cityId && childId ? [cityId] : [];
+    }),
+  );
 
   const toggleRig = (rigId: string) => {
     setCollapsedRigIds((current) => {
@@ -615,6 +621,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   };
 
   return props.rigGroups.map((rigGroup) => {
+    const isCityFolder = rigGroup.kind === "workspace" || cityFolderIds.has(rigGroup.id);
     const rigStateSummary =
       rigGroup.kind === "workspace"
         ? props.gcCityActionState === "resume"
@@ -659,6 +666,16 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               />
               <FolderIcon className="size-3 shrink-0" />
               <span className="truncate text-xs font-semibold leading-none">{rigGroup.label}</span>
+              {isCityFolder ? (
+                <Badge
+                  size="sm"
+                  variant="outline"
+                  data-testid={`gc-city-label-${gcControlTestIdSuffix(rigGroup.id)}`}
+                  className="rounded-full px-1.5 text-[.55rem] tracking-wide uppercase"
+                >
+                  city
+                </Badge>
+              ) : null}
               {rigGroup.kind === "workspace" && rigGroup.isSuspended ? (
                 <Badge
                   size="sm"
