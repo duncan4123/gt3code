@@ -1020,10 +1020,7 @@ export function makeOpenCodeAdapter(
         const serverUrl = openCodeSettings.serverUrl;
         const serverPassword = openCodeSettings.serverPassword;
         const directory = input.cwd ?? serverConfig.cwd;
-        const sessionEnvironment = mergeProviderSessionEnvironment(
-          options?.environment,
-          input.env,
-        );
+        const sessionEnvironment = mergeProviderSessionEnvironment(options?.environment, input.env);
         const existing = sessions.get(input.threadId);
         if (existing) {
           yield* stopOpenCodeContext(existing);

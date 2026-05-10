@@ -7,6 +7,7 @@ Persistent memory via [cass_memory_system](https://github.com/Dicklesworthstone/
 - **MCP server**: `cass-memory` wired to `http://127.0.0.1:8766/mcp`
 - **Skill**: `/recall` — query playbook for relevant rules before starting work
 - **Skill**: `/reflect` — trigger reflection on recent sessions to extract lessons
+- **Prompt fragment**: `cm-memory` — reminds agents to run `cm context`
 
 ## Prerequisites
 
@@ -15,13 +16,7 @@ Install and start the cass-memory server:
 ```bash
 pip install cass-memory-system
 cm init
-cm serve --port 8766 &
-```
-
-Set the authentication token:
-
-```bash
-export CM_TOKEN="your-token-here"
+packages/gascity-config/config/cities/gascity-br/packs/flywheel/cm/scripts/start-cm.sh
 ```
 
 Optional: set up nightly reflection via cron:

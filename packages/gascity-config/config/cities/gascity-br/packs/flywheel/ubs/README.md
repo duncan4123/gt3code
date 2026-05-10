@@ -6,6 +6,7 @@ Pre-commit bug scanning via [ultimate_bug_scanner](https://github.com/Dickleswor
 
 - **Hook**: `PreToolUse` — automatically scans staged files when the agent runs `git commit`
 - **Skill**: `/scan-bugs` — manually scan files, staged changes, or full repo
+- **Prompt fragment**: `ubs-scan` — reminds Codex/T3 agents to run `ubs --staged`
 
 ## Prerequisites
 

@@ -723,7 +723,8 @@ export function partitionProjectThreadsForSidebar<
   hasHiddenStandaloneThreads: boolean;
 } {
   const includeGcFolders = input.includeGcFolders ?? true;
-  const { rigGroups, standaloneThreads } = includeGcFolders
+  const shouldGroupGcThreads = includeGcFolders || Boolean(input.gcConfig);
+  const groupedThreads = shouldGroupGcThreads
     ? groupThreadsByRigAndAgent<T>([...input.threads], {
         config: input.gcConfig,
         projectCwd: input.projectCwd,
@@ -731,6 +732,8 @@ export function partitionProjectThreadsForSidebar<
         projectMembers: input.projectMembers,
       })
     : { rigGroups: [], standaloneThreads: [...input.threads] };
+  const rigGroups = includeGcFolders ? groupedThreads.rigGroups : [];
+  const standaloneThreads = groupedThreads.standaloneThreads;
   const standaloneVisibility = getVisibleThreadsForProject({
     threads: standaloneThreads,
     activeThreadId: input.activeThreadId,

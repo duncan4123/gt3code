@@ -150,11 +150,42 @@ bun gc -- status
 bun gc -- session list
 ```
 
+### Multi-city Lifecycle
+
+Gas City does not expose a separate `start all cities` command. One supervisor
+process owns every registered city, and `gc supervisor reload` is the all-cities
+operation: it asks the supervisor to reconcile every registered city.
+
+Register each bundled city once per machine or fresh clone:
+
+```bash
+bun gc -- register packages/gascity-config/config/cities/gastown --name gastown
+bun gc -- register packages/gascity-config/config/cities/gascity-br --name gascity-br
+```
+
+Then use the supervisor-level commands:
+
+```bash
+# Show all cities registered with the bundled supervisor.
+bun gc -- cities
+
+# Reconcile every registered city from the one supervisor.
+bun gc -- supervisor reload
+```
+
+Suspended cities stay suspended during reload. Resume a city first when it
+should actively run:
+
+```bash
+bun gc -- resume --city packages/gascity-config/config/cities/gastown
+bun gc -- resume --city packages/gascity-config/config/cities/gascity-br
+```
+
 `bun dev` also exports the bundled GC environment for the T3 server:
 
 ```text
 T3CODE_GASCITY_HOME=<runtime>
-GC_CITY_PATH=packages/gascity-config/config
+GC_CITY_PATH=packages/gascity-config/config/cities/gastown
 GC_BIN=<runtime>/bin/gc or <runtime>\bin\gc.exe
 BD_BIN=<runtime>/bin/bd or <runtime>\bin\bd.exe
 T3CODE_WORKTREES_DIR=$T3CODE_HOME/worktrees

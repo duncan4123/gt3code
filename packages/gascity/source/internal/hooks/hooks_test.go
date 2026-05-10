@@ -278,6 +278,24 @@ func TestInstallCodexUpgradesGeneratedFileMissingHookFormat(t *testing.T) {
 	if !strings.Contains(got, "--hook-format codex") {
 		t.Errorf("upgraded codex hooks missing Codex hook output format:\n%s", got)
 	}
+	sessionStartCommand := claudeHookCommand(t, fs.Files["/work/.codex/hooks.json"], "SessionStart")
+	if !strings.Contains(sessionStartCommand, "GC_HOOK_EVENT_NAME=SessionStart") {
+		t.Errorf("upgraded codex SessionStart missing event marker: %s", sessionStartCommand)
+	}
+	if !strings.Contains(sessionStartCommand, "GC_MANAGED_SESSION_HOOK=1") {
+		t.Errorf("upgraded codex SessionStart missing managed marker: %s", sessionStartCommand)
+	}
+	if entries := claudeHookEntries(t, fs.Files["/work/.codex/hooks.json"], "SessionStart"); len(entries) == 0 || entries[0].Matcher != "startup" {
+		t.Fatalf("upgraded codex SessionStart matcher = %q, want startup", func() string {
+			if len(entries) == 0 {
+				return ""
+			}
+			return entries[0].Matcher
+		}())
+	}
+	if !strings.Contains(claudeHookCommand(t, fs.Files["/work/.codex/hooks.json"], "PreCompact"), `gc handoff --auto "context cycle"`) {
+		t.Errorf("upgraded codex hooks missing mapped PreCompact handoff:\n%s", got)
+	}
 }
 
 func TestInstallCodexUpgradePreservesCustomHooks(t *testing.T) {
@@ -306,6 +324,12 @@ func TestInstallCodexUpgradePreservesCustomHooks(t *testing.T) {
 	got := string(fs.Files["/work/.codex/hooks.json"])
 	if !strings.Contains(got, "--hook-format codex") {
 		t.Errorf("upgraded codex hooks missing Codex hook output format:\n%s", got)
+	}
+	if !strings.Contains(claudeHookCommand(t, fs.Files["/work/.codex/hooks.json"], "PreCompact"), `gc handoff --auto "context cycle"`) {
+		t.Errorf("upgraded codex hooks missing mapped PreCompact handoff:\n%s", got)
+	}
+	if !strings.Contains(got, "GC_MANAGED_SESSION_HOOK=1") {
+		t.Errorf("upgraded codex hooks missing SessionStart managed marker:\n%s", got)
 	}
 	if !strings.Contains(got, "printf custom-codex-hook") {
 		t.Errorf("custom codex hook was not preserved:\n%s", got)
@@ -768,6 +792,12 @@ func TestInstallOverlayManagedProviders(t *testing.T) {
 	codexHooks := string(fs.Files["/work/.codex/hooks.json"])
 	if !strings.Contains(codexHooks, "--hook-format codex") {
 		t.Error("codex hooks should request Codex hook output format")
+	}
+	if !strings.Contains(claudeHookCommand(t, fs.Files["/work/.codex/hooks.json"], "PreCompact"), `gc handoff --auto "context cycle"`) {
+		t.Error("codex hooks should include mapped PreCompact handoff")
+	}
+	if !strings.Contains(codexHooks, "GC_MANAGED_SESSION_HOOK=1") {
+		t.Error("codex hooks should mark managed SessionStart hook")
 	}
 	for _, rel := range []string{
 		"/work/.codex/hooks.json",

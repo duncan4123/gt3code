@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -2042,6 +2043,10 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	}
 	cfg.Env["GC_STARTUP_ENVELOPE"] = string(envelopeJSON)
 
+	if err := runPreStart(ctx, cfg); err != nil {
+		return fail(err)
+	}
+
 	snapshot, err := p.rpcSnapshot()
 	if err != nil {
 		return fail(fmt.Errorf("t3bridge: load snapshot: %w", err))
@@ -2545,6 +2550,28 @@ func (p *Provider) SendKeys(name string, keys ...string) error {
 }
 
 func (p *Provider) RunLive(_ string, _ runtime.Config) error {
+	return nil
+}
+
+func runPreStart(ctx context.Context, cfg runtime.Config) error {
+	if len(cfg.PreStart) == 0 {
+		return nil
+	}
+	env := os.Environ()
+	for k, v := range cfg.Env {
+		env = append(env, k+"="+v)
+	}
+	for i, command := range cfg.PreStart {
+		stepCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		cmd := exec.CommandContext(stepCtx, "sh", "-c", command)
+		cmd.Dir = cfg.WorkDir
+		cmd.Env = env
+		output, err := cmd.CombinedOutput()
+		cancel()
+		if err != nil {
+			return fmt.Errorf("t3bridge pre_start[%d]: %w: %s", i, err, strings.TrimSpace(string(output)))
+		}
+	}
 	return nil
 }
 

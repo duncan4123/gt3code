@@ -350,7 +350,7 @@ func readClaudeSettingsCandidate(fs fsys.FS, path string) (claudeCandidateState,
 
 func writeCodexHooksManaged(fs fsys.FS, dst string, data []byte) error {
 	if existing, err := fs.ReadFile(dst); err == nil {
-		upgraded, changed, upgradeErr := upgradeCodexHookCommands(existing)
+		upgraded, changed, upgradeErr := upgradeCodexHooks(existing, data)
 		if upgradeErr != nil || !changed {
 			return nil
 		}
@@ -372,12 +372,20 @@ func writeManagedData(fs fsys.FS, dst string, data []byte) error {
 	return nil
 }
 
-func upgradeCodexHookCommands(existing []byte) ([]byte, bool, error) {
+func upgradeCodexHooks(existing, desired []byte) ([]byte, bool, error) {
 	var root any
 	if err := json.Unmarshal(existing, &root); err != nil {
 		return nil, false, err
 	}
-	if !upgradeCodexHookValue(root) {
+	changed := upgradeCodexHookValue(root)
+	var desiredRoot any
+	if err := json.Unmarshal(desired, &desiredRoot); err != nil {
+		return nil, false, err
+	}
+	if mergeDesiredCodexHooks(root, desiredRoot) {
+		changed = true
+	}
+	if !changed {
 		return nil, false, nil
 	}
 	data, err := json.MarshalIndent(root, "", "  ")
@@ -385,6 +393,168 @@ func upgradeCodexHookCommands(existing []byte) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	return append(data, '\n'), true, nil
+}
+
+func mergeDesiredCodexHooks(root, desiredRoot any) bool {
+	rootObj, ok := root.(map[string]any)
+	if !ok {
+		return false
+	}
+	desiredObj, ok := desiredRoot.(map[string]any)
+	if !ok {
+		return false
+	}
+	desiredHooks, ok := desiredObj["hooks"].(map[string]any)
+	if !ok || len(desiredHooks) == 0 {
+		return false
+	}
+	existingHooks, ok := rootObj["hooks"].(map[string]any)
+	if !ok {
+		rootObj["hooks"] = cloneJSONValue(desiredHooks)
+		return true
+	}
+	changed := false
+	for event, desiredEvent := range desiredHooks {
+		existingEvent, ok := existingHooks[event]
+		if !ok {
+			existingHooks[event] = cloneJSONValue(desiredEvent)
+			changed = true
+			continue
+		}
+		existingEntries, ok := existingEvent.([]any)
+		if !ok {
+			continue
+		}
+		desiredEntries, ok := desiredEvent.([]any)
+		if !ok {
+			continue
+		}
+		commands := collectHookCommands(existingEvent)
+		for _, desiredEntry := range desiredEntries {
+			if syncDesiredCodexHookMetadata(existingEntries, desiredEntry) {
+				changed = true
+			}
+			missing := missingDesiredHookCommands(desiredEntry, commands)
+			if len(missing) == 0 {
+				continue
+			}
+			entry, ok := cloneJSONValue(desiredEntry).(map[string]any)
+			if !ok {
+				continue
+			}
+			entry["hooks"] = missing
+			existingEntries = append(existingEntries, entry)
+			for _, hook := range missing {
+				if hookObj, ok := hook.(map[string]any); ok {
+					if command, ok := hookObj["command"].(string); ok {
+						commands[command] = true
+					}
+				}
+			}
+			changed = true
+		}
+		existingHooks[event] = existingEntries
+	}
+	return changed
+}
+
+func syncDesiredCodexHookMetadata(existingEntries []any, desiredEntry any) bool {
+	desiredObj, ok := desiredEntry.(map[string]any)
+	if !ok {
+		return false
+	}
+	desiredMatcher, ok := desiredObj["matcher"].(string)
+	if !ok || desiredMatcher == "" {
+		return false
+	}
+	desiredCommands := collectHookCommands(desiredEntry)
+	if len(desiredCommands) == 0 {
+		return false
+	}
+	changed := false
+	for _, existingEntry := range existingEntries {
+		entryObj, ok := existingEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		entryCommands := collectHookCommands(existingEntry)
+		for command := range desiredCommands {
+			if !entryCommands[command] {
+				continue
+			}
+			if current, _ := entryObj["matcher"].(string); current != desiredMatcher {
+				entryObj["matcher"] = desiredMatcher
+				changed = true
+			}
+			break
+		}
+	}
+	return changed
+}
+
+func collectHookCommands(v any) map[string]bool {
+	commands := make(map[string]bool)
+	collectHookCommandsInto(v, commands)
+	return commands
+}
+
+func collectHookCommandsInto(v any, commands map[string]bool) {
+	switch node := v.(type) {
+	case map[string]any:
+		if command, ok := node["command"].(string); ok {
+			commands[command] = true
+		}
+		for _, val := range node {
+			collectHookCommandsInto(val, commands)
+		}
+	case []any:
+		for _, elem := range node {
+			collectHookCommandsInto(elem, commands)
+		}
+	}
+}
+
+func missingDesiredHookCommands(entry any, existing map[string]bool) []any {
+	entryObj, ok := entry.(map[string]any)
+	if !ok {
+		return nil
+	}
+	hooks, ok := entryObj["hooks"].([]any)
+	if !ok {
+		return nil
+	}
+	var missing []any
+	for _, hook := range hooks {
+		hookObj, ok := hook.(map[string]any)
+		if !ok {
+			continue
+		}
+		command, ok := hookObj["command"].(string)
+		if !ok || existing[command] {
+			continue
+		}
+		missing = append(missing, cloneJSONValue(hookObj))
+	}
+	return missing
+}
+
+func cloneJSONValue(v any) any {
+	switch node := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(node))
+		for key, val := range node {
+			out[key] = cloneJSONValue(val)
+		}
+		return out
+	case []any:
+		out := make([]any, len(node))
+		for i, val := range node {
+			out[i] = cloneJSONValue(val)
+		}
+		return out
+	default:
+		return node
+	}
 }
 
 func upgradeCodexHookValue(v any) bool {
@@ -420,11 +590,20 @@ func upgradeCodexHookValue(v any) bool {
 }
 
 func upgradeCodexHookCommand(command string) (string, bool) {
+	original := command
+	if strings.Contains(command, `gc prime --hook`) {
+		if !strings.Contains(command, `GC_MANAGED_SESSION_HOOK=1`) {
+			command = strings.Replace(command, `gc prime --hook`, `GC_MANAGED_SESSION_HOOK=1 GC_HOOK_EVENT_NAME=SessionStart gc prime --hook`, 1)
+		}
+		if !strings.Contains(command, `--hook-format codex`) {
+			command = strings.Replace(command, `gc prime --hook`, `gc prime --hook --hook-format codex`, 1)
+		}
+		return command, command != original
+	}
 	if strings.Contains(command, `--hook-format codex`) {
 		return "", false
 	}
 	for _, needle := range []string{
-		`gc prime --hook`,
 		`gc nudge drain --inject`,
 		`gc mail check --inject`,
 		`gc hook --inject`,

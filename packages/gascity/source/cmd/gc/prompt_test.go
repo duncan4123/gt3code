@@ -618,6 +618,34 @@ func TestRenderPromptCrossPackPriority(t *testing.T) {
 	}
 }
 
+func TestRenderPromptLoadsFragmentsFromPromptPackRoot(t *testing.T) {
+	f := fsys.NewFake()
+	f.Files["/city/.gc/system/packs/gastown/template-fragments/capability.template.md"] = []byte(
+		`{{ define "capability" }}Pack capability{{ end }}`)
+	f.Files["/city/.gc/system/packs/gastown/agents/witness/prompt.template.md"] = []byte(
+		`Witness: {{ template "capability" . }}`)
+
+	got := renderPrompt(f, "/city", "", ".gc/system/packs/gastown/agents/witness/prompt.template.md", PromptContext{}, "", io.Discard,
+		nil, nil, nil)
+	if got != "Witness: Pack capability" {
+		t.Errorf("pack-root fragment render = %q, want %q", got, "Witness: Pack capability")
+	}
+}
+
+func TestRenderPromptLoadsCityRootFragments(t *testing.T) {
+	f := fsys.NewFake()
+	f.Files["/city/template-fragments/beads-rust-backend.template.md"] = []byte(
+		`{{ define "beads-rust-backend" }}BR backend{{ end }}`)
+	f.Files["/city/.gc/system/packs/gastown/agents/witness/prompt.template.md"] = []byte("Witness")
+
+	got := renderPrompt(f, "/city", "", ".gc/system/packs/gastown/agents/witness/prompt.template.md", PromptContext{}, "", io.Discard,
+		nil, []string{"beads-rust-backend"}, nil)
+	want := "Witness\n\nBR backend"
+	if got != want {
+		t.Errorf("city-root fragment render = %q, want %q", got, want)
+	}
+}
+
 func TestRenderPromptInjectFragments(t *testing.T) {
 	f := fsys.NewFake()
 	// Shared dir has named fragments.

@@ -6,6 +6,7 @@ Roll-up pack that includes the full [Agent Flywheel](https://agent-flywheel.com/
 - **cass** — session search
 - **cm** — persistent memory / playbook
 - **ubs** — pre-commit bug scanning
+- **agent-browser** — browser UI automation and audit checks
 
 ## Prerequisites
 
@@ -30,4 +31,7 @@ source = "../packs/flywheel/mcp-agent-mail"
 
 [imports.ubs]
 source = "../packs/flywheel/ubs"
+
+[imports.agent-browser]
+source = "../packs/flywheel/agent-browser"
 ```

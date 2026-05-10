@@ -14,12 +14,26 @@ Your managed session environment determines your role. `gc prime` resolves the
 agent prompt from `GC_ALIAS`, falling back to `GC_AGENT`, unless an explicit
 agent name is passed.
 
-### Dolt Server
+### Beads Backend
 
-Dolt is the data plane for beads (issues, mail, work history). It runs as a
-single server serving all databases. Check `city.toml` for the configured port. **It is fragile.**
+Gas Town agents use `gc bd` and `gc mail` as the public interface for beads.
+Do not assume every city is backed by a Dolt server. Check `[beads].provider`
+in `city.toml` or ask the mayor before running backend-specific diagnostics.
 
-If you detect Dolt trouble (commands hang/timeout, "connection refused",
+- Dolt-backed cities use the Dolt diagnostics below.
+- Exec-backed beads-rust cities use a wrapper around `br`; there is no Dolt
+  server lifecycle to restart.
+- In all backends, the bead state itself (assignee, status, labels, metadata)
+  is the durable record. Prefer `gc bd show <id> --json | jq '.[0].metadata'`
+  over inspecting backend storage directly.
+
+### Dolt Server (Dolt-Backed Cities Only)
+
+Dolt is the data plane for beads only when the city is configured for a Dolt
+or bd provider. It runs as a single server serving all databases. Check
+`city.toml` for the configured port. **It is fragile.**
+
+If this city is Dolt-backed and you detect Dolt trouble (commands hang/timeout, "connection refused",
 "database not found", query latency > 5s, unexpected empty results):
 
 **BEFORE restarting Dolt, collect non-fatal diagnostics.** Dolt hangs
@@ -93,7 +107,8 @@ server and degrade performance. Use `gc dolt cleanup` to remove them safely.
 
 ### Communication: Nudge First, Mail Rarely
 
-Every `gc mail send` creates a permanent bead with a Dolt commit. The
+Every `gc mail send` creates a permanent bead write. In Dolt-backed cities that
+means a Dolt commit; in beads-rust cities it is a `br` database write. The
 `gc session nudge` path is ephemeral and costs zero. **Default to nudge for all
 routine communication.**
 
@@ -122,10 +137,12 @@ EOF
 - **After processing a message, always archive it** to keep your inbox clean
 - `gc mail reply <id> -s "RE: ..." -m "..."` creates a threaded reply
 
-**Dolt health — your part:**
+**Backend health — your part:**
 
 - Nudge, don't mail for routine communication
 - Don't create unnecessary beads — file real work, not scratchpads
 - Close your beads — open beads that linger become pollution
-- When Dolt is slow/down: check `gc doctor`, nudge Deacon — don't restart Dolt yourself
+- When the bead backend is slow/down: check `gc doctor`, nudge Deacon, and use
+  backend-specific diagnostics. Don't restart Dolt unless this is a Dolt-backed
+  city and you have followed the diagnostic protocol above.
   {{ end }}

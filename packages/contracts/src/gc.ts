@@ -534,16 +534,55 @@ function projectContextMatchesRigPath(projectCwds: ReadonlySet<string>, rigPath:
 
   for (const projectCwd of projectCwds) {
     const normalizedProjectCwd = normalizeGcPath(projectCwd);
-    if (
-      normalizedProjectCwd &&
-      (normalizedProjectCwd === normalizedRigPath ||
-        normalizedRigPath.startsWith(`${normalizedProjectCwd}/`))
-    ) {
+    if (normalizedProjectCwd && normalizedProjectCwd === normalizedRigPath) {
       return true;
     }
   }
 
   return false;
+}
+
+function expandRelevantRigsWithMultiCityRoots(
+  rigs: readonly GcConfigRig[],
+  relevantRigs: readonly GcConfigRig[],
+  cityRootNames: ReadonlySet<string>,
+): GcConfigRig[] {
+  if (relevantRigs.length === 0) {
+    return [];
+  }
+
+  const relevantRigNames = new Set(relevantRigs.map((rig) => rig.name));
+  const requiredCityRoots = new Set<string>();
+  for (const rig of relevantRigs) {
+    for (const cityName of cityRootNames) {
+      if (rig.name === cityName || rig.name.startsWith(`${cityName}/`)) {
+        requiredCityRoots.add(cityName);
+      }
+    }
+  }
+
+  return rigs.filter((rig) => relevantRigNames.has(rig.name) || requiredCityRoots.has(rig.name));
+}
+
+function multiCityWorkspaceRigNames(rigs: readonly GcConfigRig[]): Set<string> {
+  const rigNames = new Set(
+    rigs.flatMap((rig) => {
+      const name = normalizeMetadataValue(rig.name);
+      return name ? [name] : [];
+    }),
+  );
+  const workspaceRigNames = new Set<string>();
+  for (const rigName of rigNames) {
+    const separatorIndex = rigName.indexOf("/");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    const cityName = rigName.slice(0, separatorIndex);
+    if (rigNames.has(cityName)) {
+      workspaceRigNames.add(cityName);
+    }
+  }
+  return workspaceRigNames;
 }
 
 /** Partition threads into rig folders, agent folders, and standalone threads. */
@@ -576,6 +615,8 @@ export function groupThreadsByRigAndAgent<
   const projectName = normalizeMetadataValue(options?.projectName ?? undefined);
   const workspaceName = normalizeMetadataValue(options?.config?.workspace.name);
   const workspaceSuspended = options?.config?.workspace.suspended ?? false;
+  const multiCityWorkspaceIds = multiCityWorkspaceRigNames(options?.config?.rigs ?? []);
+  const isMergedMultiCityConfig = workspaceName === "cities" && multiCityWorkspaceIds.size > 0;
   const projectCwds = new Set<string>();
   const projectLabels = new Set<string>();
 
@@ -668,16 +709,21 @@ export function groupThreadsByRigAndAgent<
       isCityAliasProject),
   );
   let cityScopedRigGroupId: string | null = null;
-  const relevantRigs = options?.config?.rigs.filter(
+  const configRigs = options?.config?.rigs ?? [];
+  const directlyRelevantRigs = configRigs.filter(
     (rig) => projectCwds.size === 0 || projectContextMatchesRigPath(projectCwds, rig.path),
   );
+  const relevantRigs = isMergedMultiCityConfig
+    ? expandRelevantRigsWithMultiCityRoots(configRigs, directlyRelevantRigs, multiCityWorkspaceIds)
+    : directlyRelevantRigs;
   if (relevantRigs && relevantRigs.length > 0) {
     const relevantRigNames = new Set(relevantRigs.map((rig) => rig.name));
     for (const rig of relevantRigs) {
+      const isMultiCityWorkspace = isMergedMultiCityConfig && multiCityWorkspaceIds.has(rig.name);
       rigGroupsById.set(rig.name, {
         id: rig.name,
         label: rig.name,
-        kind: "rig",
+        kind: isMultiCityWorkspace ? "workspace" : "rig",
         isConfigured: true,
         isSuspended: rig.suspended,
         agentGroupsById: new Map(),
@@ -718,7 +764,8 @@ export function groupThreadsByRigAndAgent<
   if (
     (!cityScopedRigGroupId || !rigGroupsById.has(cityScopedRigGroupId)) &&
     workspaceName &&
-    (isCityProject || isGlobalScope)
+    (isCityProject || isGlobalScope) &&
+    !isMergedMultiCityConfig
   ) {
     const cityGroupId = workspaceName;
     cityScopedRigGroupId = cityGroupId;

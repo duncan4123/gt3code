@@ -230,19 +230,19 @@ describe("SidebarGcFolders", () => {
     }
   });
 
-  it("labels top-level multicity folders as cities", async () => {
+  it("labels and nests top-level multicity folders as cities", async () => {
     const { host, screen } = await renderSidebarGcFolders({
       rigGroups: [
         {
-          id: "gastown",
-          label: "gastown",
-          kind: "rig",
+          id: "gascity-br",
+          label: "gascity-br",
+          kind: "workspace",
           isSuspended: false,
           agentGroups: [
             {
-              id: "gastown/refinery",
-              label: "refinery",
-              qualifiedName: "gastown/refinery",
+              id: "gascity-br/mayor",
+              label: "mayor",
+              qualifiedName: "gascity-br/mayor",
               isExplicitlySuspended: false,
               isSuspended: false,
               isPool: false,
@@ -252,19 +252,41 @@ describe("SidebarGcFolders", () => {
           ],
         },
         {
-          id: "gastown/t3code",
-          label: "gastown/t3code",
+          id: "gascity-br/beads_rust",
+          label: "gascity-br/beads_rust",
           kind: "rig",
           isSuspended: false,
-          agentGroups: [],
+          agentGroups: [
+            {
+              id: "gascity-br/beads_rust/polecat",
+              label: "polecat",
+              qualifiedName: "gascity-br/beads_rust/polecat",
+              isExplicitlySuspended: false,
+              isSuspended: false,
+              isPool: false,
+              runtimeState: { label: "Running", tone: "success" },
+              threadIds: [],
+            },
+          ],
         },
       ],
     });
 
     try {
-      await expect.element(page.getByTestId("gc-city-label-gastown")).toHaveTextContent("city");
+      await expect.element(page.getByTestId("gc-city-label-gascity-br")).toHaveTextContent("city");
       await expect
-        .element(page.getByTestId("gc-city-label-gastown--t3code"))
+        .element(page.getByTestId("gc-city-label-gascity-br--beads_rust"))
+        .not.toBeInTheDocument();
+      await expect
+        .element(page.getByTestId("gc-rig-folder-gascity-br--beads_rust"))
+        .toBeInTheDocument();
+      await expect
+        .element(page.getByTestId("gc-agent-folder-gascity-br--beads_rust--polecat"))
+        .toBeInTheDocument();
+
+      await page.getByTestId("gc-rig-toggle-gascity-br").click();
+      await expect
+        .element(page.getByTestId("gc-rig-folder-gascity-br--beads_rust"))
         .not.toBeInTheDocument();
     } finally {
       await screen.unmount();

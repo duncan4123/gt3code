@@ -566,6 +566,131 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(rigGroups[1]?.agentGroups[0]?.qualifiedName).toBe("t3code/gastown.crew");
   });
 
+  it("treats merged multicity root dirs as city folders without a synthetic cities group", () => {
+    const { rigGroups } = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "cities",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "gastown",
+            path: "/cities/gastown",
+            suspended: false,
+          },
+          {
+            name: "gastown/t3code",
+            path: "/data/projects/t3code",
+            suspended: false,
+          },
+          {
+            name: "gascity-br",
+            path: "/cities/gascity-br",
+            suspended: false,
+          },
+          {
+            name: "gascity-br/beads_rust",
+            path: "/data/projects/beads_rust",
+            suspended: false,
+          },
+        ],
+        agents: [
+          {
+            name: "mayor",
+            dir: "gastown",
+            suspended: false,
+          },
+          {
+            name: "refinery",
+            dir: "gastown/t3code",
+            suspended: false,
+          },
+          {
+            name: "mayor",
+            dir: "gascity-br",
+            suspended: false,
+          },
+          {
+            name: "polecat",
+            dir: "gascity-br/beads_rust",
+            suspended: false,
+          },
+        ],
+      },
+    });
+
+    expect(rigGroups.map((group) => group.id)).toEqual([
+      "gascity-br",
+      "gascity-br/beads_rust",
+      "gastown",
+      "gastown/t3code",
+    ]);
+    expect(rigGroups.find((group) => group.id === "gascity-br")).toMatchObject({
+      kind: "workspace",
+      agentGroups: [{ qualifiedName: "gascity-br/mayor" }],
+    });
+    expect(rigGroups.find((group) => group.id === "gascity-br/beads_rust")).toMatchObject({
+      kind: "rig",
+      agentGroups: [{ qualifiedName: "gascity-br/beads_rust/polecat" }],
+    });
+    expect(rigGroups.some((group) => group.id === "cities")).toBe(false);
+
+    const projectScopedResult = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "cities",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "gastown",
+            path: "/repo/packages/gascity-config/config/cities/gastown",
+            suspended: false,
+          },
+          {
+            name: "gastown/t3code",
+            path: "/repo",
+            suspended: false,
+          },
+          {
+            name: "gastown/beads-doltlite",
+            path: "/repo/packages/beads-doltlite",
+            suspended: false,
+          },
+        ],
+        agents: [
+          {
+            name: "mayor",
+            dir: "gastown",
+            suspended: false,
+          },
+          {
+            name: "refinery",
+            dir: "gastown/t3code",
+            suspended: false,
+          },
+          {
+            name: "polecat",
+            dir: "gastown/beads-doltlite",
+            suspended: false,
+          },
+        ],
+      },
+      projectCwd: "/repo",
+      projectName: "t3code",
+    });
+
+    expect(projectScopedResult.rigGroups.map((group) => group.id)).toEqual([
+      "gastown",
+      "gastown/t3code",
+    ]);
+    expect(projectScopedResult.rigGroups.find((group) => group.id === "gastown")).toMatchObject({
+      kind: "workspace",
+      agentGroups: [{ qualifiedName: "gastown/mayor" }],
+    });
+  });
+
   it("seeds configured agent folders from grouped project members", () => {
     const config = {
       workspace: {

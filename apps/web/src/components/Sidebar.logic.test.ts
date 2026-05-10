@@ -946,6 +946,58 @@ describe("partitionProjectThreadsForSidebar", () => {
       ThreadId.make("thread-gc"),
     ]);
   });
+
+  it("can hide GC folders while still removing GC-managed threads from native rows", () => {
+    const threads = [
+      makeThread({ id: ThreadId.make("thread-native"), title: "Native thread" }),
+      makeThread({
+        id: ThreadId.make("thread-gc"),
+        title: "GC thread",
+        customMetadata: {
+          "gc.agent": "gascity-br/beads_rust/polecat",
+          "gc.rig": "gascity-br/beads_rust",
+        },
+      }),
+    ];
+
+    const result = partitionProjectThreadsForSidebar({
+      threads,
+      activeThreadId: undefined,
+      isThreadListExpanded: false,
+      previewLimit: 6,
+      includeGcFolders: false,
+      gcConfig: {
+        workspace: { name: "cities", suspended: false },
+        rigs: [
+          {
+            name: "gascity-br",
+            path: "/cities/gascity-br",
+            suspended: false,
+          },
+          {
+            name: "gascity-br/beads_rust",
+            path: "/data/projects/beads_rust",
+            suspended: false,
+          },
+        ],
+        agents: [
+          {
+            name: "polecat",
+            dir: "gascity-br/beads_rust",
+            suspended: false,
+          },
+        ],
+      },
+      projectCwd: "/data/projects/beads_rust",
+      projectName: "beads_rust",
+    });
+
+    expect(result.rigGroups).toEqual([]);
+    expect(result.visibleStandaloneThreads.map((thread) => thread.id)).toEqual([
+      ThreadId.make("thread-native"),
+    ]);
+    expect(result.hiddenStandaloneThreads).toEqual([]);
+  });
 });
 
 function makeProject(overrides: Partial<Project> = {}): Project {

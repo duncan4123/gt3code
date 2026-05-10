@@ -4,35 +4,39 @@ suspended = false
 install_agent_hooks = ["codex"]
 
 [agent_defaults]
-append_fragments = ["cass-search"]
+append_fragments = ["cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]
 
 [[rigs]]
-name = "default"
+name = "beads_rust"
 prefix = "gb"
 suspended = false
 includes = [".gc/system/packs/gastown"]
+formulas_dir = "formulas"
 
 [patches]
 
 [[patches.agent]]
-dir = "default"
+dir = "beads_rust"
 name = "polecat"
+append_fragments = ["beads-rust-backend"]
 min_active_sessions = 1
 provider = "codex"
 wake_mode = "resume"
 
 [[patches.agent]]
-dir = "default"
+dir = "beads_rust"
 name = "refinery"
+append_fragments = ["beads-rust-backend"]
 provider = "codex"
 
 [[patches.agent]]
-dir = "default"
+dir = "beads_rust"
 name = "witness"
+append_fragments = ["beads-rust-backend"]
 provider = "codex"
 
 [[patches.named_session]]
-dir = "default"
+dir = "beads_rust"
 template = "refinery"
 mode = "always"
 

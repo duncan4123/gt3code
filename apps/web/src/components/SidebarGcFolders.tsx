@@ -72,6 +72,9 @@ function gcControlTestIdSuffix(value: string): string {
 
 interface SidebarGcFoldersProps {
   rigGroups: readonly SidebarGcRigGroup[];
+  indentDepth?: number;
+  nestedParentId?: string;
+  workspaceActionScope?: "city" | "rig";
   gcAgentMutationsInFlight: ReadonlySet<string>;
   gcAgentStartsInFlight?: ReadonlySet<string>;
   gcRigMutationsInFlight: ReadonlySet<string>;
@@ -162,6 +165,54 @@ function canWakeAgentSession(agentGroup: SidebarGcAgentGroup): boolean {
   );
 }
 
+const RIG_FOLDER_INDENT_CLASSES = ["px-2", "px-4", "px-6"] as const;
+const AGENT_FOLDER_INDENT_CLASSES = ["px-4", "px-6", "px-8"] as const;
+const THREAD_GROUP_INDENT_CLASSES = ["px-6", "px-8", "px-10"] as const;
+const THREAD_INDENT_CLASSES = ["pl-6", "pl-8", "pl-10"] as const;
+const THREAD_GROUP_THREAD_INDENT_CLASSES = ["pl-8", "pl-10", "pl-12"] as const;
+const CONVOY_AGENT_INDENT_CLASSES = ["px-6", "px-8", "px-10"] as const;
+const CONVOY_THREAD_GROUP_INDENT_CLASSES = ["px-8", "px-10", "px-12"] as const;
+const CONVOY_THREAD_INDENT_CLASSES = ["pl-10", "pl-12", "pl-14"] as const;
+
+function gcDepthClassName(depth: number, classNames: readonly string[]): string {
+  return classNames[Math.min(depth, classNames.length - 1)] ?? classNames[0] ?? "";
+}
+
+function gcNestedRigParentId(
+  rigGroup: SidebarGcRigGroup,
+  workspaceGroupIds: ReadonlySet<string>,
+  unscopedRigParentId?: string | null,
+): string | null {
+  if (rigGroup.kind === "workspace") {
+    return null;
+  }
+  const segments = rigGroup.id.split("/").filter(Boolean);
+  for (let index = segments.length - 1; index > 0; index -= 1) {
+    const candidate = segments.slice(0, index).join("/");
+    if (workspaceGroupIds.has(candidate)) {
+      return candidate;
+    }
+  }
+  if (unscopedRigParentId) {
+    return unscopedRigParentId;
+  }
+  return null;
+}
+
+function gcRigGroupDisplayLabel(rigGroup: SidebarGcRigGroup, parentId: string | undefined): string {
+  if (!parentId) {
+    return rigGroup.label;
+  }
+  const parentPrefix = `${parentId}/`;
+  if (rigGroup.label.startsWith(parentPrefix)) {
+    return rigGroup.label.slice(parentPrefix.length);
+  }
+  if (rigGroup.label === rigGroup.id && rigGroup.id.startsWith(parentPrefix)) {
+    return rigGroup.id.slice(parentPrefix.length);
+  }
+  return rigGroup.label;
+}
+
 function gcAgentEffectiveRuntimeState(
   rigGroup: SidebarGcRigGroup,
   agentGroup: SidebarGcAgentGroup,
@@ -183,11 +234,39 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   );
   const workspaceSuspensionHint =
     "Workspace is suspended. Gas City will not start or reconcile agents until GC is resumed.";
-  const cityFolderIds = new Set(
-    props.rigGroups.flatMap((rigGroup) => {
-      const [cityId, childId] = rigGroup.id.split("/");
-      return cityId && childId ? [cityId] : [];
-    }),
+  const indentDepth = props.indentDepth ?? 0;
+  const workspaceActionScope = props.workspaceActionScope ?? "city";
+  const workspaceGroupIds = new Set(
+    props.rigGroups
+      .filter((rigGroup) => rigGroup.kind === "workspace")
+      .map((rigGroup) => rigGroup.id),
+  );
+  const singleWorkspaceGroupId =
+    !props.nestedParentId && workspaceGroupIds.size === 1
+      ? ([...workspaceGroupIds][0] ?? null)
+      : null;
+  const nestedRigIds = new Set<string>();
+  const childRigGroupsByWorkspaceId = new Map<string, SidebarGcRigGroup[]>();
+  for (const rigGroup of props.rigGroups) {
+    const parentId = gcNestedRigParentId(rigGroup, workspaceGroupIds, singleWorkspaceGroupId);
+    if (!parentId) {
+      continue;
+    }
+    nestedRigIds.add(rigGroup.id);
+    const existing = childRigGroupsByWorkspaceId.get(parentId) ?? [];
+    existing.push(rigGroup);
+    childRigGroupsByWorkspaceId.set(parentId, existing);
+  }
+  const visibleRigGroups = props.nestedParentId
+    ? props.rigGroups
+    : props.rigGroups.filter((rigGroup) => !nestedRigIds.has(rigGroup.id));
+  const rigFolderIndentClassName = gcDepthClassName(indentDepth, RIG_FOLDER_INDENT_CLASSES);
+  const agentFolderIndentClassName = gcDepthClassName(indentDepth, AGENT_FOLDER_INDENT_CLASSES);
+  const threadGroupIndentClassName = gcDepthClassName(indentDepth, THREAD_GROUP_INDENT_CLASSES);
+  const threadIndentClassName = gcDepthClassName(indentDepth, THREAD_INDENT_CLASSES);
+  const threadGroupThreadIndentClassName = gcDepthClassName(
+    indentDepth,
+    THREAD_GROUP_THREAD_INDENT_CLASSES,
   );
 
   const toggleRig = (rigId: string) => {
@@ -620,13 +699,22 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
     );
   };
 
-  return props.rigGroups.map((rigGroup) => {
-    const isCityFolder = rigGroup.kind === "workspace" || cityFolderIds.has(rigGroup.id);
+  return visibleRigGroups.map((rigGroup) => {
+    const childRigGroups = childRigGroupsByWorkspaceId.get(rigGroup.id) ?? [];
+    const displayLabel = gcRigGroupDisplayLabel(rigGroup, props.nestedParentId);
+    const isCityFolder = rigGroup.kind === "workspace";
+    const cityFolderUsesRigAction = isCityFolder && workspaceActionScope === "rig";
+    const workspaceActionState = cityFolderUsesRigAction
+      ? props.gcRigActionStateByRig.get(rigGroup.id)
+      : props.gcCityActionState;
+    const workspaceMutationInFlight = cityFolderUsesRigAction
+      ? props.gcRigMutationsInFlight.has(rigGroup.id)
+      : props.gcCityMutationInFlight;
     const rigStateSummary =
       rigGroup.kind === "workspace"
-        ? props.gcCityActionState === "resume"
+        ? workspaceActionState === "resume"
           ? "Resuming"
-          : props.gcCityActionState === "suspend"
+          : workspaceActionState === "suspend"
             ? "Suspending"
             : summarizeGcRuntimeStates(
                 rigGroup.agentGroups.map((agentGroup) => agentGroup.runtimeState),
@@ -646,7 +734,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
           className="w-full"
           data-testid={`gc-rig-folder-${gcControlTestIdSuffix(rigGroup.id)}`}
         >
-          <div className="flex items-center gap-1.5 px-2 py-1 text-muted-foreground/60 uppercase">
+          <div
+            className={`flex items-center gap-1.5 py-1 text-foreground/75 uppercase ${rigFolderIndentClassName}`}
+          >
             <button
               type="button"
               data-thread-selection-safe
@@ -665,7 +755,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 }`}
               />
               <FolderIcon className="size-3 shrink-0" />
-              <span className="truncate text-xs font-semibold leading-none">{rigGroup.label}</span>
+              <span className="truncate text-xs font-bold leading-none">{displayLabel}</span>
               {isCityFolder ? (
                 <Badge
                   size="sm"
@@ -696,16 +786,16 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                     type="button"
                     data-thread-selection-safe
                     data-testid={`${
-                      rigGroup.kind === "workspace"
+                      rigGroup.kind === "workspace" && !cityFolderUsesRigAction
                         ? "gc-city-action"
                         : `gc-rig-action-${gcControlTestIdSuffix(rigGroup.id)}`
                     }`}
-                    {...(rigGroup.kind === "workspace"
+                    {...(rigGroup.kind === "workspace" && !cityFolderUsesRigAction
                       ? { "data-gc-city": rigGroup.id }
                       : { "data-gc-rig": rigGroup.id })}
                     data-gc-action-icon={
                       rigGroup.kind === "workspace"
-                        ? props.gcCityMutationInFlight
+                        ? workspaceMutationInFlight
                           ? "loading"
                           : rigGroup.isSuspended
                             ? "play"
@@ -718,12 +808,12 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                     }
                     aria-label={gcConfigToggleLabel(
                       rigGroup.kind,
-                      rigGroup.label,
+                      displayLabel,
                       rigGroup.isSuspended,
                     )}
                     disabled={
                       rigGroup.kind === "workspace"
-                        ? props.gcCityMutationInFlight
+                        ? workspaceMutationInFlight
                         : props.gcRigMutationsInFlight.has(rigGroup.id)
                     }
                     className="ml-auto inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60"
@@ -731,6 +821,14 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                       event.preventDefault();
                       event.stopPropagation();
                       if (rigGroup.kind === "workspace") {
+                        if (cityFolderUsesRigAction) {
+                          props.onToggleRigSuspended(
+                            rigGroup.id,
+                            !rigGroup.isSuspended,
+                            rigGroup.agentGroups,
+                          );
+                          return;
+                        }
                         props.onToggleCitySuspended(!rigGroup.isSuspended, rigGroup.agentGroups);
                         return;
                       }
@@ -743,7 +841,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                   >
                     {(
                       rigGroup.kind === "workspace"
-                        ? props.gcCityMutationInFlight
+                        ? workspaceMutationInFlight
                         : props.gcRigMutationsInFlight.has(rigGroup.id)
                     ) ? (
                       <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
@@ -758,7 +856,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               <TooltipPopup side="top">
                 <div className="space-y-1">
                   <div>
-                    {gcConfigToggleLabel(rigGroup.kind, rigGroup.label, rigGroup.isSuspended)}
+                    {gcConfigToggleLabel(rigGroup.kind, displayLabel, rigGroup.isSuspended)}
                   </div>
                   {rigGroup.kind === "workspace" && rigGroup.isSuspended ? (
                     <div className="max-w-56 text-[10px] text-muted-foreground">
@@ -783,7 +881,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                       data-thread-selection-safe
                       data-testid={`gc-thread-group-${gcControlTestIdSuffix(groupKey)}`}
                     >
-                      <div className="flex items-center gap-1.5 px-4 py-0.5 text-muted-foreground/60">
+                      <div
+                        className={`flex items-center gap-1.5 py-0.5 text-muted-foreground/60 ${agentFolderIndentClassName}`}
+                      >
                         <button
                           type="button"
                           data-thread-selection-safe
@@ -828,9 +928,18 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                     {!groupCollapsed &&
                       threadGroup.agentGroups?.map((agentGroup) =>
                         renderAgentGroup(rigGroup, agentGroup, {
-                          agentIndentClassName: "px-6",
-                          threadGroupIndentClassName: "px-8",
-                          threadIndentClassName: "pl-10",
+                          agentIndentClassName: gcDepthClassName(
+                            indentDepth,
+                            CONVOY_AGENT_INDENT_CLASSES,
+                          ),
+                          threadGroupIndentClassName: gcDepthClassName(
+                            indentDepth,
+                            CONVOY_THREAD_GROUP_INDENT_CLASSES,
+                          ),
+                          threadIndentClassName: gcDepthClassName(
+                            indentDepth,
+                            CONVOY_THREAD_INDENT_CLASSES,
+                          ),
                           keyPrefix: `${groupKey}:`,
                         }),
                       )}
@@ -889,7 +998,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                     data-thread-selection-safe
                     data-testid={`gc-agent-folder-${testIdSuffix}`}
                   >
-                    <div className="flex items-center gap-1.5 px-4 py-1 text-muted-foreground/60">
+                    <div
+                      className={`flex items-center gap-1.5 py-1 text-muted-foreground/60 ${agentFolderIndentClassName}`}
+                    >
                       <button
                         type="button"
                         data-thread-selection-safe
@@ -1206,7 +1317,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                                 data-thread-selection-safe
                                 data-testid={`gc-thread-group-${gcControlTestIdSuffix(groupKey)}`}
                               >
-                                <div className="flex items-center gap-1.5 px-6 py-0.5 text-muted-foreground/60">
+                                <div
+                                  className={`flex items-center gap-1.5 py-0.5 text-muted-foreground/60 ${threadGroupIndentClassName}`}
+                                >
                                   <button
                                     type="button"
                                     data-thread-selection-safe
@@ -1249,18 +1362,30 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                                 </div>
                               </SidebarMenuSubItem>
                               {!groupCollapsed &&
-                                props.renderThreadRows(threadGroup.threadIds, "pl-8")}
+                                props.renderThreadRows(
+                                  threadGroup.threadIds,
+                                  threadGroupThreadIndentClassName,
+                                )}
                             </Fragment>
                           );
                         })}
                       </>
                     ) : (
-                      props.renderThreadRows(agentGroup.threadIds, "pl-6")
+                      props.renderThreadRows(agentGroup.threadIds, threadIndentClassName)
                     ))}
                 </Fragment>
               );
             })
           ))}
+        {!collapsedRigIds.has(rigGroup.id) && childRigGroups.length > 0 ? (
+          <SidebarGcFolders
+            {...props}
+            rigGroups={childRigGroups}
+            indentDepth={indentDepth + 1}
+            nestedParentId={rigGroup.id}
+            workspaceActionScope={workspaceActionScope}
+          />
+        ) : null}
       </Fragment>
     );
   });

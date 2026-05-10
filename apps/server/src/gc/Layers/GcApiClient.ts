@@ -2531,8 +2531,24 @@ const makeGcApiClient = Effect.gen(function* () {
                 });
                 return null;
               });
-              const normalizedRemote = remote ? normalizeGcConfig(remote, city.path) : null;
-              if (!normalizedRemote) {
+              let normalizedConfig = remote ? normalizeGcConfig(remote, city.path) : null;
+              if (!normalizedConfig) {
+                const cli = runGcCli(gcCliBinary, city.path, ["config", "show"]);
+                if (cli.exitCode !== 0) {
+                  logGcWarning("gc city config cli fallback failed", {
+                    cityName: city.name,
+                    cityPath: city.path,
+                    exitCode: cli.exitCode,
+                    stderr: cli.stderr,
+                  });
+                } else {
+                  normalizedConfig = normalizeGcConfig(
+                    parseGcConfigShowToml(cli.stdout),
+                    city.path,
+                  );
+                }
+              }
+              if (!normalizedConfig) {
                 return null;
               }
               const lifecycle = (await readGcLifecycleStatusFromSupervisorApi({
@@ -2544,7 +2560,7 @@ const makeGcApiClient = Effect.gen(function* () {
                 controllerRunning: city.running,
                 ...gcSupervisorLifecycleFields(baseUrl),
               };
-              return prefixGcConfigForCity(withLifecycleStatus(normalizedRemote, lifecycle), city);
+              return prefixGcConfigForCity(withLifecycleStatus(normalizedConfig, lifecycle), city);
             }),
           );
           const merged = mergeMultiCityConfig(

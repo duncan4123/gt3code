@@ -71,27 +71,49 @@ func renderPrompt(fs fsys.FS, cityPath, cityName, templatePath string, ctx Promp
 		Funcs(promptFuncMap(cityName, sessionTemplate, store)).
 		Option("missingkey=zero")
 
+	loadedTemplateDirs := make(map[string]struct{})
+	loadTemplateDir := func(dir string) {
+		clean := filepath.Clean(dir)
+		if _, ok := loadedTemplateDirs[clean]; ok {
+			return
+		}
+		loadedTemplateDirs[clean] = struct{}{}
+		loadSharedTemplates(fs, tmpl, clean, stderr)
+	}
+
 	// Load shared templates from pack dirs (lower priority).
 	// Each pack directory may contain prompts/shared/ and/or
 	// template-fragments/ subdirectories.
 	for _, dir := range packDirs {
 		sharedDir := filepath.Join(dir, "prompts", "shared")
-		loadSharedTemplates(fs, tmpl, sharedDir, stderr)
+		loadTemplateDir(sharedDir)
 		// V2: template-fragments/ at pack level.
 		fragDir := filepath.Join(dir, "template-fragments")
-		loadSharedTemplates(fs, tmpl, fragDir, stderr)
+		loadTemplateDir(fragDir)
 	}
 
-	// Load shared templates from sibling shared/ directory (highest priority —
-	// wins on name collision with cross-pack templates).
+	// Rig pack prompts can be discovered through rig includes without their
+	// pack root appearing in cfg.PackDirs. Load fragments relative to the
+	// prompt's own pack root so agents from those packs can render.
+	if packRoot, ok := promptPackRootFromSource(sourcePath); ok {
+		loadTemplateDir(filepath.Join(packRoot, "prompts", "shared"))
+		loadTemplateDir(filepath.Join(packRoot, "template-fragments"))
+	}
+
+	// City-local prompt fragments provide final deployment-specific guidance
+	// such as backend details for one city using a shared pack.
+	loadTemplateDir(filepath.Join(cityPath, "template-fragments"))
+
+	// Load shared templates from sibling shared/ directory (higher priority —
+	// wins on name collision with pack or city templates).
 	sharedDir := filepath.Join(filepath.Dir(sourcePath), "shared")
-	loadSharedTemplates(fs, tmpl, sharedDir, stderr)
+	loadTemplateDir(sharedDir)
 
 	// V2: per-agent template-fragments/ (if the prompt lives in agents/<name>/).
 	// Load from agents/<name>/template-fragments/ so per-agent fragments
 	// are available alongside pack-level ones.
 	agentFragDir := filepath.Join(filepath.Dir(sourcePath), "template-fragments")
-	loadSharedTemplates(fs, tmpl, agentFragDir, stderr)
+	loadTemplateDir(agentFragDir)
 
 	// Parse main template last — its body becomes the "prompt" template.
 	tmpl, err = tmpl.Parse(raw)
@@ -131,6 +153,20 @@ func promptTemplateSourcePath(cityPath, templatePath string) string {
 		return templatePath
 	}
 	return filepath.Join(cityPath, templatePath)
+}
+
+func promptPackRootFromSource(sourcePath string) (string, bool) {
+	dir := filepath.Dir(sourcePath)
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		if filepath.Base(parent) == "agents" {
+			return filepath.Dir(parent), true
+		}
+		dir = parent
+	}
 }
 
 func isCanonicalPromptTemplatePath(path string) bool {

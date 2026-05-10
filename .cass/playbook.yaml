@@ -1,0 +1,44 @@
+# Project-specific playbook rules
+# These are merged with your global ~/.cass-memory/playbook.yaml
+# Project rules take precedence over global rules
+schema_version: 2
+name: repo-playbook
+description: Project-specific rules for this repository
+metadata:
+  createdAt: 2026-05-09T20:34:33.387Z
+  totalReflections: 0
+  totalSessionsProcessed: 0
+deprecatedPatterns: []
+bullets:
+  - id: b-agent-browser-t3code-20260511
+    content: For T3Code browser/UI audits, use agent-browser against the server origin
+      (`http://localhost:3773/`) by default, authenticate with a fresh bearer
+      token from `apps/server`, and collect snapshot, network, console, and
+      errors before changing code. Treat blank pages or `Failed to fetch` as
+      auth/preflight failures, and compare sidebar rows to resolved Gas City
+      config instead of live sessions only.
+    category: integration
+    kind: workflow_rule
+    type: rule
+    isNegative: false
+    scope: workspace
+    source: learned
+    tags:
+      - agent-browser
+      - t3code
+      - gascity
+      - sidebar
+    state: draft
+    maturity: candidate
+    createdAt: 2026-05-10T14:25:15.000Z
+    updatedAt: 2026-05-10T14:25:15.000Z
+    sourceSessions:
+      - /home/ubuntu/.codex/sessions/2026/05/08/rollout-2026-05-08T21-21-40-019e0752-6198-7fe2-9343-e3e696bd5e3d.jsonl
+    sourceAgents:
+      - codex
+    helpfulCount: 0
+    harmfulCount: 0
+    feedbackEvents: []
+    deprecated: false
+    pinned: false
+    confidenceDecayHalfLifeDays: 90
