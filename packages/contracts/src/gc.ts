@@ -534,7 +534,11 @@ function projectContextMatchesRigPath(projectCwds: ReadonlySet<string>, rigPath:
 
   for (const projectCwd of projectCwds) {
     const normalizedProjectCwd = normalizeGcPath(projectCwd);
-    if (normalizedProjectCwd && normalizedProjectCwd === normalizedRigPath) {
+    if (
+      normalizedProjectCwd &&
+      (normalizedProjectCwd === normalizedRigPath ||
+        normalizedRigPath.startsWith(`${normalizedProjectCwd}/`))
+    ) {
       return true;
     }
   }

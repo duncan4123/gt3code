@@ -12,6 +12,7 @@
     "*.tsbuildinfo",
     "**/routeTree.gen.ts",
     "packages/beads-doltlite/doltlite",
+    "packages/gascity-config/config/cities/gascity-br/rigs/beads_rust",
     "apps/web/public/mockServiceWorker.js",
     "apps/web/src/lib/vendor/qrcodegen.ts",
     "*.icon/**"

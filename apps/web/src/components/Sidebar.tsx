@@ -422,9 +422,7 @@ function GcThreadHoverCard({
         <div className="min-w-0">
           <div className="font-semibold leading-snug text-foreground">{beadTitle}</div>
           {meta.agent ? (
-            <div className="mt-0.5 truncate text-[10px] text-muted-foreground/70">
-              {meta.agent}
-            </div>
+            <div className="mt-0.5 truncate text-[10px] text-muted-foreground/70">{meta.agent}</div>
           ) : null}
         </div>
         {meta.beadStatus ? (
@@ -1682,7 +1680,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               ? { maxActiveSessions: agentGroup.maxActiveSessions }
               : {}),
             ...(agentGroup.wakeMode ? { wakeMode: agentGroup.wakeMode } : {}),
-            ...(agentGroup.namedSessionMode ? { namedSessionMode: agentGroup.namedSessionMode } : {}),
+            ...(agentGroup.namedSessionMode
+              ? { namedSessionMode: agentGroup.namedSessionMode }
+              : {}),
             ...(agentGroup.scope ? { scope: agentGroup.scope } : {}),
             ...(agentGroup.provider ? { provider: agentGroup.provider } : {}),
             ...(agentGroup.description ? { description: agentGroup.description } : {}),
@@ -1695,11 +1695,15 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             runtimeState: resolveGcAgentRuntimeState({
               isPool: agentGroup.isPool,
               isSuspended: agentGroup.isSuspended,
-              ...(agentGroup.namedSessionMode ? { namedSessionMode: agentGroup.namedSessionMode } : {}),
+              ...(agentGroup.namedSessionMode
+                ? { namedSessionMode: agentGroup.namedSessionMode }
+                : {}),
               ...(gcAgentActionStateByAgent.get(agentGroup.qualifiedName)
                 ? { actionState: gcAgentActionStateByAgent.get(agentGroup.qualifiedName) }
                 : {}),
-              ...(gcAgentStartsInFlight.has(agentGroup.qualifiedName) ? { startPending: true } : {}),
+              ...(gcAgentStartsInFlight.has(agentGroup.qualifiedName)
+                ? { startPending: true }
+                : {}),
               threads: agentGroup.threads.map((thread) => ({
                 latestTurn: thread.latestTurn ?? null,
                 session: thread.session ?? null,

@@ -3,7 +3,7 @@ name = "gc"
 schema = 2
 
 [imports.gastown]
-source = "packs/gastown"
+source = "../../packs/gastown"
 
 [providers.codex]
 base = "builtin:codex"

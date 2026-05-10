@@ -1,11 +1,15 @@
 [workspace]
+prefix = "co"
 suspended = false
 global_fragments = ["command-glossary", "operational-awareness"]
+
+[daemon]
+formula_v2 = true
 
 [[rigs]]
 name = "gascity"
 suspended = false
-includes = ["packs/gastown"]
+includes = ["../../packs/gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
@@ -23,7 +27,7 @@ suspended = false
 name = "beads-doltlite"
 prefix = "bd"
 suspended = true
-includes = ["packs/gastown"]
+includes = ["../../packs/gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
@@ -41,7 +45,7 @@ suspended = true
 name = "context-mode"
 prefix = "ccm"
 suspended = true
-includes = ["packs/gastown"]
+includes = ["../../packs/gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
@@ -59,13 +63,13 @@ suspended = true
 name = "t3code"
 prefix = "t3"
 suspended = false
-includes = ["packs/gastown"]
+includes = ["../../packs/gastown"]
 
 [[rigs]]
 name = "test-rig"
 prefix = "tr"
 suspended = false
-includes = ["packs/gastown"]
+includes = ["../../packs/gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
@@ -78,6 +82,138 @@ suspended = false
 [[rigs.overrides]]
 agent = "witness"
 suspended = false
+
+[[agent]]
+dir = ""
+name = "codex"
+suspended = false
+provider = "codex"
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 5
+
+[[agent]]
+dir = ""
+name = "kimi-for-coding"
+suspended = false
+provider = "kimi-for-coding"
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 5
+
+[[agent]]
+dir = "gascity"
+name = "codex"
+suspended = false
+provider = "codex"
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 5
+
+[[agent]]
+dir = "gascity"
+name = "kimi-for-coding"
+suspended = false
+provider = "kimi-for-coding"
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 5
+
+[[agent]]
+dir = "beads-doltlite"
+name = "codex"
+suspended = false
+provider = "codex"
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 5
+
+[[agent]]
+dir = "beads-doltlite"
+name = "kimi-for-coding"
+suspended = false
+provider = "kimi-for-coding"
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 5
+
+[[agent]]
+dir = "context-mode"
+name = "codex"
+suspended = false
+provider = "codex"
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 5
+
+[[agent]]
+dir = "context-mode"
+name = "kimi-for-coding"
+suspended = false
+provider = "kimi-for-coding"
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 5
+
+[[agent]]
+dir = "t3code"
+name = "codex"
+suspended = false
+provider = "codex"
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 5
+
+[[agent]]
+dir = "t3code"
+name = "kimi-for-coding"
+suspended = false
+provider = "kimi-for-coding"
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 5
+
+[[agent]]
+dir = "test-rig"
+name = "codex"
+suspended = false
+provider = "codex"
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 5
+
+[[agent]]
+dir = "test-rig"
+name = "kimi-for-coding"
+suspended = false
+provider = "kimi-for-coding"
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+min_active_sessions = 0
+max_active_sessions = 5
 
 [patches]
 
@@ -200,6 +336,7 @@ suspended = false
 provider = "codex"
 
 wake_mode = "resume"
+
 [[patches.named_session]]
 template = "mayor"
 mode = "always"

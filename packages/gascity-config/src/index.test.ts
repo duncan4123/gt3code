@@ -8,18 +8,26 @@ import {
   getBundledBdBinaryPath,
   getBundledGcBinaryPath,
   getBundledGascityConfigLayout,
+  getBundledGascityConfigLayouts,
   getDefaultGascityRuntimeRoot,
   materializeGascityConfig,
   materializeGascityRuntime,
+  readGascityBeadsConfig,
+  usesDoltliteBeadsBackend,
 } from "./index.ts";
 
 describe("@t3tools/gascity-config", () => {
   it("ships a self-contained city and Gastown packs", () => {
     assertBundledGascityConfigPresent();
     const layout = getBundledGascityConfigLayout();
+    const cityLayouts = getBundledGascityConfigLayouts();
 
     const cityToml = readFileSync(layout.cityTomlPath, "utf8");
-    expect(cityToml).toContain('name = "t3code"');
+    expect(layout.rootDir).toContain(path.join("config", "cities", "gastown"));
+    expect(cityLayouts.map((city) => path.basename(city.rootDir))).toEqual([
+      "gastown",
+      "gascity-br",
+    ]);
     expect(cityToml).toContain('name = "gascity"');
     expect(cityToml).toContain('name = "beads-doltlite"');
     expect(cityToml).toContain("[[patches.agent]]");
@@ -31,6 +39,18 @@ describe("@t3tools/gascity-config", () => {
     );
     expect(readFileSync(path.join(layout.maintenancePackDir, "pack.toml"), "utf8")).toContain(
       "maintenance",
+    );
+    expect(readGascityBeadsConfig(layout.rootDir)).toEqual({
+      provider: "bd",
+      backend: "doltlite",
+    });
+    expect(usesDoltliteBeadsBackend(layout.rootDir)).toBe(true);
+    expect(readGascityBeadsConfig(getBundledGascityConfigLayout("gascity-br").rootDir)).toEqual({
+      provider: "exec:/data/projects/gascity/contrib/beads-scripts/gc-beads-br",
+      backend: null,
+    });
+    expect(usesDoltliteBeadsBackend(getBundledGascityConfigLayout("gascity-br").rootDir)).toBe(
+      false,
     );
   });
 

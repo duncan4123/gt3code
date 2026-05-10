@@ -20,14 +20,15 @@ source = "../maintenance"
 
 [global]
 session_live = [
-    "{{.ConfigDir}}/assets/scripts/tmux-theme.sh {{.Session}} {{.Agent}} {{.ConfigDir}}",
-    "{{.ConfigDir}}/assets/scripts/tmux-keybindings.sh {{.ConfigDir}}",
+  "{{.ConfigDir}}/assets/scripts/tmux-theme.sh {{.Session}} {{.Agent}} {{.ConfigDir}}",
+  "{{.ConfigDir}}/assets/scripts/tmux-keybindings.sh {{.ConfigDir}}",
 ]
 
 [[patches.agent]]
 name = "dog"
 provider = "codex"
 wake_mode = "fresh"
+min_active_sessions = 1
 work_dir = ".gc/agents/dogs/{{.AgentBase}}"
 
 [[named_session]]

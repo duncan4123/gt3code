@@ -8,6 +8,7 @@ import {
   DEFAULT_T3CODE_GASCITY_HOME,
   createBundledGascityProcessEnv,
 } from "./bundled-gascity-env.ts";
+import { getBundledGascityConfigLayout } from "@t3tools/gascity-config";
 
 it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
   it.effect("fills bundled GC runtime env defaults", () =>
@@ -65,6 +66,22 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.equal(env.GC_BIN, "/tmp/bin/gc");
       assert.equal(env.BD_BIN, "/tmp/bin/bd");
       assert.equal(env.GC_CITY_PATH, "/tmp/city");
+    }),
+  );
+
+  it.effect("does not force doltlite backend for the beads-rust city", () =>
+    Effect.gen(function* () {
+      const cityPath = getBundledGascityConfigLayout("gascity-br").rootDir;
+      const env = yield* createBundledGascityProcessEnv({
+        baseEnv: {
+          GC_CITY_PATH: cityPath,
+        },
+        t3Home: undefined,
+      });
+
+      assert.equal(env.GC_CITY_PATH, cityPath);
+      assert.equal(env.GC_BEADS_BACKEND, undefined);
+      assert.equal(env.BEADS_BACKEND, undefined);
     }),
   );
 

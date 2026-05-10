@@ -1,0 +1,15 @@
+[pack]
+name = "gascity-br"
+schema = 2
+
+[imports.flywheel]
+source = "packs/flywheel/all"
+
+[[agent]]
+name = "mayor"
+suspended = false
+prompt_template = "agents/mayor/prompt.template.md"
+
+[[named_session]]
+template = "mayor"
+mode = "always"

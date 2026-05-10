@@ -94,6 +94,7 @@ async function renderSidebarGcFolders(options?: {
         gcAgentMutationsInFlight={options?.gcAgentMutationsInFlight ?? new Set()}
         gcRigMutationsInFlight={options?.gcRigMutationsInFlight ?? new Set()}
         gcCityMutationInFlight={options?.gcCityMutationInFlight ?? false}
+        gcThreadGroupingMode="agent"
         gcAgentActionStateByAgent={new Map()}
         gcRigActionStateByRig={new Map()}
         gcCityActionState={null}
@@ -102,6 +103,7 @@ async function renderSidebarGcFolders(options?: {
         onToggleAgentSuspended={options?.onToggleAgentSuspended ?? vi.fn()}
         onAdjustAgentMinActiveSessions={options?.onAdjustAgentMinActiveSessions ?? vi.fn()}
         onAdjustAgentMaxActiveSessions={options?.onAdjustAgentMaxActiveSessions ?? vi.fn()}
+        onWakeAgentSession={vi.fn()}
         onToggleAgentWakeMode={options?.onToggleAgentWakeMode ?? vi.fn()}
         onToggleAgentSessionMode={vi.fn()}
         renderThreadRows={(threadIds, indentClassName) => (

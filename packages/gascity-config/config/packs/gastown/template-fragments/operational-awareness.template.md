@@ -1,4 +1,5 @@
 {{ define "operational-awareness" }}
+
 ## Operational Awareness
 
 > **Build/Test Execution Guard**: Do not run builds or tests unless explicitly asked to do so.
@@ -86,7 +87,7 @@ above were insufficient AND the operator has approved a Dolt restart:
 # kill -QUIT $(cat {{ .CityRoot }}/.gc/runtime/packs/dolt/dolt.pid)
 ```
 
-Orphan databases (testdb_*, beads_t*, beads_pt*) accumulate on the production
+Orphan databases (testdb\__, beads_t_, beads_pt\*) accumulate on the production
 server and degrade performance. Use `gc dolt cleanup` to remove them safely.
 **Never use `rm -rf` on Dolt data directories.**
 
@@ -122,8 +123,9 @@ EOF
 - `gc mail reply <id> -s "RE: ..." -m "..."` creates a threaded reply
 
 **Dolt health — your part:**
+
 - Nudge, don't mail for routine communication
 - Don't create unnecessary beads — file real work, not scratchpads
 - Close your beads — open beads that linger become pollution
 - When Dolt is slow/down: check `gc doctor`, nudge Deacon — don't restart Dolt yourself
-{{ end }}
+  {{ end }}

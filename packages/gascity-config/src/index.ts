@@ -3,6 +3,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   renameSync,
   rmSync,
@@ -14,6 +15,8 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 export const GASCITY_CONFIG_PACKAGE_NAME = "@t3tools/gascity-config";
+export const BUNDLED_GASCITY_CITY_NAMES = ["gastown", "gascity-br"] as const;
+export type BundledGascityCityName = (typeof BUNDLED_GASCITY_CITY_NAMES)[number];
 
 export interface GascityConfigLayout {
   readonly rootDir: string;
@@ -22,6 +25,11 @@ export interface GascityConfigLayout {
   readonly packsDir: string;
   readonly gastownPackDir: string;
   readonly maintenancePackDir: string;
+}
+
+export interface GascityBeadsConfig {
+  readonly provider: string;
+  readonly backend: string | null;
 }
 
 export interface MaterializeGascityConfigOptions {
@@ -61,8 +69,11 @@ const modulePackageRoot = path.resolve(fileURLToPath(new URL("..", import.meta.u
 
 function hasBundledGascityConfigRoot(candidateRoot: string): boolean {
   return (
-    existsSync(path.join(candidateRoot, "config", "city.toml")) &&
-    existsSync(path.join(candidateRoot, "config", "pack.toml"))
+    existsSync(path.join(candidateRoot, "config", "cities", "gastown", "city.toml")) &&
+    existsSync(path.join(candidateRoot, "config", "cities", "gastown", "pack.toml")) &&
+    existsSync(path.join(candidateRoot, "config", "cities", "gascity-br", "city.toml")) &&
+    existsSync(path.join(candidateRoot, "config", "cities", "gascity-br", "pack.toml")) &&
+    existsSync(path.join(candidateRoot, "config", "packs", "gastown", "pack.toml"))
   );
 }
 
@@ -103,22 +114,77 @@ function resolvePackageRoot(): string {
 }
 
 const packageRoot = resolvePackageRoot();
-const configRoot = path.join(packageRoot, "config");
+const configBundleRoot = path.join(packageRoot, "config");
+const configRoot = path.join(configBundleRoot, "cities", "gastown");
 const binariesRoot = path.join(packageRoot, "binaries");
 
-export function getBundledGascityConfigLayout(): GascityConfigLayout {
-  return getGascityConfigLayout(configRoot);
+export function getBundledGascityConfigLayout(
+  cityName: BundledGascityCityName = "gastown",
+): GascityConfigLayout {
+  return getGascityConfigLayout(
+    path.join(configBundleRoot, "cities", cityName),
+    path.join(configBundleRoot, "packs"),
+  );
 }
 
-function getGascityConfigLayout(rootDir: string): GascityConfigLayout {
+export function getBundledGascityConfigLayouts(): ReadonlyArray<GascityConfigLayout> {
+  return BUNDLED_GASCITY_CITY_NAMES.map((cityName) => getBundledGascityConfigLayout(cityName));
+}
+
+export function isBundledGascityCityRoot(cityPath: string): boolean {
+  const resolved = path.resolve(cityPath);
+  return getBundledGascityConfigLayouts().some(
+    (layout) => path.resolve(layout.rootDir) === resolved,
+  );
+}
+
+function getGascityConfigLayout(rootDir: string, packsRoot?: string): GascityConfigLayout {
+  const packsDir = packsRoot ? path.resolve(packsRoot) : path.resolve(rootDir, "..", "packs");
   return {
     rootDir,
     cityTomlPath: path.join(rootDir, "city.toml"),
     packTomlPath: path.join(rootDir, "pack.toml"),
-    packsDir: path.join(rootDir, "packs"),
-    gastownPackDir: path.join(rootDir, "packs", "gastown"),
-    maintenancePackDir: path.join(rootDir, "packs", "maintenance"),
+    packsDir,
+    gastownPackDir: path.join(packsDir, "gastown"),
+    maintenancePackDir: path.join(packsDir, "maintenance"),
   };
+}
+
+function readTomlSectionValue(content: string, sectionName: string, key: string): string | null {
+  const lines = content.split("\n");
+  let inSection = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    if (trimmed.startsWith("[")) {
+      inSection = trimmed === `[${sectionName}]`;
+      continue;
+    }
+    if (!inSection || !trimmed.startsWith(`${key} =`)) continue;
+    const rawValue = trimmed.slice(trimmed.indexOf("=") + 1).trim();
+    if (rawValue.startsWith('"') && rawValue.endsWith('"')) {
+      return rawValue.slice(1, -1);
+    }
+    return rawValue;
+  }
+  return null;
+}
+
+export function readGascityBeadsConfig(cityDir: string): GascityBeadsConfig {
+  const cityTomlPath = path.join(cityDir, "city.toml");
+  if (!existsSync(cityTomlPath)) {
+    return { provider: "bd", backend: null };
+  }
+  const content = readFileSync(cityTomlPath, "utf8");
+  return {
+    provider: readTomlSectionValue(content, "beads", "provider") ?? "bd",
+    backend: readTomlSectionValue(content, "beads", "backend"),
+  };
+}
+
+export function usesDoltliteBeadsBackend(cityDir: string): boolean {
+  const beads = readGascityBeadsConfig(cityDir);
+  return beads.provider === "bd" && beads.backend === "doltlite";
 }
 
 export function materializeGascityConfig(
@@ -131,6 +197,21 @@ export function materializeGascityConfig(
 
   mkdirSync(targetDir, { recursive: true });
   cpSync(configRoot, targetDir, {
+    recursive: true,
+    force: options.overwrite ?? false,
+    filter: shouldCopyConfigPath,
+  });
+  for (const fileName of ["city.toml", "pack.toml"]) {
+    const filePath = path.join(targetDir, fileName);
+    if (existsSync(filePath)) {
+      writeFileSync(
+        filePath,
+        readFileSync(filePath, "utf8").replaceAll("../../packs/", "../packs/"),
+        "utf8",
+      );
+    }
+  }
+  cpSync(path.join(configBundleRoot, "packs"), path.resolve(targetDir, "..", "packs"), {
     recursive: true,
     force: options.overwrite ?? false,
     filter: shouldCopyConfigPath,
@@ -334,12 +415,13 @@ function hasMaterializedGascityConfig(rootDir: string): boolean {
 }
 
 export function assertBundledGascityConfigPresent(): void {
-  const layout = getBundledGascityConfigLayout();
   for (const requiredPath of [
-    layout.cityTomlPath,
-    layout.packTomlPath,
-    path.join(layout.gastownPackDir, "pack.toml"),
-    path.join(layout.maintenancePackDir, "pack.toml"),
+    ...getBundledGascityConfigLayouts().flatMap((layout) => [
+      layout.cityTomlPath,
+      layout.packTomlPath,
+    ]),
+    path.join(getBundledGascityConfigLayout().gastownPackDir, "pack.toml"),
+    path.join(getBundledGascityConfigLayout().maintenancePackDir, "pack.toml"),
   ]) {
     if (!existsSync(requiredPath) || !statSync(requiredPath).isFile()) {
       throw new Error(`Bundled Gas City config is missing required file: ${requiredPath}`);

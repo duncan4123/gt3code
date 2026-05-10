@@ -2,10 +2,6 @@
 
 > **Recovery**: Run `{{ cmd }} prime` after compaction, clear, or new session
 
-{{ template "approval-fallacy-polecat" . }}
-
----
-
 ## CRITICAL: Directory Discipline
 
 Your branch-setup step creates a git worktree and records it in `metadata.work_dir`
@@ -24,10 +20,6 @@ Stay in your worktree. Install deps there if needed (`npm install`). Commit and 
 ---
 
 {{ template "propulsion-polecat" . }}
-
----
-
-{{ template "capability-ledger-work" . }}
 
 ---
 
