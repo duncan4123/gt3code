@@ -73,17 +73,19 @@ describe("crew empty states", () => {
       if (path === "/v0/city/{cityName}/sessions") {
         return {
           data: {
-            items: [{
-              active_bead: "",
-              attached: true,
-              id: "s-reviewer",
-              last_active: "2026-04-18T20:00:00Z",
-              last_output: "",
-              pool: "review",
-              rig: "rig-a",
-              running: true,
-              template: "reviewer",
-            }],
+            items: [
+              {
+                active_bead: "",
+                attached: true,
+                id: "s-reviewer",
+                last_active: "2026-04-18T20:00:00Z",
+                last_output: "",
+                pool: "review",
+                rig: "rig-a",
+                running: true,
+                template: "reviewer",
+              },
+            ],
           },
         } as never;
       }
@@ -91,12 +93,20 @@ describe("crew empty states", () => {
         return { data: { pending: false } } as never;
       }
       if (path === "/v0/city/{cityName}/session/{id}/transcript") {
-        const query = (options as { params?: { query?: Record<string, string | undefined> } } | undefined)?.params?.query ?? {};
+        const query =
+          (options as { params?: { query?: Record<string, string | undefined> } } | undefined)
+            ?.params?.query ?? {};
         transcriptQueries.push(query);
         if (query.before) {
           return {
             data: {
-              turns: [{ role: "assistant", text: "Older transcript turn", timestamp: "2026-04-18T19:00:00Z" }],
+              turns: [
+                {
+                  role: "assistant",
+                  text: "Older transcript turn",
+                  timestamp: "2026-04-18T19:00:00Z",
+                },
+              ],
               pagination: {
                 has_older_messages: false,
                 returned_message_count: 1,
@@ -108,7 +118,13 @@ describe("crew empty states", () => {
         }
         return {
           data: {
-            turns: [{ role: "assistant", text: "Newest transcript turn", timestamp: "2026-04-18T20:00:00Z" }],
+            turns: [
+              {
+                role: "assistant",
+                text: "Newest transcript turn",
+                timestamp: "2026-04-18T20:00:00Z",
+              },
+            ],
             pagination: {
               has_older_messages: true,
               returned_message_count: 1,
@@ -126,13 +142,17 @@ describe("crew empty states", () => {
     await renderCrew();
     document.querySelector<HTMLButtonElement>(".agent-log-link")?.click();
     await waitFor(() => {
-      expect(document.getElementById("log-drawer-messages")?.textContent).toContain("Newest transcript turn");
+      expect(document.getElementById("log-drawer-messages")?.textContent).toContain(
+        "Newest transcript turn",
+      );
     });
 
     expect(document.getElementById("log-drawer-loading")).not.toBeNull();
     document.getElementById("log-drawer-older-btn")?.click();
     await waitFor(() => {
-      expect(document.getElementById("log-drawer-messages")?.textContent).toContain("Older transcript turn");
+      expect(document.getElementById("log-drawer-messages")?.textContent).toContain(
+        "Older transcript turn",
+      );
     });
 
     expect(transcriptQueries.map((query) => query.before)).toEqual([undefined, "cursor-1"]);

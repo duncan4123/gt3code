@@ -588,6 +588,11 @@ describe("groupThreadsByRigAndAgent", () => {
             name: "gascity-br",
             path: "/cities/gascity-br",
             suspended: false,
+            lifecycle: {
+              supervisorRunning: true,
+              controllerRunning: true,
+              supervisorPort: 41341,
+            },
           },
           {
             name: "gascity-br/beads_rust",
@@ -628,6 +633,11 @@ describe("groupThreadsByRigAndAgent", () => {
     ]);
     expect(rigGroups.find((group) => group.id === "gascity-br")).toMatchObject({
       kind: "workspace",
+      lifecycle: {
+        supervisorRunning: true,
+        controllerRunning: true,
+        supervisorPort: 41341,
+      },
       agentGroups: [{ qualifiedName: "gascity-br/mayor" }],
     });
     expect(rigGroups.find((group) => group.id === "gascity-br/beads_rust")).toMatchObject({
@@ -688,6 +698,63 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(projectScopedResult.rigGroups.find((group) => group.id === "gastown")).toMatchObject({
       kind: "workspace",
       agentGroups: [{ qualifiedName: "gastown/mayor" }],
+    });
+  });
+
+  it("normalizes stale multicity rig metadata under the configured city rig", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          customMetadata: {
+            "gc.agent": "beads_rust/control-dispatcher",
+            "gc.city": "gascity-br",
+            "gc.rig": "beads_rust",
+            "gc.groupKind": "rig",
+            "gc.groupId": "beads_rust",
+            "gc.agentQualified": "beads_rust/control-dispatcher",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "cities",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "gascity-br",
+              path: "/cities/gascity-br",
+              suspended: false,
+            },
+            {
+              name: "gascity-br/beads_rust",
+              path: "/repo/packages/gascity-config/config/cities/gascity-br/rigs/beads_rust",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "control-dispatcher",
+              dir: "gascity-br/beads_rust",
+              suspended: false,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(standaloneThreads).toEqual([]);
+    expect(rigGroups.some((group) => group.id === "beads_rust")).toBe(false);
+    expect(rigGroups.find((group) => group.id === "gascity-br/beads_rust")).toMatchObject({
+      kind: "rig",
+      agentGroups: [
+        {
+          qualifiedName: "gascity-br/beads_rust/control-dispatcher",
+          threads: [{ id: "thread-1" }],
+        },
+      ],
     });
   });
 

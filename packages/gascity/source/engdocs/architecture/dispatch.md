@@ -178,38 +178,38 @@ CLI layer (cmd/gc/cmd_sling.go)
 
 ## Interactions
 
-| Depends on | How |
-|---|---|
+| Depends on               | How                                                                                                                                                                   |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `internal/beads` (Store) | `MolCook` for wisp instantiation, `Create` for auto-convoy, `Get`/`Children` for container expansion, `Update` for ParentID linking, `SetMetadata` for merge strategy |
-| `internal/config` | Agent resolution, `EffectiveSlingQuery`, pool detection via `IsPool`, `PoolConfig` for sizing, `Suspended` flag |
-| `internal/runtime` | `Provider.IsRunning` and `Provider.Nudge` for agent nudging via `doSlingNudge` |
-| `internal/agent` | `SessionNameFor` to compute session names |
-| `internal/worker` | `Handle.Nudge` at the worker boundary for direct nudge delivery |
-| `internal/telemetry` | `RecordSling` for metrics and log events on every dispatch |
-| `cmd/gc/cmd_agent.go` | `resolveAgentIdentity` for 2-step target resolution (literal then contextual) |
+| `internal/config`        | Agent resolution, `EffectiveSlingQuery`, pool detection via `IsPool`, `PoolConfig` for sizing, `Suspended` flag                                                       |
+| `internal/runtime`       | `Provider.IsRunning` and `Provider.Nudge` for agent nudging via `doSlingNudge`                                                                                        |
+| `internal/agent`         | `SessionNameFor` to compute session names                                                                                                                             |
+| `internal/worker`        | `Handle.Nudge` at the worker boundary for direct nudge delivery                                                                                                       |
+| `internal/telemetry`     | `RecordSling` for metrics and log events on every dispatch                                                                                                            |
+| `cmd/gc/cmd_agent.go`    | `resolveAgentIdentity` for 2-step target resolution (literal then contextual)                                                                                         |
 
-| Depended on by | How |
-|---|---|
-| `cmd/gc/cmd_convoy.go` | Convoys are the batch tracking containers that dispatch creates and expands |
-| `internal/orders` | Order dispatch creates wisps and routes them through the same formula instantiation path (`Store.MolCook`) |
-| `cmd/gc/cmd_handoff.go` | Work handoff between agents uses similar agent resolution and bead routing patterns |
-| Controller | The controller's reconciliation loop drives pool sizing via `evaluatePool` which determines how many pool instances exist to receive slung work |
+| Depended on by          | How                                                                                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cmd/gc/cmd_convoy.go`  | Convoys are the batch tracking containers that dispatch creates and expands                                                                     |
+| `internal/orders`       | Order dispatch creates wisps and routes them through the same formula instantiation path (`Store.MolCook`)                                      |
+| `cmd/gc/cmd_handoff.go` | Work handoff between agents uses similar agent resolution and bead routing patterns                                                             |
+| Controller              | The controller's reconciliation loop drives pool sizing via `evaluatePool` which determines how many pool instances exist to receive slung work |
 
 ## Code Map
 
-| Path | Description |
-|---|---|
-| `cmd/gc/cmd_sling.go` | CLI command, `SlingOpts`, `doSling`, `doSlingBatch`, `buildSlingCommand`, `instantiateWisp`, `checkBeadState`, `doSlingNudge` |
-| `cmd/gc/cmd_sling_test.go` | Unit tests: command building, single-bead dispatch, formula dispatch, container expansion, nudge behavior, merge strategy, auto-convoy, pre-flight warnings |
-| `cmd/gc/cmd_convoy.go` | Convoy CRUD: create, list, status, add, close, check (auto-close), stranded, autoclose (hidden hook) |
-| `cmd/gc/system_formulas.go` | `MaterializeSystemFormulas`, `ListEmbeddedSystemFormulas`, stale file cleanup |
-| `cmd/gc/system_formulas_test.go` | Tests for materialization: empty FS, write, overwrite, stale cleanup, idempotency, orders |
-| `cmd/gc/pool.go` | `evaluatePool` (scale check), `poolAgents` (instance expansion), `expandSessionSetup` (template context) |
-| `internal/config/config.go` | `Agent.SlingQuery`, `Agent.EffectiveSlingQuery()`, `Agent.EffectiveWorkQuery()`, `Agent.IsPool()` |
-| `internal/beads/beads.go` | `IsContainerType`, `Store.MolCook`, `Store.Children`, `Store.SetMetadata` |
-| `internal/beads/bdstore.go` | `BdStore.MolCook` and `BdStore.MolCookOn` -- formula-backed wisp instantiation via `bd mol wisp` / `bd mol bond` |
-| `internal/telemetry/recorder.go` | `RecordSling` -- metrics counter + structured log event for each dispatch |
-| `cmd/gc/cmd_agent.go` | `resolveAgentIdentity` -- 2-step agent name resolution |
+| Path                             | Description                                                                                                                                                 |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cmd/gc/cmd_sling.go`            | CLI command, `SlingOpts`, `doSling`, `doSlingBatch`, `buildSlingCommand`, `instantiateWisp`, `checkBeadState`, `doSlingNudge`                               |
+| `cmd/gc/cmd_sling_test.go`       | Unit tests: command building, single-bead dispatch, formula dispatch, container expansion, nudge behavior, merge strategy, auto-convoy, pre-flight warnings |
+| `cmd/gc/cmd_convoy.go`           | Convoy CRUD: create, list, status, add, close, check (auto-close), stranded, autoclose (hidden hook)                                                        |
+| `cmd/gc/system_formulas.go`      | `MaterializeSystemFormulas`, `ListEmbeddedSystemFormulas`, stale file cleanup                                                                               |
+| `cmd/gc/system_formulas_test.go` | Tests for materialization: empty FS, write, overwrite, stale cleanup, idempotency, orders                                                                   |
+| `cmd/gc/pool.go`                 | `evaluatePool` (scale check), `poolAgents` (instance expansion), `expandSessionSetup` (template context)                                                    |
+| `internal/config/config.go`      | `Agent.SlingQuery`, `Agent.EffectiveSlingQuery()`, `Agent.EffectiveWorkQuery()`, `Agent.IsPool()`                                                           |
+| `internal/beads/beads.go`        | `IsContainerType`, `Store.MolCook`, `Store.Children`, `Store.SetMetadata`                                                                                   |
+| `internal/beads/bdstore.go`      | `BdStore.MolCook` and `BdStore.MolCookOn` -- formula-backed wisp instantiation via `bd mol wisp` / `bd mol bond`                                            |
+| `internal/telemetry/recorder.go` | `RecordSling` -- metrics counter + structured log event for each dispatch                                                                                   |
+| `cmd/gc/cmd_agent.go`            | `resolveAgentIdentity` -- 2-step agent name resolution                                                                                                      |
 
 ## Configuration
 

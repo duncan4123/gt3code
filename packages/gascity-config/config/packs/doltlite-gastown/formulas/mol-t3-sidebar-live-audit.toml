@@ -28,7 +28,7 @@ default = "http://localhost:5733/"
 
 [vars.runtime_city]
 description = "Bundled T3Code GC city path"
-default = "/data/projects/t3code/packages/gascity-config/config"
+default = "packages/gascity-config/config"
 
 [vars.context_db]
 description = "Named context-mode database for audit snapshots"
@@ -52,7 +52,7 @@ branch, normally `{{context_branch}}`.
 
 Required ledger setup:
 1. Confirm the git branch:
-   `git -C /data/projects/t3code branch --show-current`
+   `git branch --show-current`
 2. In context-mode, checkout or create branch `{{context_branch}}`.
 3. Capture a baseline batch:
    - `git status --short`
@@ -222,7 +222,7 @@ sha256sum {{runtime_city}}/city.toml {{runtime_city}}/.gc/site.toml
 bun gc -- config show
 bun gc -- status
 bun gc -- session list
-git -C /data/projects/t3code diff -- scripts/gascity-runner.ts apps/server/src/gc/Layers/GcApiClient.ts packages/contracts/src/gc.ts apps/web/src/components/SidebarGcFolders.tsx apps/web/src/components/sidebar/gcSidebarControls.ts
+git diff -- scripts/gascity-runner.ts apps/server/src/gc/Layers/GcApiClient.ts packages/contracts/src/gc.ts apps/web/src/components/SidebarGcFolders.tsx apps/web/src/components/sidebar/gcSidebarControls.ts
 ```
 
 TOML expectations:

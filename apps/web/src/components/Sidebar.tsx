@@ -443,6 +443,7 @@ function toSidebarGcRigGroups(
       label: rigGroup.label,
       kind: rigGroup.kind,
       isSuspended: rigGroup.isSuspended,
+      ...(rigGroup.lifecycle ? { lifecycle: rigGroup.lifecycle } : {}),
       agentGroups,
       threadGroups: buildGcPrimaryThreadGroups(agentGroups, threadById),
     };
@@ -1148,6 +1149,9 @@ interface SidebarProjectThreadListProps {
   collapseThreadListForProject: (projectKey: string) => void;
   gcAgentMutationsInFlight: ReadonlySet<string>;
   gcAgentStartsInFlight: ReadonlySet<string>;
+  gcSupervisorMutationInFlight: boolean;
+  gcControllerMutationInFlight: boolean;
+  gcCityControllerMutationsInFlight: ReadonlySet<string>;
   gcRigMutationsInFlight: ReadonlySet<string>;
   gcCityMutationInFlight: boolean;
   gcThreadGroupingMode: SidebarGcThreadGroupingMode;
@@ -1163,6 +1167,8 @@ interface SidebarProjectThreadListProps {
     suspended: boolean,
     affectedAgents: readonly SidebarGcAgentGroup[],
   ) => void;
+  onSetGcSupervisorRunning: (city: string | null, running: boolean) => void;
+  onSetGcControllerRunning: (city: string | null, running: boolean) => void;
   onToggleGcAgentSuspended: (
     agent: string,
     suspended: boolean,
@@ -1216,6 +1222,9 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     collapseThreadListForProject,
     gcAgentMutationsInFlight,
     gcAgentStartsInFlight,
+    gcSupervisorMutationInFlight,
+    gcControllerMutationInFlight,
+    gcCityControllerMutationsInFlight,
     gcRigMutationsInFlight,
     gcCityMutationInFlight,
     gcThreadGroupingMode,
@@ -1224,6 +1233,8 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     gcCityActionState,
     onToggleGcRigSuspended,
     onToggleGcCitySuspended,
+    onSetGcSupervisorRunning,
+    onSetGcControllerRunning,
     onToggleGcAgentSuspended,
     onAdjustGcAgentMinActiveSessions,
     onAdjustGcAgentMaxActiveSessions,
@@ -1257,6 +1268,9 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
           rigGroups={rigGroups}
           gcAgentMutationsInFlight={gcAgentMutationsInFlight}
           gcAgentStartsInFlight={gcAgentStartsInFlight}
+          gcSupervisorMutationInFlight={gcSupervisorMutationInFlight}
+          gcControllerMutationInFlight={gcControllerMutationInFlight}
+          gcCityControllerMutationsInFlight={gcCityControllerMutationsInFlight}
           gcRigMutationsInFlight={gcRigMutationsInFlight}
           gcCityMutationInFlight={gcCityMutationInFlight}
           gcThreadGroupingMode={gcThreadGroupingMode}
@@ -1265,6 +1279,8 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
           gcCityActionState={gcCityActionState}
           onToggleCitySuspended={onToggleGcCitySuspended}
           onToggleRigSuspended={onToggleGcRigSuspended}
+          onSetSupervisorRunning={(city, running) => onSetGcSupervisorRunning(city, running)}
+          onSetControllerRunning={(city, running) => onSetGcControllerRunning(city, running)}
           onToggleAgentSuspended={onToggleGcAgentSuspended}
           onAdjustAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
           onAdjustAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
@@ -1390,6 +1406,9 @@ interface SidebarProjectItemProps {
   showGcFolders: boolean;
   gcAgentMutationsInFlight: ReadonlySet<string>;
   gcAgentStartsInFlight: ReadonlySet<string>;
+  gcSupervisorMutationInFlight: boolean;
+  gcControllerMutationInFlight: boolean;
+  gcCityControllerMutationsInFlight: ReadonlySet<string>;
   gcRigMutationsInFlight: ReadonlySet<string>;
   gcCityMutationInFlight: boolean;
   gcThreadGroupingMode: SidebarGcThreadGroupingMode;
@@ -1417,6 +1436,8 @@ interface SidebarProjectItemProps {
     suspended: boolean,
     affectedAgents: readonly SidebarGcAgentGroup[],
   ) => void;
+  onSetGcSupervisorRunning: (city: string | null, running: boolean) => void;
+  onSetGcControllerRunning: (city: string | null, running: boolean) => void;
   onToggleGcAgentSuspended: (
     agent: string,
     suspended: boolean,
@@ -1439,6 +1460,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     showGcFolders,
     gcAgentMutationsInFlight,
     gcAgentStartsInFlight,
+    gcSupervisorMutationInFlight,
+    gcControllerMutationInFlight,
+    gcCityControllerMutationsInFlight,
     gcRigMutationsInFlight,
     gcCityMutationInFlight,
     gcThreadGroupingMode,
@@ -1459,6 +1483,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     dragHandleProps,
     onToggleGcRigSuspended,
     onToggleGcCitySuspended,
+    onSetGcSupervisorRunning,
+    onSetGcControllerRunning,
     onToggleGcAgentSuspended,
     onAdjustGcAgentMinActiveSessions,
     onAdjustGcAgentMaxActiveSessions,
@@ -2665,6 +2691,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         collapseThreadListForProject={collapseThreadListForProject}
         gcAgentMutationsInFlight={gcAgentMutationsInFlight}
         gcAgentStartsInFlight={gcAgentStartsInFlight}
+        gcSupervisorMutationInFlight={gcSupervisorMutationInFlight}
+        gcControllerMutationInFlight={gcControllerMutationInFlight}
+        gcCityControllerMutationsInFlight={gcCityControllerMutationsInFlight}
         gcRigMutationsInFlight={gcRigMutationsInFlight}
         gcCityMutationInFlight={gcCityMutationInFlight}
         gcThreadGroupingMode={gcThreadGroupingMode}
@@ -2673,6 +2702,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         gcCityActionState={gcCityActionState}
         onToggleGcCitySuspended={onToggleGcCitySuspended}
         onToggleGcRigSuspended={onToggleGcRigSuspended}
+        onSetGcSupervisorRunning={onSetGcSupervisorRunning}
+        onSetGcControllerRunning={onSetGcControllerRunning}
         onToggleGcAgentSuspended={onToggleGcAgentSuspended}
         onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
         onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
@@ -2817,6 +2848,9 @@ interface SidebarGcCitiesSectionProps {
   threadJumpLabelByKey: ReadonlyMap<string, string>;
   gcAgentMutationsInFlight: ReadonlySet<string>;
   gcAgentStartsInFlight: ReadonlySet<string>;
+  gcSupervisorMutationInFlight: boolean;
+  gcControllerMutationInFlight: boolean;
+  gcCityControllerMutationsInFlight: ReadonlySet<string>;
   gcRigMutationsInFlight: ReadonlySet<string>;
   gcCityMutationInFlight: boolean;
   gcThreadGroupingMode: SidebarGcThreadGroupingMode;
@@ -2832,6 +2866,8 @@ interface SidebarGcCitiesSectionProps {
     suspended: boolean,
     affectedAgents: readonly SidebarGcAgentGroup[],
   ) => void;
+  onSetGcSupervisorRunning: (city: string | null, running: boolean) => void;
+  onSetGcControllerRunning: (city: string | null, running: boolean) => void;
   onToggleGcAgentSuspended: (
     agent: string,
     suspended: boolean,
@@ -2934,6 +2970,9 @@ const SidebarGcCitiesSection = memo(function SidebarGcCitiesSection(
               workspaceActionScope="rig"
               gcAgentMutationsInFlight={props.gcAgentMutationsInFlight}
               gcAgentStartsInFlight={props.gcAgentStartsInFlight}
+              gcSupervisorMutationInFlight={props.gcSupervisorMutationInFlight}
+              gcControllerMutationInFlight={props.gcControllerMutationInFlight}
+              gcCityControllerMutationsInFlight={props.gcCityControllerMutationsInFlight}
               gcRigMutationsInFlight={props.gcRigMutationsInFlight}
               gcCityMutationInFlight={props.gcCityMutationInFlight}
               gcThreadGroupingMode={props.gcThreadGroupingMode}
@@ -2942,6 +2981,12 @@ const SidebarGcCitiesSection = memo(function SidebarGcCitiesSection(
               gcCityActionState={props.gcCityActionState}
               onToggleCitySuspended={props.onToggleGcCitySuspended}
               onToggleRigSuspended={props.onToggleGcRigSuspended}
+              onSetSupervisorRunning={(city, running) =>
+                props.onSetGcSupervisorRunning(city, running)
+              }
+              onSetControllerRunning={(city, running) =>
+                props.onSetGcControllerRunning(city, running)
+              }
               onToggleAgentSuspended={props.onToggleGcAgentSuspended}
               onAdjustAgentMinActiveSessions={props.onAdjustGcAgentMinActiveSessions}
               onAdjustAgentMaxActiveSessions={props.onAdjustGcAgentMaxActiveSessions}
@@ -3245,6 +3290,7 @@ interface SidebarProjectsContentProps {
   gcCityThreadById: ReadonlyMap<ThreadId, SidebarThreadSummary>;
   gcSupervisorMutationInFlight: boolean;
   gcControllerMutationInFlight: boolean;
+  gcCityControllerMutationsInFlight: ReadonlySet<string>;
   gcAgentMutationsInFlight: ReadonlySet<string>;
   gcAgentStartsInFlight: ReadonlySet<string>;
   gcRigMutationsInFlight: ReadonlySet<string>;
@@ -3261,8 +3307,8 @@ interface SidebarProjectsContentProps {
   attachProjectListAutoAnimateRef: (node: HTMLElement | null) => void;
   projectsLength: number;
   onThreadSearchQueryChange: (query: string) => void;
-  onSetGcSupervisorRunning: (running: boolean) => void;
-  onSetGcControllerRunning: (running: boolean) => void;
+  onSetGcSupervisorRunning: (city: string | null, running: boolean) => void;
+  onSetGcControllerRunning: (city: string | null, running: boolean) => void;
   onToggleGcRigSuspended: (
     rig: string,
     suspended: boolean,
@@ -3323,6 +3369,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     gcCityThreadById,
     gcSupervisorMutationInFlight,
     gcControllerMutationInFlight,
+    gcCityControllerMutationsInFlight,
     gcAgentMutationsInFlight,
     gcAgentStartsInFlight,
     gcRigMutationsInFlight,
@@ -3460,7 +3507,10 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                     disabled={gcSupervisorMutationInFlight}
                     className="inline-flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 hover:text-emerald-800 disabled:cursor-wait disabled:opacity-60 dark:text-emerald-300"
                     onClick={() =>
-                      onSetGcSupervisorRunning(!(gcConfig?.lifecycle?.supervisorRunning ?? false))
+                      onSetGcSupervisorRunning(
+                        null,
+                        !(gcConfig?.lifecycle?.supervisorRunning ?? false),
+                      )
                     }
                   />
                 }
@@ -3490,7 +3540,10 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                     disabled={gcControllerMutationInFlight}
                     className="inline-flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-sky-700 transition-colors hover:bg-sky-500/10 hover:text-sky-800 disabled:cursor-wait disabled:opacity-60 dark:text-sky-300"
                     onClick={() =>
-                      onSetGcControllerRunning(!(gcConfig?.lifecycle?.controllerRunning ?? false))
+                      onSetGcControllerRunning(
+                        null,
+                        !(gcConfig?.lifecycle?.controllerRunning ?? false),
+                      )
                     }
                   />
                 }
@@ -3556,6 +3609,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
             threadJumpLabelByKey={threadJumpLabelByKey}
             gcAgentMutationsInFlight={gcAgentMutationsInFlight}
             gcAgentStartsInFlight={gcAgentStartsInFlight}
+            gcSupervisorMutationInFlight={gcSupervisorMutationInFlight}
+            gcControllerMutationInFlight={gcControllerMutationInFlight}
+            gcCityControllerMutationsInFlight={gcCityControllerMutationsInFlight}
             gcRigMutationsInFlight={gcRigMutationsInFlight}
             gcCityMutationInFlight={gcCityMutationInFlight}
             gcThreadGroupingMode={gcThreadGroupingMode}
@@ -3564,6 +3620,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
             gcCityActionState={gcCityActionState}
             onToggleGcCitySuspended={onToggleGcCitySuspended}
             onToggleGcRigSuspended={onToggleGcRigSuspended}
+            onSetGcSupervisorRunning={onSetGcSupervisorRunning}
+            onSetGcControllerRunning={onSetGcControllerRunning}
             onToggleGcAgentSuspended={onToggleGcAgentSuspended}
             onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
             onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
@@ -3601,6 +3659,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                         showGcFolders={gcCityRigGroups.length === 0}
                         gcAgentMutationsInFlight={gcAgentMutationsInFlight}
                         gcAgentStartsInFlight={gcAgentStartsInFlight}
+                        gcSupervisorMutationInFlight={gcSupervisorMutationInFlight}
+                        gcControllerMutationInFlight={gcControllerMutationInFlight}
+                        gcCityControllerMutationsInFlight={gcCityControllerMutationsInFlight}
                         gcRigMutationsInFlight={gcRigMutationsInFlight}
                         gcCityMutationInFlight={gcCityMutationInFlight}
                         gcThreadGroupingMode={gcThreadGroupingMode}
@@ -3623,6 +3684,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                         dragHandleProps={dragHandleProps}
                         onToggleGcCitySuspended={onToggleGcCitySuspended}
                         onToggleGcRigSuspended={onToggleGcRigSuspended}
+                        onSetGcSupervisorRunning={onSetGcSupervisorRunning}
+                        onSetGcControllerRunning={onSetGcControllerRunning}
                         onToggleGcAgentSuspended={onToggleGcAgentSuspended}
                         onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
                         onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
@@ -3651,6 +3714,9 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 showGcFolders={gcCityRigGroups.length === 0}
                 gcAgentMutationsInFlight={gcAgentMutationsInFlight}
                 gcAgentStartsInFlight={gcAgentStartsInFlight}
+                gcSupervisorMutationInFlight={gcSupervisorMutationInFlight}
+                gcControllerMutationInFlight={gcControllerMutationInFlight}
+                gcCityControllerMutationsInFlight={gcCityControllerMutationsInFlight}
                 gcRigMutationsInFlight={gcRigMutationsInFlight}
                 gcCityMutationInFlight={gcCityMutationInFlight}
                 gcThreadGroupingMode={gcThreadGroupingMode}
@@ -3671,6 +3737,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 dragHandleProps={null}
                 onToggleGcCitySuspended={onToggleGcCitySuspended}
                 onToggleGcRigSuspended={onToggleGcRigSuspended}
+                onSetGcSupervisorRunning={onSetGcSupervisorRunning}
+                onSetGcControllerRunning={onSetGcControllerRunning}
                 onToggleGcAgentSuspended={onToggleGcAgentSuspended}
                 onAdjustGcAgentMinActiveSessions={onAdjustGcAgentMinActiveSessions}
                 onAdjustGcAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
@@ -3732,6 +3800,9 @@ export default function Sidebar() {
   const [gcConfig, setGcConfig] = useState<GcConfigResult | null>(null);
   const [gcSupervisorMutationInFlight, setGcSupervisorMutationInFlight] = useState(false);
   const [gcControllerMutationInFlight, setGcControllerMutationInFlight] = useState(false);
+  const [gcCityControllerMutationsInFlight, setGcCityControllerMutationsInFlight] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [gcAgentActionStateByAgent, setGcAgentActionStateByAgent] = useState<
     ReadonlyMap<string, GcAgentActionState>
   >(() => new Map());
@@ -3803,6 +3874,17 @@ export default function Sidebar() {
       return next;
     });
   }, []);
+  const setCityControllerPending = useCallback((city: string, pending: boolean) => {
+    setGcCityControllerMutationsInFlight((current) => {
+      const next = new Set(current);
+      if (pending) {
+        next.add(city);
+      } else {
+        next.delete(city);
+      }
+      return next;
+    });
+  }, []);
   const stopWatchingGcAgentStart = useCallback(
     (agent: string) => {
       gcAgentStartAbortControllersRef.current.get(agent)?.abort();
@@ -3821,14 +3903,14 @@ export default function Sidebar() {
     return config;
   }, []);
   const handleSetGcSupervisorRunning = useCallback(
-    async (running: boolean) => {
+    async (city: string | null, running: boolean) => {
       const api = readLocalApi();
       if (!api?.gc?.setSupervisorRunning) {
         return;
       }
       setGcSupervisorMutationInFlight(true);
       try {
-        setGcConfig(await api.gc.setSupervisorRunning({ running }));
+        setGcConfig(await api.gc.setSupervisorRunning({ running, ...(city ? { city } : {}) }));
       } catch (error) {
         toastManager.add({
           type: "error",
@@ -3843,14 +3925,18 @@ export default function Sidebar() {
     [refreshGcConfig],
   );
   const handleSetGcControllerRunning = useCallback(
-    async (running: boolean) => {
+    async (city: string | null, running: boolean) => {
       const api = readLocalApi();
       if (!api?.gc?.setControllerRunning) {
         return;
       }
-      setGcControllerMutationInFlight(true);
+      if (city) {
+        setCityControllerPending(city, true);
+      } else {
+        setGcControllerMutationInFlight(true);
+      }
       try {
-        setGcConfig(await api.gc.setControllerRunning({ running }));
+        setGcConfig(await api.gc.setControllerRunning({ running, ...(city ? { city } : {}) }));
       } catch (error) {
         toastManager.add({
           type: "error",
@@ -3859,10 +3945,14 @@ export default function Sidebar() {
         });
         void refreshGcConfig().catch(() => undefined);
       } finally {
-        setGcControllerMutationInFlight(false);
+        if (city) {
+          setCityControllerPending(city, false);
+        } else {
+          setGcControllerMutationInFlight(false);
+        }
       }
     },
-    [refreshGcConfig],
+    [refreshGcConfig, setCityControllerPending],
   );
   const waitForAgentStart = useCallback(
     async (agent: string) => {
@@ -4985,6 +5075,7 @@ export default function Sidebar() {
             gcCityThreadById={gcCityThreadById}
             gcSupervisorMutationInFlight={gcSupervisorMutationInFlight}
             gcControllerMutationInFlight={gcControllerMutationInFlight}
+            gcCityControllerMutationsInFlight={gcCityControllerMutationsInFlight}
             gcAgentMutationsInFlight={gcAgentMutationsInFlight}
             gcAgentStartsInFlight={gcAgentStartsInFlight}
             gcRigMutationsInFlight={gcRigMutationsInFlight}

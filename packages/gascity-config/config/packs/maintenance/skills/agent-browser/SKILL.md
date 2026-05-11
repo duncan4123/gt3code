@@ -13,32 +13,43 @@ from code alone.
 
 ## T3Code Auth
 
-Prefer the server origin for authenticated T3 checks:
+Use the browser origin for authenticated T3 checks. In Vite dev mode this is
+usually `http://localhost:5733`; the backend is still `http://localhost:3773`,
+but the app redirects/proxies browser requests through the Vite origin.
 
 ```bash
-TOKEN=$(cd /data/projects/t3code/apps/server && node src/bin.ts auth session issue --role owner --token-only | tail -n 1)
-agent-browser set headers "{\"Authorization\":\"Bearer ${TOKEN}\"}"
-agent-browser navigate http://localhost:3773/
+T3_URL=http://localhost:5733
+T3_HOME="${T3CODE_HOME:-$HOME/.t3}"
+T3CODE_REPO="${T3CODE_REPO:-$(git rev-parse --show-toplevel)}"
+TOKEN=$(cd "$T3CODE_REPO/apps/server" && \
+  T3CODE_HOME="$T3_HOME" VITE_DEV_SERVER_URL="$T3_URL" \
+  node src/bin.ts auth session issue --dev-url "$T3_URL" --role owner --token-only \
+  2>/tmp/t3-agent-browser-auth.err | sed '/^$/d' | tail -n 1)
+agent-browser --session sidebar-audit cookies set t3_session "$TOKEN" \
+  --url "$T3_URL/" --path / --sameSite Lax
+agent-browser --session sidebar-audit open "$T3_URL/"
 ```
 
-Use the Vite origin only when the task specifically needs Vite source behavior.
+Do not rely on `agent-browser --headers` for the SPA. Pairing tokens are
+single-use; use the bearer-session cookie flow above for repeatable audits.
 
 ## Common Checks
 
 ```bash
-agent-browser wait 5000
-agent-browser snapshot -c -d 8
-agent-browser get text body
-agent-browser screenshot /tmp/t3-sidebar.png
-agent-browser network requests --filter http://localhost:3773
-agent-browser console
-agent-browser errors
+agent-browser --session sidebar-audit wait 5000
+agent-browser --session sidebar-audit snapshot -c -d 8
+agent-browser --session sidebar-audit get text body
+agent-browser --session sidebar-audit screenshot /tmp/t3-sidebar.png
+agent-browser --session sidebar-audit network requests --filter "$T3_URL"
+agent-browser --session sidebar-audit console
+agent-browser --session sidebar-audit errors
 ```
 
 ## Rules
 
 - Treat a blank page, empty snapshot, or `Failed to fetch` as failed preflight,
   not as a UI result.
+- Treat `/pair` after auth setup as a failed auth preflight.
 - Capture network requests, console output, and errors before changing app code.
 - After using a pairing token, assume it is spent. Issue a fresh bearer token
   for a new authenticated browser session.

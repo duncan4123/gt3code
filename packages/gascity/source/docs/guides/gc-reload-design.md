@@ -61,14 +61,14 @@ gc reload [path] [--async] [--timeout <duration>]
 
 Sync mode waits for the first reload-processing tick only.
 
-| Outcome | Exit | Stdout/Stderr contract |
-| --- | --- | --- |
-| `applied` | `0` | stdout: `Config reloaded: ... (rev <short>)` |
-| `no_change` | `0` | stdout: `No config changes detected.` |
-| `accepted` (`--async`) | `0` | stdout: `Reload requested.` |
-| `failed` | `1` | stderr: specific config/load/fetch error |
-| `busy` | `1` | stderr: controller too busy to accept reload |
-| `timeout` | `1` | stderr: wait budget expired; reload may still finish later |
+| Outcome                | Exit | Stdout/Stderr contract                                     |
+| ---------------------- | ---- | ---------------------------------------------------------- |
+| `applied`              | `0`  | stdout: `Config reloaded: ... (rev <short>)`               |
+| `no_change`            | `0`  | stdout: `No config changes detected.`                      |
+| `accepted` (`--async`) | `0`  | stdout: `Reload requested.`                                |
+| `failed`               | `1`  | stderr: specific config/load/fetch error                   |
+| `busy`                 | `1`  | stderr: controller too busy to accept reload               |
+| `timeout`              | `1`  | stderr: wait budget expired; reload may still finish later |
 
 Warnings are non-fatal post-apply problems. On sync success with
 warnings:

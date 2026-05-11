@@ -84,21 +84,21 @@ check.
 
 ### Always required
 
-| Tool | macOS | Debian / Ubuntu |
-|------|-------|-----------------|
-| tmux | `brew install tmux` | `apt install tmux` |
-| git | `brew install git` | `apt install git` |
-| jq | `brew install jq` | `apt install jq` |
-| pgrep | included | `apt install procps` |
-| lsof | included | `apt install lsof` |
+| Tool  | macOS               | Debian / Ubuntu      |
+| ----- | ------------------- | -------------------- |
+| tmux  | `brew install tmux` | `apt install tmux`   |
+| git   | `brew install git`  | `apt install git`    |
+| jq    | `brew install jq`   | `apt install jq`     |
+| pgrep | included            | `apt install procps` |
+| lsof  | included            | `apt install lsof`   |
 
 ### Required for the default beads provider (`bd`)
 
-| Tool | Min version | macOS | Linux |
-|------|-------------|-------|-------|
-| dolt | 1.86.2 or newer | `brew install dolt` | [releases](https://github.com/dolthub/dolt/releases) |
-| bd | 1.0.0 | [releases](https://github.com/gastownhall/beads/releases) | [releases](https://github.com/gastownhall/beads/releases) |
-| flock | -- | `brew install flock` | `apt install util-linux` |
+| Tool  | Min version     | macOS                                                     | Linux                                                     |
+| ----- | --------------- | --------------------------------------------------------- | --------------------------------------------------------- |
+| dolt  | 1.86.2 or newer | `brew install dolt`                                       | [releases](https://github.com/dolthub/dolt/releases)      |
+| bd    | 1.0.0           | [releases](https://github.com/gastownhall/beads/releases) | [releases](https://github.com/gastownhall/beads/releases) |
+| flock | --              | `brew install flock`                                      | `apt install util-linux`                                  |
 
 If you do not want to install dolt, bd, and flock, switch to the file-based
 store:

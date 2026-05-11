@@ -67,6 +67,162 @@ Do not continue if the URL is `about:blank`, the root is empty, the snapshot is
 empty, or the screenshot is blank. Capture network requests, console, and page
 errors, then fix browser/session setup first.
 
+### Authenticated Agent-Browser Setup
+
+When T3 is running in authenticated web mode, the pairing page can mislead an
+audit:
+
+- Pairing tokens are one-time tokens.
+- Navigating to a new `/pair#token=...` URL can leave the old token mounted in
+  the React component until a full reload.
+- A blank `http://localhost:5733/` page with repeated
+  `GET /api/auth/session` requests means the browser is not authenticated; it is
+  not sidebar evidence.
+
+For a reliable live-sidebar inspection in Vite dev mode, issue a bearer session
+from the same server process state and install it as a browser-origin cookie.
+The `--dev-url` value must match the running Vite origin or the token is minted
+against the wrong state DB:
+
+```bash
+T3_URL=http://localhost:5733
+T3_HOME=/home/ubuntu/.t3
+TOKEN=$(
+  cd /data/projects/t3code/apps/server &&
+    T3CODE_HOME="$T3_HOME" VITE_DEV_SERVER_URL="$T3_URL" \
+    node src/bin.ts auth session issue --dev-url "$T3_URL" --role owner --token-only \
+      2>/tmp/t3-agent-browser-auth.err |
+    sed '/^$/d' |
+    tail -n 1
+)
+
+agent-browser --session sidebar-audit cookies set t3_session "$TOKEN" \
+  --url "$T3_URL/" --path / --sameSite Lax
+agent-browser --session sidebar-audit open "$T3_URL/"
+agent-browser --session sidebar-audit wait 7000
+agent-browser --session sidebar-audit get text body
+agent-browser --session sidebar-audit snapshot -c -d 8
+```
+
+Do not rely on `agent-browser --headers` for the SPA. Pairing tokens are
+single-use; bearer-session cookies are the repeatable audit path. Treat `/pair`
+after the cookie setup as an auth preflight failure.
+
+### Reading The Actual Sidebar Tree
+
+The accessibility snapshot is useful for preflight, but it can be empty or miss
+the rendered sidebar in this app. If `snapshot` says `(empty page)` or
+`(no interactive elements)` while `document.body.innerText` contains sidebar
+text, read the rendered DOM rows directly:
+
+```bash
+agent-browser --session sidebar-audit eval --stdin <<'EOF'
+(() => {
+  const norm = (value) => (value || "").replace(/\s+/g, " ").trim();
+  return [...document.querySelectorAll('li[data-sidebar="menu-sub-item"]')]
+    .map((row) => {
+      const rig = row.querySelector(':scope > button[data-testid^="gc-rig-toggle-"]');
+      const agent = row.querySelector(':scope > button[data-testid^="gc-agent-folder-toggle-"]');
+      const thread = row.getAttribute("data-thread-item");
+      const buttons = [...row.querySelectorAll("button")]
+        .filter((button) => button.closest('li[data-sidebar="menu-sub-item"]') === row)
+        .map((button) => ({
+          testid: button.getAttribute("data-testid"),
+          text: norm(button.innerText),
+          aria: button.getAttribute("aria-label"),
+        }));
+      if (rig) return { type: "rig-or-city", id: rig.getAttribute("data-testid"), label: norm(rig.innerText), buttons };
+      if (agent) return { type: "agent", id: agent.getAttribute("data-testid"), label: norm(agent.innerText), buttons };
+      if (thread) return { type: "thread", id: thread, label: norm(row.innerText), buttons };
+      return null;
+    })
+    .filter(Boolean);
+})()
+EOF
+```
+
+For visual layout issues, also capture a screenshot:
+
+```bash
+agent-browser --session sidebar-audit screenshot /tmp/t3-sidebar-current.png
+```
+
+Always close the browser session after the audit:
+
+```bash
+agent-browser --session sidebar-audit close
+```
+
+Useful diagnostics when the page is blank or auth loops:
+
+```bash
+agent-browser --session sidebar-audit network requests --filter "$T3_URL"
+agent-browser --session sidebar-audit console
+agent-browser --session sidebar-audit errors
+tail -n 120 /tmp/t3code-server-setsid.log
+```
+
+The expected multicity tree starts under `Cities` and should include configured
+items even when no sessions/threads exist:
+
+```text
+Cities
+  gascity-br
+    mayor
+    dog
+    beads_rust
+      control-dispatcher
+      polecat
+      refinery
+      witness
+  gastown
+    boot
+    deacon
+    dog
+    mayor
+    t3code
+      control-dispatcher
+      polecat
+      refinery
+      witness
+    beads-doltlite
+      control-dispatcher
+      polecat
+      refinery
+      witness
+    context-mode
+      control-dispatcher
+      polecat
+      refinery
+      witness
+    gascity
+      control-dispatcher
+      polecat
+      refinery
+      witness
+    test-rig
+      control-dispatcher
+      polecat
+      refinery
+      witness
+```
+
+If a city-scoped config API route returns 404, do not assume the city is gone.
+Check the registered city list and resolved config:
+
+```bash
+GC_HOME=/home/ubuntu/.local/state/t3code/gascity/current \
+  /home/ubuntu/.local/state/t3code/gascity/current/bin/gc cities
+
+GC_HOME=/home/ubuntu/.local/state/t3code/gascity/current \
+  /home/ubuntu/.local/state/t3code/gascity/current/bin/gc \
+  --city /data/projects/t3code/packages/gascity-config/config/cities/gascity-br \
+  config show
+```
+
+Configured sidebar rows should come from resolved config first; runtime state
+only changes labels and controls.
+
 ## Known Failure Modes To Catch
 
 - `named_session_mode` is stale, causing `on_demand` agents to display as `auto`.

@@ -5,11 +5,11 @@ description: Install Gas City from Homebrew, a release tarball, or source.
 
 ## Which method should I use?
 
-| Method | Best for | Installs deps? | Auto-upgrades? |
-|--------|----------|----------------|----------------|
-| [Homebrew](#homebrew-recommended) | macOS / Linux daily use | Yes (all 6) | `brew upgrade` |
-| [Direct download](#direct-download) | CI, containers, air-gapped hosts | No | Manual |
-| [Source build](#build-from-source) | Contributors, bleeding-edge | No | Manual |
+| Method                              | Best for                         | Installs deps? | Auto-upgrades? |
+| ----------------------------------- | -------------------------------- | -------------- | -------------- |
+| [Homebrew](#homebrew-recommended)   | macOS / Linux daily use          | Yes (all 6)    | `brew upgrade` |
+| [Direct download](#direct-download) | CI, containers, air-gapped hosts | No             | Manual         |
+| [Source build](#build-from-source)  | Contributors, bleeding-edge      | No             | Manual         |
 
 **Most users should use Homebrew.** It installs all runtime dependencies
 automatically and keeps `gc` on your PATH. Choose direct download when you
@@ -21,16 +21,16 @@ managers). Choose source when you need unreleased changes or plan to contribute.
 Gas City requires a small set of runtime tools. Homebrew installs all of them
 for you; the other methods require manual installation.
 
-| Tool | Required | Min version | macOS | Linux | Notes |
-|------|----------|-------------|-------|-------|-------|
-| tmux | Yes | — | `brew install tmux` | `apt install tmux` | Session management |
-| jq | Yes | — | `brew install jq` | `apt install jq` | JSON processing |
-| git | Yes | — | (built-in) | (built-in) | Version control |
-| dolt | Yes | 1.86.2 or newer | `brew install dolt` | [releases](https://github.com/dolthub/dolt/releases) | Beads data plane |
-| bd (Beads CLI) | Yes | 1.0.0 | `brew install beads` | [releases](https://github.com/gastownhall/beads/releases) | Issue tracking |
-| flock | Yes | — | `brew install flock` | (built-in via util-linux) | File locking |
-| Go 1.25+ | Source only | 1.25 | `brew install go` | [golang.org](https://go.dev/dl/) | Compiler |
-| make | Source only | — | (built-in) | `apt install make` (or `build-essential`) | Drives `make install` |
+| Tool           | Required    | Min version     | macOS                | Linux                                                     | Notes                 |
+| -------------- | ----------- | --------------- | -------------------- | --------------------------------------------------------- | --------------------- |
+| tmux           | Yes         | —               | `brew install tmux`  | `apt install tmux`                                        | Session management    |
+| jq             | Yes         | —               | `brew install jq`    | `apt install jq`                                          | JSON processing       |
+| git            | Yes         | —               | (built-in)           | (built-in)                                                | Version control       |
+| dolt           | Yes         | 1.86.2 or newer | `brew install dolt`  | [releases](https://github.com/dolthub/dolt/releases)      | Beads data plane      |
+| bd (Beads CLI) | Yes         | 1.0.0           | `brew install beads` | [releases](https://github.com/gastownhall/beads/releases) | Issue tracking        |
+| flock          | Yes         | —               | `brew install flock` | (built-in via util-linux)                                 | File locking          |
+| Go 1.25+       | Source only | 1.25            | `brew install go`    | [golang.org](https://go.dev/dl/)                          | Compiler              |
+| make           | Source only | —               | (built-in)           | `apt install make` (or `build-essential`)                 | Drives `make install` |
 
 Use a final Dolt 1.86.2 or newer. Gas City's managed Dolt checks reject older
 and pre-release builds because they can miss the upstream GC/writer deadlock
@@ -97,12 +97,12 @@ brew untap gastownhall/gascity             # remove the tap
 
 Release tarballs are published for every tagged version. Supported platforms:
 
-| OS | Architecture | Archive name |
-|----|-------------|--------------|
+| OS             | Architecture          | Archive name                          |
+| -------------- | --------------------- | ------------------------------------- |
 | macOS (darwin) | Apple Silicon (arm64) | `gascity_VERSION_darwin_arm64.tar.gz` |
-| macOS (darwin) | Intel (amd64) | `gascity_VERSION_darwin_amd64.tar.gz` |
-| Linux | x86_64 (amd64) | `gascity_VERSION_linux_amd64.tar.gz` |
-| Linux | ARM (arm64) | `gascity_VERSION_linux_arm64.tar.gz` |
+| macOS (darwin) | Intel (amd64)         | `gascity_VERSION_darwin_amd64.tar.gz` |
+| Linux          | x86_64 (amd64)        | `gascity_VERSION_linux_amd64.tar.gz`  |
+| Linux          | ARM (arm64)           | `gascity_VERSION_linux_arm64.tar.gz`  |
 
 ### Download and install
 

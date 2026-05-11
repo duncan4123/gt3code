@@ -17,25 +17,27 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { findBuiltBdBinaryPath, findBuiltDoltliteLibraryPath } from "@t3tools/beads-doltlite";
-import { findBuiltGcBinaryPath } from "@t3tools/gascity";
+import { findBrBeadsProviderScriptPath, findBuiltGcBinaryPath } from "@t3tools/gascity";
 import {
   getBundledGascityConfigLayout,
   getDefaultGascityRuntimeRoot,
+  resolveManagedBrBinaryPath,
   usesDoltliteBeadsBackend,
 } from "@t3tools/gascity-config";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const projectsRoot = dirname(repoRoot);
 const defaultRuntimeRoot = getDefaultGascityRuntimeRoot();
 const defaultCityRoot = getBundledGascityConfigLayout().rootDir;
 const defaultRigBindings = [
-  { name: "gascity", path: join(projectsRoot, "gascity") },
-  { name: "beads-doltlite", path: join(projectsRoot, "beads-doltlite") },
-  { name: "context-mode", path: join(projectsRoot, "claude-context-mode") },
+  { name: "gascity", path: join(repoRoot, "packages", "gascity") },
+  { name: "beads-doltlite", path: join(repoRoot, "packages", "beads-doltlite") },
+  { name: "context-mode", path: join(repoRoot, "packages", "context-mode") },
+  { name: "t3code", path: repoRoot },
+  { name: "test-rig", path: join(defaultCityRoot, "rigs", "test-rig") },
 ] as const;
 const gascityBrRigBindings = [
   {
-    name: "default",
+    name: "beads_rust",
     path: join(defaultCityRoot, "..", "gascity-br", "rigs", "beads_rust"),
   },
 ] as const;
@@ -48,9 +50,13 @@ interface RuntimePaths {
   readonly cityDir: string;
   readonly gcBinaryPath: string;
   readonly bdBinaryPath: string;
+  readonly brBinaryPath: string;
+  readonly brBeadsScriptPath: string;
   readonly doltliteLibraryPath: string;
   readonly worktreesDir: string;
 }
+
+const brBeadsScriptSourcePath = findBrBeadsProviderScriptPath();
 
 function main(): void {
   switch (command) {
@@ -114,25 +120,31 @@ function installRuntime(options: { readonly overwriteConfig: boolean }): Runtime
   if (!bdBinarySource) {
     throw new Error("No built beads binary is available. Run bun build:gascity-tools.");
   }
+  if (!brBeadsScriptSourcePath) {
+    throw new Error("No beads_rust exec provider script is available in @t3tools/gascity.");
+  }
   if (!doltliteLibrarySource && process.platform !== "win32") {
     throw new Error("No built Doltlite runtime library is available. Run bun build:gascity-tools.");
   }
+  const brBinarySource = resolveManagedBrBinaryPath();
   const runtime = getRuntimePaths();
   mkdirSync(dirname(runtime.gcBinaryPath), { recursive: true });
   copyRuntimeBinary(gcBinarySource, runtime.gcBinaryPath);
   copyRuntimeBinary(bdBinarySource, runtime.bdBinaryPath);
+  copyRuntimeBinary(brBinarySource, runtime.brBinaryPath);
+  copyRuntimeBinary(brBeadsScriptSourcePath, runtime.brBeadsScriptPath);
   if (doltliteLibrarySource) {
     copyRuntimeFile(doltliteLibrarySource, runtime.doltliteLibraryPath);
   }
   ensureRuntimeCommandLinks(runtime);
   prepareActiveCity(defaultCityRoot, {
     bdBinaryPath: runtime.bdBinaryPath,
-    initializeStores: true,
+    initializeStores: false,
   });
   if (resolve(runtime.cityDir) !== resolve(defaultCityRoot)) {
     prepareActiveCity(runtime.cityDir, {
       bdBinaryPath: runtime.bdBinaryPath,
-      initializeStores: true,
+      initializeStores: false,
     });
   }
   return {
@@ -140,6 +152,8 @@ function installRuntime(options: { readonly overwriteConfig: boolean }): Runtime
     cityDir: runtime.cityDir,
     gcBinaryPath: runtime.gcBinaryPath,
     bdBinaryPath: runtime.bdBinaryPath,
+    brBinaryPath: runtime.brBinaryPath,
+    brBeadsScriptPath: runtime.brBeadsScriptPath,
     doltliteLibraryPath: runtime.doltliteLibraryPath,
     worktreesDir: runtime.worktreesDir,
   };
@@ -150,7 +164,19 @@ function ensureRuntimeInstalled(): RuntimePaths {
   const gcBinarySource = process.env.GASCITY_BINARY ?? findBuiltGcBinaryPath();
   const bdBinarySource = process.env.BD_BINARY ?? findBuiltBdBinaryPath();
   const doltliteLibrarySource = process.env.DOLTLITE_LIBRARY ?? findBuiltDoltliteLibraryPath();
-  if (runtimeMatchesSources(runtime, { gcBinarySource, bdBinarySource, doltliteLibrarySource })) {
+  const canResolveBr =
+    gcBinarySource !== undefined &&
+    bdBinarySource !== undefined &&
+    (doltliteLibrarySource !== undefined || process.platform === "win32");
+  const brBinarySource = canResolveBr ? resolveManagedBrBinaryPath() : undefined;
+  if (
+    runtimeMatchesSources(runtime, {
+      gcBinarySource,
+      bdBinarySource,
+      brBinarySource,
+      doltliteLibrarySource,
+    })
+  ) {
     ensureRuntimeCommandLinks(runtime);
     prepareActiveCity(runtime.cityDir, { initializeStores: false });
     return runtime;
@@ -163,6 +189,7 @@ function runtimeMatchesSources(
   sources: {
     readonly gcBinarySource: string | undefined;
     readonly bdBinarySource: string | undefined;
+    readonly brBinarySource: string | undefined;
     readonly doltliteLibrarySource: string | undefined;
   },
 ): boolean {
@@ -171,6 +198,15 @@ function runtimeMatchesSources(
     return false;
   }
   if (!sources.bdBinarySource || !sameFileHash(sources.bdBinarySource, runtime.bdBinaryPath)) {
+    return false;
+  }
+  if (!sources.brBinarySource || !sameFileHash(sources.brBinarySource, runtime.brBinaryPath)) {
+    return false;
+  }
+  if (
+    !brBeadsScriptSourcePath ||
+    !sameFileHash(brBeadsScriptSourcePath, runtime.brBeadsScriptPath)
+  ) {
     return false;
   }
   if (process.platform !== "win32") {
@@ -199,6 +235,12 @@ function getRuntimePaths(): RuntimePaths {
     cityDir: process.env.GC_CITY_PATH ?? process.env.GC_CITY ?? defaultCityRoot,
     gcBinaryPath: join(rootDir, "bin", process.platform === "win32" ? "gc.exe" : "gc"),
     bdBinaryPath: join(rootDir, "bin", process.platform === "win32" ? "bd.exe" : "bd"),
+    brBinaryPath: join(rootDir, "bin", process.platform === "win32" ? "br.exe" : "br"),
+    brBeadsScriptPath: join(
+      rootDir,
+      "bin",
+      process.platform === "win32" ? "gc-beads-br.cmd" : "gc-beads-br",
+    ),
     doltliteLibraryPath: join(
       rootDir,
       "bin",
@@ -377,6 +419,10 @@ function beadsPrefixForRig(name: string): string {
       return "bd";
     case "context-mode":
       return "ccm";
+    case "t3code":
+      return "t3";
+    case "test-rig":
+      return "tr";
     default:
       return "gc";
   }
@@ -457,6 +503,7 @@ function ensureRuntimeCommandLinks(runtime: RuntimePaths): void {
   const linkTargets = [
     { command: "gc", target: runtime.gcBinaryPath },
     { command: "bd", target: runtime.bdBinaryPath },
+    { command: "gc-beads-br", target: runtime.brBeadsScriptPath },
   ] as const;
   const userBinDirs = [join(homedir(), "go", "bin"), join(homedir(), ".local", "bin")];
   for (const binDir of userBinDirs) {
@@ -509,11 +556,11 @@ function runGc(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
     GC_CITY_PATH: runtime.cityDir,
     GC_BIN: runtime.gcBinaryPath,
     BD_BIN: runtime.bdBinaryPath,
+    BR_BIN: runtime.brBinaryPath,
     T3CODE_WORKTREES_DIR: runtime.worktreesDir,
     GC_WORKTREES_DIR: runtime.worktreesDir,
     GC_API_URL: gcApiUrl,
   };
-  applyDefaultBeadsBackendEnv(env, runtime.cityDir);
   prepareRuntimeEnv(env, dirname(runtime.gcBinaryPath));
   const result = spawnSync(runtime.gcBinaryPath, ["--city", runtime.cityDir, ...args], {
     cwd: repoRoot,
@@ -521,14 +568,6 @@ function runGc(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
     stdio: "inherit",
   });
   process.exit(result.status ?? 1);
-}
-
-function applyDefaultBeadsBackendEnv(env: NodeJS.ProcessEnv, cityDir: string): void {
-  if (!usesDoltliteBeadsBackend(cityDir)) {
-    return;
-  }
-  env.GC_BEADS_BACKEND ??= "doltlite";
-  env.BEADS_BACKEND ??= "doltlite";
 }
 
 function resolveGcApiUrl(runtime: RuntimePaths): string {
@@ -587,6 +626,8 @@ function printRuntime(runtime: RuntimePaths): void {
   console.log(`GC_CITY_PATH=${runtime.cityDir}`);
   console.log(`GC_BIN=${runtime.gcBinaryPath}`);
   console.log(`BD_BIN=${runtime.bdBinaryPath}`);
+  console.log(`BR_BIN=${runtime.brBinaryPath}`);
+  console.log(`GC_BEADS_BR=${runtime.brBeadsScriptPath}`);
   console.log(`DOLTLITE_LIBRARY=${runtime.doltliteLibraryPath}`);
   console.log(`T3CODE_WORKTREES_DIR=${runtime.worktreesDir}`);
   console.log(`GC_API_URL=${resolveGcApiUrl(runtime)}`);
@@ -596,7 +637,7 @@ function printHelp(): void {
   console.log(`Usage: bun gascity:<command>
 
 Commands:
-  bun gascity:install   Install built GC and bd binaries; use repo packaged city
+  bun gascity:install   Install built GC, bd, and br binaries; use repo packaged city
   bun gascity:dry-run   Show agents GC would start without side effects
   bun gascity:status    Show bundled city status
   bun gascity:start     Start GC using the bundled runtime
@@ -611,6 +652,7 @@ Env:
   GC_CITY_PATH          Override active city dir
   GASCITY_BINARY        Override built gc binary
   BD_BINARY             Override built bd binary
+  BR_BINARY             Override managed beads_rust br binary
 
 Install flags:
   --overwrite-config    Deprecated no-op; config lives in packages/gascity-config/config

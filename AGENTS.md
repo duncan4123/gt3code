@@ -84,6 +84,13 @@ When debugging:
 - Do not assume `gc prime` exports shell variables; it emits agent prompt
   content.
 
+## T3Code DB Access
+
+Follow `docs/t3code-db-playbook.md` before inspecting or repairing T3Code
+runtime databases. Do not use stock `sqlite3` on T3Code state files. The app
+opens its main state through the Doltlite-backed persistence client, and thread
+metadata repairs must go through app-owned orchestration/projection paths.
+
 ## Reference Repos
 
 - Open-source Codex repo: https://github.com/openai/codex

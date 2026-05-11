@@ -157,7 +157,7 @@ type statusObservationTarget struct {
 func loadStatusSessionSnapshot(store beads.Store) *sessionBeadSnapshot {
 	snapshot, err := loadSessionBeadSnapshot(store)
 	if err != nil {
-		return nil
+		return newSessionBeadSnapshot(nil)
 	}
 	return snapshot
 }

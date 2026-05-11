@@ -67,6 +67,9 @@ func resolveAgentMCPProjection(
 	qualifiedName, workDir string,
 	providerKind string,
 ) (materialize.MCPCatalog, materialize.MCPProjection, error) {
+	if skipsProviderNativeMCP(agent) {
+		return materialize.MCPCatalog{}, materialize.MCPProjection{}, nil
+	}
 	catalog, err := loadEffectiveMCPForAgent(cityPath, cfg, agent, qualifiedName, workDir)
 	if err != nil {
 		return materialize.MCPCatalog{}, materialize.MCPProjection{}, err
@@ -83,6 +86,13 @@ func resolveAgentMCPProjection(
 		return materialize.MCPCatalog{}, materialize.MCPProjection{}, err
 	}
 	return catalog, projection, nil
+}
+
+func skipsProviderNativeMCP(agent *config.Agent) bool {
+	if agent == nil {
+		return false
+	}
+	return agent.Name == config.ControlDispatcherAgentName && strings.TrimSpace(agent.StartCommand) != ""
 }
 
 func mergeMCPFingerprintEntry(fpExtra map[string]string, projection materialize.MCPProjection) map[string]string {

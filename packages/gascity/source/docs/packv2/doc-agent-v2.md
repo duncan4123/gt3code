@@ -19,7 +19,8 @@ This is a companion to [doc-pack-v2.md](doc-pack-v2.md), which covers the pack/c
 
 Agent definitions are split across `[[agent]]` TOML tables and filesystem assets (prompts, overlays, scripts) scattered in separate directory trees. This creates six problems:
 v
-1. **Scattered identity.** There's no single place to understand what an agent is. Adding an agent means editing city.toml *and* creating files in multiple directories (`prompts/`, `overlay/`, `scripts/`).
+
+1. **Scattered identity.** There's no single place to understand what an agent is. Adding an agent means editing city.toml _and_ creating files in multiple directories (`prompts/`, `overlay/`, `scripts/`).
 
 2. **Invisible prompt injection.** Every `.md` file is secretly a Go template. Fragments get injected via `global_fragments` and `inject_fragments` without appearing in the prompt file itself. You can't read a prompt and know what the agent actually sees.
 
@@ -33,7 +34,7 @@ v
 
 ## Proposed change: agents as directories
 
-Agents are defined by convention: a directory in `agents/` with at least a `prompt.md` file.  All additional assets live in the agent's directory, as does any configuration in an optional `agent.toml` file.
+Agents are defined by convention: a directory in `agents/` with at least a `prompt.md` file. All additional assets live in the agent's directory, as does any configuration in an optional `agent.toml` file.
 
 **Minimal agent** — just a prompt, inherits all defaults:
 
@@ -259,7 +260,7 @@ local `.gitignore` best-effort, and effective MCP changes participate
 in session fingerprints so affected sessions restart on drift.
 
 > **Template expansion and TOML escaping.** `.template.toml` files are
-> expanded by Go `text/template` *before* TOML parsing. Values that
+> expanded by Go `text/template` _before_ TOML parsing. Values that
 > contain `"`, `\`, or newlines can produce invalid TOML — the parse
 > error will point at the expanded file, not your template. Either
 > keep secret values simple strings (no embedded quotes/backslashes)
@@ -310,17 +311,17 @@ Authorization = "Bearer {{.SENTRY_TOKEN}}"
 
 #### Field spec
 
-| Field | Required | Description |
-|---|---|---|
-| `name` | Yes | Server name (must match filename without extension) |
-| `description` | Yes | What this server provides |
-| `command` | Yes* | Command to launch local server (stdio transport) |
-| `args` | No | Arguments to the command |
-| `url` | Yes* | URL for remote server (HTTP transport) |
-| `headers` | No | HTTP headers for remote server |
-| `[env]` | No | Environment variables passed to local server |
+| Field         | Required | Description                                         |
+| ------------- | -------- | --------------------------------------------------- |
+| `name`        | Yes      | Server name (must match filename without extension) |
+| `description` | Yes      | What this server provides                           |
+| `command`     | Yes\*    | Command to launch local server (stdio transport)    |
+| `args`        | No       | Arguments to the command                            |
+| `url`         | Yes\*    | URL for remote server (HTTP transport)              |
+| `headers`     | No       | HTTP headers for remote server                      |
+| `[env]`       | No       | Environment variables passed to local server        |
 
-*One of `command` or `url` is required.
+\*One of `command` or `url` is required.
 
 #### What Gas City does at agent startup (later slice)
 
@@ -387,13 +388,13 @@ An agent whose prompt is plain `.md` cannot use fragments — no template engine
 
 **What this replaces:**
 
-| Current mechanism | New model |
-|---|---|
-| `global_fragments` in workspace config | Gone — each prompt explicitly includes what it needs |
-| `inject_fragments` on agent config | Gone — same reason |
-| `inject_fragments_append` on patches | Gone — same reason |
-| `prompts/shared/*.template.md` | `template-fragments/*.template.md` at city level |
-| All `.md` files run through Go templates | Only `.template.md` files run through Go templates |
+| Current mechanism                        | New model                                            |
+| ---------------------------------------- | ---------------------------------------------------- |
+| `global_fragments` in workspace config   | Gone — each prompt explicitly includes what it needs |
+| `inject_fragments` on agent config       | Gone — same reason                                   |
+| `inject_fragments_append` on patches     | Gone — same reason                                   |
+| `prompts/shared/*.template.md`           | `template-fragments/*.template.md` at city level     |
+| All `.md` files run through Go templates | Only `.template.md` files run through Go templates   |
 
 The three-layer injection pipeline (inline templates → global_fragments → inject_fragments) collapses to one: **explicit `{{ template "name" . }}` in the `.template.md` file.** The prompt file is the single source of truth for what the agent sees.
 
@@ -484,6 +485,7 @@ my-city/
 ```
 
 Key design decisions:
+
 - `agents/<name>/` = new agent. `[[patches.agent]]` = modify imported agent. Never conflated.
 - Patches target by qualified name (`gastown.mayor`). Bare names work when unambiguous.
 - File-level: prompt replacement only for now. Skills, MCP, overlays deferred.
@@ -505,10 +507,10 @@ max_active_sessions = 2
 
 Same fields as agent patches, same qualified naming, same semantics. The only difference is scope:
 
-| Mechanism | Where | Scope |
-|---|---|---|
-| Agent patches | `[[patches.agent]]` in city.toml | All rigs |
-| Rig patches | `[[rigs.patches]]` in city.toml | One rig only |
+| Mechanism     | Where                            | Scope        |
+| ------------- | -------------------------------- | ------------ |
+| Agent patches | `[[patches.agent]]` in city.toml | All rigs     |
+| Rig patches   | `[[rigs.patches]]` in city.toml  | One rig only |
 
 **Application order** (later wins):
 

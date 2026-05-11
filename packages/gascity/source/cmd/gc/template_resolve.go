@@ -76,6 +76,8 @@ type TemplateParams struct {
 	RigName string
 	// RigRoot is the absolute path to the associated rig root (empty if none).
 	RigRoot string
+	// CityName is the resolved city identity used for runtime/session metadata.
+	CityName string
 	// WakeMode controls whether the next wake resumes or starts fresh conversation state.
 	WakeMode string
 	// IsACP is true when the resolved session transport is SessionTransportACP.
@@ -546,6 +548,7 @@ func resolveTemplate(p *agentBuildParams, cfgAgent *config.Agent, qualifiedName 
 		InstanceName:             qualifiedName,
 		RigName:                  rigName,
 		RigRoot:                  rigRoot,
+		CityName:                 p.cityName,
 		WakeMode:                 cfgAgent.WakeMode,
 		IsACP:                    sessionTransport == config.SessionTransportACP,
 		HookEnabled:              hasHooks,
@@ -848,7 +851,7 @@ func buildStartupEnvelope(tp TemplateParams, startupPrompt string) json.RawMessa
 		"version": 1,
 		"gc": map[string]any{
 			"cityPath":    tp.Env["GC_CITY_PATH"],
-			"cityName":    filepath.Base(tp.Env["GC_CITY_PATH"]),
+			"cityName":    startupEnvelopeCityName(tp),
 			"rigName":     tp.RigName,
 			"rigPath":     tp.RigRoot,
 			"agent":       tp.TemplateName,
@@ -911,6 +914,29 @@ func buildStartupEnvelope(tp TemplateParams, startupPrompt string) json.RawMessa
 		return nil
 	}
 	return json.RawMessage(data)
+}
+
+func startupEnvelopeCityName(tp TemplateParams) string {
+	if name := cleanStartupEnvelopeCityName(tp.CityName); name != "" && !strings.ContainsAny(name, `/\`) {
+		return name
+	}
+	for _, value := range []string{tp.CityName, tp.Env["GC_CITY_PATH"], tp.Env["GC_CITY_ROOT"], tp.Env["GC_CITY"]} {
+		if base := cleanStartupEnvelopeCityName(filepath.Base(filepath.Clean(value))); base != "" {
+			return base
+		}
+		if name := cleanStartupEnvelopeCityName(value); name != "" {
+			return name
+		}
+	}
+	return "city"
+}
+
+func cleanStartupEnvelopeCityName(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "." || value == ".." || value == string(filepath.Separator) {
+		return ""
+	}
+	return value
 }
 
 func templateParamsUseT3Bridge(tp TemplateParams) bool {

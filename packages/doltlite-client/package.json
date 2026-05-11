@@ -2,14 +2,14 @@
   "name": "@t3tools/doltlite-client",
   "version": "0.0.0-alpha.1",
   "private": true,
+  "bin": {
+    "dlite": "./scripts/dlite.mjs"
+  },
   "files": [
     "bin",
     "source",
     "scripts"
   ],
-  "bin": {
-    "dlite": "./scripts/dlite.mjs"
-  },
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",

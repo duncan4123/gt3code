@@ -3,37 +3,54 @@ provider = "codex"
 suspended = false
 install_agent_hooks = ["codex"]
 
-[agent_defaults]
-append_fragments = ["cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]
-
 [[rigs]]
 name = "beads_rust"
 prefix = "gb"
 suspended = false
-includes = [".gc/system/packs/gastown"]
 formulas_dir = "formulas"
+includes = [".gc/system/packs/gastown"]
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = false
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = false
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = false
 
 [patches]
 
 [[patches.agent]]
 dir = "beads_rust"
 name = "polecat"
-append_fragments = ["beads-rust-backend"]
-min_active_sessions = 1
+suspended = false
 provider = "codex"
+append_fragments = ["beads-rust-backend"]
 wake_mode = "resume"
+min_active_sessions = 1
 
 [[patches.agent]]
 dir = "beads_rust"
 name = "refinery"
-append_fragments = ["beads-rust-backend"]
+suspended = false
 provider = "codex"
+append_fragments = ["beads-rust-backend"]
 
 [[patches.agent]]
 dir = "beads_rust"
 name = "witness"
-append_fragments = ["beads-rust-backend"]
+suspended = false
 provider = "codex"
+append_fragments = ["beads-rust-backend"]
+
+[[patches.agent]]
+dir = ""
+name = "mayor"
+suspended = false
 
 [[patches.named_session]]
 dir = "beads_rust"
@@ -41,10 +58,13 @@ template = "refinery"
 mode = "always"
 
 [beads]
-provider = "exec:/data/projects/gascity/contrib/beads-scripts/gc-beads-br"
+provider = "exec:gc-beads-br"
 
 [session]
 provider = "t3bridge"
 
 [daemon]
 formula_v2 = true
+
+[agent_defaults]
+append_fragments = ["cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]

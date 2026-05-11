@@ -5,3 +5,8 @@
 !.beads/metadata.json
 hooks/
 .runtime/
+
+# Gas City
+.mcp.json
+.gemini/settings.json
+.codex/config.toml

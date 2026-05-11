@@ -334,9 +334,20 @@ func (s *Store) ListOpen(status ...string) ([]beads.Bead, error) {
 }
 
 // Ready returns actionable open beads (excluding infrastructure types):
-// script ready
+// script ready [--assignee=<name>] [--limit=<n>]
 func (s *Store) Ready(query ...beads.ReadyQuery) ([]beads.Bead, error) {
-	out, err := s.run(nil, "ready")
+	args := []string{"ready"}
+	if len(query) > 0 {
+		q := query[0]
+		if q.Assignee != "" {
+			args = append(args, "--assignee="+q.Assignee)
+		}
+		if q.Limit > 0 && q.Assignee != "" {
+			args = append(args, "--limit="+strconv.Itoa(q.Limit))
+		}
+	}
+
+	out, err := s.run(nil, args...)
 	if err != nil {
 		return nil, fmt.Errorf("exec beads ready: %w", err)
 	}

@@ -11,7 +11,12 @@ const arch = process.env.T3CODE_DOLTLITE_CLIENT_BUILD_ARCH || process.arch;
 const goos = platform === "win32" ? "windows" : platform === "darwin" ? "darwin" : "linux";
 const goarch = arch === "x64" ? "amd64" : arch;
 const executable = platform === "win32" ? "dlite.exe" : "dlite";
-const library = platform === "win32" ? "doltlite.dll" : platform === "darwin" ? "libdoltlite.dylib" : "libdoltlite.so";
+const library =
+  platform === "win32"
+    ? "doltlite.dll"
+    : platform === "darwin"
+      ? "libdoltlite.dylib"
+      : "libdoltlite.so";
 const outDir = path.join(packageRoot, "bin", `${platform}-${arch}`);
 const sourceRoot = path.join(packageRoot, "source");
 const doltliteBuildDir = resolveDoltliteBuildDir();
@@ -25,7 +30,10 @@ const result = spawnSync("go", ["build", "-o", path.join(outDir, executable), ".
     ...process.env,
     CGO_ENABLED: "1",
     CGO_CFLAGS: appendFlag(process.env.CGO_CFLAGS, `-I${doltliteBuildDir}`),
-    CGO_LDFLAGS: appendFlag(process.env.CGO_LDFLAGS, `-L${doltliteBuildDir} ${rpathFlag} -ldoltlite -lz -lpthread -lm`),
+    CGO_LDFLAGS: appendFlag(
+      process.env.CGO_LDFLAGS,
+      `-L${doltliteBuildDir} ${rpathFlag} -ldoltlite -lz -lpthread -lm`,
+    ),
     GOOS: goos,
     GOARCH: goarch,
     GOFLAGS: appendFlag(process.env.GOFLAGS, "-tags=libsqlite3"),
@@ -45,7 +53,8 @@ function resolveDoltliteBuildDir() {
   ].filter(Boolean);
   for (const candidate of candidates) {
     const resolved = path.resolve(candidate);
-    if (existsSync(path.join(resolved, library)) && existsSync(path.join(resolved, "sqlite3.h"))) return resolved;
+    if (existsSync(path.join(resolved, library)) && existsSync(path.join(resolved, "sqlite3.h")))
+      return resolved;
   }
   throw new Error(`doltlite build not found. Expected ${library} and sqlite3.h.`);
 }

@@ -3,21 +3,24 @@ Generate activity digest for the mayor.
 
 ## gascity-br beads-rust rules
 
-This city uses the beads-rust backend. Do not use bare `bd`; and do not use
-`gc bd` for bead CRUD in this city because the exec-backed `br` provider does
-not expose the bd-only `gc bd` passthrough. Use `br` directly:
+This city uses the beads-rust backend. Do not use bare `bd` or Gas City's bd compatibility path for bead CRUD. Use the managed `br` binary:
 
 ```bash
 BR_ROOT="${GC_RIG_ROOT:-$GC_CITY_ROOT}"
 BR_DB="$BR_ROOT/.beads/beads.db"
-brj() { br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" --json "$@"; }
-brt() { br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" "$@"; }
+BR_ACTOR="${GC_SESSION_NAME:-${GC_AGENT:-agent}}"
+brj() { br --db "$BR_DB" --actor "$BR_ACTOR" --json "$@"; }
+brt() { br --db "$BR_DB" --actor "$BR_ACTOR" "$@"; }
+brlist() { brj list "$@" | jq -c '.issues // .'; }
+brmeta() { br --db "$BR_DB" --actor "$BR_ACTOR" --json gc-metadata "$@"; }
+brmeta_set() { local id="$1" key="$2" value="$3"; brmeta get "$id" | jq --arg k "$key" --arg v "$value" '. + {($k): $v}' | br --db "$BR_DB" --actor "$BR_ACTOR" gc-metadata set "$id"; }
+brmeta_unset() { local id="$1" key="$2"; brmeta get "$id" | jq --arg k "$key" 'del(.[$k])' | br --db "$BR_DB" --actor "$BR_ACTOR" gc-metadata set "$id"; }
 ```
 
-Translate inherited `gc bd list/show/create/update/close/dep` examples to
-`brj list`, `brj show`, `brj create`, `brj update`, `brt close`, and
-`brt dep ...`. Keep GC control-plane commands such as `gc runtime`,
-`gc session`, `gc mail`, and `gc hook`.
+Use `brj`/`brt` for issue CRUD and `brmeta`/`brmeta_set`/`brmeta_unset`
+for Gas City metadata. Keep GC control-plane commands such as `gc runtime`,
+`gc session`, `gc mail`, `gc hook`, and `gc sling --formula`. Do not use
+`gc bd ...` in this city.
 
 Before writing the digest, load memory and prior-session context:
 
@@ -111,8 +114,8 @@ gc rig list
 
 a) **Issues filed and closed:**
 ```bash
-gc bd list --created-after=$SINCE --json --limit=0
-gc bd list --status=closed --closed-after=$SINCE --json --limit=0
+brlist --all --limit=0 | jq --arg since "$SINCE" '[.[] | select((.created_at // "") >= $since)]'
+brlist --status=closed --all --limit=0 | jq --arg since "$SINCE" '[.[] | select((.closed_at // "") >= $since)]'
 ```
 
 b) **Merge activity:**
@@ -122,7 +125,7 @@ git -C <rig-path> log --merges --since=$SINCE --oneline main
 
 c) **Incidents:**
 ```bash
-gc bd list --label=incident --created-after=$SINCE --json
+brlist --label=incident --all --limit=0 | jq --arg since "$SINCE" '[.[] | select((.created_at // "") >= $since)]'
 ```
 
 **3. Collect town-level data:**
@@ -134,12 +137,12 @@ gc events --since=$SINCE --type=session.woke,session.stopped,session.crashed --j
 
 b) **Escalations:**
 ```bash
-gc bd list --label=escalation --created-after=$SINCE --json
+brlist --label=escalation --all --limit=0 | jq --arg since "$SINCE" '[.[] | select((.created_at // "") >= $since)]'
 ```
 
 c) **Warrants filed:**
 ```bash
-gc bd list --type=warrant --created-after=$SINCE --json
+brlist --type=warrant --all --limit=0 | jq --arg since "$SINCE" '[.[] | select((.created_at // "") >= $since)]'
 ```
 
 Close this step when all data is collected."""
@@ -186,14 +189,14 @@ gc mail send mayor/ -s "Gas Town Digest: $DATE" -m "$DIGEST"
 
 **3. Archive as bead:**
 ```bash
-gc bd create --type=digest \
+brj create --type=digest \
   --title="Digest: $DATE" \
-  --label=digest,{{period}}
+  --labels=digest,{{period}}
 ```
 
 **4. Close work bead, signal reconciler, and exit:**
 ```bash
-gc bd close <work-bead> --reason "Digest generated and sent"
+brt close <work-bead> --reason "Digest generated and sent"
 gc runtime drain-ack
 exit
 ```

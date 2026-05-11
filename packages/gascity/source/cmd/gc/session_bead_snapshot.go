@@ -181,6 +181,18 @@ func (s *sessionBeadSnapshot) FindSessionNameByNamedIdentity(identity string) st
 	return ""
 }
 
+func (s *sessionBeadSnapshot) FindSessionBeadByNamedIdentity(identity string) (beads.Bead, bool) {
+	if s == nil || strings.TrimSpace(identity) == "" {
+		return beads.Bead{}, false
+	}
+	for _, bead := range s.open {
+		if strings.TrimSpace(bead.Metadata["configured_named_identity"]) == identity {
+			return bead, true
+		}
+	}
+	return beads.Bead{}, false
+}
+
 func stampedPoolQualifiedIdentity(bead beads.Bead) string {
 	if !isPoolManagedSessionBead(bead) {
 		return ""

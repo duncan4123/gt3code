@@ -92,41 +92,41 @@ Decision: block direct merge. Use a reasoned synthesize merge on
 
 ## T3 Bridge Contract Inventory
 
-| Part | Direction | Source markers | Failure if lost | Smoke check | Status |
-| --- | --- | --- | --- | --- | --- |
-| GC API client contract | GC -> T3 | `packages/contracts/src/gc.ts`, `apps/server/src/gc/Services/GcApiClient.ts` | Sidebar/API calls disappear | `bun gc status`, RPC `gc.getConfig` | preserve |
-| GC API implementation | GC -> T3 | `apps/server/src/gc/Layers/GcApiClient.ts` | lifecycle controls fail | `getLifecycleStatus`, start/stop buttons | dirty, preserve |
-| GC context provider | GC -> T3 | `apps/server/src/gc/Layers/GcContextProvider.ts` | right sidebar loses bead/formula/env context | open GC managed thread | preserve |
-| Thread binding lookup | bidirectional | `apps/server/src/gc/peek.ts` | session->thread resolution fails | `findThreadBinding` | preserve |
-| Folder metadata | GC -> T3 | `apps/server/src/gc/folderMetadata.ts` | virtual folders collapse | sidebar with rig project | preserve |
-| Provider env handoff | T3 -> GC provider | `ProviderCommandReactor.ts`, `packages/contracts/src/provider.ts` | agents lose `GC_SESSION_NAME` etc. | provider start input includes env | preserve |
-| Custom metadata store | GC -> T3 web | `apps/web/src/store.ts` | GC threads vanish or stop updating | metadata-only update | preserve |
-| Terminal/project env | T3 -> shell | `ChatView.tsx`, project script launchers | shells lack GC env | terminal env audit | preserve |
-| Sidebar GC folders | GC -> T3 UI | `Sidebar.tsx`, `SidebarGcFolders.tsx` | rigs/pools/named sessions missing | sidebar shows rig/project folders | dirty, preserve |
-| Right sidebar panel | GC -> T3 UI | `GcPanel.tsx`, `GcContextSidebar.tsx`, chat route | no bead/formula/convoy/runtime panel | `panel=gc` route | preserve |
-| FTS5 search | T3 persistence -> UI | `orchestrationReactQuery.ts`, FTS migrations | sidebar search degraded | message text search | preserve |
-| Projection sidecar | T3 persistence | `NodeSqliteClient.ts`, migrations, `packages/doltlite/index.ts` | read model missing columns/tables | fresh dev DB migrations | preserve |
-| OpenCode/Kimi defaults | shared config | `city.toml`, `pack.toml`, settings | wrong provider/model for agents | config show provider rows | dirty, preserve |
-| Bundled runner env | T3 -> GC | `scripts/gascity-runner.ts`, bundled env helpers | wrong binary/db/backend | `bun gascity:path` | preserve |
-| t3bridge provider | GC -> T3 | `packages/gascity/source/internal/runtime/t3bridge` | GC sessions cannot start T3 threads | session start via t3bridge | dirty, preserve |
-| Dolt backend | beads storage | beads/gascity backend paths | managed Dolt compatibility lost | bd init backend=dolt | preserve |
-| doltlite backend | beads storage | `packages/doltlite`, `packages/beads-doltlite`, `doltlite_read_store.go` | current runtime backend breaks | bd/gc against doltlite DB | dirty, preserve |
+| Part                   | Direction            | Source markers                                                               | Failure if lost                              | Smoke check                              | Status          |
+| ---------------------- | -------------------- | ---------------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------- | --------------- |
+| GC API client contract | GC -> T3             | `packages/contracts/src/gc.ts`, `apps/server/src/gc/Services/GcApiClient.ts` | Sidebar/API calls disappear                  | `bun gc status`, RPC `gc.getConfig`      | preserve        |
+| GC API implementation  | GC -> T3             | `apps/server/src/gc/Layers/GcApiClient.ts`                                   | lifecycle controls fail                      | `getLifecycleStatus`, start/stop buttons | dirty, preserve |
+| GC context provider    | GC -> T3             | `apps/server/src/gc/Layers/GcContextProvider.ts`                             | right sidebar loses bead/formula/env context | open GC managed thread                   | preserve        |
+| Thread binding lookup  | bidirectional        | `apps/server/src/gc/peek.ts`                                                 | session->thread resolution fails             | `findThreadBinding`                      | preserve        |
+| Folder metadata        | GC -> T3             | `apps/server/src/gc/folderMetadata.ts`                                       | virtual folders collapse                     | sidebar with rig project                 | preserve        |
+| Provider env handoff   | T3 -> GC provider    | `ProviderCommandReactor.ts`, `packages/contracts/src/provider.ts`            | agents lose `GC_SESSION_NAME` etc.           | provider start input includes env        | preserve        |
+| Custom metadata store  | GC -> T3 web         | `apps/web/src/store.ts`                                                      | GC threads vanish or stop updating           | metadata-only update                     | preserve        |
+| Terminal/project env   | T3 -> shell          | `ChatView.tsx`, project script launchers                                     | shells lack GC env                           | terminal env audit                       | preserve        |
+| Sidebar GC folders     | GC -> T3 UI          | `Sidebar.tsx`, `SidebarGcFolders.tsx`                                        | rigs/pools/named sessions missing            | sidebar shows rig/project folders        | dirty, preserve |
+| Right sidebar panel    | GC -> T3 UI          | `GcPanel.tsx`, `GcContextSidebar.tsx`, chat route                            | no bead/formula/convoy/runtime panel         | `panel=gc` route                         | preserve        |
+| FTS5 search            | T3 persistence -> UI | `orchestrationReactQuery.ts`, FTS migrations                                 | sidebar search degraded                      | message text search                      | preserve        |
+| Projection sidecar     | T3 persistence       | `NodeSqliteClient.ts`, migrations, `packages/doltlite/index.ts`              | read model missing columns/tables            | fresh dev DB migrations                  | preserve        |
+| OpenCode/Kimi defaults | shared config        | `city.toml`, `pack.toml`, settings                                           | wrong provider/model for agents              | config show provider rows                | dirty, preserve |
+| Bundled runner env     | T3 -> GC             | `scripts/gascity-runner.ts`, bundled env helpers                             | wrong binary/db/backend                      | `bun gascity:path`                       | preserve        |
+| t3bridge provider      | GC -> T3             | `packages/gascity/source/internal/runtime/t3bridge`                          | GC sessions cannot start T3 threads          | session start via t3bridge               | dirty, preserve |
+| Dolt backend           | beads storage        | beads/gascity backend paths                                                  | managed Dolt compatibility lost              | bd init backend=dolt                     | preserve        |
+| doltlite backend       | beads storage        | `packages/doltlite`, `packages/beads-doltlite`, `doltlite_read_store.go`     | current runtime backend breaks               | bd/gc against doltlite DB                | dirty, preserve |
 
 ## Difference Ledger
 
-| Surface | Upstream change | Fork feature affected | Decision | Verification |
-| --- | --- | --- | --- | --- |
-| `apps/server/src/cli*` | upstream splits CLI into focused modules | GC server layer imports/wiring | synthesize upstream CLI split while preserving GC layers | targeted server tests |
-| `apps/server/src/gc/**` | absent upstream | GC API client, context, generated client | keep fork; port to any new server architecture manually | GC RPC smoke |
-| `apps/server/src/persistence/Migrations/*` | upstream has later migration shape, fork has sidecar/FTS/provider-instance work | projection sidecar, FTS5, provider instance IDs | synthesize; never drop sidecar/FTS migrations silently | fresh dev DB boot |
-| `apps/web/src/components/Sidebar.tsx` | upstream timeline/sidebar changes overlap with fork GC virtual folders | rig/project grouping, pool controls, thread rows | synthesize; keep top-level project semantics and GC virtual folders | sidebar tests/manual UI |
-| `apps/web/src/components/SidebarGcFolders.tsx` | absent upstream | GC agent/rig/session controls | keep fork | sidebar renders configured agents |
-| `apps/web/src/components/GcContextSidebar.tsx` | absent upstream | right sidebar context panel | keep fork | `panel=gc` route |
-| `apps/web/src/components/chat/MessagesTimeline*` | upstream performance work | GC activity cards and timeline entries | synthesize if timeline touched | timeline tests |
-| `packages/gascity/**` | absent upstream T3Code | bundled GC build/runtime | keep fork; sync from Gas City rig formula, not T3 upstream | `bun build:gascity-tools` |
-| `packages/beads-doltlite/**` | absent upstream T3Code | doltlite-backed beads | keep fork; sync from beads-doltlite rig formula | bd doltlite smoke |
-| `packages/doltlite/**` | absent upstream T3Code | linked libdoltlite client | keep fork | native build smoke |
-| `packages/gascity-config/**` | absent upstream T3Code | bundled city/rig/packs/providers | keep fork; sync via HQ formula | `bun gc config show` |
+| Surface                                          | Upstream change                                                                 | Fork feature affected                            | Decision                                                            | Verification                      |
+| ------------------------------------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------- | --------------------------------- |
+| `apps/server/src/cli*`                           | upstream splits CLI into focused modules                                        | GC server layer imports/wiring                   | synthesize upstream CLI split while preserving GC layers            | targeted server tests             |
+| `apps/server/src/gc/**`                          | absent upstream                                                                 | GC API client, context, generated client         | keep fork; port to any new server architecture manually             | GC RPC smoke                      |
+| `apps/server/src/persistence/Migrations/*`       | upstream has later migration shape, fork has sidecar/FTS/provider-instance work | projection sidecar, FTS5, provider instance IDs  | synthesize; never drop sidecar/FTS migrations silently              | fresh dev DB boot                 |
+| `apps/web/src/components/Sidebar.tsx`            | upstream timeline/sidebar changes overlap with fork GC virtual folders          | rig/project grouping, pool controls, thread rows | synthesize; keep top-level project semantics and GC virtual folders | sidebar tests/manual UI           |
+| `apps/web/src/components/SidebarGcFolders.tsx`   | absent upstream                                                                 | GC agent/rig/session controls                    | keep fork                                                           | sidebar renders configured agents |
+| `apps/web/src/components/GcContextSidebar.tsx`   | absent upstream                                                                 | right sidebar context panel                      | keep fork                                                           | `panel=gc` route                  |
+| `apps/web/src/components/chat/MessagesTimeline*` | upstream performance work                                                       | GC activity cards and timeline entries           | synthesize if timeline touched                                      | timeline tests                    |
+| `packages/gascity/**`                            | absent upstream T3Code                                                          | bundled GC build/runtime                         | keep fork; sync from Gas City rig formula, not T3 upstream          | `bun build:gascity-tools`         |
+| `packages/beads-doltlite/**`                     | absent upstream T3Code                                                          | doltlite-backed beads                            | keep fork; sync from beads-doltlite rig formula                     | bd doltlite smoke                 |
+| `packages/doltlite/**`                           | absent upstream T3Code                                                          | linked libdoltlite client                        | keep fork                                                           | native build smoke                |
+| `packages/gascity-config/**`                     | absent upstream T3Code                                                          | bundled city/rig/packs/providers                 | keep fork; sync via HQ formula                                      | `bun gc config show`              |
 
 ## Rig Sync Plan
 

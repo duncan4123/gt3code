@@ -64,26 +64,26 @@ model = "gpt-5.4"
 [[patches.agent]]
 dir = ""
 name = "deacon"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = ""
 name = "boot"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = ""
 name = "dog"
-suspended = false
+suspended = true
 provider = "codex"
 env = { GC_MODEL = "gpt-5.4-mini" }
 
 [[patches.agent]]
 dir = ""
 name = "mayor"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.named_session]]

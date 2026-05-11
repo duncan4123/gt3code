@@ -19,7 +19,7 @@ supervised by the GC loader. Start the local server with the pack helper:
 packages/gascity-config/config/cities/gascity-br/packs/flywheel/mcp-agent-mail/scripts/start-agent-mail.sh
 ```
 
-The helper uses `/home/ubuntu/mcp_agent_mail` by default and leaves logs under
+The helper uses `$HOME/mcp_agent_mail` by default and leaves logs under
 `/tmp/gascity-mcp-agent-mail/server.log`. Override the checkout or port if
 needed:
 

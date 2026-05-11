@@ -10,7 +10,7 @@ or `/gc-city` to load command reference for any topic.
 
 Note: those `/gc-*` entries are Claude Code slash commands (skill references),
 not bash commands — do not invent `gc mail list`, `gc city status`, etc. from
-them. For bead work use `gc bd ...`, for city-level status use `gc status`,
+them. For bead work use `br ...`, for city-level status use `gc status`,
 and for mail use `gc mail <subcommand>` where subcommands are `inbox`, `send`,
 `check`, `read`, `peek`, `reply`, `mark-read`, `mark-unread`, `thread`,
 `count`, `archive`, `delete`. If unsure of exact subcommand shape, run
@@ -20,23 +20,25 @@ and for mail use `gc mail <subcommand>` where subcommands are `inbox`, `send`,
 
 1. **Set up rigs:** `gc rig add <path>` to register project directories
 2. **Add agents:** `gc agent add --name <name> --dir <rig-dir>` for each worker
-3. **Create work:** `gc bd create "<title>"` for each task to be done
+3. **Create work:** `br create "<title>"` for each task to be done
 4. **Dispatch:** `gc sling <agent> <bead-id>` to route work to agents
-5. **Monitor:** `gc bd list` and `gc session peek <name>` to track progress
+5. **Monitor:** `br list` and `gc session peek <name>` to track progress
 
 ## Working with rig beads
 
-Use `gc bd` to run bead commands against any rig from the city root:
+Use `br` for bead commands in this Beads Rust city:
 
-    gc bd --rig <rig-name> list
-    gc bd --rig <rig-name> create "<title>"
-    gc bd --rig <rig-name> show <bead-id>
+    BR_DB="$GC_RIG_ROOT/.beads/beads.db" br list
+    BR_DB="$GC_RIG_ROOT/.beads/beads.db" br create "<title>"
+    BR_DB="$GC_RIG_ROOT/.beads/beads.db" br show <bead-id>
 
-The rig is auto-detected from the bead prefix when possible:
+If `$GC_RIG_ROOT` is not set, run from the rig root or set `BR_DB` to the
+configured rig DB:
 
-    gc bd show my-project-abc    # auto-routes to the correct rig
+    BR_DB=/path/to/beads_rust/.beads/beads.db br show <bead-id>
 
-For city-level beads (no rig), `gc bd` works the same way without `--rig`.
+Do not use `bd` in this city. Keep using `gc status`, `gc session`, `gc mail`,
+`gc rig`, and `gc agent` for Gas City control-plane work.
 
 ## Handoff
 

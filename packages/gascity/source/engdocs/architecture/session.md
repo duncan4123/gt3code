@@ -2,7 +2,6 @@
 title: "Session"
 ---
 
-
 > Last verified against code: 2026-04-25
 
 ## Summary
@@ -144,41 +143,41 @@ Optional provider extensions also live in `runtime/runtime.go`:
 
 ## Interactions
 
-| Depends on | How |
-|---|---|
-| `internal/agent` | Session naming and startup-hint structures |
-| `internal/config` | Provider presets and resolved agent settings |
+| Depends on         | How                                                          |
+| ------------------ | ------------------------------------------------------------ |
+| `internal/agent`   | Session naming and startup-hint structures                   |
+| `internal/config`  | Provider presets and resolved agent settings                 |
 | `internal/session` | Session bead state, wait lifecycle, and blocked-turn helpers |
 
-| Depended on by | How |
-|---|---|
-| `cmd/gc/cmd_start.go` | Starts runtimes for configured agents |
+| Depended on by                 | How                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| `cmd/gc/cmd_start.go`          | Starts runtimes for configured agents                                          |
 | `cmd/gc/session_reconciler.go` | Uses runtime liveness and drift signals for bead-driven session reconciliation |
-| `cmd/gc/cmd_session.go` | Attach, list, inspect, and session-level commands |
-| `cmd/gc/cmd_nudge.go` | Idle-aware and queued nudge delivery |
-| `internal/api/` | Session-aware API surfaces and status views |
+| `cmd/gc/cmd_session.go`        | Attach, list, inspect, and session-level commands                              |
+| `cmd/gc/cmd_nudge.go`          | Idle-aware and queued nudge delivery                                           |
+| `internal/api/`                | Session-aware API surfaces and status views                                    |
 
 ## Code Map
 
-| Path | Responsibility |
-|---|---|
-| `internal/runtime/runtime.go` | `Provider`, `Config`, optional runtime extensions |
-| `internal/runtime/fingerprint.go` | Deterministic runtime config hashing |
-| `internal/runtime/beacon.go` | Startup beacon formatting |
-| `internal/runtime/dialog.go` | Shared startup-dialog handling |
-| `internal/runtime/fake.go` | In-memory fake runtime for tests |
-| `internal/runtime/tmux/` | Interactive tmux-backed runtime |
-| `internal/runtime/subprocess/` | Non-interactive subprocess runtime |
-| `internal/runtime/exec/` | Script-backed runtime provider |
-| `internal/runtime/k8s/` | Kubernetes-backed runtime provider |
-| `internal/runtime/acp/` | ACP-backed runtime provider |
-| `internal/runtime/auto/` | Automatic routing between runtime backends |
-| `internal/runtime/hybrid/` | Hybrid routing between local and remote backends |
-| `internal/agent/hints.go` | `StartupHints` |
-| `internal/agent/session_name.go` | Session naming |
-| `cmd/gc/template_resolve.go` | Builds runtime configs from resolved agent config |
-| `internal/session/manager.go` | Higher-level session manager for session beads |
-| `internal/session/waits.go` | Wait state helpers |
+| Path                              | Responsibility                                    |
+| --------------------------------- | ------------------------------------------------- |
+| `internal/runtime/runtime.go`     | `Provider`, `Config`, optional runtime extensions |
+| `internal/runtime/fingerprint.go` | Deterministic runtime config hashing              |
+| `internal/runtime/beacon.go`      | Startup beacon formatting                         |
+| `internal/runtime/dialog.go`      | Shared startup-dialog handling                    |
+| `internal/runtime/fake.go`        | In-memory fake runtime for tests                  |
+| `internal/runtime/tmux/`          | Interactive tmux-backed runtime                   |
+| `internal/runtime/subprocess/`    | Non-interactive subprocess runtime                |
+| `internal/runtime/exec/`          | Script-backed runtime provider                    |
+| `internal/runtime/k8s/`           | Kubernetes-backed runtime provider                |
+| `internal/runtime/acp/`           | ACP-backed runtime provider                       |
+| `internal/runtime/auto/`          | Automatic routing between runtime backends        |
+| `internal/runtime/hybrid/`        | Hybrid routing between local and remote backends  |
+| `internal/agent/hints.go`         | `StartupHints`                                    |
+| `internal/agent/session_name.go`  | Session naming                                    |
+| `cmd/gc/template_resolve.go`      | Builds runtime configs from resolved agent config |
+| `internal/session/manager.go`     | Higher-level session manager for session beads    |
+| `internal/session/waits.go`       | Wait state helpers                                |
 
 ## Testing
 

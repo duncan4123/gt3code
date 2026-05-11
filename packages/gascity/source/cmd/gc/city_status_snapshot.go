@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -195,7 +194,7 @@ func collectCityStatusSnapshotFromStoreSnapshot(
 	for _, ns := range cfg.NamedSessions {
 		identity := ns.QualifiedName()
 		mode := ns.ModeOrDefault()
-		status := namedSessionStatusForCity(cityPath, cfg, store, snapshot.CityName, identity, mode, suspendedRigs)
+		status := namedSessionStatusForCity(cityPath, cfg, store, statusSnapshot, snapshot.CityName, identity, mode, suspendedRigs)
 		snapshot.NamedSessions = append(snapshot.NamedSessions, cityStatusNamedSession{
 			Identity: identity,
 			Status:   status,
@@ -210,6 +209,7 @@ func namedSessionStatusForCity(
 	cityPath string,
 	cfg *config.City,
 	store beads.Store,
+	statusSnapshot *sessionBeadSnapshot,
 	cityName string,
 	identity string,
 	mode string,
@@ -221,22 +221,18 @@ func namedSessionStatusForCity(
 			status = "degraded blocked"
 		}
 	}
-	if store == nil {
-		return status
-	}
-
-	id, err := resolveSessionIDWithConfig(cityPath, cfg, store, identity)
-	if err != nil {
-		if errors.Is(err, session.ErrSessionNotFound) {
-			return status
+	if statusSnapshot != nil {
+		if bead, ok := statusSnapshot.FindSessionBeadByNamedIdentity(identity); ok {
+			return namedSessionStatusFromBead(bead)
 		}
-		return "lookup error: " + err.Error()
+		if bead, ok := statusSnapshot.FindSessionBeadByTemplate(identity); ok {
+			return namedSessionStatusFromBead(bead)
+		}
 	}
+	return status
+}
 
-	bead, err := store.Get(id)
-	if err != nil {
-		return "lookup error: " + err.Error()
-	}
+func namedSessionStatusFromBead(bead beads.Bead) string {
 	if state := strings.TrimSpace(bead.Metadata["state"]); state != "" {
 		return state
 	}
@@ -310,13 +306,13 @@ func renderCityStatusText(snapshot cityStatusSnapshot, dops drainOps, stdout io.
 		fmt.Fprintln(stdout, "Agents:")
 		for _, row := range snapshot.Agents {
 			if row.ScaleLabel != "" {
-				fmt.Fprintf(stdout, "  %-24s%s\n", row.GroupName, row.ScaleLabel) //nolint:errcheck // best-effort stdout
+				fmt.Fprintf(stdout, "  %-24s  %s\n", row.GroupName, row.ScaleLabel) //nolint:errcheck // best-effort stdout
 			}
 			status := agentStatusLine(row.Agent.Running, dops, row.SessionName, row.Agent.Suspended)
 			if row.Expanded {
-				fmt.Fprintf(stdout, "    %-22s%s\n", row.Agent.QualifiedName, status) //nolint:errcheck // best-effort stdout
+				fmt.Fprintf(stdout, "    %-22s  %s\n", row.Agent.QualifiedName, status) //nolint:errcheck // best-effort stdout
 			} else {
-				fmt.Fprintf(stdout, "  %-24s%s\n", row.Agent.QualifiedName, status) //nolint:errcheck // best-effort stdout
+				fmt.Fprintf(stdout, "  %-24s  %s\n", row.Agent.QualifiedName, status) //nolint:errcheck // best-effort stdout
 			}
 		}
 		fmt.Fprintln(stdout)                                                                                        //nolint:errcheck // best-effort stdout
@@ -327,7 +323,7 @@ func renderCityStatusText(snapshot cityStatusSnapshot, dops drainOps, stdout io.
 		fmt.Fprintln(stdout) //nolint:errcheck // best-effort stdout
 		fmt.Fprintln(stdout, "Named sessions:")
 		for _, named := range snapshot.NamedSessions {
-			fmt.Fprintf(stdout, "  %-24s%s (%s)\n", named.Identity, named.Status, named.Mode) //nolint:errcheck // best-effort stdout
+			fmt.Fprintf(stdout, "  %-24s  %s (%s)\n", named.Identity, named.Status, named.Mode) //nolint:errcheck // best-effort stdout
 		}
 	}
 

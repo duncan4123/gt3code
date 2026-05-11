@@ -3,21 +3,24 @@ Full pipeline from vague idea to reviewed, beads-ready implementation plan.
 
 ## gascity-br beads-rust rules
 
-This city uses the beads-rust backend. Do not use bare `bd`; and do not use
-`gc bd` for bead CRUD in this city because the exec-backed `br` provider does
-not expose the bd-only `gc bd` passthrough. Use `br` directly:
+This city uses the beads-rust backend. Do not use bare `bd` or Gas City's bd compatibility path for bead CRUD. Use the managed `br` binary:
 
 ```bash
 BR_ROOT="${GC_RIG_ROOT:-$GC_CITY_ROOT}"
 BR_DB="$BR_ROOT/.beads/beads.db"
-brj() { br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" --json "$@"; }
-brt() { br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" "$@"; }
+BR_ACTOR="${GC_SESSION_NAME:-${GC_AGENT:-agent}}"
+brj() { br --db "$BR_DB" --actor "$BR_ACTOR" --json "$@"; }
+brt() { br --db "$BR_DB" --actor "$BR_ACTOR" "$@"; }
+brlist() { brj list "$@" | jq -c '.issues // .'; }
+brmeta() { br --db "$BR_DB" --actor "$BR_ACTOR" --json gc-metadata "$@"; }
+brmeta_set() { local id="$1" key="$2" value="$3"; brmeta get "$id" | jq --arg k "$key" --arg v "$value" '. + {($k): $v}' | br --db "$BR_DB" --actor "$BR_ACTOR" gc-metadata set "$id"; }
+brmeta_unset() { local id="$1" key="$2"; brmeta get "$id" | jq --arg k "$key" 'del(.[$k])' | br --db "$BR_DB" --actor "$BR_ACTOR" gc-metadata set "$id"; }
 ```
 
-Translate inherited `gc bd list/show/create/update/close/dep` examples to
-`brj list`, `brj show`, `brj create`, `brj update`, `brt close`, and
-`brt dep ...`. Keep GC control-plane commands such as `gc runtime`,
-`gc session`, `gc mail`, and `gc hook`.
+Use `brj`/`brt` for issue CRUD and `brmeta`/`brmeta_set`/`brmeta_unset`
+for Gas City metadata. Keep GC control-plane commands such as `gc runtime`,
+`gc session`, `gc mail`, `gc hook`, and `gc sling --formula`. Do not use
+`gc bd ...` in this city.
 
 Before planning work, load memory and prior-session context:
 
@@ -34,11 +37,11 @@ shortcuts today, so this formula maps the same intent onto primitives we do
 have:
 
 - repo-local artifacts (`.prd-reviews/`, `.designs/`, `.plan-reviews/`)
-- review task beads created with `gc bd create`
+- review task beads created with `brj create`
 - parallel dispatch via `gc sling ... --on mol-review-leg`
 - completion mail via `gc mail send`
 - one human clarification gate in the live conversation
-- final bead graph creation with `gc bd create` + `gc bd dep add`
+- final bead graph creation with `brj create` + `brt dep add`
 
 Run this from a coordinator workspace that has the target repo checked out
 (typically a crew worker, or a mayor who has already `cd`'d into the rig repo).
@@ -93,7 +96,7 @@ Use only the primitives listed in this formula.
 **1. Prime and move to the repo root:**
 ```bash
 gc prime
-gc bd prime
+brj list --status=open
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 ```
@@ -167,7 +170,7 @@ description = """
 Fan out parallel PRD review using review task beads plus `mol-review-leg`.
 
 **Dispatch pattern for EVERY review leg in this workflow:**
-1. `gc bd create` a task bead with a detailed description
+1. `brj create` a task bead with a detailed description
 2. set metadata:
    - `coordinator=$COORDINATOR`
    - `review_id=$REVIEW_ID`
@@ -179,7 +182,7 @@ gc sling "$REVIEW_TARGET" "$LEG_BEAD" --on {{review_formula}}
 ```
 4. record the bead ID in the round log
 5. wait for completion mail or poll the bead until it closes
-6. read the full report from the bead notes with `gc bd show <id>`
+6. read the full report from the bead notes with `brj show <id>`
 
 **Standard instructions each review bead must include:**
 - read `.prd-reviews/$REVIEW_ID/prd-draft.md`
@@ -480,10 +483,10 @@ After creating the task beads, add them to the convoy with:
 gc convoy add <convoy-id> <task-id>
 ```
 
-**4. Wire dependencies with `gc bd dep add`:**
+**4. Wire dependencies with `brt dep add`:**
 Model the actual "X needs Y" relationships. Verify with:
 ```bash
-gc bd blocked
+brt blocked
 ```
 
 **5. Record the created bead IDs in:**

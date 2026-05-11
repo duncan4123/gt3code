@@ -3,21 +3,24 @@ Witness patrol loop. Poured as a root-only wisp on startup:
 
 ## gascity-br beads-rust rules
 
-This city uses the beads-rust backend. Do not use bare `bd`; and do not use
-`gc bd` for bead CRUD in this city because the exec-backed `br` provider does
-not expose the bd-only `gc bd` passthrough. Use `br` directly:
+This city uses the beads-rust backend. Do not use bare `bd` or Gas City's bd compatibility path for bead CRUD. Use the managed `br` binary:
 
 ```bash
 BR_ROOT="${GC_RIG_ROOT:-$GC_CITY_ROOT}"
 BR_DB="$BR_ROOT/.beads/beads.db"
-brj() { br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" --json "$@"; }
-brt() { br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" "$@"; }
+BR_ACTOR="${GC_SESSION_NAME:-${GC_AGENT:-agent}}"
+brj() { br --db "$BR_DB" --actor "$BR_ACTOR" --json "$@"; }
+brt() { br --db "$BR_DB" --actor "$BR_ACTOR" "$@"; }
+brlist() { brj list "$@" | jq -c '.issues // .'; }
+brmeta() { br --db "$BR_DB" --actor "$BR_ACTOR" --json gc-metadata "$@"; }
+brmeta_set() { local id="$1" key="$2" value="$3"; brmeta get "$id" | jq --arg k "$key" --arg v "$value" '. + {($k): $v}' | br --db "$BR_DB" --actor "$BR_ACTOR" gc-metadata set "$id"; }
+brmeta_unset() { local id="$1" key="$2"; brmeta get "$id" | jq --arg k "$key" 'del(.[$k])' | br --db "$BR_DB" --actor "$BR_ACTOR" gc-metadata set "$id"; }
 ```
 
-Translate inherited `gc bd list/show/create/update/close/dep` examples to
-`brj list`, `brj show`, `brj create`, `brj update`, `brt close`, and
-`brt dep ...`. Keep GC control-plane commands such as `gc runtime`,
-`gc session`, `gc mail`, and `gc hook`.
+Use `brj`/`brt` for issue CRUD and `brmeta`/`brmeta_set`/`brmeta_unset`
+for Gas City metadata. Keep GC control-plane commands such as `gc runtime`,
+`gc session`, `gc mail`, `gc hook`, and `gc sling --formula`. Do not use
+`gc bd ...` in this city.
 
 Before triage, load memory and prior-session context:
 
@@ -26,8 +29,7 @@ cm context "<current witness patrol issue>" --json || true
 cass search "<agent crash orphan recovery merge queue>" --json --limit 5 --fields minimal || true
 ```
 
-  gc bd mol wisp mol-witness-patrol --root-only
-  gc bd update $WISP --assignee=$GC_AGENT
+  gc sling "${GC_AGENT:?GC_AGENT required}" mol-witness-patrol --formula
 
 Each wisp is ONE iteration: check for work, patrol, pour the next
 iteration. On crash, re-read the formula steps and determine where
@@ -163,8 +165,8 @@ This happens when:
 
 List beads assigned to agents in YOUR rig:
 ```bash
-gc bd list --status=in_progress --json --limit=0
-gc bd list --status=open --json --limit=0
+brlist --status=in_progress --limit=0
+brlist --status=open --limit=0
 ```
 
 Filter for beads with an assignee (skip unassigned beads). This pass does not
@@ -175,7 +177,7 @@ worktree-salvage scan keyed by `metadata.work_dir`.
 Get the full session roster for liveness checks:
 ```bash
 gc session list --state=all --json
-gc bd list --type=session --label=gc:session --include-infra --include-gates --all --json --limit=0
+brlist --type=session --label=gc:session --all --limit=0
 ```
 
 For each bead with an assignee, check **session-ID liveness** — NOT
@@ -194,7 +196,7 @@ a NEW session with a different ID — the old one never comes back.
    lookup from `gc session list --state=all --json` plus session bead metadata:
    ```bash
    SESSIONS_JSON=$(gc session list --state=all --json)
-   SESSION_BEADS_JSON=$(gc bd list --type=session --label=gc:session --include-infra --include-gates --all --json --limit=0)
+   SESSION_BEADS_JSON=$(brlist --type=session --label=gc:session --all --limit=0)
 
    MATCH_JSON=$(jq -n \
      --arg assignee "$ASSIGNEE" \
@@ -252,7 +254,7 @@ Our job is to ensure work reaches the branch so it's schedulable.
 
 Read the bead metadata to find the worktree and branch:
 ```bash
-META=$(gc bd show <bead> --json | jq '.[0].metadata')
+META=$(brmeta get <bead>)
 WORKTREE=$(echo "$META" | jq -r '.worktree // empty')
 BRANCH=$(echo "$META" | jq -r '.branch // empty')
 ```
@@ -292,7 +294,7 @@ git commit -m "witness: salvage uncommitted work (<bead>)"
 Publish the work to make branch canonical:
 ```bash
 git push origin HEAD
-gc bd update <bead> --set-metadata branch=$BRANCH
+brmeta_set <bead> branch "$BRANCH"
 ```
 Skip to Step 3 (cleanup).
 
@@ -304,7 +306,7 @@ git add -A
 git commit -m "witness: salvage work from orphaned agent (<bead>)"
 BRANCH=$(git branch --show-current)
 git push origin HEAD
-gc bd update <bead> --set-metadata branch=$BRANCH
+brmeta_set <bead> branch "$BRANCH"
 ```
 Skip to Step 3 (cleanup).
 
@@ -326,7 +328,7 @@ git merge-base --is-ancestor origin/$BRANCH origin/main
 If the work is already on main:
 - **Close the bead** (work is done, don't re-dispatch):
 ```bash
-gc bd close <bead>
+brt close <bead>
 gc mail send mayor/ -s "ORPHAN_CLOSED: <bead> already merged" \
   -m "Branch $BRANCH already on main. Closed instead of resetting."
 ```
@@ -374,7 +376,7 @@ Concern: <why this one warrants attention>"
 
 Mark recovered beads so spawn storm detection can track patterns:
 ```bash
-gc bd update <bead> --set-metadata recovered=true
+brmeta_set <bead> recovered true
 ```
 
 **Exit criteria:** All orphaned beads recovered, worktrees cleaned.
@@ -389,7 +391,7 @@ Ensure the refinery is processing work and the queue is healthy.
 
 **Step 1: Check work beads assigned to refinery:**
 ```bash
-gc bd list --assignee=<rig>/refinery --status=open --json
+brlist --assignee=<rig>/refinery --status=open
 ```
 
 These are work beads with `metadata.branch` and `metadata.target` that
@@ -435,7 +437,7 @@ progressing. The controller can't detect this; it's a work-layer judgment.
 
 **Step 1: Find active polecat work beads:**
 ```bash
-gc bd list --status=in_progress --json --limit=0
+brlist --status=in_progress --limit=0
 ```
 Filter for beads assigned to polecat-pattern agents in YOUR rig.
 
@@ -458,10 +460,10 @@ Do NOT kill the agent directly. File a warrant bead and let the dog pool
 handle the shutdown dance (multi-stage interrogation with due process):
 
 ```bash
-gc bd create --type=warrant \
-  --title="Stuck: <agent>" \
-  --metadata '{"target":"<session-name>","reason":"No progress on <bead> for <duration>","requester":"witness"}' \
-  --label=pool:dog
+WARRANT=$(brj create --type=warrant --title="Stuck: <agent>" --labels=pool:dog | jq -r '.id // .[0].id')
+brmeta_set "$WARRANT" target "<session-name>"
+brmeta_set "$WARRANT" reason "No progress on <bead> for <duration>"
+brmeta_set "$WARRANT" requester witness
 ```
 
 The dog pool picks up the warrant and runs `mol-shutdown-dance`, which
@@ -497,8 +499,7 @@ is already assigned — the new session resumes from context.
 
 **2. Pour next iteration BEFORE burning:**
 ```bash
-NEXT=$(gc bd mol wisp mol-witness-patrol --root-only --json | jq -r '.new_epic_id')
-gc bd update "$NEXT" --assignee=$GC_AGENT
+gc sling "${GC_AGENT:?GC_AGENT required}" mol-witness-patrol --formula
 ```
 
 **3. Wait for activity (exponential backoff):**
@@ -513,7 +514,7 @@ On timeout: double the timeout (cap 300s) and proceed anyway.
 
 **4. Burn this wisp:**
 ```bash
-gc bd mol burn <this-wisp-id> --force
+brt close "${GC_BEAD_ID:-<this-wisp-id>}" --force --reason "Witness patrol iteration complete"
 ```
 
 The new wisp is ready. Re-read formula steps to start

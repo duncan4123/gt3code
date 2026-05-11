@@ -679,12 +679,12 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         [WS_METHODS.gcSetSupervisorRunning]: (input) =>
           observeGcRpcEffect(
             WS_METHODS.gcSetSupervisorRunning,
-            gcConfigAfter(gcApi.setSupervisorRunning(input.running)),
+            gcConfigAfter(gcApi.setSupervisorRunning(input.running, input.city)),
           ),
         [WS_METHODS.gcSetControllerRunning]: (input) =>
           observeGcRpcEffect(
             WS_METHODS.gcSetControllerRunning,
-            gcConfigAfter(gcApi.setControllerRunning(input.running)),
+            gcConfigAfter(gcApi.setControllerRunning(input.running, input.city)),
           ),
         [WS_METHODS.gcSetAgentSuspended]: (input) =>
           observeGcRpcEffect(

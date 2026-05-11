@@ -7,6 +7,7 @@
  * Source of truth: gascity/internal/api/ handlers
  */
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
@@ -19,13 +20,15 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { homedir as osHomedir } from "node:os";
 import path from "node:path";
 import { findBuiltBdBinaryPath, findBuiltDoltliteLibraryPath } from "@t3tools/beads-doltlite";
-import { findBuiltGcBinaryPath } from "@t3tools/gascity";
+import { findBrBeadsProviderScriptPath, findBuiltGcBinaryPath } from "@t3tools/gascity";
 import {
+  BUNDLED_GASCITY_CITY_NAMES,
+  getBrExecutableName,
   getBundledGascityConfigLayout,
   isBundledGascityCityRoot,
+  resolveManagedBrBinaryPath,
   usesDoltliteBeadsBackend,
 } from "@t3tools/gascity-config";
 import { Effect, Layer, Stream, PubSub, Config, Option } from "effect";
@@ -91,10 +94,18 @@ const DEFAULT_GC_RIG_BINDINGS = [
       "context-mode",
     ),
   },
+  {
+    name: "t3code",
+    path: path.resolve(getBundledGascityConfigLayout().rootDir, "..", "..", "..", "..", ".."),
+  },
+  {
+    name: "test-rig",
+    path: path.join(getBundledGascityConfigLayout().rootDir, "rigs", "test-rig"),
+  },
 ] as const;
 const GASCITY_BR_RIG_BINDINGS = [
   {
-    name: "default",
+    name: "beads_rust",
     path: path.join(getBundledGascityConfigLayout("gascity-br").rootDir, "rigs", "beads_rust"),
   },
 ] as const;
@@ -560,6 +571,7 @@ function prefixGcConfigForCity(config: GcConfigResult, city: GcSupervisorCity): 
         name: city.name,
         path: city.path,
         suspended: config.workspace.suspended,
+        ...(config.lifecycle ? { lifecycle: config.lifecycle } : {}),
       },
       ...config.rigs.map((rig) => ({
         ...rig,
@@ -581,6 +593,45 @@ function prefixGcConfigForCity(config: GcConfigResult, city: GcSupervisorCity): 
       };
     }),
   };
+}
+
+function bundledGcSupervisorCities(): readonly GcSupervisorCity[] {
+  return BUNDLED_GASCITY_CITY_NAMES.flatMap((cityName) => {
+    const layout = getBundledGascityConfigLayout(cityName);
+    return isGcCityRoot(layout.rootDir)
+      ? [{ name: cityName, path: layout.rootDir, running: false }]
+      : [];
+  });
+}
+
+function bundledGcCitiesToml(): string {
+  return `${BUNDLED_GASCITY_CITY_NAMES.map((cityName) => {
+    const layout = getBundledGascityConfigLayout(cityName);
+    return [`[[cities]]`, `  path = "${layout.rootDir}"`, `  name = "${cityName}"`].join("\n");
+  }).join("\n\n")}\n`;
+}
+
+function ensureBundledGcRuntimeRegistry(runtimeHome: string): void {
+  mkdirSync(runtimeHome, { recursive: true });
+  const registryPath = path.join(runtimeHome, "cities.toml");
+  const content = bundledGcCitiesToml();
+  if (!existsSync(registryPath) || readFileSync(registryPath, "utf8") !== content) {
+    writeFileSync(registryPath, content, "utf8");
+  }
+}
+
+function overlaySupervisorRuntimeState(
+  configuredCities: readonly GcSupervisorCity[],
+  observedCities: readonly GcSupervisorCity[],
+): readonly GcSupervisorCity[] {
+  return configuredCities.map((configuredCity) => {
+    const observedCity = observedCities.find(
+      (city) =>
+        city.name === configuredCity.name ||
+        path.resolve(city.path) === path.resolve(configuredCity.path),
+    );
+    return observedCity ? { ...configuredCity, running: observedCity.running } : configuredCity;
+  });
 }
 
 function mergeMultiCityConfig(configs: readonly GcConfigResult[]): GcConfigResult | null {
@@ -1023,6 +1074,10 @@ function gcBeadsPrefixForRig(name: string): string {
       return "bd";
     case "context-mode":
       return "ccm";
+    case "t3code":
+      return "t3";
+    case "test-rig":
+      return "tr";
     default:
       return "gc";
   }
@@ -1104,6 +1159,17 @@ function copyBundledRuntimeBinary(
   }
 }
 
+function shouldCopyBundledRuntimeFile(targetPath: string, sourcePath: string | undefined): boolean {
+  if (!existsSync(targetPath) || !statSync(targetPath).isFile()) {
+    return true;
+  }
+  return sourcePath !== undefined && sha256File(targetPath) !== sha256File(sourcePath);
+}
+
+function sha256File(filePath: string): string {
+  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}
+
 function ensurePackagedGcRuntime(input: {
   readonly runtimeHome: string;
   readonly cityPath: string | null;
@@ -1112,6 +1178,7 @@ function ensurePackagedGcRuntime(input: {
   readonly cityPath: string;
   readonly binaryPath: string;
   readonly bdBinaryPath: string;
+  readonly brBinaryPath: string;
   readonly doltliteLibraryPath: string;
 } {
   const defaultCityPath = getBundledGascityConfigLayout().rootDir;
@@ -1121,6 +1188,7 @@ function ensurePackagedGcRuntime(input: {
     "bin",
     process.platform === "win32" ? "bd.exe" : "bd",
   );
+  const brBinaryPath = path.join(input.runtimeHome, "bin", getBrExecutableName());
   const doltliteLibraryPath = path.join(
     input.runtimeHome,
     "bin",
@@ -1130,6 +1198,11 @@ function ensurePackagedGcRuntime(input: {
         ? "doltlite.dll"
         : "libdoltlite.so",
   );
+  const brBeadsScriptPath = path.join(
+    input.runtimeHome,
+    "bin",
+    process.platform === "win32" ? "gc-beads-br.cmd" : "gc-beads-br",
+  );
   if (!isGcCityRoot(cityPath)) {
     if (path.resolve(cityPath) !== path.resolve(defaultCityPath)) {
       throw new Error(`Gas City city is not installed at ${cityPath}.`);
@@ -1137,6 +1210,7 @@ function ensurePackagedGcRuntime(input: {
     throw new Error(`Bundled Gas City city is missing required config at ${defaultCityPath}.`);
   }
   if (isBundledGcCityRoot(cityPath)) {
+    ensureBundledGcRuntimeRegistry(input.runtimeHome);
     ensureDefaultGcSiteToml(cityPath);
     if (usesDoltliteBeadsBackend(cityPath)) {
       ensureDefaultGcBeadsConfig(cityPath, "t3", "hq");
@@ -1148,23 +1222,46 @@ function ensurePackagedGcRuntime(input: {
       }
     }
   }
-  if (!existsSync(input.binaryPath) || !statSync(input.binaryPath).isFile()) {
-    copyBundledRuntimeBinary(input.binaryPath, findBuiltGcBinaryPath(), "Gas City");
+  const gcBinarySourcePath = findBuiltGcBinaryPath();
+  if (shouldCopyBundledRuntimeFile(input.binaryPath, gcBinarySourcePath)) {
+    copyBundledRuntimeBinary(input.binaryPath, gcBinarySourcePath, "Gas City");
   }
-  if (!existsSync(bdBinaryPath) || !statSync(bdBinaryPath).isFile()) {
-    copyBundledRuntimeBinary(bdBinaryPath, findBuiltBdBinaryPath(), "beads");
+  const bdBinarySourcePath = findBuiltBdBinaryPath();
+  if (shouldCopyBundledRuntimeFile(bdBinaryPath, bdBinarySourcePath)) {
+    copyBundledRuntimeBinary(bdBinaryPath, bdBinarySourcePath, "beads");
   }
+  const brBinarySourcePath = resolveManagedBrBinaryPath();
+  if (shouldCopyBundledRuntimeFile(brBinaryPath, brBinarySourcePath)) {
+    copyBundledRuntimeBinary(brBinaryPath, brBinarySourcePath, "beads_rust");
+  }
+  const brBeadsScriptSourcePath = findBrBeadsProviderScriptPath();
+  if (shouldCopyBundledRuntimeFile(brBeadsScriptPath, brBeadsScriptSourcePath)) {
+    copyBundledRuntimeBinary(brBeadsScriptPath, brBeadsScriptSourcePath, "BR beads provider");
+  }
+  const doltliteLibrarySourcePath = findBuiltDoltliteLibraryPath();
   if (
     process.platform !== "win32" &&
-    (!existsSync(doltliteLibraryPath) || !statSync(doltliteLibraryPath).isFile())
+    shouldCopyBundledRuntimeFile(doltliteLibraryPath, doltliteLibrarySourcePath)
   ) {
-    copyBundledRuntimeBinary(doltliteLibraryPath, findBuiltDoltliteLibraryPath(), "Doltlite");
+    copyBundledRuntimeBinary(doltliteLibraryPath, doltliteLibrarySourcePath, "Doltlite");
   }
-  return { cityPath, binaryPath: input.binaryPath, bdBinaryPath, doltliteLibraryPath };
+  return {
+    cityPath,
+    binaryPath: input.binaryPath,
+    bdBinaryPath,
+    brBinaryPath,
+    doltliteLibraryPath,
+  };
 }
 
-function findRegisteredGcCityRoot(startCwd: string): string | null {
-  const registryPath = path.join(osHomedir(), ".gc", "cities.toml");
+function findRegisteredGcCityRoot(
+  startCwd: string,
+  runtimeHome: string | null = null,
+): string | null {
+  if (!runtimeHome) {
+    return null;
+  }
+  const registryPath = path.join(runtimeHome, "cities.toml");
   if (!existsSync(registryPath)) {
     return null;
   }
@@ -1234,7 +1331,7 @@ function findRegisteredGcCityRoot(startCwd: string): string | null {
   return flushRig() ?? flushCity();
 }
 
-function discoverGcCityRoot(startCwd: string): string | null {
+function discoverGcCityRoot(startCwd: string, runtimeHome: string | null = null): string | null {
   const envCityPath = process.env.GC_CITY_PATH ?? process.env.GC_CITY;
   if (envCityPath) {
     const resolved = path.resolve(envCityPath);
@@ -1245,7 +1342,7 @@ function discoverGcCityRoot(startCwd: string): string | null {
 
   return (
     findGcCityRootUpward(startCwd) ??
-    findRegisteredGcCityRoot(startCwd) ??
+    findRegisteredGcCityRoot(startCwd, runtimeHome) ??
     findSiblingGcCityRoot(startCwd) ??
     findT3CodePackagedGcCityRoot()
   );
@@ -1469,11 +1566,12 @@ function writeRigAgentSuspendedToCityToml(
 
 function seedRigAgentSuspendedOverrides(
   binaryPath: string,
+  runtimeHome: string,
   cityPath: string,
   rigName: string,
   suspended: boolean,
 ): void {
-  const config = loadExpandedGcConfig(binaryPath, cityPath);
+  const config = loadExpandedGcConfig(binaryPath, runtimeHome, cityPath);
   const includedAgentNames = readRigIncludedAgentNames(cityPath, rigName);
   if (includedAgentNames.size === 0) {
     throw new Error(`GC rig "${rigName}" has no readable included pack agents`);
@@ -1796,8 +1894,8 @@ function mergeCliExpandedConfig(
   };
 }
 
-function discoverGcApiBaseUrl(startCwd: string): string | null {
-  const cityPath = discoverGcCityRoot(startCwd);
+function discoverGcApiBaseUrl(startCwd: string, runtimeHome: string | null = null): string | null {
+  const cityPath = discoverGcCityRoot(startCwd, runtimeHome);
   if (!cityPath) {
     return null;
   }
@@ -1881,20 +1979,21 @@ function resolveGcCliBinary(value: string, runtimeHome: string): string {
 
 function runGcCli(
   binaryPath: string,
+  runtimeHome: string,
   cityPath: string,
   args: string[],
   options?: { readonly timeoutMs?: number },
 ): { readonly stdout: string; readonly stderr: string; readonly exitCode: number } {
   const binDir = path.dirname(binaryPath);
-  const env = applyDefaultGcBeadsBackendEnv(
-    {
-      ...process.env,
-      GC_CITY_PATH: cityPath,
-      GC_BIN: binaryPath,
-      BD_BIN: path.join(binDir, process.platform === "win32" ? "bd.exe" : "bd"),
-    },
-    cityPath,
-  );
+  const env = {
+    ...process.env,
+    GC_HOME: runtimeHome,
+    T3CODE_GASCITY_HOME: runtimeHome,
+    GC_CITY_PATH: cityPath,
+    GC_BIN: binaryPath,
+    BD_BIN: path.join(binDir, process.platform === "win32" ? "bd.exe" : "bd"),
+    BR_BIN: path.join(binDir, getBrExecutableName()),
+  };
   const result = spawnSync(binaryPath, ["--city", cityPath, ...args], {
     encoding: "utf8",
     env: withPackagedGcRuntimeEnv(env, binDir),
@@ -1905,18 +2004,6 @@ function runGcCli(
     stderr: result.stderr ?? "",
     exitCode: result.status ?? 1,
   };
-}
-
-function applyDefaultGcBeadsBackendEnv(
-  env: NodeJS.ProcessEnv,
-  cityPath: string,
-): NodeJS.ProcessEnv {
-  const next = { ...env };
-  if (usesDoltliteBeadsBackend(cityPath)) {
-    next.GC_BEADS_BACKEND ??= "doltlite";
-    next.BEADS_BACKEND ??= "doltlite";
-  }
-  return next;
 }
 
 function withPackagedGcRuntimeEnv(env: NodeJS.ProcessEnv, binDir: string): NodeJS.ProcessEnv {
@@ -1959,8 +2046,12 @@ function clearDoltServerEnv(env: NodeJS.ProcessEnv): void {
   }
 }
 
-function loadExpandedGcConfig(binaryPath: string, cityPath: string): GcConfigResult {
-  const cli = runGcCli(binaryPath, cityPath, ["config", "show"]);
+function loadExpandedGcConfig(
+  binaryPath: string,
+  runtimeHome: string,
+  cityPath: string,
+): GcConfigResult {
+  const cli = runGcCli(binaryPath, runtimeHome, cityPath, ["config", "show"]);
   if (cli.exitCode !== 0) {
     throw new Error(
       cli.stderr.trim() || cli.stdout.trim() || "Failed to expand GC config for city.toml patches",
@@ -1986,6 +2077,7 @@ function isProcessMatching(pattern: string): boolean {
 
 function readGcLifecycleStatus(input: {
   readonly binaryPath: string;
+  readonly runtimeHome: string;
   readonly cityPath: string | null;
   readonly supervisorBaseUrl?: string | null;
 }): GcLifecycleStatus {
@@ -1997,7 +2089,9 @@ function readGcLifecycleStatus(input: {
     return { supervisorRunning, controllerRunning: false, ...supervisorFields };
   }
 
-  const status = runGcCli(input.binaryPath, input.cityPath, ["status"], { timeoutMs: 1_500 });
+  const status = runGcCli(input.binaryPath, input.runtimeHome, input.cityPath, ["status"], {
+    timeoutMs: 1_500,
+  });
   const statusText = `${status.stdout}\n${status.stderr}`;
   const controllerMatch = statusText.match(/^\s*Controller:\s*(.+)$/m);
   const controllerState = controllerMatch?.[1]?.trim().toLowerCase() ?? "";
@@ -2041,7 +2135,8 @@ async function readGcLifecycleStatusFromSupervisorApi(input: {
           (input.cityName && record.name === input.cityName) ||
           (input.cityPath && record.path === input.cityPath)
         );
-      }) ?? (items.length === 1 ? items[0] : null);
+      }) ??
+      (!input.cityName && !input.cityPath && items.length === 1 ? items[0] : null);
     const controllerRunning =
       city && typeof city === "object" && !Array.isArray(city)
         ? Boolean((city as Record<string, unknown>).running)
@@ -2076,7 +2171,8 @@ const makeGcApiClient = Effect.gen(function* () {
   const configuredCityName = yield* Config.string("GC_CITY_NAME").pipe(Config.option);
   const runtimeHome = expandHomePath(gcSettings.runtimeHome);
   const cityPath =
-    resolveConfiguredGcCityPath(gcSettings.cityPath) ?? discoverGcCityRoot(process.cwd());
+    resolveConfiguredGcCityPath(gcSettings.cityPath) ??
+    discoverGcCityRoot(process.cwd(), runtimeHome);
   const configuredSettingsApiUrl =
     gcSettings.apiUrl.trim() && !isDefaultGcApiUrl(gcSettings.apiUrl)
       ? gcSettings.apiUrl
@@ -2087,7 +2183,7 @@ const makeGcApiClient = Effect.gen(function* () {
   const baseUrl =
     normalizedConfiguredBaseUrl.baseUrl ??
     discoverGcSupervisorApiBaseUrl(runtimeHome) ??
-    discoverGcApiBaseUrl(process.cwd()) ??
+    discoverGcApiBaseUrl(process.cwd(), runtimeHome) ??
     GC_API_DEFAULT_URL;
   let cachedCityName =
     gcSettings.cityName.trim() ||
@@ -2098,6 +2194,12 @@ const makeGcApiClient = Effect.gen(function* () {
   const useCityScopedRoutes =
     Option.isSome(configuredCityName) || (cityPath !== null && cityPath.trim().length > 0);
   const routeMode = useCityScopedRoutes ? "city-scoped" : "legacy";
+  const useBundledCityCatalog =
+    gcSettings.cityPath.trim() === DEFAULT_GC_CITY_PATH ||
+    (cityPath ? isBundledGcCityRoot(cityPath) : false);
+  if (useBundledCityCatalog) {
+    ensureBundledGcRuntimeRegistry(runtimeHome);
+  }
 
   yield* Effect.logInfo("gc api client configured", {
     baseUrl,
@@ -2280,10 +2382,14 @@ const makeGcApiClient = Effect.gen(function* () {
   const fetchSupervisorCities = async (): Promise<readonly GcSupervisorCity[]> => {
     const raw = await fetchJson<unknown>("/v0/cities");
     const cities = normalizeSupervisorCities(raw);
-    if (cities.length > 0) {
-      lastKnownSupervisorCities = cities;
+    const bundledCities = useBundledCityCatalog ? bundledGcSupervisorCities() : [];
+    const effectiveCities = bundledCities.length > 0
+      ? overlaySupervisorRuntimeState(bundledCities, cities)
+      : cities;
+    if (effectiveCities.length > 0) {
+      lastKnownSupervisorCities = effectiveCities;
     }
-    return cities;
+    return effectiveCities;
   };
 
   const knownCityNames = async (): Promise<ReadonlySet<string>> => {
@@ -2310,6 +2416,21 @@ const makeGcApiClient = Effect.gen(function* () {
       cityPath: city?.path ?? cityPath,
       localName: scoped.localName,
     };
+  };
+
+  const resolveLifecycleCityPath = async (cityName?: string | null): Promise<string | null> => {
+    const normalizedCityName = cityName?.trim();
+    if (!normalizedCityName) {
+      return cityPath;
+    }
+    if (lastKnownSupervisorCities.length === 0) {
+      await fetchSupervisorCities().catch(() => []);
+    }
+    return (
+      lastKnownSupervisorCities.find((candidate) => candidate.name === normalizedCityName)?.path ??
+      lastKnownConfig?.rigs.find((rig) => rig.name === normalizedCityName)?.path ??
+      cityPath
+    );
   };
 
   const requireGcCityName = async (): Promise<string> => {
@@ -2498,7 +2619,7 @@ const makeGcApiClient = Effect.gen(function* () {
             expandedCliConfig = null;
             return null;
           }
-          const cli = runGcCli(gcCliBinary, cityPath, ["config", "show"]);
+          const cli = runGcCli(gcCliBinary, runtimeHome, cityPath, ["config", "show"]);
           if (cli.exitCode !== 0) {
             logGcWarning("gc config show fallback failed", {
               cityPath,
@@ -2533,7 +2654,7 @@ const makeGcApiClient = Effect.gen(function* () {
               });
               let normalizedConfig = remote ? normalizeGcConfig(remote, city.path) : null;
               if (!normalizedConfig) {
-                const cli = runGcCli(gcCliBinary, city.path, ["config", "show"]);
+                const cli = runGcCli(gcCliBinary, runtimeHome, city.path, ["config", "show"]);
                 if (cli.exitCode !== 0) {
                   logGcWarning("gc city config cli fallback failed", {
                     cityName: city.name,
@@ -2555,11 +2676,12 @@ const makeGcApiClient = Effect.gen(function* () {
                 baseUrl,
                 cityName: city.name,
                 cityPath: city.path,
-              })) ?? {
-                supervisorRunning: true,
-                controllerRunning: city.running,
-                ...gcSupervisorLifecycleFields(baseUrl),
-              };
+              })) ?? readGcLifecycleStatus({
+                binaryPath: gcCliBinary,
+                runtimeHome,
+                cityPath: city.path,
+                supervisorBaseUrl: baseUrl,
+              });
               return prefixGcConfigForCity(withLifecycleStatus(normalizedConfig, lifecycle), city);
             }),
           );
@@ -2586,7 +2708,12 @@ const makeGcApiClient = Effect.gen(function* () {
         });
         const lifecycle =
           (await readGcLifecycleStatusFromSupervisorApi({ baseUrl, cityName, cityPath })) ??
-          readGcLifecycleStatus({ binaryPath: gcCliBinary, cityPath, supervisorBaseUrl: baseUrl });
+          readGcLifecycleStatus({
+            binaryPath: gcCliBinary,
+            runtimeHome,
+            cityPath,
+            supervisorBaseUrl: baseUrl,
+          });
         if (remote) {
           const normalizedRemote =
             cityPath && cityPath.trim().length > 0 ? normalizeGcConfig(remote, cityPath) : null;
@@ -2687,20 +2814,18 @@ const makeGcApiClient = Effect.gen(function* () {
       const result = spawnSync(runtime.binaryPath, ["--city", runtime.cityPath, "start"], {
         cwd: path.dirname(runtime.cityPath),
         env: withPackagedGcRuntimeEnv(
-          applyDefaultGcBeadsBackendEnv(
-            {
-              ...process.env,
-              GC_HOME: runtimeHome,
-              T3CODE_GASCITY_HOME: runtimeHome,
-              T3CODE_WORKTREES_DIR: serverConfig.worktreesDir,
-              GC_WORKTREES_DIR: serverConfig.worktreesDir,
-              GC_CITY_PATH: runtime.cityPath,
-              GC_BIN: runtime.binaryPath,
-              BD_BIN: runtime.bdBinaryPath,
-              GC_API_URL: baseUrl,
-            },
-            runtime.cityPath,
-          ),
+          {
+            ...process.env,
+            GC_HOME: runtimeHome,
+            T3CODE_GASCITY_HOME: runtimeHome,
+            T3CODE_WORKTREES_DIR: serverConfig.worktreesDir,
+            GC_WORKTREES_DIR: serverConfig.worktreesDir,
+            GC_CITY_PATH: runtime.cityPath,
+            GC_BIN: runtime.binaryPath,
+            BD_BIN: runtime.bdBinaryPath,
+            BR_BIN: runtime.brBinaryPath,
+            GC_API_URL: baseUrl,
+          },
           path.dirname(runtime.binaryPath),
         ),
         encoding: "utf8",
@@ -2719,29 +2844,30 @@ const makeGcApiClient = Effect.gen(function* () {
       new GcApiClientStartError(error instanceof Error ? error.message : String(error)),
   });
 
-  const runPackagedGcLifecycleCommandInBackground = (args: string[]): void => {
+  const runPackagedGcLifecycleCommandInBackground = (
+    args: string[],
+    targetCityPath?: string | null,
+  ): void => {
     const runtime = ensurePackagedGcRuntime({
       runtimeHome,
-      cityPath,
+      cityPath: targetCityPath ?? cityPath,
       binaryPath: gcCliBinary,
     });
     const child = spawn(runtime.binaryPath, ["--city", runtime.cityPath, ...args], {
       cwd: path.dirname(runtime.cityPath),
       env: withPackagedGcRuntimeEnv(
-        applyDefaultGcBeadsBackendEnv(
-          {
-            ...process.env,
-            GC_HOME: runtimeHome,
-            T3CODE_GASCITY_HOME: runtimeHome,
-            T3CODE_WORKTREES_DIR: serverConfig.worktreesDir,
-            GC_WORKTREES_DIR: serverConfig.worktreesDir,
-            GC_CITY_PATH: runtime.cityPath,
-            GC_BIN: runtime.binaryPath,
-            BD_BIN: runtime.bdBinaryPath,
-            GC_API_URL: baseUrl,
-          },
-          runtime.cityPath,
-        ),
+        {
+          ...process.env,
+          GC_HOME: runtimeHome,
+          T3CODE_GASCITY_HOME: runtimeHome,
+          T3CODE_WORKTREES_DIR: serverConfig.worktreesDir,
+          GC_WORKTREES_DIR: serverConfig.worktreesDir,
+          GC_CITY_PATH: runtime.cityPath,
+          GC_BIN: runtime.binaryPath,
+          BD_BIN: runtime.bdBinaryPath,
+          BR_BIN: runtime.brBinaryPath,
+          GC_API_URL: baseUrl,
+        },
         path.dirname(runtime.binaryPath),
       ),
       detached: true,
@@ -2758,26 +2884,36 @@ const makeGcApiClient = Effect.gen(function* () {
         const cityName = await resolveGcCityName();
         return (
           (await readGcLifecycleStatusFromSupervisorApi({ baseUrl, cityName, cityPath })) ??
-          readGcLifecycleStatus({ binaryPath: gcCliBinary, cityPath, supervisorBaseUrl: baseUrl })
+          readGcLifecycleStatus({
+            binaryPath: gcCliBinary,
+            runtimeHome,
+            cityPath,
+            supervisorBaseUrl: baseUrl,
+          })
         );
       },
       catch: (error) =>
         new GcApiClientStartError(error instanceof Error ? error.message : String(error)),
     });
 
-  const setSupervisorRunning: GcApiClientShape["setSupervisorRunning"] = (running) =>
-    Effect.try({
-      try: () => {
-        runPackagedGcLifecycleCommandInBackground(["supervisor", running ? "start" : "stop"]);
+  const setSupervisorRunning: GcApiClientShape["setSupervisorRunning"] = (running, cityName) =>
+    Effect.tryPromise({
+      try: async () => {
+        const targetCityPath = await resolveLifecycleCityPath(cityName);
+        runPackagedGcLifecycleCommandInBackground(
+          ["supervisor", running ? "start" : "stop"],
+          targetCityPath,
+        );
       },
       catch: (error) =>
         new GcApiClientStartError(error instanceof Error ? error.message : String(error)),
     });
 
-  const setControllerRunning: GcApiClientShape["setControllerRunning"] = (running) =>
-    Effect.try({
-      try: () => {
-        runPackagedGcLifecycleCommandInBackground([running ? "start" : "stop"]);
+  const setControllerRunning: GcApiClientShape["setControllerRunning"] = (running, cityName) =>
+    Effect.tryPromise({
+      try: async () => {
+        const targetCityPath = await resolveLifecycleCityPath(cityName);
+        runPackagedGcLifecycleCommandInBackground([running ? "start" : "stop"], targetCityPath);
       },
       catch: (error) =>
         new GcApiClientStartError(error instanceof Error ? error.message : String(error)),
@@ -2790,7 +2926,7 @@ const makeGcApiClient = Effect.gen(function* () {
     if (!cityPath) {
       return null;
     }
-    lastKnownConfig = loadExpandedGcConfig(gcCliBinary, cityPath);
+    lastKnownConfig = loadExpandedGcConfig(gcCliBinary, runtimeHome, cityPath);
     return lastKnownConfig;
   };
 
@@ -3067,7 +3203,9 @@ const makeGcApiClient = Effect.gen(function* () {
           if (!cityPath) {
             throw error;
           }
-          const cli = runGcCli(gcCliBinary, cityPath, [suspended ? "suspend" : "resume"]);
+          const cli = runGcCli(gcCliBinary, runtimeHome, cityPath, [
+            suspended ? "suspend" : "resume",
+          ]);
           if (cli.exitCode === 0) {
             if (lastKnownConfig) {
               lastKnownConfig = {
@@ -3115,6 +3253,7 @@ const makeGcApiClient = Effect.gen(function* () {
           if (target.cityPath) {
             seedRigAgentSuspendedOverrides(
               gcCliBinary,
+              runtimeHome,
               target.cityPath,
               target.localName,
               suspended,
@@ -3126,10 +3265,15 @@ const makeGcApiClient = Effect.gen(function* () {
           if (!target.cityPath) {
             throw error;
           }
-          const cli = runGcCli(gcCliBinary, target.cityPath, ["rig", action, target.localName]);
+          const cli = runGcCli(gcCliBinary, runtimeHome, target.cityPath, [
+            "rig",
+            action,
+            target.localName,
+          ]);
           if (cli.exitCode === 0) {
             seedRigAgentSuspendedOverrides(
               gcCliBinary,
+              runtimeHome,
               target.cityPath,
               target.localName,
               suspended,
@@ -3166,12 +3310,12 @@ const makeGcApiClient = Effect.gen(function* () {
         if (input.startSuspended ?? true) {
           args.push("--start-suspended");
         }
-        const cli = runGcCli(gcCliBinary, cityPath, args);
+        const cli = runGcCli(gcCliBinary, runtimeHome, cityPath, args);
         if (cli.exitCode !== 0) {
           throw new Error(cli.stderr.trim() || cli.stdout.trim() || "Failed to add GC rig");
         }
         if (input.startSuspended ?? true) {
-          seedRigAgentSuspendedOverrides(gcCliBinary, cityPath, rigName, true);
+          seedRigAgentSuspendedOverrides(gcCliBinary, runtimeHome, cityPath, rigName, true);
         }
         lastKnownConfig = null;
         return { result: undefined, path: "gc-cli" };

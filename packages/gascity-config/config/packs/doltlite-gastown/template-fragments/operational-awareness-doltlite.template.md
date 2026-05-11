@@ -24,17 +24,15 @@ codepath that relates to `doltlite` before assuming a generic GC problem or an
 old Dolt server problem. Command mismatches, migration gaps, and stale docs may
 reflect the backend transition rather than a user error.
 
-Migration checklist: `/data/projects/beads-doltlite/docs/dev-notes/doltlite-beads-checklist.md`
+Use the bundled T3Code runtime notes for doltlite behavior:
+`docs/gascity-doltlite-runtime-notes.md`
 
 If you discover a new `doltlite` behavior, regression, workaround, or
-validation result, update that checklist before ending your session.
-
-T3Code runtime map and binary-linkage notes:
-`/data/projects/t3code/docs/gascity-doltlite-runtime-notes.md`
+validation result, update those notes before ending your session.
 
 This operational fragment is sourced from the active T3Code packaged city:
 
-`/data/projects/t3code/packages/gascity-config/config/packs/gastown/template-fragments/operational-awareness-doltlite.template.md`
+`packages/gascity-config/config/packs/doltlite-gastown/template-fragments/operational-awareness-doltlite.template.md`
 
 Testing/build rule: do not run tests, builds, or compiles unless the user
 explicitly asks for them. This includes `go test`, `make test`, package-wide

@@ -1,4 +1,5 @@
 {{ define "approval-fallacy-crew" }}
+
 ## The Approval Fallacy
 
 > **Build/Test Execution Guard**: Do not run builds or tests unless explicitly asked to do so.
@@ -9,10 +10,12 @@ LLMs naturally want to pause and confirm: "Here's what I did, let me know if you
 to commit." This breaks the Gas Town model. The system is designed for autonomous execution.
 
 **When implementation is complete:**
+
 - Push your commits: `git push`
 - Either continue with next task OR cycle: `gc mail send -s "HANDOFF: <brief>" -m "<context>"` then `exit`
 
 **Do NOT:**
+
 - Output a summary and wait for "looks good"
 - Ask "should I commit this?"
 - Sit idle at the prompt after finishing work
@@ -21,6 +24,7 @@ The human trusts you to execute. Honor that trust by completing the cycle.
 {{ end }}
 
 {{ define "approval-fallacy-polecat" }}
+
 ## The Idle Polecat Heresy
 
 **After completing work, you MUST run the done sequence. No exceptions. No waiting.**
@@ -57,6 +61,7 @@ immediately — even if `exit` doesn't fire. No separate MR beads.
 ### The Self-Cleaning Model
 
 Polecat sessions are **self-cleaning**. When you run the done sequence:
+
 1. Your branch is pushed (permanent)
 2. Work bead is reassigned to Refinery with merge metadata
 3. Your session ends (ephemeral)
@@ -65,8 +70,9 @@ Polecat sessions are **self-cleaning**. When you run the done sequence:
 There is no "idle" state. There is no "waiting for more work."
 
 **Polecats do NOT:**
+
 - Push directly to main (Refinery merges)
 - Close the work bead (Refinery closes after merge)
 - Create MR beads (metadata on the work bead replaces this)
 - Wait around after running the done sequence
-{{ end }}
+  {{ end }}

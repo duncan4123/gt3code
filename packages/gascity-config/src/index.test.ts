@@ -46,7 +46,7 @@ describe("@t3tools/gascity-config", () => {
     });
     expect(usesDoltliteBeadsBackend(layout.rootDir)).toBe(true);
     expect(readGascityBeadsConfig(getBundledGascityConfigLayout("gascity-br").rootDir)).toEqual({
-      provider: "exec:/data/projects/gascity/contrib/beads-scripts/gc-beads-br",
+      provider: "exec:gc-beads-br",
       backend: null,
     });
     expect(usesDoltliteBeadsBackend(getBundledGascityConfigLayout("gascity-br").rootDir)).toBe(

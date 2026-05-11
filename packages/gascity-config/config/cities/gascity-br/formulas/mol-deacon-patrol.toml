@@ -3,21 +3,24 @@ Deacon patrol loop. Poured as a root-only wisp on startup:
 
 ## gascity-br beads-rust rules
 
-This city uses the beads-rust backend. Do not use bare `bd`; and do not use
-`gc bd` for bead CRUD in this city because the exec-backed `br` provider does
-not expose the bd-only `gc bd` passthrough. Use `br` directly:
+This city uses the beads-rust backend. Do not use bare `bd` or Gas City's bd compatibility path for bead CRUD. Use the managed `br` binary:
 
 ```bash
 BR_ROOT="${GC_RIG_ROOT:-$GC_CITY_ROOT}"
 BR_DB="$BR_ROOT/.beads/beads.db"
-brj() { br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" --json "$@"; }
-brt() { br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" "$@"; }
+BR_ACTOR="${GC_SESSION_NAME:-${GC_AGENT:-agent}}"
+brj() { br --db "$BR_DB" --actor "$BR_ACTOR" --json "$@"; }
+brt() { br --db "$BR_DB" --actor "$BR_ACTOR" "$@"; }
+brlist() { brj list "$@" | jq -c '.issues // .'; }
+brmeta() { br --db "$BR_DB" --actor "$BR_ACTOR" --json gc-metadata "$@"; }
+brmeta_set() { local id="$1" key="$2" value="$3"; brmeta get "$id" | jq --arg k "$key" --arg v "$value" '. + {($k): $v}' | br --db "$BR_DB" --actor "$BR_ACTOR" gc-metadata set "$id"; }
+brmeta_unset() { local id="$1" key="$2"; brmeta get "$id" | jq --arg k "$key" 'del(.[$k])' | br --db "$BR_DB" --actor "$BR_ACTOR" gc-metadata set "$id"; }
 ```
 
-Translate inherited `gc bd list/show/create/update/close/dep` examples to
-`brj list`, `brj show`, `brj create`, `brj update`, `brt close`, and
-`brt dep ...`. Keep GC control-plane commands such as `gc runtime`,
-`gc session`, `gc mail`, and `gc hook`.
+Use `brj`/`brt` for issue CRUD and `brmeta`/`brmeta_set`/`brmeta_unset`
+for Gas City metadata. Keep GC control-plane commands such as `gc runtime`,
+`gc session`, `gc mail`, `gc hook`, and `gc sling --formula`. Do not use
+`gc bd ...` in this city.
 
 Before patrol work, load memory and prior-session context:
 
@@ -26,8 +29,7 @@ cm context "<current deacon patrol task>" --json || true
 cass search "<town health stuck agent coordination>" --json --limit 5 --fields minimal || true
 ```
 
-  gc bd mol wisp mol-deacon-patrol --root-only --var binding_prefix={{binding_prefix}}
-  gc bd update $WISP --assignee=$GC_AGENT
+  gc sling "${GC_AGENT:?GC_AGENT required}" mol-deacon-patrol --formula --var binding_prefix={{binding_prefix}}
 
 Each wisp is ONE iteration: check inbox, run town-wide coordination
 tasks, pour the next iteration. On crash, re-read the formula steps
@@ -184,10 +186,11 @@ something is stuck. This is exactly why an LLM does it, not Go code.
 
 **For stuck coordination agents, file a warrant:**
 ```bash
-gc bd create --type=warrant \
-  --title="Stuck: <rig>/<role>" \
-  --metadata '{"target":"<session>","reason":"<reason>","requester":"deacon"}' \
-  --set-metadata gc.routed_to={{binding_prefix}}dog
+WARRANT=$(brj create --type=warrant --title="Stuck: <rig>/<role>" | jq -r '.id // .[0].id')
+brmeta_set "$WARRANT" target "<session>"
+brmeta_set "$WARRANT" reason "<reason>"
+brmeta_set "$WARRANT" requester deacon
+brmeta_set "$WARRANT" gc.routed_to "{{binding_prefix}}dog"
 ```
 
 The dog pool runs `mol-shutdown-dance` for due process.
@@ -211,7 +214,11 @@ wisp timestamps.
 
 **Step 1: Find active utility agent work:**
 ```bash
-gc bd list --status=in_progress --metadata-field gc.routed_to={{binding_prefix}}dog --json --limit=0
+brlist --status=in_progress --limit=0 | jq -c '.[]' | while read -r bead; do
+  id=$(echo "$bead" | jq -r '.id')
+  route=$(brmeta get "$id" | jq -r '."gc.routed_to" // empty')
+  [ "$route" = "{{binding_prefix}}dog" ] && echo "$bead"
+done | jq -s .
 ```
 
 **Step 2: For each, assess progress:**
@@ -224,10 +231,11 @@ No hardcoded thresholds. Use judgment.
 
 **Step 3: For stuck utility agents, file a warrant:**
 ```bash
-gc bd create --type=warrant \
-  --title="Stuck dog: <agent>" \
-  --metadata '{"target":"<session>","reason":"<reason>","requester":"deacon"}' \
-  --set-metadata gc.routed_to={{binding_prefix}}dog
+WARRANT=$(brj create --type=warrant --title="Stuck dog: <agent>" | jq -r '.id // .[0].id')
+brmeta_set "$WARRANT" target "<session>"
+brmeta_set "$WARRANT" reason "<reason>"
+brmeta_set "$WARRANT" requester deacon
+brmeta_set "$WARRANT" gc.routed_to "{{binding_prefix}}dog"
 ```
 
 A different dog from the pool picks up the warrant and runs the
@@ -365,8 +373,7 @@ Handle any urgent messages that arrived during patrol. Archive the rest.
 
 **3. Pour next iteration BEFORE burning:**
 ```bash
-NEXT=$(gc bd mol wisp mol-deacon-patrol --root-only --var binding_prefix={{binding_prefix}} --json | jq -r '.new_epic_id')
-gc bd update "$NEXT" --assignee=$GC_AGENT
+gc sling "${GC_AGENT:?GC_AGENT required}" mol-deacon-patrol --formula --var binding_prefix={{binding_prefix}}
 ```
 
 **4. Wait for activity (exponential backoff):**
@@ -381,7 +388,7 @@ On timeout: double the timeout (cap 300s) and proceed anyway.
 
 **5. Burn this wisp:**
 ```bash
-gc bd mol burn <this-wisp-id> --force
+brt close "${GC_BEAD_ID:-<this-wisp-id>}" --force --reason "Deacon patrol iteration complete"
 ```
 
 The new wisp is ready. Re-read formula steps to start

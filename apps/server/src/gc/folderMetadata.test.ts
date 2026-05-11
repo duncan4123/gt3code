@@ -22,6 +22,37 @@ describe("gc folder metadata helpers", () => {
     });
   });
 
+  it("city-qualifies rig and agent folder identity outside the default city", () => {
+    expect(
+      deriveCanonicalGcFolderMetadata({
+        "gc.agent": "beads_rust/control-dispatcher",
+        "gc.rig": "beads_rust",
+        "gc.city": "gascity-br",
+      }),
+    ).toEqual({
+      "gc.groupKind": "rig",
+      "gc.groupId": "gascity-br/beads_rust",
+      "gc.groupLabel": "beads_rust",
+      "gc.agentQualified": "gascity-br/beads_rust/control-dispatcher",
+      "gc.agentLabel": "control-dispatcher",
+    });
+  });
+
+  it("city-qualifies workspace agent folder identity outside the default city", () => {
+    expect(
+      deriveCanonicalGcFolderMetadata({
+        "gc.agent": "mayor",
+        "gc.city": "gascity-br",
+      }),
+    ).toEqual({
+      "gc.groupKind": "workspace",
+      "gc.groupId": "gascity-br",
+      "gc.groupLabel": "GASCITY-BR",
+      "gc.agentQualified": "gascity-br/mayor",
+      "gc.agentLabel": "mayor",
+    });
+  });
+
   it("derives a workspace-scoped canonical folder payload when no rig is present", () => {
     expect(
       deriveCanonicalGcFolderMetadata({

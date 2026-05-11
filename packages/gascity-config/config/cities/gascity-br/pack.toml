@@ -7,7 +7,7 @@ source = "packs/flywheel/all"
 
 [[agent]]
 name = "mayor"
-suspended = false
+suspended = true
 prompt_template = "agents/mayor/prompt.template.md"
 
 [[named_session]]

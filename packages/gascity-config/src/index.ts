@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   cpSync,
@@ -48,6 +49,7 @@ export interface MaterializeGascityRuntimeOptions extends GascityBinaryTarget {
   readonly preserveExistingConfig?: boolean;
   readonly gcBinaryPath?: string;
   readonly bdBinaryPath?: string;
+  readonly brBinaryPath?: string;
   readonly doltliteLibraryPath?: string;
   readonly seedLocalBeadsConfig?: boolean;
 }
@@ -62,6 +64,7 @@ export interface GascityRuntimeLayout {
   readonly binDir: string;
   readonly gcBinaryPath: string;
   readonly bdBinaryPath: string;
+  readonly brBinaryPath: string;
   readonly doltliteLibraryPath: string;
 }
 
@@ -228,6 +231,84 @@ export function getBundledBdBinaryPath(target: GascityBinaryTarget = {}): string
   return getBundledBinaryPath("bd", target);
 }
 
+export function getBrExecutableName(platform: NodeJS.Platform = process.platform): string {
+  return platform === "win32" ? "br.exe" : "br";
+}
+
+export function getBundledBeadsRustRigPath(): string {
+  return path.join(getBundledGascityConfigLayout("gascity-br").rootDir, "rigs", "beads_rust");
+}
+
+export function getBuiltBrBinaryPath(target: GascityBinaryTarget = {}): string {
+  return path.join(
+    getBundledBeadsRustRigPath(),
+    "target",
+    "release",
+    getBrExecutableName(target.platform),
+  );
+}
+
+export function findBuiltBrBinaryPath(target: GascityBinaryTarget = {}): string | undefined {
+  const binaryPath = getBuiltBrBinaryPath(target);
+  return existsSync(binaryPath) && statSync(binaryPath).isFile() ? binaryPath : undefined;
+}
+
+export function resolveManagedBrBinaryPath(
+  options: GascityBinaryTarget & { readonly brBinaryPath?: string } = {},
+): string {
+  const override = options.brBinaryPath?.trim() || process.env.BR_BINARY?.trim();
+  if (override) {
+    return path.resolve(override);
+  }
+  return ensureBuiltBrBinaryPath(options);
+}
+
+export function ensureBuiltBrBinaryPath(target: GascityBinaryTarget = {}): string {
+  const rigPath = getBundledBeadsRustRigPath();
+  const binaryPath = getBuiltBrBinaryPath(target);
+  if (isBuiltBrBinaryFresh(rigPath, binaryPath)) {
+    return binaryPath;
+  }
+  const manifestPath = path.join(rigPath, "Cargo.toml");
+  if (!existsSync(manifestPath)) {
+    throw new Error(`Bundled beads_rust rig is missing Cargo.toml at ${manifestPath}.`);
+  }
+  const result = spawnSync(
+    "cargo",
+    [
+      "build",
+      "--release",
+      "--manifest-path",
+      manifestPath,
+      "--target-dir",
+      path.join(rigPath, "target"),
+    ],
+    {
+      cwd: rigPath,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CARGO_TERM_COLOR: "never",
+      },
+      maxBuffer: 16 * 1024 * 1024,
+    },
+  );
+  if (result.error) {
+    throw new Error(`Failed to build bundled beads_rust br binary: ${result.error.message}`);
+  }
+  if ((result.status ?? 1) !== 0) {
+    throw new Error(
+      `Failed to build bundled beads_rust br binary:\n${tailProcessOutput(
+        `${result.stdout ?? ""}\n${result.stderr ?? ""}`,
+      )}`,
+    );
+  }
+  if (!existsSync(binaryPath) || !statSync(binaryPath).isFile()) {
+    throw new Error(`Bundled beads_rust build finished but did not produce ${binaryPath}.`);
+  }
+  return binaryPath;
+}
+
 export function getBundledDoltliteLibraryPath(target: GascityBinaryTarget = {}): string {
   const platform = target.platform ?? process.platform;
   const arch = target.arch ?? process.arch;
@@ -338,10 +419,18 @@ export function materializeGascityRuntime(
   if (!existsSync(sourceBdBinaryPath) || !statSync(sourceBdBinaryPath).isFile()) {
     throw new Error(`beads binary does not exist or is not a file: ${sourceBdBinaryPath}`);
   }
+  const sourceBrBinaryPath = resolveManagedBrBinaryPath({
+    ...binaryTarget,
+    brBinaryPath: options.brBinaryPath,
+  });
+  if (!existsSync(sourceBrBinaryPath) || !statSync(sourceBrBinaryPath).isFile()) {
+    throw new Error(`beads_rust binary does not exist or is not a file: ${sourceBrBinaryPath}`);
+  }
 
   const binDir = path.join(rootDir, "bin");
   const gcBinaryPath = path.join(binDir, path.basename(getBundledGcBinaryPath(options)));
   const bdBinaryPath = path.join(binDir, path.basename(getBundledBdBinaryPath(options)));
+  const brBinaryPath = path.join(binDir, getBrExecutableName(options.platform));
   const doltliteLibraryPath = path.join(
     binDir,
     path.basename(getBundledDoltliteLibraryPath(options)),
@@ -349,6 +438,7 @@ export function materializeGascityRuntime(
   mkdirSync(binDir, { recursive: true });
   copyRuntimeBinary(sourceGcBinaryPath, gcBinaryPath, binaryPlatform);
   copyRuntimeBinary(sourceBdBinaryPath, bdBinaryPath, binaryPlatform);
+  copyRuntimeBinary(sourceBrBinaryPath, brBinaryPath, binaryPlatform);
   if (sourceDoltliteLibraryPath) {
     copyRuntimeBinary(sourceDoltliteLibraryPath, doltliteLibraryPath, binaryPlatform);
   }
@@ -359,8 +449,55 @@ export function materializeGascityRuntime(
     binDir,
     gcBinaryPath,
     bdBinaryPath,
+    brBinaryPath,
     doltliteLibraryPath,
   };
+}
+
+function isBuiltBrBinaryFresh(rigPath: string, binaryPath: string): boolean {
+  if (!existsSync(binaryPath) || !statSync(binaryPath).isFile()) {
+    return false;
+  }
+  const binaryMtime = statSync(binaryPath).mtimeMs;
+  const sourceMtime = latestPathMtimeMs([
+    path.join(rigPath, "Cargo.toml"),
+    path.join(rigPath, "Cargo.lock"),
+    path.join(rigPath, "build.rs"),
+    path.join(rigPath, "rust-toolchain.toml"),
+    path.join(rigPath, "src"),
+  ]);
+  return sourceMtime <= binaryMtime;
+}
+
+function latestPathMtimeMs(paths: readonly string[]): number {
+  let latest = 0;
+  for (const sourcePath of paths) {
+    latest = Math.max(latest, latestSinglePathMtimeMs(sourcePath));
+  }
+  return latest;
+}
+
+function latestSinglePathMtimeMs(sourcePath: string): number {
+  if (!existsSync(sourcePath)) {
+    return 0;
+  }
+  const stat = statSync(sourcePath);
+  let latest = stat.mtimeMs;
+  if (!stat.isDirectory()) {
+    return latest;
+  }
+  for (const entry of readdirSync(sourcePath, { withFileTypes: true })) {
+    latest = Math.max(latest, latestSinglePathMtimeMs(path.join(sourcePath, entry.name)));
+  }
+  return latest;
+}
+
+function tailProcessOutput(output: string): string {
+  const lines = output
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+  return lines.slice(-40).join("\n");
 }
 
 function findSiblingDoltliteLibraryPath(

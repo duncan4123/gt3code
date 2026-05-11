@@ -3,25 +3,152 @@ prefix = "co"
 suspended = false
 global_fragments = ["command-glossary", "operational-awareness"]
 
-[daemon]
-formula_v2 = true
+[[agent]]
+name = "codex"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "codex"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+
+[[agent]]
+name = "kimi-for-coding"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "kimi-for-coding"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+
+[[agent]]
+name = "codex"
+dir = "gascity"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "codex"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+
+[[agent]]
+name = "kimi-for-coding"
+dir = "gascity"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "kimi-for-coding"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+
+[[agent]]
+name = "codex"
+dir = "beads-doltlite"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "codex"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+
+[[agent]]
+name = "kimi-for-coding"
+dir = "beads-doltlite"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "kimi-for-coding"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+
+[[agent]]
+name = "codex"
+dir = "context-mode"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "codex"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+
+[[agent]]
+name = "kimi-for-coding"
+dir = "context-mode"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "kimi-for-coding"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+
+[[agent]]
+name = "codex"
+dir = "t3code"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "codex"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+
+[[agent]]
+name = "kimi-for-coding"
+dir = "t3code"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "kimi-for-coding"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+
+[[agent]]
+name = "codex"
+dir = "test-rig"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "codex"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+
+[[agent]]
+name = "kimi-for-coding"
+dir = "test-rig"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "kimi-for-coding"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
 
 [[rigs]]
 name = "gascity"
-suspended = false
+suspended = true
 includes = ["../../packs/gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "refinery"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "witness"
-suspended = false
+suspended = true
 
 [[rigs]]
 name = "beads-doltlite"
@@ -65,12 +192,6 @@ prefix = "t3"
 suspended = false
 includes = ["../../packs/gastown"]
 
-[[rigs]]
-name = "test-rig"
-prefix = "tr"
-suspended = false
-includes = ["../../packs/gastown"]
-
 [[rigs.overrides]]
 agent = "polecat"
 suspended = false
@@ -83,163 +204,49 @@ suspended = false
 agent = "witness"
 suspended = false
 
-[[agent]]
-dir = ""
-name = "codex"
-suspended = false
-provider = "codex"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-min_active_sessions = 0
-max_active_sessions = 5
+[[rigs]]
+name = "test-rig"
+prefix = "tr"
+suspended = true
+includes = ["../../packs/gastown"]
 
-[[agent]]
-dir = ""
-name = "kimi-for-coding"
-suspended = false
-provider = "kimi-for-coding"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-min_active_sessions = 0
-max_active_sessions = 5
+[[rigs.overrides]]
+agent = "polecat"
+suspended = true
 
-[[agent]]
-dir = "gascity"
-name = "codex"
-suspended = false
-provider = "codex"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-min_active_sessions = 0
-max_active_sessions = 5
+[[rigs.overrides]]
+agent = "refinery"
+suspended = true
 
-[[agent]]
-dir = "gascity"
-name = "kimi-for-coding"
-suspended = false
-provider = "kimi-for-coding"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-min_active_sessions = 0
-max_active_sessions = 5
-
-[[agent]]
-dir = "beads-doltlite"
-name = "codex"
-suspended = false
-provider = "codex"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-min_active_sessions = 0
-max_active_sessions = 5
-
-[[agent]]
-dir = "beads-doltlite"
-name = "kimi-for-coding"
-suspended = false
-provider = "kimi-for-coding"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-min_active_sessions = 0
-max_active_sessions = 5
-
-[[agent]]
-dir = "context-mode"
-name = "codex"
-suspended = false
-provider = "codex"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-min_active_sessions = 0
-max_active_sessions = 5
-
-[[agent]]
-dir = "context-mode"
-name = "kimi-for-coding"
-suspended = false
-provider = "kimi-for-coding"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-min_active_sessions = 0
-max_active_sessions = 5
-
-[[agent]]
-dir = "t3code"
-name = "codex"
-suspended = false
-provider = "codex"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-min_active_sessions = 0
-max_active_sessions = 5
-
-[[agent]]
-dir = "t3code"
-name = "kimi-for-coding"
-suspended = false
-provider = "kimi-for-coding"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-min_active_sessions = 0
-max_active_sessions = 5
-
-[[agent]]
-dir = "test-rig"
-name = "codex"
-suspended = false
-provider = "codex"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-min_active_sessions = 0
-max_active_sessions = 5
-
-[[agent]]
-dir = "test-rig"
-name = "kimi-for-coding"
-suspended = false
-provider = "kimi-for-coding"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-min_active_sessions = 0
-max_active_sessions = 5
+[[rigs.overrides]]
+agent = "witness"
+suspended = true
 
 [patches]
 
 [[patches.agent]]
 dir = ""
 name = "mayor"
-suspended = false
+suspended = true
 provider = "codex"
 wake_mode = "resume"
 
 [[patches.agent]]
 dir = ""
 name = "deacon"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = ""
 name = "boot"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = ""
 name = "dog"
-suspended = false
+suspended = true
 provider = "codex"
 [patches.agent.env]
 GC_MODEL = "gpt-5.4-mini"
@@ -247,94 +254,93 @@ GC_MODEL = "gpt-5.4-mini"
 [[patches.agent]]
 dir = "gascity"
 name = "refinery"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "gascity"
 name = "witness"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "gascity"
 name = "polecat"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "beads-doltlite"
 name = "polecat"
-suspended = false
+suspended = true
 provider = "codex"
 wake_mode = "fresh"
 
 [[patches.agent]]
 dir = "beads-doltlite"
 name = "refinery"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "beads-doltlite"
 name = "witness"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "context-mode"
 name = "witness"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "context-mode"
 name = "refinery"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "context-mode"
 name = "polecat"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "t3code"
 name = "witness"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "t3code"
 name = "refinery"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "t3code"
 name = "polecat"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "test-rig"
 name = "witness"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "test-rig"
 name = "refinery"
-suspended = false
+suspended = true
 provider = "codex"
 
 [[patches.agent]]
 dir = "test-rig"
 name = "polecat"
-suspended = false
+suspended = true
 provider = "codex"
-
 wake_mode = "resume"
 
 [[patches.named_session]]
@@ -380,3 +386,6 @@ backend = "doltlite"
 
 [session]
 provider = "t3bridge"
+
+[daemon]
+formula_v2 = true

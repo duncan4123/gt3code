@@ -214,41 +214,41 @@ enforced by the conformance suite in `internal/beads/beadstest/conformance.go`.
 
 ## Interactions
 
-| Depends on | How |
-|---|---|
-| `internal/fsys` | FileStore uses `fsys.FS` for all file I/O (testable via `fsys.Fake`) |
-| `internal/telemetry` | BdStore's `ExecCommandRunner` calls `telemetry.RecordBDCall` for every bd subprocess invocation |
+| Depends on             | How                                                                                                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/fsys`        | FileStore uses `fsys.FS` for all file I/O (testable via `fsys.Fake`)                                                                                                  |
+| `internal/telemetry`   | BdStore's `ExecCommandRunner` calls `telemetry.RecordBDCall` for every bd subprocess invocation                                                                       |
 | Formula-aware backends | `BdStore.MolCook` delegates to `bd mol wisp`; `exec.Store` delegates to script operations; in-memory stores provide simplified molecule roots for tests and tutorials |
 
-| Depended on by | How |
-|---|---|
-| `cmd/gc/` (CLI commands) | `openCityStore` creates the appropriate Store; used by convoy, sling, order, handoff, and hook commands |
-| `internal/mail/beadmail` | Implements mail.Provider backed by beads.Store -- mail messages are beads with type `"message"` |
-| Formula-aware backends | Molecule creation and step materialization are delegated to the configured store backend |
-| `internal/orders` | Order dispatch uses Store for cooldown tracking (`ListByLabel` with `order-run:` labels) and cursor-based event triggers |
-| `internal/doctor` | Health checks verify Store accessibility for both city-level and per-rig bead databases |
-| `cmd/gc/cmd_convoy.go` | Convoy operations (create, list, status, add, close, check, stranded) all operate through Store |
-| `cmd/gc/cmd_handoff.go` | Work handoff between agents reads and writes beads through Store |
+| Depended on by           | How                                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `cmd/gc/` (CLI commands) | `openCityStore` creates the appropriate Store; used by convoy, sling, order, handoff, and hook commands                  |
+| `internal/mail/beadmail` | Implements mail.Provider backed by beads.Store -- mail messages are beads with type `"message"`                          |
+| Formula-aware backends   | Molecule creation and step materialization are delegated to the configured store backend                                 |
+| `internal/orders`        | Order dispatch uses Store for cooldown tracking (`ListByLabel` with `order-run:` labels) and cursor-based event triggers |
+| `internal/doctor`        | Health checks verify Store accessibility for both city-level and per-rig bead databases                                  |
+| `cmd/gc/cmd_convoy.go`   | Convoy operations (create, list, status, add, close, check, stranded) all operate through Store                          |
+| `cmd/gc/cmd_handoff.go`  | Work handoff between agents reads and writes beads through Store                                                         |
 
 ## Code Map
 
-| Path | Description |
-|---|---|
-| `internal/beads/beads.go` | Bead struct, Store interface, UpdateOpts, ErrNotFound, IsContainerType |
-| `internal/beads/bdstore.go` | BdStore: production store shelling out to bd CLI; includes Init, ConfigSet, Purge, CommandRunner, ExecCommandRunner, status mapping |
-| `internal/beads/memstore.go` | MemStore: in-memory store with mutex-guarded slice; exported for use as test double |
-| `internal/beads/filestore.go` | FileStore: embeds MemStore, adds JSON persistence via fsys.FS with atomic writes |
-| `internal/beads/exec/exec.go` | exec.Store: delegates all operations to a user-supplied script via fork/exec |
-| `internal/beads/exec/json.go` | Wire format types (createRequest, updateRequest, molCookRequest, beadWire) for exec.Store's JSON protocol |
-| `internal/beads/beadstest/conformance.go` | RunStoreTests: the conformance suite that all Store implementations must pass |
-| `internal/beads/boundary_test.go` | TestNoBdExecOutsideBeads: architectural boundary enforcement |
-| `internal/beads/bdstore_test.go` | BdStore unit tests with fake CommandRunner |
-| `internal/beads/memstore_test.go` | MemStore tests including conformance suite, MolCook, and ListByLabel |
-| `internal/beads/filestore_test.go` | FileStore tests including persistence, corruption, and fsys.Fake failure paths |
-| `internal/beads/exec/exec_test.go` | exec.Store tests including conformance suite, composed MolCook with resolver, timeout, and error handling |
-| `internal/beads/exec/br_test.go` | Integration test for beads_rust (br) provider via exec.Store |
-| `cmd/gc/main.go` | openCityStore: factory that selects and creates the appropriate Store |
-| `cmd/gc/providers.go` | beadsProvider: resolves provider name from GC_BEADS env var or city.toml |
+| Path                                      | Description                                                                                                                         |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/beads/beads.go`                 | Bead struct, Store interface, UpdateOpts, ErrNotFound, IsContainerType                                                              |
+| `internal/beads/bdstore.go`               | BdStore: production store shelling out to bd CLI; includes Init, ConfigSet, Purge, CommandRunner, ExecCommandRunner, status mapping |
+| `internal/beads/memstore.go`              | MemStore: in-memory store with mutex-guarded slice; exported for use as test double                                                 |
+| `internal/beads/filestore.go`             | FileStore: embeds MemStore, adds JSON persistence via fsys.FS with atomic writes                                                    |
+| `internal/beads/exec/exec.go`             | exec.Store: delegates all operations to a user-supplied script via fork/exec                                                        |
+| `internal/beads/exec/json.go`             | Wire format types (createRequest, updateRequest, molCookRequest, beadWire) for exec.Store's JSON protocol                           |
+| `internal/beads/beadstest/conformance.go` | RunStoreTests: the conformance suite that all Store implementations must pass                                                       |
+| `internal/beads/boundary_test.go`         | TestNoBdExecOutsideBeads: architectural boundary enforcement                                                                        |
+| `internal/beads/bdstore_test.go`          | BdStore unit tests with fake CommandRunner                                                                                          |
+| `internal/beads/memstore_test.go`         | MemStore tests including conformance suite, MolCook, and ListByLabel                                                                |
+| `internal/beads/filestore_test.go`        | FileStore tests including persistence, corruption, and fsys.Fake failure paths                                                      |
+| `internal/beads/exec/exec_test.go`        | exec.Store tests including conformance suite, composed MolCook with resolver, timeout, and error handling                           |
+| `internal/beads/exec/br_test.go`          | Integration test for beads_rust (br) provider via exec.Store                                                                        |
+| `cmd/gc/main.go`                          | openCityStore: factory that selects and creates the appropriate Store                                                               |
+| `cmd/gc/providers.go`                     | beadsProvider: resolves provider name from GC_BEADS env var or city.toml                                                            |
 
 ## Configuration
 

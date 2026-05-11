@@ -6,39 +6,44 @@ This city uses the Gas City exec beads provider:
 
 ```toml
 [beads]
-provider = "exec:/data/projects/gascity/contrib/beads-scripts/gc-beads-br"
+provider = "exec:gc-beads-br"
 ```
 
 That wrapper talks to `br` (beads_rust), not Dolt or `bd`.
 
-Use `gc bd` as the stable interface:
+Use `br` directly for bead work:
 
 ```bash
-gc bd --rig beads_rust list
-gc bd --rig beads_rust show <id> --json
-gc bd --rig beads_rust update <id> --set-metadata key=value
+BR_ROOT="${GC_RIG_ROOT:-{{ .RigRoot }}}"
+BR_DB="$BR_ROOT/.beads/beads.db"
+br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" list
+br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" --json show <id>
+br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" --json gc-metadata get <id>
+printf '{"key":"value"}' | br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" gc-metadata set <id>
 ```
 
 Backend rules for this city:
 
 - Do not run `gc dolt ...` diagnostics for `beads_rust`; there is no Dolt
   server lifecycle for this rig.
-- Do not run bare `bd` in this city. The provider is `br` behind `gc bd`.
-- The wrapper runs `br` from `BR_DIR` or `GC_STORE_ROOT`; use `gc bd --rig
-  beads_rust ...` so Gas City sets the correct store root.
-- Metadata is stored by the wrapper in the `br` SQLite metadata table under
-  `issue:<id>:metadata`. Read and write it through `gc bd`, not raw SQLite.
+- Do not run bare `bd` in this city. Use `br` against the configured
+  `beads_rust` rig DB.
+- The wrapper runs `br` from `BR_DIR` or `GC_STORE_ROOT`; for direct work,
+  set `BR_DB="$GC_RIG_ROOT/.beads/beads.db"` or run from the rig root.
+- Metadata is stored by the wrapper in the `br` SQLite metadata table. Read
+  and write it through `br gc-metadata`, not raw SQLite.
 - Parent and dependency edges are represented as backend labels
   `parent:<id>` and `needs:<id>`. Raw `br` may show encoded labels
-  (`labelhex:*` or `labelhash:*`); `gc bd` decodes the Gas City view.
+  (`labelhex:*` or `labelhash:*`); the Gas City wrapper decodes those when it
+  has to read the backend.
 - `br` statuses `blocked`, `review`, and `testing` are normalized to `open`
   when Gas City reads them.
 
 If bead commands fail here, collect:
 
 ```bash
-gc bd --rig beads_rust list --json
-BR_DIR={{ .RigRoot }} br info --json
+BR_DB="${GC_RIG_ROOT:-{{ .RigRoot }}}/.beads/beads.db" br --json list
+BR_DB="${GC_RIG_ROOT:-{{ .RigRoot }}}/.beads/beads.db" br --json info
 ```
 
 Then escalate with that evidence instead of restarting Dolt.

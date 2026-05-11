@@ -1,7 +1,10 @@
 .gc/
 .beads/
 .git/
-cities/*/rigs/
+cities/*/rigs/*
+!cities/gastown/rigs/
+!cities/gastown/rigs/test-rig/
+!cities/gastown/rigs/test-rig/.gitkeep
 audit/
 *.prof
 *.out

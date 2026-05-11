@@ -13,7 +13,7 @@ import { Fragment, type ReactNode, useState } from "react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { SidebarMenuSubItem } from "./ui/sidebar";
 import { Badge } from "./ui/badge";
-import type { ThreadId } from "@t3tools/contracts";
+import type { GcLifecycleStatus, ThreadId } from "@t3tools/contracts";
 import type { SidebarGcThreadGroupingMode } from "@t3tools/contracts/settings";
 import {
   type GcAgentActionState,
@@ -62,6 +62,7 @@ export interface SidebarGcRigGroup {
   label: string;
   kind: "workspace" | "rig";
   isSuspended: boolean;
+  lifecycle?: GcLifecycleStatus;
   agentGroups: readonly SidebarGcAgentGroup[];
   threadGroups?: readonly SidebarGcThreadGroup[];
 }
@@ -77,6 +78,9 @@ interface SidebarGcFoldersProps {
   workspaceActionScope?: "city" | "rig";
   gcAgentMutationsInFlight: ReadonlySet<string>;
   gcAgentStartsInFlight?: ReadonlySet<string>;
+  gcSupervisorMutationInFlight?: boolean;
+  gcControllerMutationInFlight?: boolean;
+  gcCityControllerMutationsInFlight?: ReadonlySet<string>;
   gcRigMutationsInFlight: ReadonlySet<string>;
   gcCityMutationInFlight: boolean;
   gcThreadGroupingMode: SidebarGcThreadGroupingMode;
@@ -102,6 +106,8 @@ interface SidebarGcFoldersProps {
   onWakeAgentSession: (agent: string) => void;
   onToggleAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
+  onSetSupervisorRunning?: (city: string, running: boolean) => void;
+  onSetControllerRunning?: (city: string, running: boolean) => void;
   renderThreadRows: (threadIds: readonly ThreadId[], indentClassName?: string) => ReactNode;
 }
 
@@ -200,17 +206,23 @@ function gcNestedRigParentId(
 }
 
 function gcRigGroupDisplayLabel(rigGroup: SidebarGcRigGroup, parentId: string | undefined): string {
+  const label = rigGroup.label.trim();
+  const fallbackLabel =
+    rigGroup.id
+      .split("/")
+      .filter(Boolean)
+      .at(-1) ?? (rigGroup.kind === "workspace" ? "City" : "Rig");
   if (!parentId) {
-    return rigGroup.label;
+    return label || fallbackLabel;
   }
   const parentPrefix = `${parentId}/`;
-  if (rigGroup.label.startsWith(parentPrefix)) {
-    return rigGroup.label.slice(parentPrefix.length);
+  if (label.startsWith(parentPrefix)) {
+    return label.slice(parentPrefix.length) || fallbackLabel;
   }
-  if (rigGroup.label === rigGroup.id && rigGroup.id.startsWith(parentPrefix)) {
-    return rigGroup.id.slice(parentPrefix.length);
+  if (label === rigGroup.id && rigGroup.id.startsWith(parentPrefix)) {
+    return rigGroup.id.slice(parentPrefix.length) || fallbackLabel;
   }
-  return rigGroup.label;
+  return label || fallbackLabel;
 }
 
 function gcAgentEffectiveRuntimeState(
@@ -703,6 +715,19 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
     const childRigGroups = childRigGroupsByWorkspaceId.get(rigGroup.id) ?? [];
     const displayLabel = gcRigGroupDisplayLabel(rigGroup, props.nestedParentId);
     const isCityFolder = rigGroup.kind === "workspace";
+    const lifecycle = isCityFolder ? rigGroup.lifecycle : undefined;
+    const supervisorMutationInFlight = Boolean(props.gcSupervisorMutationInFlight && lifecycle);
+    const controllerMutationInFlight = Boolean(
+      lifecycle &&
+        (props.gcControllerMutationInFlight ||
+          props.gcCityControllerMutationsInFlight?.has(rigGroup.id)),
+    );
+    const supervisorActionLabel = lifecycle?.supervisorRunning
+      ? `Stop shared Gas City supervisor from ${displayLabel}`
+      : `Start shared Gas City supervisor from ${displayLabel}`;
+    const controllerActionLabel = lifecycle?.controllerRunning
+      ? `Stop controller for ${displayLabel}`
+      : `Start controller for ${displayLabel}`;
     const cityFolderUsesRigAction = isCityFolder && workspaceActionScope === "rig";
     const workspaceActionState = cityFolderUsesRigAction
       ? props.gcRigActionStateByRig.get(rigGroup.id)
@@ -755,13 +780,19 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 }`}
               />
               <FolderIcon className="size-3 shrink-0" />
-              <span className="truncate text-xs font-bold leading-none">{displayLabel}</span>
+              <span
+                className={`truncate text-xs font-bold leading-none ${
+                  isCityFolder ? "max-w-28 shrink-0" : "min-w-0"
+                }`}
+              >
+                {displayLabel}
+              </span>
               {isCityFolder ? (
                 <Badge
                   size="sm"
                   variant="outline"
                   data-testid={`gc-city-label-${gcControlTestIdSuffix(rigGroup.id)}`}
-                  className="rounded-full px-1.5 text-[.55rem] tracking-wide uppercase"
+                  className="shrink-0 rounded-full px-1.5 text-[.55rem] tracking-wide uppercase"
                 >
                   city
                 </Badge>
@@ -770,15 +801,96 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 <Badge
                   size="sm"
                   variant="outline"
-                  className="rounded-full border-amber-500/25 bg-amber-500/10 px-1.5 tracking-wide text-amber-700 uppercase dark:text-amber-300"
+                  className="shrink-0 rounded-full border-amber-500/25 bg-amber-500/10 px-1.5 tracking-wide text-amber-700 uppercase dark:text-amber-300"
                 >
                   blocks starts
                 </Badge>
               ) : null}
-              <span className="truncate text-[.625rem] font-medium tracking-normal text-muted-foreground/60 lowercase sm:text-[.625rem]">
+              <span className="min-w-0 truncate text-[.625rem] font-medium tracking-normal text-muted-foreground/60 lowercase sm:text-[.625rem]">
                 {rigStateSummary}
               </span>
             </button>
+            {lifecycle && props.onSetSupervisorRunning ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      data-thread-selection-safe
+                      data-testid={`gc-city-supervisor-${gcControlTestIdSuffix(rigGroup.id)}`}
+                      data-gc-city={rigGroup.id}
+                      aria-label={supervisorActionLabel}
+                      disabled={supervisorMutationInFlight}
+                      className="ml-auto inline-flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[.55rem] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 hover:text-emerald-800 disabled:cursor-wait disabled:opacity-60 dark:text-emerald-300"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        props.onSetSupervisorRunning?.(
+                          rigGroup.id,
+                          !lifecycle.supervisorRunning,
+                        );
+                      }}
+                    >
+                      {supervisorMutationInFlight ? (
+                        <LoaderCircleIcon className="size-3 shrink-0 animate-spin" />
+                      ) : lifecycle.supervisorRunning ? (
+                        <SquareIcon className="size-3 shrink-0" />
+                      ) : (
+                        <PlayIcon className="size-3 shrink-0" />
+                      )}
+                      <span>Sup</span>
+                    </button>
+                  }
+                />
+                <TooltipPopup side="top">
+                  <div className="space-y-1">
+                    <div>{supervisorActionLabel}</div>
+                    <div className="max-w-56 text-[10px] text-muted-foreground">
+                      Shared supervisor. Stopping it affects all cities.
+                      {typeof lifecycle.supervisorPort === "number"
+                        ? ` Port ${lifecycle.supervisorPort}.`
+                        : lifecycle.supervisorUrl
+                          ? ` ${lifecycle.supervisorUrl}.`
+                          : ""}
+                    </div>
+                  </div>
+                </TooltipPopup>
+              </Tooltip>
+            ) : null}
+            {lifecycle && props.onSetControllerRunning ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      data-thread-selection-safe
+                      data-testid={`gc-city-controller-${gcControlTestIdSuffix(rigGroup.id)}`}
+                      data-gc-city={rigGroup.id}
+                      aria-label={controllerActionLabel}
+                      disabled={controllerMutationInFlight}
+                      className={`inline-flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[.55rem] font-medium text-sky-700 transition-colors hover:bg-sky-500/10 hover:text-sky-800 disabled:cursor-wait disabled:opacity-60 dark:text-sky-300 ${
+                        props.onSetSupervisorRunning ? "" : "ml-auto"
+                      }`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        props.onSetControllerRunning?.(rigGroup.id, !lifecycle.controllerRunning);
+                      }}
+                    >
+                      {controllerMutationInFlight ? (
+                        <LoaderCircleIcon className="size-3 shrink-0 animate-spin" />
+                      ) : lifecycle.controllerRunning ? (
+                        <SquareIcon className="size-3 shrink-0" />
+                      ) : (
+                        <PlayIcon className="size-3 shrink-0" />
+                      )}
+                      <span>Ctl</span>
+                    </button>
+                  }
+                />
+                <TooltipPopup side="top">{controllerActionLabel}</TooltipPopup>
+              </Tooltip>
+            ) : null}
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -816,7 +928,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         ? workspaceMutationInFlight
                         : props.gcRigMutationsInFlight.has(rigGroup.id)
                     }
-                    className="ml-auto inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+                    className={`inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60 ${
+                      lifecycle ? "" : "ml-auto"
+                    }`}
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();

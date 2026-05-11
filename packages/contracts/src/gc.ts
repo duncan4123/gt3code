@@ -235,6 +235,14 @@ export type GcNamedSessionMode = typeof GcNamedSessionMode.Type;
 export const GcWakeMode = Schema.Union([Schema.Literal("resume"), Schema.Literal("fresh")]);
 export type GcWakeMode = typeof GcWakeMode.Type;
 
+export const GcLifecycleStatus = Schema.Struct({
+  supervisorRunning: Schema.Boolean,
+  controllerRunning: Schema.Boolean,
+  supervisorPort: Schema.optional(Schema.Number),
+  supervisorUrl: Schema.optional(Schema.String),
+});
+export type GcLifecycleStatus = typeof GcLifecycleStatus.Type;
+
 export const GcConfigAgent = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
@@ -260,6 +268,7 @@ export const GcConfigRig = Schema.Struct({
   path: Schema.String,
   prefix: Schema.optional(Schema.String),
   suspended: Schema.Boolean,
+  lifecycle: Schema.optional(GcLifecycleStatus),
 });
 export type GcConfigRig = typeof GcConfigRig.Type;
 
@@ -280,14 +289,6 @@ export const GcConfigPatches = Schema.Struct({
   provider_count: Schema.Number,
 });
 export type GcConfigPatches = typeof GcConfigPatches.Type;
-
-export const GcLifecycleStatus = Schema.Struct({
-  supervisorRunning: Schema.Boolean,
-  controllerRunning: Schema.Boolean,
-  supervisorPort: Schema.optional(Schema.Number),
-  supervisorUrl: Schema.optional(Schema.String),
-});
-export type GcLifecycleStatus = typeof GcLifecycleStatus.Type;
 
 export const GcConfigResult = Schema.Struct({
   workspace: GcConfigWorkspace,
@@ -321,6 +322,7 @@ export const GcSidebarLayoutRigGroup = Schema.Struct({
   kind: Schema.Union([Schema.Literal("workspace"), Schema.Literal("rig")]),
   isConfigured: Schema.Boolean,
   isSuspended: Schema.Boolean,
+  lifecycle: Schema.optional(GcLifecycleStatus),
   agentGroups: Schema.Array(GcSidebarLayoutAgentGroup),
 });
 export type GcSidebarLayoutRigGroup = typeof GcSidebarLayoutRigGroup.Type;
@@ -366,6 +368,7 @@ export interface VirtualRigGroup<TThread> {
   kind: "workspace" | "rig";
   isConfigured: boolean;
   isSuspended: boolean;
+  lifecycle?: GcLifecycleStatus;
   agentGroups: VirtualAgentGroup<TThread>[];
 }
 
@@ -375,12 +378,74 @@ interface MutableVirtualRigGroup<TThread> {
   kind: "workspace" | "rig";
   isConfigured: boolean;
   isSuspended: boolean;
+  lifecycle?: GcLifecycleStatus;
   agentGroupsById: Map<string, VirtualAgentGroup<TThread>>;
 }
 
 function normalizeMetadataValue(value?: string): string | null {
   const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
+  if (!trimmed || trimmed === "." || trimmed === "..") {
+    return null;
+  }
+  return trimmed;
+}
+
+function qualifyMergedMultiCityRigId(input: {
+  rig: string | null;
+  city: string | null;
+  isMergedMultiCityConfig: boolean;
+  multiCityWorkspaceIds: ReadonlySet<string>;
+  configRigByName: ReadonlyMap<string, GcConfigRig>;
+}): string | null {
+  if (
+    !input.rig ||
+    !input.isMergedMultiCityConfig ||
+    !input.city ||
+    !input.multiCityWorkspaceIds.has(input.city) ||
+    input.rig === input.city ||
+    input.rig.startsWith(`${input.city}/`)
+  ) {
+    return input.rig;
+  }
+
+  const cityScopedRig = `${input.city}/${input.rig}`;
+  return input.configRigByName.has(cityScopedRig) ? cityScopedRig : input.rig;
+}
+
+function qualifyMergedMultiCityAgent(input: {
+  agent: string | null;
+  city: string | null;
+  originalRig: string | null;
+  resolvedRig: string | null;
+  isMergedMultiCityConfig: boolean;
+  multiCityWorkspaceIds: ReadonlySet<string>;
+}): string | null {
+  if (
+    !input.agent ||
+    !input.resolvedRig ||
+    !input.isMergedMultiCityConfig ||
+    !input.city ||
+    !input.multiCityWorkspaceIds.has(input.city) ||
+    (input.resolvedRig !== input.city && !input.resolvedRig.startsWith(`${input.city}/`))
+  ) {
+    return input.agent;
+  }
+
+  if (input.agent === input.resolvedRig || input.agent.startsWith(`${input.resolvedRig}/`)) {
+    return input.agent;
+  }
+
+  const rigCandidates = [
+    input.originalRig,
+    input.originalRig ? pathBasename(input.originalRig) : null,
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  for (const candidate of new Set(rigCandidates)) {
+    if (input.agent.startsWith(`${candidate}/`)) {
+      return `${input.resolvedRig}/${input.agent.slice(candidate.length + 1)}`;
+    }
+  }
+
+  return `${input.resolvedRig}/${input.agent}`;
 }
 
 function agentFolderLabel(agent: string): string {
@@ -710,6 +775,7 @@ export function groupThreadsByRigAndAgent<
   );
   let cityScopedRigGroupId: string | null = null;
   const configRigs = options?.config?.rigs ?? [];
+  const configRigByName = new Map(configRigs.map((rig) => [rig.name, rig] as const));
   const directlyRelevantRigs = configRigs.filter(
     (rig) => projectCwds.size === 0 || projectContextMatchesRigPath(projectCwds, rig.path),
   );
@@ -726,6 +792,7 @@ export function groupThreadsByRigAndAgent<
         kind: isMultiCityWorkspace ? "workspace" : "rig",
         isConfigured: true,
         isSuspended: rig.suspended,
+        ...(rig.lifecycle ? { lifecycle: rig.lifecycle } : {}),
         agentGroupsById: new Map(),
       });
     }
@@ -741,6 +808,11 @@ export function groupThreadsByRigAndAgent<
           existingWorkspaceRig.kind = "workspace";
           existingWorkspaceRig.label = workspaceName.toUpperCase();
           existingWorkspaceRig.isSuspended = workspaceSuspended;
+          if (workspaceRig.lifecycle) {
+            existingWorkspaceRig.lifecycle = workspaceRig.lifecycle;
+          } else if (options.config?.lifecycle) {
+            existingWorkspaceRig.lifecycle = options.config.lifecycle;
+          }
         }
       }
     }
@@ -776,6 +848,7 @@ export function groupThreadsByRigAndAgent<
       kind: "workspace",
       isConfigured: true,
       isSuspended: workspaceSuspended,
+      ...(options.config.lifecycle ? { lifecycle: options.config.lifecycle } : {}),
       agentGroupsById: new Map(),
     });
   }
@@ -798,15 +871,28 @@ export function groupThreadsByRigAndAgent<
     const meta = parseGcMeta(thread.customMetadata);
     const rig = normalizeMetadataValue(meta.rig);
     const agent = normalizeMetadataValue(meta.agent);
+    const resolvedCity = normalizeMetadataValue(meta.city);
     const canonicalGroupId = normalizeMetadataValue(meta.groupId);
     const canonicalGroupLabel = normalizeMetadataValue(meta.groupLabel);
     const canonicalAgentQualified = normalizeMetadataValue(meta.agentQualified);
     const canonicalAgentLabel = normalizeMetadataValue(meta.agentLabel);
+    const cityWorkspaceGroupId =
+      resolvedCity && multiCityWorkspaceIds.has(resolvedCity)
+        ? resolvedCity
+        : cityScopedRigGroupId;
     let resolvedRig =
-      meta.groupKind === "workspace" && cityScopedRigGroupId
-        ? cityScopedRigGroupId
+      meta.groupKind === "workspace" && cityWorkspaceGroupId
+        ? cityWorkspaceGroupId
         : (canonicalGroupId ?? rig ?? null);
     let resolvedAgent = canonicalAgentQualified ?? agent;
+
+    resolvedRig = qualifyMergedMultiCityRigId({
+      rig: resolvedRig,
+      city: resolvedCity,
+      isMergedMultiCityConfig,
+      multiCityWorkspaceIds,
+      configRigByName,
+    });
 
     if (!resolvedRig && resolvedAgent && options?.config) {
       const configuredAgent = options.config.agents.find(
@@ -825,6 +911,40 @@ export function groupThreadsByRigAndAgent<
       resolvedRig = cityScopedRigGroupId;
     }
 
+    resolvedRig = qualifyMergedMultiCityRigId({
+      rig: resolvedRig,
+      city: resolvedCity,
+      isMergedMultiCityConfig,
+      multiCityWorkspaceIds,
+      configRigByName,
+    });
+    resolvedAgent = qualifyMergedMultiCityAgent({
+      agent: resolvedAgent,
+      city: resolvedCity,
+      originalRig: rig,
+      resolvedRig,
+      isMergedMultiCityConfig,
+      multiCityWorkspaceIds,
+    });
+
+    if (
+      isMergedMultiCityConfig &&
+      resolvedCity &&
+      !multiCityWorkspaceIds.has(resolvedCity)
+    ) {
+      standaloneThreads.push(thread);
+      continue;
+    }
+    if (
+      isMergedMultiCityConfig &&
+      meta.groupKind === "workspace" &&
+      resolvedRig &&
+      !multiCityWorkspaceIds.has(resolvedRig)
+    ) {
+      standaloneThreads.push(thread);
+      continue;
+    }
+
     if ((!meta.isGcManaged && !resolvedAgent) || !resolvedRig || !resolvedAgent) {
       standaloneThreads.push(thread);
       continue;
@@ -833,6 +953,12 @@ export function groupThreadsByRigAndAgent<
     let rigGroup = rigGroupsById.get(resolvedRig);
     if (rigGroup && meta.groupKind === "workspace" && canonicalGroupLabel) {
       rigGroup.label = canonicalGroupLabel;
+    }
+    const resolvedRigLifecycle =
+      configRigByName.get(resolvedRig)?.lifecycle ??
+      (resolvedRig === cityScopedRigGroupId ? options?.config?.lifecycle : undefined);
+    if (rigGroup && !rigGroup.lifecycle && resolvedRigLifecycle) {
+      rigGroup.lifecycle = resolvedRigLifecycle;
     }
     if (!rigGroup) {
       rigGroup = {
@@ -853,6 +979,7 @@ export function groupThreadsByRigAndAgent<
           meta.groupKind === "workspace" || resolvedRig === cityScopedRigGroupId
             ? workspaceSuspended
             : false,
+        ...(resolvedRigLifecycle ? { lifecycle: resolvedRigLifecycle } : {}),
         agentGroupsById: new Map(),
       };
       rigGroupsById.set(resolvedRig, rigGroup);
@@ -924,8 +1051,14 @@ export function groupThreadsByRigAndAgent<
       if (cityGroup.kind !== "workspace") {
         continue;
       }
+      if (isMergedMultiCityConfig && !multiCityWorkspaceIds.has(cityGroup.id)) {
+        continue;
+      }
       cityGroup.isConfigured = true;
       cityGroup.isSuspended = cityGroup.isSuspended || workspaceSuspended;
+      if (!cityGroup.lifecycle && options.config.lifecycle) {
+        cityGroup.lifecycle = options.config.lifecycle;
+      }
       for (const agent of options.config.agents) {
         if (isImplicitProviderLane(agent)) {
           continue;
@@ -948,6 +1081,7 @@ export function groupThreadsByRigAndAgent<
         kind: rigGroup.kind,
         isConfigured: rigGroup.isConfigured,
         isSuspended: rigGroup.isSuspended,
+        ...(rigGroup.lifecycle ? { lifecycle: rigGroup.lifecycle } : {}),
         agentGroups: Array.from(rigGroup.agentGroupsById.values()).toSorted((a, b) =>
           a.label.localeCompare(b.label),
         ),
@@ -1028,11 +1162,13 @@ export type GcStartInput = typeof GcStartInput.Type;
 
 export const GcSetSupervisorRunningInput = Schema.Struct({
   running: Schema.Boolean,
+  city: Schema.optional(Schema.String),
 });
 export type GcSetSupervisorRunningInput = typeof GcSetSupervisorRunningInput.Type;
 
 export const GcSetControllerRunningInput = Schema.Struct({
   running: Schema.Boolean,
+  city: Schema.optional(Schema.String),
 });
 export type GcSetControllerRunningInput = typeof GcSetControllerRunningInput.Type;
 

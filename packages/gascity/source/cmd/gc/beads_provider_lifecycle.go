@@ -420,6 +420,15 @@ func shouldRetryExecBdInit(err error) bool {
 	return strings.Contains(err.Error(), "bd schema not visible")
 }
 
+func isExecBeadsAlreadyInitializedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "already initialized") ||
+		strings.Contains(message, "Found existing database")
+}
+
 // resolveRigPaths resolves relative rig paths to absolute (relative to
 // cityPath). Mutates rigs in place. Must be called after loading city config
 // and before any access to rigs[i].Path for filesystem operations. Required
@@ -541,7 +550,13 @@ func initBeadsForDir(cityPath, dir, prefix, doltDatabase string) error {
 		}
 		script := strings.TrimPrefix(provider, "exec:")
 		if execProviderUsesCanonicalBdScopeFiles(provider) && cityUsesDoltliteBeadsBackend(cityPath) {
-			return runProviderOpWithEnv(script, providerLifecycleProcessEnv(cityPath, provider), args...)
+			if err := runProviderOpWithEnv(script, providerLifecycleProcessEnv(cityPath, provider), args...); err != nil {
+				if isExecBeadsAlreadyInitializedError(err) {
+					return nil
+				}
+				return err
+			}
+			return nil
 		}
 		if execProviderUsesCanonicalBdScopeFiles(provider) && !execProviderNeedsScopedDoltInit(provider) {
 			baseEnv := providerLifecycleProcessEnv(cityPath, provider)
@@ -563,6 +578,9 @@ func initBeadsForDir(cityPath, dir, prefix, doltDatabase string) error {
 			}
 			env := overlayEnvEntries(baseEnv, overrides)
 			if err := runProviderOpWithEnv(script, env, args...); err != nil {
+				if isExecBeadsAlreadyInitializedError(err) {
+					return finalizeCanonicalBdScopeInit(cityPath, dir, prefix, canonicalDoltDatabase)
+				}
 				if shouldRetryExecBdInit(err) {
 					for attempt := 0; attempt < 3; attempt++ {
 						time.Sleep(time.Second)
@@ -589,6 +607,9 @@ func initBeadsForDir(cityPath, dir, prefix, doltDatabase string) error {
 				"BEADS_DIR": filepath.Join(dir, ".beads"),
 			})
 			if err := runProviderOpWithEnv(script, env, args...); err != nil {
+				if isExecBeadsAlreadyInitializedError(err) {
+					return nil
+				}
 				if shouldRetryExecBdInit(err) {
 					for attempt := 0; attempt < 3; attempt++ {
 						time.Sleep(time.Second)
@@ -614,7 +635,13 @@ func initBeadsForDir(cityPath, dir, prefix, doltDatabase string) error {
 		if err != nil {
 			return err
 		}
-		return runProviderOpWithEnv(script, providerEnv, args...)
+		if err := runProviderOpWithEnv(script, providerEnv, args...); err != nil {
+			if isExecBeadsAlreadyInitializedError(err) {
+				return nil
+			}
+			return err
+		}
+		return nil
 	}
 	return nil
 }

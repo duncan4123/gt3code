@@ -64,10 +64,7 @@
         },
         "scope": {
           "type": "string",
-          "enum": [
-            "city",
-            "rig"
-          ],
+          "enum": ["city", "rig"],
           "description": "Scope defines where this agent is instantiated: \"city\" (one per city)\nor \"rig\" (one per rig, the default). Only meaningful for pack-defined\nagents; inline agents in city.toml use Dir directly."
         },
         "suspended": {
@@ -91,10 +88,7 @@
         },
         "session": {
           "type": "string",
-          "enum": [
-            "acp",
-            "tmux"
-          ],
+          "enum": ["acp", "tmux"],
           "description": "Session overrides the session transport for this agent.\n\"\" (default) uses the provider default.\n\"tmux\" uses the tmux-backed CLI path even when the provider supports ACP.\n\"acp\" uses the Agent Client Protocol (JSON-RPC over stdio); the agent's\nresolved provider must have supports_acp = true."
         },
         "provider": {
@@ -114,11 +108,7 @@
         },
         "prompt_mode": {
           "type": "string",
-          "enum": [
-            "arg",
-            "flag",
-            "none"
-          ],
+          "enum": ["arg", "flag", "none"],
           "description": "PromptMode controls how prompts are delivered: \"arg\", \"flag\", or \"none\".",
           "default": "arg"
         },
@@ -295,18 +285,13 @@
         },
         "wake_mode": {
           "type": "string",
-          "enum": [
-            "resume",
-            "fresh"
-          ],
+          "enum": ["resume", "fresh"],
           "description": "WakeMode controls context freshness across sleep/wake cycles.\n\"resume\" (default): reuse provider session key for conversation continuity.\n\"fresh\": start a new provider session on every wake (polecat pattern)."
         }
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "name"
-      ],
+      "required": ["name"],
       "description": "Agent defines a configured agent in the city."
     },
     "AgentDefaults": {
@@ -317,10 +302,7 @@
         },
         "wake_mode": {
           "type": "string",
-          "enum": [
-            "resume",
-            "fresh"
-          ],
+          "enum": ["resume", "fresh"],
           "description": "WakeMode is the parsed/composed default wake mode (\"resume\" or\n\"fresh\"), but it is not yet auto-applied at runtime."
         },
         "default_sling_formula": {
@@ -570,10 +552,7 @@
         },
         "wake_mode": {
           "type": "string",
-          "enum": [
-            "resume",
-            "fresh"
-          ],
+          "enum": ["resume", "fresh"],
           "description": "WakeMode overrides the agent's wake mode (\"resume\" or \"fresh\")."
         },
         "inject_fragments_append": {
@@ -605,9 +584,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "agent"
-      ],
+      "required": ["agent"],
       "description": "AgentOverride modifies a pack-stamped agent for a specific rig."
     },
     "AgentPatch": {
@@ -785,10 +762,7 @@
         },
         "wake_mode": {
           "type": "string",
-          "enum": [
-            "resume",
-            "fresh"
-          ],
+          "enum": ["resume", "fresh"],
           "description": "WakeMode overrides the agent's wake mode (\"resume\" or \"fresh\")."
         },
         "pre_start_append": {
@@ -848,10 +822,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "dir",
-        "name"
-      ],
+      "required": ["dir", "name"],
       "description": "AgentPatch modifies an existing agent identified by (Dir, Name)."
     },
     "BeadsConfig": {
@@ -1002,10 +973,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "workspace",
-        "agent"
-      ],
+      "required": ["workspace", "agent"],
       "description": "City is the top-level configuration for a Gas City instance."
     },
     "ConvergenceConfig": {
@@ -1195,18 +1163,13 @@
         },
         "shadow": {
           "type": "string",
-          "enum": [
-            "warn",
-            "silent"
-          ],
+          "enum": ["warn", "silent"],
           "description": "Shadow controls shadow warnings when the importer defines an agent\nwith the same name as one from this import. \"warn\" (default) emits\na warning; \"silent\" suppresses it."
         }
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "source"
-      ],
+      "required": ["source"],
       "description": "Import defines a named import of another pack."
     },
     "K8sConfig": {
@@ -1276,10 +1239,7 @@
         },
         "scope": {
           "type": "string",
-          "enum": [
-            "city",
-            "rig"
-          ],
+          "enum": ["city", "rig"],
           "description": "Scope defines where this named session is instantiated in pack\nexpansion: \"city\" (one per city) or \"rig\" (one per rig)."
         },
         "dir": {
@@ -1288,18 +1248,13 @@
         },
         "mode": {
           "type": "string",
-          "enum": [
-            "on_demand",
-            "always"
-          ],
+          "enum": ["on_demand", "always"],
           "description": "Mode controls controller behavior for this named session.\n\"on_demand\" (default): reserve identity and materialize when work or\nan explicit reference requires it.\n\"always\": keep the canonical session controller-managed."
         }
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "template"
-      ],
+      "required": ["template"],
       "description": "NamedSession defines a canonical persistent session backed by an agent template."
     },
     "OptionChoice": {
@@ -1330,11 +1285,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "value",
-        "label",
-        "flag_args"
-      ],
+      "required": ["value", "label", "flag_args"],
       "description": "OptionChoice is one allowed value for a \"select\" option."
     },
     "OrderOverride": {
@@ -1387,9 +1338,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "name"
-      ],
+      "required": ["name"],
       "description": "OrderOverride modifies a scanned order's scheduling fields."
     },
     "OrdersConfig": {
@@ -1434,9 +1383,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "source"
-      ],
+      "required": ["source"],
       "description": "PackSource defines a remote pack repository."
     },
     "Patches": {
@@ -1528,13 +1475,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "key",
-        "label",
-        "type",
-        "default",
-        "choices"
-      ],
+      "required": ["key", "label", "type", "default", "choices"],
       "description": "ProviderOption declares a single configurable option for a provider."
     },
     "ProviderPatch": {
@@ -1582,11 +1523,7 @@
         },
         "prompt_mode": {
           "type": "string",
-          "enum": [
-            "arg",
-            "flag",
-            "none"
-          ],
+          "enum": ["arg", "flag", "none"],
           "description": "PromptMode overrides prompt delivery mode."
         },
         "prompt_flag": {
@@ -1619,9 +1556,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "name"
-      ],
+      "required": ["name"],
       "description": "ProviderPatch modifies an existing provider identified by Name."
     },
     "ProviderSpec": {
@@ -1639,10 +1574,7 @@
         },
         "options_schema_merge": {
           "type": "string",
-          "enum": [
-            "replace",
-            "by_key"
-          ],
+          "enum": ["replace", "by_key"],
           "description": "OptionsSchemaMerge controls OptionsSchema merge mode across the\nchain: \"replace\" (default) or \"by_key\"."
         },
         "display_name": {
@@ -1662,11 +1594,7 @@
         },
         "prompt_mode": {
           "type": "string",
-          "enum": [
-            "arg",
-            "flag",
-            "none"
-          ],
+          "enum": ["arg", "flag", "none"],
           "description": "PromptMode controls how prompts are delivered: \"arg\", \"flag\", or \"none\".",
           "default": "arg"
         },
@@ -1854,9 +1782,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "name"
-      ],
+      "required": ["name"],
       "description": "Rig defines an external project registered in the city."
     },
     "RigPatch": {
@@ -1880,9 +1806,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "name"
-      ],
+      "required": ["name"],
       "description": "RigPatch modifies an existing rig identified by Name."
     },
     "Service": {
@@ -1893,18 +1817,12 @@
         },
         "kind": {
           "type": "string",
-          "enum": [
-            "workflow",
-            "proxy_process"
-          ],
+          "enum": ["workflow", "proxy_process"],
           "description": "Kind selects how the service is implemented."
         },
         "publish_mode": {
           "type": "string",
-          "enum": [
-            "private",
-            "direct"
-          ],
+          "enum": ["private", "direct"],
           "description": "PublishMode declares how the service is intended to be published.\nv0 supports private services and direct reuse of the API listener."
         },
         "state_root": {
@@ -1926,9 +1844,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "name"
-      ],
+      "required": ["name"],
       "description": "Service declares a workspace-owned HTTP service mounted under /svc/{name}."
     },
     "ServiceProcessConfig": {
@@ -1953,11 +1869,7 @@
       "properties": {
         "visibility": {
           "type": "string",
-          "enum": [
-            "private",
-            "public",
-            "tenant"
-          ],
+          "enum": ["private", "public", "tenant"],
           "description": "Visibility selects whether the service is private to the workspace,\navailable publicly, or gated by tenant auth at the platform edge."
         },
         "hostname": {

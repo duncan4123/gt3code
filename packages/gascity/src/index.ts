@@ -29,3 +29,12 @@ export function findBuiltGcBinaryPath(target: GascityToolTarget = {}): string | 
   const binaryPath = getBuiltGcBinaryPath(target);
   return existsSync(binaryPath) && statSync(binaryPath).isFile() ? binaryPath : undefined;
 }
+
+export function getBrBeadsProviderScriptPath(): string {
+  return path.join(packageRoot, "source", "contrib", "beads-scripts", "gc-beads-br");
+}
+
+export function findBrBeadsProviderScriptPath(): string | undefined {
+  const scriptPath = getBrBeadsProviderScriptPath();
+  return existsSync(scriptPath) && statSync(scriptPath).isFile() ? scriptPath : undefined;
+}

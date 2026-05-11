@@ -79,8 +79,14 @@ export interface GcApiClientShape {
   readonly getConfig: () => Effect.Effect<GcConfigResult | null>;
   readonly getLifecycleStatus: () => Effect.Effect<GcLifecycleStatus, Error>;
   readonly start: Effect.Effect<void, Error>;
-  readonly setSupervisorRunning: (running: boolean) => Effect.Effect<void, Error>;
-  readonly setControllerRunning: (running: boolean) => Effect.Effect<void, Error>;
+  readonly setSupervisorRunning: (
+    running: boolean,
+    city?: string | null,
+  ) => Effect.Effect<void, Error>;
+  readonly setControllerRunning: (
+    running: boolean,
+    city?: string | null,
+  ) => Effect.Effect<void, Error>;
   readonly submitSession: (
     sessionName: string,
     message: string,

@@ -2,7 +2,6 @@
 title: "Formulas & Molecules"
 ---
 
-
 > Last verified against code: 2026-03-17
 
 ## Summary
@@ -125,35 +124,35 @@ Closed wisps are purged by the controller's wisp GC in
 
 ## Interactions
 
-| Depends on | How |
-|---|---|
-| `internal/config` | Computes formula layers from city, packs, and rigs |
-| `internal/beads` | Instantiates formulas via `MolCook` and `MolCookOn` |
-| `internal/convergence` | Validates convergence-specific formula metadata |
+| Depends on             | How                                                 |
+| ---------------------- | --------------------------------------------------- |
+| `internal/config`      | Computes formula layers from city, packs, and rigs  |
+| `internal/beads`       | Instantiates formulas via `MolCook` and `MolCookOn` |
+| `internal/convergence` | Validates convergence-specific formula metadata     |
 
-| Depended on by | How |
-|---|---|
-| `cmd/gc/cmd_sling.go` | Creates wisps and attached molecules from formulas |
-| `cmd/gc/order_dispatch.go` | Fires formula-backed orders |
-| `cmd/gc/wisp_gc.go` | Purges expired closed molecules |
-| Contributor docs | Reference formula layout and resolution behavior |
+| Depended on by             | How                                                |
+| -------------------------- | -------------------------------------------------- |
+| `cmd/gc/cmd_sling.go`      | Creates wisps and attached molecules from formulas |
+| `cmd/gc/order_dispatch.go` | Fires formula-backed orders                        |
+| `cmd/gc/wisp_gc.go`        | Purges expired closed molecules                    |
+| Contributor docs           | Reference formula layout and resolution behavior   |
 
 ## Code Map
 
-| Path | Responsibility |
-|---|---|
-| `cmd/gc/formula_resolve.go` | Layer winner selection and symlink staging |
-| `cmd/gc/cmd_sling.go` | Formula-backed sling and attached-molecule flows |
-| `cmd/gc/order_dispatch.go` | Formula-backed order dispatch |
-| `cmd/gc/wisp_gc.go` | TTL-based cleanup for closed molecules |
-| `internal/config/config.go` | `FormulaLayers` data shape |
-| `internal/config/pack.go` | `ComputeFormulaLayers()` |
-| `internal/beads/beads.go` | `MolCook` / `MolCookOn` store interface |
-| `internal/beads/bdstore.go` | Production formula instantiation via `bd` |
-| `internal/beads/exec/exec.go` | Script-backed formula instantiation |
-| `internal/beads/memstore.go` | Simplified in-memory molecule creation |
-| `internal/beads/filestore.go` | Persistent wrapper over `MemStore` |
-| `internal/convergence/formula.go` | Convergence-specific formula validation |
+| Path                              | Responsibility                                   |
+| --------------------------------- | ------------------------------------------------ |
+| `cmd/gc/formula_resolve.go`       | Layer winner selection and symlink staging       |
+| `cmd/gc/cmd_sling.go`             | Formula-backed sling and attached-molecule flows |
+| `cmd/gc/order_dispatch.go`        | Formula-backed order dispatch                    |
+| `cmd/gc/wisp_gc.go`               | TTL-based cleanup for closed molecules           |
+| `internal/config/config.go`       | `FormulaLayers` data shape                       |
+| `internal/config/pack.go`         | `ComputeFormulaLayers()`                         |
+| `internal/beads/beads.go`         | `MolCook` / `MolCookOn` store interface          |
+| `internal/beads/bdstore.go`       | Production formula instantiation via `bd`        |
+| `internal/beads/exec/exec.go`     | Script-backed formula instantiation              |
+| `internal/beads/memstore.go`      | Simplified in-memory molecule creation           |
+| `internal/beads/filestore.go`     | Persistent wrapper over `MemStore`               |
+| `internal/convergence/formula.go` | Convergence-specific formula validation          |
 
 ## Configuration
 

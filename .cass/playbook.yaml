@@ -11,12 +11,28 @@ metadata:
 deprecatedPatterns: []
 bullets:
   - id: b-agent-browser-t3code-20260511
-    content: For T3Code browser/UI audits, use agent-browser against the server origin
-      (`http://localhost:3773/`) by default, authenticate with a fresh bearer
-      token from `apps/server`, and collect snapshot, network, console, and
-      errors before changing code. Treat blank pages or `Failed to fetch` as
-      auth/preflight failures, and compare sidebar rows to resolved Gas City
-      config instead of live sessions only.
+    content: >-
+      For repeatable T3Code browser/UI audits in Vite dev mode, authenticate
+      agent-browser by issuing a fresh owner bearer session against the same
+      runtime state as the server and installing it as the `t3_session` cookie
+      on the browser origin. Example:
+      `T3_URL=http://localhost:5733; T3_HOME=/home/ubuntu/.t3; TOKEN=$(cd
+      /data/projects/t3code/apps/server && T3CODE_HOME="$T3_HOME"
+      VITE_DEV_SERVER_URL="$T3_URL" node src/bin.ts auth session issue --dev-url
+      "$T3_URL" --role owner --token-only 2>/tmp/t3-auth.err | sed '/^$/d' |
+      tail -n 1); agent-browser --session sidebar-audit cookies set t3_session
+      "$TOKEN" --url "$T3_URL/" --path / --sameSite Lax; agent-browser --session
+      sidebar-audit open "$T3_URL/"`. Do not rely on `agent-browser --headers`
+      for the SPA. Pairing tokens are single-use and are not the repeatable
+      audit path. Treat blank pages, `/pair`, or `Failed to fetch` as
+      auth/preflight failures. Accessibility snapshots can be empty even when
+      the T3 sidebar is rendered; if `document.body.innerText` contains sidebar
+      text, read actual rows with `agent-browser eval` from
+      `li[data-sidebar="menu-sub-item"]`, using `gc-rig-toggle-*`,
+      `gc-agent-folder-toggle-*`, `data-thread-item`, and row buttons/ARIA to
+      reconstruct the tree. Capture a screenshot for truncation/overlap/missing
+      labels, then close the browser session. Compare sidebar rows to resolved
+      Gas City config instead of live sessions only.
     category: integration
     kind: workflow_rule
     type: rule
@@ -31,7 +47,7 @@ bullets:
     state: draft
     maturity: candidate
     createdAt: 2026-05-10T14:25:15.000Z
-    updatedAt: 2026-05-10T14:25:15.000Z
+    updatedAt: 2026-05-11T16:45:00.000Z
     sourceSessions:
       - /home/ubuntu/.codex/sessions/2026/05/08/rollout-2026-05-08T21-21-40-019e0752-6198-7fe2-9343-e3e696bd5e3d.jsonl
     sourceAgents:

@@ -15,10 +15,10 @@ engine used by the `bd` provider.
 
 ## Providers
 
-| Provider | Purpose |
-| --- | --- |
-| `bd` | Default production provider. Gas City shells out to the Beads CLI (`bd`). |
-| `file` | JSON file store for lightweight local/tutorial use. |
+| Provider        | Purpose                                                                       |
+| --------------- | ----------------------------------------------------------------------------- |
+| `bd`            | Default production provider. Gas City shells out to the Beads CLI (`bd`).     |
+| `file`          | JSON file store for lightweight local/tutorial use.                           |
 | `exec:<script>` | External store provider. The script implements Gas City's JSON CRUD protocol. |
 
 `GC_BEADS` overrides `[beads].provider`.
@@ -28,10 +28,10 @@ engine used by the `bd` provider.
 The `bd` provider keeps Gas City on the normal Beads path. Backend selection
 happens inside `bd`, based on `.beads/metadata.json`.
 
-| Backend | Config | Lifecycle |
-| --- | --- | --- |
+| Backend     | Config                        | Lifecycle                                                                      |
+| ----------- | ----------------------------- | ------------------------------------------------------------------------------ |
 | Dolt server | `backend = "dolt"` or omitted | Gas City starts/manages the Dolt SQL server and auto-includes the `dolt` pack. |
-| doltlite | `backend = "doltlite"` | Gas City initializes `bd` with doltlite and does not start Dolt. |
+| doltlite    | `backend = "doltlite"`        | Gas City initializes `bd` with doltlite and does not start Dolt.               |
 
 `GC_BEADS_BACKEND` overrides `[beads].backend`.
 

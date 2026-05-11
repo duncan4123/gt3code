@@ -64,7 +64,7 @@ default = "integration/gascity-upstream-sync/"
 
 [vars.runtime_city]
 description = "Bundled T3Code GC city path"
-default = "/data/projects/t3code/packages/gascity-config/config"
+default = "packages/gascity-config/config"
 
 [vars.package_source_dir]
 description = "Vendored/package Gas City source tree inside T3Code"

@@ -41,29 +41,29 @@ needs = ["dry", "wet"]
 
 ## Common Top-Level Keys
 
-| Key | Type | Purpose |
-|---|---|---|
-| `formula` | string | Unique formula name used by `gc formula cook`, `gc sling --formula`, and `Store.MolCook*` |
-| `description` | string | Human-readable description |
-| `version` | integer | Optional formula version marker |
-| `extends` | []string | Optional parent formulas to compose from |
+| Key           | Type     | Purpose                                                                                   |
+| ------------- | -------- | ----------------------------------------------------------------------------------------- |
+| `formula`     | string   | Unique formula name used by `gc formula cook`, `gc sling --formula`, and `Store.MolCook*` |
+| `description` | string   | Human-readable description                                                                |
+| `version`     | integer  | Optional formula version marker                                                           |
+| `extends`     | []string | Optional parent formulas to compose from                                                  |
 
 ## Step Fields
 
 Each `[[steps]]` entry represents one task bead inside the instantiated
 molecule.
 
-| Key | Type | Purpose |
-|---|---|---|
-| `id` | string | Step identifier; unique within the formula |
-| `title` | string | Short step title |
-| `description` | string | Step instructions shown to the agent |
-| `needs` | []string | Step IDs that must complete before this step is ready |
-| `condition` | string | Equality expression (`{{var}} == value` or `!=`) — step is excluded when false |
-| `children` | []step | Nested sub-steps; parent acts as a container dependency |
-| `loop` | object | Static loop expansion: `count` iterations at compile time |
-| `check` | object | Runtime retry: `max_attempts` with a `check` script after each attempt |
-| `timeout` | duration string | Default timeout for this step's `check` script; `check.check.timeout` takes precedence |
+| Key           | Type            | Purpose                                                                                |
+| ------------- | --------------- | -------------------------------------------------------------------------------------- |
+| `id`          | string          | Step identifier; unique within the formula                                             |
+| `title`       | string          | Short step title                                                                       |
+| `description` | string          | Step instructions shown to the agent                                                   |
+| `needs`       | []string        | Step IDs that must complete before this step is ready                                  |
+| `condition`   | string          | Equality expression (`{{var}} == value` or `!=`) — step is excluded when false         |
+| `children`    | []step          | Nested sub-steps; parent acts as a container dependency                                |
+| `loop`        | object          | Static loop expansion: `count` iterations at compile time                              |
+| `check`       | object          | Runtime retry: `max_attempts` with a `check` script after each attempt                 |
+| `timeout`     | duration string | Default timeout for this step's `check` script; `check.check.timeout` takes precedence |
 
 ## Variable Substitution
 
@@ -79,11 +79,11 @@ gc sling worker deploy --formula --var env=prod
 Convergence uses a formula subset defined in
 [`internal/convergence/formula.go`](https://github.com/gastownhall/gascity/blob/main/internal/convergence/formula.go).
 
-| Key | Type | Purpose |
-|---|---|---|
-| `convergence` | bool | Must be `true` for convergence loops |
-| `required_vars` | []string | Variables that must be supplied at creation time |
-| `evaluate_prompt` | string | Optional prompt file for the controller-injected evaluate step |
+| Key               | Type     | Purpose                                                        |
+| ----------------- | -------- | -------------------------------------------------------------- |
+| `convergence`     | bool     | Must be `true` for convergence loops                           |
+| `required_vars`   | []string | Variables that must be supplied at creation time               |
+| `evaluate_prompt` | string   | Optional prompt file for the controller-injected evaluate step |
 
 ## Where Formulas Come From
 

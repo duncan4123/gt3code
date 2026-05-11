@@ -1391,9 +1391,10 @@ func buildThreadEnv(env map[string]string) map[string]string {
 }
 
 func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state string, sessionEnv map[string]string) map[string]interface{} {
+	cityName := normalizedGCCityName(envelope, sessionEnv)
 	groupKind := "workspace"
-	groupID := envelope.GC.CityName
-	groupLabel := strings.ToUpper(strings.TrimSpace(envelope.GC.CityName))
+	groupID := cityName
+	groupLabel := strings.ToUpper(cityName)
 	if strings.TrimSpace(envelope.GC.RigName) != "" {
 		groupKind = "rig"
 		groupID = envelope.GC.RigName
@@ -1412,7 +1413,7 @@ func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state string, se
 		"gc.sessionName":       envelope.GC.SessionName,
 		"gc.rig":               envelope.GC.RigName,
 		"gc.rigPath":           envelope.GC.RigPath,
-		"gc.city":              envelope.GC.CityName,
+		"gc.city":              cityName,
 		"gc.bead":              envelope.Assignment.BeadID,
 		"gc.beadTitle":         envelope.Assignment.BeadTitle,
 		"gc.convoy":            envelope.Assignment.ConvoyID,
@@ -1449,6 +1450,33 @@ func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state string, se
 		}
 	}
 	return meta
+}
+
+func normalizedGCCityName(envelope StartupEnvelope, sessionEnv map[string]string) string {
+	for _, value := range []string{
+		envelope.GC.CityName,
+		sessionEnv["GC_CITY_NAME"],
+		envelope.GC.CityPath,
+		sessionEnv["GC_CITY_PATH"],
+		sessionEnv["GC_CITY_ROOT"],
+		sessionEnv["GC_CITY"],
+	} {
+		if name := cleanGCCityName(value); name != "" && !strings.ContainsAny(name, `/\`) {
+			return name
+		}
+		if base := cleanGCCityName(filepath.Base(filepath.Clean(value))); base != "" {
+			return base
+		}
+	}
+	return "gc"
+}
+
+func cleanGCCityName(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "." || value == ".." || value == string(filepath.Separator) {
+		return ""
+	}
+	return value
 }
 
 func stateChangePayload(state string, extra map[string]interface{}) map[string]interface{} {

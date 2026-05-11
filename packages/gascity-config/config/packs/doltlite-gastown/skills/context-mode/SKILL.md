@@ -38,7 +38,7 @@ Bash whitelist (safe to run directly):
 ## MCP Launcher Source Of Truth
 
 - If an agent is running the wrong `context-mode`, check project/global MCP config files first.
-- For this repo, the safe launcher is `/usr/bin/node /data/projects/claude-context-mode/start.mjs`.
+- This pack does not hardcode a machine-local launcher path. Use the context-mode MCP server configured for the current clone/user.
 - After changing MCP config, restart the client/agent and run `ctx_doctor` to confirm the expected build is live.
 
 ## Decision Tree
