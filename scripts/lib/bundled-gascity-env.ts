@@ -1,15 +1,11 @@
 import * as NodeOS from "node:os";
 
-import {
-  getBundledGascityConfigLayout,
-  getDefaultGascityRuntimeRoot,
-  usesDoltliteBeadsBackend,
-} from "@t3tools/gascity-config";
+import { getDefaultGascityRuntimeRoot, usesDoltliteBeadsBackend } from "@t3tools/gascity-config";
 import { Effect, Path } from "effect";
 
 export const DEFAULT_GASCITY_API_URL = "http://127.0.0.1:8372";
 export const DEFAULT_T3CODE_GASCITY_HOME = getDefaultGascityRuntimeRoot();
-export const DEFAULT_GC_CITY_PATH = getBundledGascityConfigLayout().rootDir;
+export const DEFAULT_GC_CITY_PATH = "";
 
 export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) =>
   path.join(NodeOS.homedir(), ".t3"),
@@ -67,15 +63,15 @@ export function createBundledGascityProcessEnv({
     const gascityHome = baseEnv.T3CODE_GASCITY_HOME?.trim() || DEFAULT_T3CODE_GASCITY_HOME;
     const worktreesDir =
       baseEnv.T3CODE_WORKTREES_DIR?.trim() || path.join(resolvedBaseDir, "worktrees");
-    const cityPath = baseEnv.GC_CITY_PATH ?? baseEnv.GC_CITY ?? DEFAULT_GC_CITY_PATH;
+    const cityPath = baseEnv.GC_CITY_PATH ?? baseEnv.GC_CITY;
     const env = { ...baseEnv } satisfies NodeJS.ProcessEnv;
-    if (usesDoltliteBeadsBackend(cityPath)) {
+    if (cityPath && usesDoltliteBeadsBackend(cityPath)) {
       env.GC_BEADS_BACKEND ??= "doltlite";
       env.BEADS_BACKEND ??= "doltlite";
     }
     clearDoltServerEnv(env);
 
-    return {
+    const output: NodeJS.ProcessEnv = {
       ...env,
       T3CODE_HOME: resolvedBaseDir,
       T3CODE_GASCITY_HOME: gascityHome,
@@ -88,7 +84,10 @@ export function createBundledGascityProcessEnv({
       BD_BIN:
         baseEnv.BD_BIN ??
         path.join(gascityHome, "bin", process.platform === "win32" ? "bd.exe" : "bd"),
-      GC_CITY_PATH: cityPath,
     };
+    if (cityPath) {
+      output.GC_CITY_PATH = cityPath;
+    }
+    return output;
   });
 }

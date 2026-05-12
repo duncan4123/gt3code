@@ -10,11 +10,7 @@ import * as VcsDriverRegistry from "./VcsDriverRegistry.ts";
 const commandCalls = (calls: ReadonlyArray<VcsProcess.VcsProcessInput>) =>
   calls.map((call) => [call.command].concat(call.args));
 
-const processOutput = (
-  stdout: string,
-  exitCode = 0,
-  stderr = "",
-): VcsProcess.VcsProcessOutput => ({
+const processOutput = (stdout: string, exitCode = 0, stderr = ""): VcsProcess.VcsProcessOutput => ({
   exitCode: ChildProcessSpawner.ExitCode(exitCode),
   stdout,
   stderr,

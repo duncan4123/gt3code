@@ -95,10 +95,9 @@ function gcAgentQualifiedName(input: {
     return input.agent;
   }
 
-  const rigCandidates = [
-    normalizedIdentifier(input.rig),
-    normalizedLeafName(input.rig),
-  ].filter((candidate): candidate is string => Boolean(candidate));
+  const rigCandidates = [normalizedIdentifier(input.rig), normalizedLeafName(input.rig)].filter(
+    (candidate): candidate is string => Boolean(candidate),
+  );
   for (const candidate of new Set(rigCandidates)) {
     if (input.agent.startsWith(`${candidate}/`)) {
       return `${input.groupId}/${input.agent.slice(candidate.length + 1)}`;

@@ -108,6 +108,10 @@ const GASCITY_BR_RIG_BINDINGS = [
     name: "beads_rust",
     path: path.join(getBundledGascityConfigLayout("gascity-br").rootDir, "rigs", "beads_rust"),
   },
+  {
+    name: "t3-jj",
+    path: path.join(getBundledGascityConfigLayout("gascity-br").rootDir, "rigs", "t3code"),
+  },
 ] as const;
 
 class GcApiClientStartError extends Error {
@@ -2135,8 +2139,7 @@ async function readGcLifecycleStatusFromSupervisorApi(input: {
           (input.cityName && record.name === input.cityName) ||
           (input.cityPath && record.path === input.cityPath)
         );
-      }) ??
-      (!input.cityName && !input.cityPath && items.length === 1 ? items[0] : null);
+      }) ?? (!input.cityName && !input.cityPath && items.length === 1 ? items[0] : null);
     const controllerRunning =
       city && typeof city === "object" && !Array.isArray(city)
         ? Boolean((city as Record<string, unknown>).running)
@@ -2168,11 +2171,20 @@ const makeGcApiClient = Effect.gen(function* () {
   const settings = yield* serverSettings.getSettings;
   const gcSettings = settings.providers.gc;
   const configuredBaseUrl = yield* Config.string("GC_API_URL").pipe(Config.option);
+  const configuredCityPath = yield* Config.string("GC_CITY_PATH").pipe(Config.option);
+  const configuredCity = yield* Config.string("GC_CITY").pipe(Config.option);
   const configuredCityName = yield* Config.string("GC_CITY_NAME").pipe(Config.option);
   const runtimeHome = expandHomePath(gcSettings.runtimeHome);
-  const cityPath =
-    resolveConfiguredGcCityPath(gcSettings.cityPath) ??
-    discoverGcCityRoot(process.cwd(), runtimeHome);
+  const envCityPath =
+    Option.getOrUndefined(configuredCityPath)?.trim() ||
+    Option.getOrUndefined(configuredCity)?.trim() ||
+    null;
+  const configuredSettingsCityPath = gcSettings.cityPath.trim();
+  const explicitCityPath = envCityPath || configuredSettingsCityPath || null;
+  const cityPath = explicitCityPath
+    ? (resolveConfiguredGcCityPath(explicitCityPath) ??
+      discoverGcCityRoot(process.cwd(), runtimeHome))
+    : findGcCityRootUpward(process.cwd());
   const configuredSettingsApiUrl =
     gcSettings.apiUrl.trim() && !isDefaultGcApiUrl(gcSettings.apiUrl)
       ? gcSettings.apiUrl
@@ -2195,8 +2207,7 @@ const makeGcApiClient = Effect.gen(function* () {
     Option.isSome(configuredCityName) || (cityPath !== null && cityPath.trim().length > 0);
   const routeMode = useCityScopedRoutes ? "city-scoped" : "legacy";
   const useBundledCityCatalog =
-    gcSettings.cityPath.trim() === DEFAULT_GC_CITY_PATH ||
-    (cityPath ? isBundledGcCityRoot(cityPath) : false);
+    explicitCityPath === null || (cityPath ? isBundledGcCityRoot(cityPath) : false);
   if (useBundledCityCatalog) {
     ensureBundledGcRuntimeRegistry(runtimeHome);
   }
@@ -2209,6 +2220,7 @@ const makeGcApiClient = Effect.gen(function* () {
     cwd: process.cwd(),
     routeMode,
     hasConfiguredBaseUrl: Option.isSome(configuredBaseUrl),
+    hasConfiguredCityPath: explicitCityPath !== null,
     hasConfiguredCityName: Option.isSome(configuredCityName),
   });
   if (!cityPath && !Option.isSome(configuredBaseUrl)) {
@@ -2383,9 +2395,8 @@ const makeGcApiClient = Effect.gen(function* () {
     const raw = await fetchJson<unknown>("/v0/cities");
     const cities = normalizeSupervisorCities(raw);
     const bundledCities = useBundledCityCatalog ? bundledGcSupervisorCities() : [];
-    const effectiveCities = bundledCities.length > 0
-      ? overlaySupervisorRuntimeState(bundledCities, cities)
-      : cities;
+    const effectiveCities =
+      bundledCities.length > 0 ? overlaySupervisorRuntimeState(bundledCities, cities) : cities;
     if (effectiveCities.length > 0) {
       lastKnownSupervisorCities = effectiveCities;
     }
@@ -2672,16 +2683,18 @@ const makeGcApiClient = Effect.gen(function* () {
               if (!normalizedConfig) {
                 return null;
               }
-              const lifecycle = (await readGcLifecycleStatusFromSupervisorApi({
-                baseUrl,
-                cityName: city.name,
-                cityPath: city.path,
-              })) ?? readGcLifecycleStatus({
-                binaryPath: gcCliBinary,
-                runtimeHome,
-                cityPath: city.path,
-                supervisorBaseUrl: baseUrl,
-              });
+              const lifecycle =
+                (await readGcLifecycleStatusFromSupervisorApi({
+                  baseUrl,
+                  cityName: city.name,
+                  cityPath: city.path,
+                })) ??
+                readGcLifecycleStatus({
+                  binaryPath: gcCliBinary,
+                  runtimeHome,
+                  cityPath: city.path,
+                  supervisorBaseUrl: baseUrl,
+                });
               return prefixGcConfigForCity(withLifecycleStatus(normalizedConfig, lifecycle), city);
             }),
           );

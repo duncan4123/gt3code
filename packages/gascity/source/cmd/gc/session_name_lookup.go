@@ -155,6 +155,9 @@ func createPoolSessionBead(
 		_ = store.Close(bead.ID)
 		return beads.Bead{}, err
 	}
+	if bead.Metadata == nil {
+		bead.Metadata = make(map[string]string, 1)
+	}
 	bead.Metadata["session_name"] = sessionName
 	if sessionBeads != nil {
 		sessionBeads.add(bead)

@@ -208,10 +208,8 @@ function gcNestedRigParentId(
 function gcRigGroupDisplayLabel(rigGroup: SidebarGcRigGroup, parentId: string | undefined): string {
   const label = rigGroup.label.trim();
   const fallbackLabel =
-    rigGroup.id
-      .split("/")
-      .filter(Boolean)
-      .at(-1) ?? (rigGroup.kind === "workspace" ? "City" : "Rig");
+    rigGroup.id.split("/").filter(Boolean).at(-1) ??
+    (rigGroup.kind === "workspace" ? "City" : "Rig");
   if (!parentId) {
     return label || fallbackLabel;
   }
@@ -719,8 +717,8 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
     const supervisorMutationInFlight = Boolean(props.gcSupervisorMutationInFlight && lifecycle);
     const controllerMutationInFlight = Boolean(
       lifecycle &&
-        (props.gcControllerMutationInFlight ||
-          props.gcCityControllerMutationsInFlight?.has(rigGroup.id)),
+      (props.gcControllerMutationInFlight ||
+        props.gcCityControllerMutationsInFlight?.has(rigGroup.id)),
     );
     const supervisorActionLabel = lifecycle?.supervisorRunning
       ? `Stop shared Gas City supervisor from ${displayLabel}`
@@ -825,10 +823,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
-                        props.onSetSupervisorRunning?.(
-                          rigGroup.id,
-                          !lifecycle.supervisorRunning,
-                        );
+                        props.onSetSupervisorRunning?.(rigGroup.id, !lifecycle.supervisorRunning);
                       }}
                     >
                       {supervisorMutationInFlight ? (

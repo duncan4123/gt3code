@@ -877,9 +877,7 @@ export function groupThreadsByRigAndAgent<
     const canonicalAgentQualified = normalizeMetadataValue(meta.agentQualified);
     const canonicalAgentLabel = normalizeMetadataValue(meta.agentLabel);
     const cityWorkspaceGroupId =
-      resolvedCity && multiCityWorkspaceIds.has(resolvedCity)
-        ? resolvedCity
-        : cityScopedRigGroupId;
+      resolvedCity && multiCityWorkspaceIds.has(resolvedCity) ? resolvedCity : cityScopedRigGroupId;
     let resolvedRig =
       meta.groupKind === "workspace" && cityWorkspaceGroupId
         ? cityWorkspaceGroupId
@@ -927,11 +925,7 @@ export function groupThreadsByRigAndAgent<
       multiCityWorkspaceIds,
     });
 
-    if (
-      isMergedMultiCityConfig &&
-      resolvedCity &&
-      !multiCityWorkspaceIds.has(resolvedCity)
-    ) {
+    if (isMergedMultiCityConfig && resolvedCity && !multiCityWorkspaceIds.has(resolvedCity)) {
       standaloneThreads.push(thread);
       continue;
     }

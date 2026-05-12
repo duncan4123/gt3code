@@ -26,11 +26,11 @@ from source on restart.
 
 Default for sidebar testing:
 
-| Scope | Deletes | Keeps |
-| --- | --- | --- |
-| T3Code app reset | `~/.t3/*/state*.sqlite`, app runtime caches/logs/worktrees | GC workspace Beads DBs |
-| GC process runtime reset | supervisor/controller sockets, logs, generated `.gc` workdirs | city workspace Beads DBs, source config |
-| Session-bead scrub | `issue_type='session'` / `gc:session` rows inside each city workspace DB | DB files and non-session beads |
+| Scope                    | Deletes                                                                  | Keeps                                   |
+| ------------------------ | ------------------------------------------------------------------------ | --------------------------------------- |
+| T3Code app reset         | `~/.t3/*/state*.sqlite`, app runtime caches/logs/worktrees               | GC workspace Beads DBs                  |
+| GC process runtime reset | supervisor/controller sockets, logs, generated `.gc` workdirs            | city workspace Beads DBs, source config |
+| Session-bead scrub       | `issue_type='session'` / `gc:session` rows inside each city workspace DB | DB files and non-session beads          |
 
 Only run the full Beads rebuild section when you explicitly want cities to
 recreate their Beads storage from scratch.
@@ -273,7 +273,7 @@ done
 Expected result for each workspace DB that contains session beads:
 
 ```json
-{"after":{"sessionIssues":0,"gcSessionLabels":0}}
+{ "after": { "sessionIssues": 0, "gcSessionLabels": 0 } }
 ```
 
 ## Optional: Full GC/Beads Workspace Rebuild

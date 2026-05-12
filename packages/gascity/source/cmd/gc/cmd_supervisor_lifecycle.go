@@ -668,7 +668,9 @@ func buildSupervisorServiceData() (*supervisorServiceData, error) {
 		LaunchdLabel:    supervisorLaunchdLabel(),
 		SafeName:        sanitizeServiceName(filepath.Base(home)),
 		Path:            searchpath.ExpandPath(homeDir, goruntime.GOOS, os.Getenv("PATH")),
-		GCCityPath:      strings.TrimSpace(os.Getenv("GC_CITY_PATH")),
+		// The machine-wide supervisor reads its city registry and must not be
+		// pinned to whichever city happened to invoke `gc start`.
+		GCCityPath:      "",
 		GCBeadsBackend:  strings.TrimSpace(os.Getenv("GC_BEADS_BACKEND")),
 		GCBin:           strings.TrimSpace(os.Getenv("GC_BIN")),
 		BDBin:           strings.TrimSpace(os.Getenv("BD_BIN")),
