@@ -1,13 +1,4 @@
-issue_prefix: t3
-issue-prefix: t3
-dolt.auto-start: false
-gc.endpoint_origin: inherited_city
-gc.endpoint_status: verified
-
-backup.enabled: false
-
-backup.git-push: false
-
-export.auto: false
-dolt.shared-server: false
-types.custom: "molecule,convoy,message,event,gate,merge-request,agent,role,rig,session,spec,convergence"
+# Beads Project Configuration
+# issue_prefix: tj
+# default_priority: 2
+# default_type: task
