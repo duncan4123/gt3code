@@ -40,6 +40,10 @@ const gascityBrRigBindings = [
     name: "beads_rust",
     path: join(defaultCityRoot, "..", "gascity-br", "rigs", "beads_rust"),
   },
+  {
+    name: "t3-jj",
+    path: join(defaultCityRoot, "..", "gascity-br", "rigs", "t3code"),
+  },
 ] as const;
 
 const command = process.argv[2] ?? "help";
@@ -503,6 +507,7 @@ function ensureRuntimeCommandLinks(runtime: RuntimePaths): void {
   const linkTargets = [
     { command: "gc", target: runtime.gcBinaryPath },
     { command: "bd", target: runtime.bdBinaryPath },
+    { command: "br", target: runtime.brBinaryPath },
     { command: "gc-beads-br", target: runtime.brBeadsScriptPath },
   ] as const;
   const userBinDirs = [join(homedir(), "go", "bin"), join(homedir(), ".local", "bin")];
@@ -549,11 +554,11 @@ function copyRuntimeFile(
 
 function runGc(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
   const gcApiUrl = resolveGcApiUrl(runtime);
+  const selectedCityPath = selectedCityPathForEnv(runtime, args);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     GC_HOME: runtime.rootDir,
     T3CODE_GASCITY_HOME: runtime.rootDir,
-    GC_CITY_PATH: runtime.cityDir,
     GC_BIN: runtime.gcBinaryPath,
     BD_BIN: runtime.bdBinaryPath,
     BR_BIN: runtime.brBinaryPath,
@@ -561,13 +566,78 @@ function runGc(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
     GC_WORKTREES_DIR: runtime.worktreesDir,
     GC_API_URL: gcApiUrl,
   };
+  if (selectedCityPath) {
+    env.GC_CITY_PATH = selectedCityPath;
+    env.GC_CITY = selectedCityPath;
+  }
   prepareRuntimeEnv(env, dirname(runtime.gcBinaryPath));
-  const result = spawnSync(runtime.gcBinaryPath, ["--city", runtime.cityDir, ...args], {
+  const result = spawnSync(runtime.gcBinaryPath, gcArgsForRuntime(runtime, args), {
     cwd: repoRoot,
     env,
     stdio: "inherit",
   });
   process.exit(result.status ?? 1);
+}
+
+function gcArgsForRuntime(runtime: RuntimePaths, args: ReadonlyArray<string>): string[] {
+  if (argsSelectCity(args)) {
+    return [...args];
+  }
+  return ["--city", runtime.cityDir, ...args];
+}
+
+function selectedCityPathForEnv(
+  runtime: RuntimePaths,
+  args: ReadonlyArray<string>,
+): string | null {
+  const command = args[0];
+  if (command === "cities" || command === "supervisor") {
+    return selectedCityPathFromArgs(args);
+  }
+  return selectedCityPathFromArgs(args) ?? runtime.cityDir;
+}
+
+function argsSelectCity(args: ReadonlyArray<string>): boolean {
+  if (selectedCityPathFromArgs(args)) {
+    return true;
+  }
+  const command = args[0];
+  if (!command) {
+    return false;
+  }
+  if (command === "start" || command === "register") {
+    const target = args[1];
+    return typeof target === "string" && target.length > 0 && !target.startsWith("-");
+  }
+  return command === "cities" || command === "supervisor";
+}
+
+function selectedCityPathFromArgs(args: ReadonlyArray<string>): string | null {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--city") {
+      return args[index + 1] ?? null;
+    }
+    if (arg?.startsWith("--city=")) {
+      return arg.slice("--city=".length);
+    }
+  }
+  const command = args[0];
+  if (command !== "start" && command !== "register") {
+    return null;
+  }
+  for (let index = 1; index < args.length; index += 1) {
+    const arg = args[index];
+    if (!arg) continue;
+    if (arg.startsWith("-")) {
+      if (arg === "--name" || arg === "--rig") {
+        index += 1;
+      }
+      continue;
+    }
+    return arg;
+  }
+  return null;
 }
 
 function resolveGcApiUrl(runtime: RuntimePaths): string {

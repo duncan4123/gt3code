@@ -1,0 +1,103 @@
+description = """
+JJ lander patrol.
+
+The lander serializes accepted changes onto the target bookmark. Workers
+submit JJ change IDs; the lander validates, rebases, moves the target
+bookmark, pushes, and closes beads.
+
+Use the beads-rust `brj`, `brt`, `brlist`, `brmeta`, and `brmeta_set` helpers
+from the beads-rust prompt fragment. Do not use `bd`.
+"""
+formula = "mol-jj-lander-patrol"
+version = 1
+contract = "graph.v2"
+
+[vars]
+[vars.target]
+description = "Target bookmark to land onto"
+default = "main"
+
+[vars.worker]
+description = "Worker pool suffix"
+default = "worker"
+
+[vars.binding_prefix]
+description = "Rig binding prefix"
+default = ""
+
+[[steps]]
+id = "select-work"
+title = "Select one submitted JJ change"
+description = """
+Find one open work bead assigned to this lander:
+
+```bash
+WORK=$(brlist --status=open --assignee="${GC_RIG:+$GC_RIG/}{{binding_prefix}}lander" | jq -r '.[0].id // empty')
+```
+
+If no work is queued, pour the next patrol wisp and exit cleanly.
+
+Read required metadata:
+
+```bash
+META=$(brmeta get "$WORK")
+JJ_CHANGE=$(printf '%s' "$META" | jq -r '.jj_change // empty')
+WORK_DIR=$(printf '%s' "$META" | jq -r '.work_dir // empty')
+TARGET=$(printf '%s' "$META" | jq -r '.target // "{{target}}"')
+```
+
+Reject the bead if `jj_change` or `work_dir` is missing.
+"""
+
+[[steps]]
+id = "validate-change"
+title = "Validate submitted change"
+needs = ["select-work"]
+description = """
+Use the submitted workspace when it exists:
+
+```bash
+cd "$WORK_DIR"
+jj workspace update-stale || true
+jj status
+jj show "$JJ_CHANGE"
+```
+
+Confirm the change is still reviewable and based on the intended target stack.
+If it needs code changes, return it to the worker pool with
+`rejection_reason`.
+"""
+
+[[steps]]
+id = "land-change"
+title = "Land change serially"
+needs = ["validate-change"]
+description = """
+Only land one change per patrol iteration.
+
+```bash
+cd "$WORK_DIR"
+jj git fetch --remote origin
+jj rebase -r "$JJ_CHANGE" -d "$TARGET"
+jj bookmark set "$TARGET" -r "$JJ_CHANGE" --allow-backwards
+jj git push --remote origin --bookmark "$TARGET"
+brmeta_set "$WORK" landed_commit "$(jj log -r "$JJ_CHANGE" --no-graph --template 'commit_id.short()')"
+brt close "$WORK" --reason fixed
+```
+
+If rebase or push fails, do not repair feature code. Record
+`rejection_reason`, route back to worker, and continue with the next patrol.
+"""
+
+[[steps]]
+id = "continue-loop"
+title = "Pour next patrol wisp"
+needs = ["land-change"]
+description = """
+Pour the next lander patrol wisp and assign it to yourself:
+
+```bash
+NEXT=$(gc bd mol wisp mol-jj-lander-patrol --root-only --var target={{target}} --var binding_prefix={{binding_prefix}} --json | jq -r '.new_epic_id')
+brt update "$NEXT" --assignee="$GC_ALIAS"
+```
+"""

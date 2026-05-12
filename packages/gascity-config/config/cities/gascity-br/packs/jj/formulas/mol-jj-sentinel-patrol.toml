@@ -1,0 +1,66 @@
+description = """
+JJ sentinel patrol.
+
+Sentinel detects stale workspaces, orphaned worker state, and submitted work
+that is no longer making progress. It repairs routing metadata or escalates.
+
+Use the beads-rust `brj`, `brt`, `brlist`, `brmeta`, and `brmeta_set` helpers
+from the beads-rust prompt fragment. Do not use `bd`.
+"""
+formula = "mol-jj-sentinel-patrol"
+version = 1
+contract = "graph.v2"
+
+[vars]
+[vars.worker]
+description = "Worker pool suffix"
+default = "worker"
+
+[vars.binding_prefix]
+description = "Rig binding prefix"
+default = ""
+
+[[steps]]
+id = "scan-workspaces"
+title = "Scan JJ workspaces"
+description = """
+From the rig root:
+
+```bash
+cd "${GC_RIG_ROOT:?GC_RIG_ROOT required}"
+jj workspace list
+find .gc/jj/workspaces -maxdepth 2 -type d 2>/dev/null || true
+```
+
+Record any workspace that exists on disk but has no open bead metadata.
+Do not delete anything during this step.
+"""
+
+[[steps]]
+id = "scan-beads"
+title = "Scan bead metadata"
+needs = ["scan-workspaces"]
+description = """
+Look for open beads with `work_dir`, `jj_workspace`, or `jj_change` metadata.
+
+For each bead:
+- If assigned worker session is gone and `work_dir` exists, return it to the
+  worker pool with existing metadata preserved.
+- If `work_dir` is missing but `jj_change` exists, route to lander for review.
+- If both are missing, clear stale JJ metadata and return to worker pool.
+
+Use `brmeta_set` to update `gc.routed_to` before changing assignee.
+"""
+
+[[steps]]
+id = "continue-loop"
+title = "Pour next sentinel patrol"
+needs = ["scan-beads"]
+description = """
+Pour the next sentinel patrol wisp and assign it to yourself:
+
+```bash
+NEXT=$(gc bd mol wisp mol-jj-sentinel-patrol --root-only --var binding_prefix={{binding_prefix}} --json | jq -r '.new_epic_id')
+brt update "$NEXT" --assignee="$GC_ALIAS"
+```
+"""

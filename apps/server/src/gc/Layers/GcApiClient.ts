@@ -108,6 +108,10 @@ const GASCITY_BR_RIG_BINDINGS = [
     name: "beads_rust",
     path: path.join(getBundledGascityConfigLayout("gascity-br").rootDir, "rigs", "beads_rust"),
   },
+  {
+    name: "t3-jj",
+    path: path.join(getBundledGascityConfigLayout("gascity-br").rootDir, "rigs", "t3code"),
+  },
 ] as const;
 
 class GcApiClientStartError extends Error {
@@ -2168,11 +2172,20 @@ const makeGcApiClient = Effect.gen(function* () {
   const settings = yield* serverSettings.getSettings;
   const gcSettings = settings.providers.gc;
   const configuredBaseUrl = yield* Config.string("GC_API_URL").pipe(Config.option);
+  const configuredCityPath = yield* Config.string("GC_CITY_PATH").pipe(Config.option);
+  const configuredCity = yield* Config.string("GC_CITY").pipe(Config.option);
   const configuredCityName = yield* Config.string("GC_CITY_NAME").pipe(Config.option);
   const runtimeHome = expandHomePath(gcSettings.runtimeHome);
-  const cityPath =
-    resolveConfiguredGcCityPath(gcSettings.cityPath) ??
-    discoverGcCityRoot(process.cwd(), runtimeHome);
+  const envCityPath =
+    Option.getOrUndefined(configuredCityPath)?.trim() ||
+    Option.getOrUndefined(configuredCity)?.trim() ||
+    null;
+  const configuredSettingsCityPath = gcSettings.cityPath.trim();
+  const explicitCityPath = envCityPath || configuredSettingsCityPath || null;
+  const cityPath = explicitCityPath
+    ? (resolveConfiguredGcCityPath(explicitCityPath) ??
+      discoverGcCityRoot(process.cwd(), runtimeHome))
+    : findGcCityRootUpward(process.cwd());
   const configuredSettingsApiUrl =
     gcSettings.apiUrl.trim() && !isDefaultGcApiUrl(gcSettings.apiUrl)
       ? gcSettings.apiUrl
@@ -2195,8 +2208,7 @@ const makeGcApiClient = Effect.gen(function* () {
     Option.isSome(configuredCityName) || (cityPath !== null && cityPath.trim().length > 0);
   const routeMode = useCityScopedRoutes ? "city-scoped" : "legacy";
   const useBundledCityCatalog =
-    gcSettings.cityPath.trim() === DEFAULT_GC_CITY_PATH ||
-    (cityPath ? isBundledGcCityRoot(cityPath) : false);
+    explicitCityPath === null || (cityPath ? isBundledGcCityRoot(cityPath) : false);
   if (useBundledCityCatalog) {
     ensureBundledGcRuntimeRegistry(runtimeHome);
   }
@@ -2209,6 +2221,7 @@ const makeGcApiClient = Effect.gen(function* () {
     cwd: process.cwd(),
     routeMode,
     hasConfiguredBaseUrl: Option.isSome(configuredBaseUrl),
+    hasConfiguredCityPath: explicitCityPath !== null,
     hasConfiguredCityName: Option.isSome(configuredCityName),
   });
   if (!cityPath && !Option.isSome(configuredBaseUrl)) {

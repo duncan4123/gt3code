@@ -1,6 +1,6 @@
 [workspace]
 prefix = "co"
-suspended = false
+suspended = true
 global_fragments = ["command-glossary", "operational-awareness"]
 
 [[agent]]
@@ -189,20 +189,20 @@ suspended = true
 [[rigs]]
 name = "t3code"
 prefix = "t3"
-suspended = false
+suspended = true
 includes = ["../../packs/gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "refinery"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "witness"
-suspended = false
+suspended = true
 
 [[rigs]]
 name = "test-rig"

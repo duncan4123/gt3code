@@ -27,10 +27,11 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.equal(env.T3CODE_GASCITY_HOME, DEFAULT_T3CODE_GASCITY_HOME);
       assert.equal(env.T3CODE_WORKTREES_DIR, expectedWorktreesDir);
       assert.equal(env.GC_WORKTREES_DIR, expectedWorktreesDir);
-      assert.equal(env.GC_CITY_PATH, DEFAULT_GC_CITY_PATH);
+      assert.equal(DEFAULT_GC_CITY_PATH, "");
+      assert.equal(env.GC_CITY_PATH, undefined);
       assert.equal(env.GC_API_URL, "http://127.0.0.1:8372");
-      assert.equal(env.GC_BEADS_BACKEND, "doltlite");
-      assert.equal(env.BEADS_BACKEND, "doltlite");
+      assert.equal(env.GC_BEADS_BACKEND, undefined);
+      assert.equal(env.BEADS_BACKEND, undefined);
       assert.equal(
         env.GC_BIN,
         path.join(expectedBinDir, process.platform === "win32" ? "gc.exe" : "gc"),
@@ -85,6 +86,22 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
     }),
   );
 
+  it.effect("forces doltlite backend for the gastown city", () =>
+    Effect.gen(function* () {
+      const cityPath = getBundledGascityConfigLayout("gastown").rootDir;
+      const env = yield* createBundledGascityProcessEnv({
+        baseEnv: {
+          GC_CITY_PATH: cityPath,
+        },
+        t3Home: undefined,
+      });
+
+      assert.equal(env.GC_CITY_PATH, cityPath);
+      assert.equal(env.GC_BEADS_BACKEND, "doltlite");
+      assert.equal(env.BEADS_BACKEND, "doltlite");
+    }),
+  );
+
   it.effect("drops stale Dolt server env while keeping bundled runtime wiring", () =>
     Effect.gen(function* () {
       const env = yield* createBundledGascityProcessEnv({
@@ -103,8 +120,8 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.equal(env.BEADS_DOLT_PORT, undefined);
       assert.equal(env.BEADS_DOLT_SERVER_HOST, undefined);
       assert.equal(env.BEADS_DOLT_SHARED_SERVER, undefined);
-      assert.equal(env.GC_BEADS_BACKEND, "doltlite");
-      assert.equal(env.BEADS_BACKEND, "doltlite");
+      assert.equal(env.GC_BEADS_BACKEND, undefined);
+      assert.equal(env.BEADS_BACKEND, undefined);
     }),
   );
 });
