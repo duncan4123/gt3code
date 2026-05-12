@@ -1,0 +1,113 @@
+description = """
+JJ worker lifecycle.
+
+The worker owns one code bead, creates or resumes one JJ workspace for that
+bead, submits a Jorje review, records metadata, and routes the bead to lander.
+
+Use the beads-rust `brj`, `brt`, `brmeta`, `brmeta_set`, and `brmeta_unset`
+helpers from the beads-rust prompt fragment. Do not use `bd`.
+"""
+formula = "mol-jj-worker-work"
+version = 1
+contract = "graph.v2"
+
+[vars]
+[vars.target]
+description = "Target bookmark to build on"
+default = "main"
+
+[vars.lander]
+description = "Lander agent suffix"
+default = "lander"
+
+[vars.binding_prefix]
+description = "Rig binding prefix"
+default = ""
+
+[[steps]]
+id = "prepare-workspace"
+title = "Create or resume JJ workspace"
+description = """
+Read existing metadata:
+
+```bash
+META=$(brmeta get {{issue}})
+WORK_DIR=$(printf '%s' "$META" | jq -r '.work_dir // empty')
+JJ_WORKSPACE=$(printf '%s' "$META" | jq -r '.jj_workspace // empty')
+TARGET=$(printf '%s' "$META" | jq -r '.target // "{{target}}"')
+```
+
+If `WORK_DIR` exists and is a directory, use it:
+
+```bash
+cd "$WORK_DIR"
+jj workspace update-stale || true
+```
+
+Otherwise create a bead-scoped workspace from the target bookmark:
+
+```bash
+cd "${GC_RIG_ROOT:?GC_RIG_ROOT required}"
+SAFE_ISSUE=$(printf '%s' "{{issue}}" | tr -c 'A-Za-z0-9._-' '-')
+JJ_WORKSPACE="gc-${SAFE_ISSUE}-${GC_AGENT_BASE:-${GC_SESSION_NAME:-worker}}"
+WORK_DIR="$GC_RIG_ROOT/.gc/jj/workspaces/$JJ_WORKSPACE"
+mkdir -p "$(dirname "$WORK_DIR")"
+jj workspace add --name "$JJ_WORKSPACE" -r "$TARGET" -m "{{issue}}: work" "$WORK_DIR"
+cd "$WORK_DIR"
+brmeta_set {{issue}} work_dir "$WORK_DIR"
+brmeta_set {{issue}} jj_workspace "$JJ_WORKSPACE"
+brmeta_set {{issue}} jj_parent "$TARGET"
+brmeta_set {{issue}} target "$TARGET"
+```
+
+Exit criteria: `pwd` is the bead workspace and `jj status` succeeds.
+"""
+
+[[steps]]
+id = "implement-change"
+title = "Implement one logical JJ change"
+needs = ["prepare-workspace"]
+description = """
+Work only in the current JJ workspace.
+
+Keep the change reviewable. Use `jj split` or create follow-up beads instead
+of mixing unrelated work.
+
+Before handoff:
+
+```bash
+jj status
+jj describe -m "{{issue}}: <short summary>"
+JJ_CHANGE=$(jj log -r @ --no-graph --template 'change_id')
+brmeta_set {{issue}} jj_change "$JJ_CHANGE"
+```
+
+Run only checks requested by the bead, mayor, or user. Do not invent broad test
+runs.
+"""
+
+[[steps]]
+id = "submit-review"
+title = "Push Jorje review and route to lander"
+needs = ["implement-change"]
+description = """
+Push the current JJ change for review:
+
+```bash
+jj git push --remote jorje -c @
+JJ_CHANGE=$(jj log -r @ --no-graph --template 'change_id')
+JJ_COMMIT=$(jj log -r @ --no-graph --template 'commit_id.short()')
+brmeta_set {{issue}} jj_change "$JJ_CHANGE"
+brmeta_set {{issue}} jj_commit "$JJ_COMMIT"
+brmeta_set {{issue}} review_remote "jorje"
+brmeta_set {{issue}} gc.routed_to "${GC_RIG:+$GC_RIG/}{{binding_prefix}}{{lander}}"
+brt update {{issue}} --assignee="${GC_RIG:+$GC_RIG/}{{binding_prefix}}{{lander}}" --status=open
+```
+
+Then drain this worker session:
+
+```bash
+gc runtime drain-ack
+exit
+```
+"""

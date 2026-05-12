@@ -1,0 +1,6 @@
+scope = "rig"
+wake_mode = "fresh"
+work_dir = ".gc/jj/agents/{{.Rig}}/planner"
+nudge = "Check mail, then create or refine stack-shaped work beads."
+idle_timeout = "1h"
+max_active_sessions = 1

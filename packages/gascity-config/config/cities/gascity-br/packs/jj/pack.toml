@@ -1,0 +1,22 @@
+[pack]
+name = "jj"
+version = "0.2.0"
+schema = 2
+
+[formulas]
+dir = "formulas"
+
+[[named_session]]
+template = "planner"
+scope = "rig"
+mode = "on_demand"
+
+[[named_session]]
+template = "lander"
+scope = "rig"
+mode = "always"
+
+[[named_session]]
+template = "sentinel"
+scope = "rig"
+mode = "always"

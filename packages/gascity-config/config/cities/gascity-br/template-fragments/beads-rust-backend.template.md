@@ -22,6 +22,20 @@ br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" --json gc-meta
 printf '{"key":"value"}' | br --db "$BR_DB" --actor "${GC_SESSION_NAME:-${GC_AGENT:-agent}}" gc-metadata set <id>
 ```
 
+For repeated work, define helpers in the current shell:
+
+```bash
+BR_ROOT="${GC_RIG_ROOT:-{{ .RigRoot }}}"
+BR_DB="$BR_ROOT/.beads/beads.db"
+BR_ACTOR="${GC_SESSION_NAME:-${GC_AGENT:-agent}}"
+brj() { br --db "$BR_DB" --actor "$BR_ACTOR" --json "$@"; }
+brt() { br --db "$BR_DB" --actor "$BR_ACTOR" "$@"; }
+brlist() { brj list "$@" | jq -c '.issues // .'; }
+brmeta() { br --db "$BR_DB" --actor "$BR_ACTOR" --json gc-metadata "$@"; }
+brmeta_set() { local id="$1" key="$2" value="$3"; brmeta get "$id" | jq --arg k "$key" --arg v "$value" '. + {($k): $v}' | br --db "$BR_DB" --actor "$BR_ACTOR" gc-metadata set "$id"; }
+brmeta_unset() { local id="$1" key="$2"; brmeta get "$id" | jq --arg k "$key" 'del(.[$k])' | br --db "$BR_DB" --actor "$BR_ACTOR" gc-metadata set "$id"; }
+```
+
 Backend rules for this city:
 
 - Do not run `gc dolt ...` diagnostics for `beads_rust`; there is no Dolt

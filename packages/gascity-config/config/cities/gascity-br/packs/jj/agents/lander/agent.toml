@@ -1,0 +1,6 @@
+scope = "rig"
+wake_mode = "fresh"
+work_dir = ".gc/jj/agents/{{.Rig}}/lander"
+nudge = "Run gc prime, inspect submitted JJ changes, and land ready work serially."
+idle_timeout = "2h"
+max_active_sessions = 1
