@@ -67,4 +67,4 @@ provider = "t3bridge"
 formula_v2 = true
 
 [agent_defaults]
-append_fragments = ["cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]
+append_fragments = ["cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan", "jj-workflow"]

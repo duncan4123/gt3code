@@ -1,6 +1,6 @@
 # Flywheel All — rolls up all four flywheel enhancement packs.
 #
-# Includes: mcp-agent-mail, cass, cm, ubs, agent-browser.
+# Includes: mcp-agent-mail, cass, cm, ubs, agent-browser, jj.
 # All settings.json files are deep-merged, skills are additive.
 #
 # Usage in your city's pack.toml:
@@ -25,3 +25,6 @@ source = "../ubs"
 
 [imports.agent-browser]
 source = "../agent-browser"
+
+[imports.jj]
+source = "../jj"

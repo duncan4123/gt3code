@@ -7,6 +7,7 @@ Roll-up pack that includes the full [Agent Flywheel](https://agent-flywheel.com/
 - **cm** — persistent memory / playbook
 - **ubs** — pre-commit bug scanning
 - **agent-browser** — browser UI automation and audit checks
+- **jj** — Jujutsu/Jorje stack workflow guidance
 
 ## Prerequisites
 
@@ -34,4 +35,7 @@ source = "../packs/flywheel/ubs"
 
 [imports.agent-browser]
 source = "../packs/flywheel/agent-browser"
+
+[imports.jj]
+source = "../packs/flywheel/jj"
 ```
