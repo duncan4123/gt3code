@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/gastownhall/gascity/internal/beads"
+	beadsexec "github.com/gastownhall/gascity/internal/beads/exec"
 	"github.com/gastownhall/gascity/internal/events"
 	"github.com/gastownhall/gascity/internal/runtime"
 	"github.com/google/uuid"
@@ -1685,9 +1686,65 @@ func resolveConfigProviderModel(cfg *execStartConfig) (string, string, bool) {
 	return provider, model, true
 }
 
-func beadStoreForWatcher(workDir string, env map[string]string) *beads.CachingStore {
+type watcherBeadStore struct {
+	store      beads.Store
+	prime      func(context.Context)
+	applyEvent func(string, json.RawMessage)
+}
+
+func beadStoreForWatcher(workDir string, env map[string]string) watcherBeadStore {
+	provider := strings.TrimSpace(env["GC_BEADS"])
+	if strings.HasPrefix(provider, "exec:") {
+		store := beadsexec.NewStore(strings.TrimSpace(strings.TrimPrefix(provider, "exec:")))
+		store.SetEnv(beadStoreEnvForWatcher(workDir, env))
+		return watcherBeadStore{store: store}
+	}
+
 	bd := beads.NewBdStore(workDir, beads.ExecCommandRunnerWithEnv(env))
-	return beads.NewCachingStore(bd, nil)
+	cache := beads.NewCachingStore(bd, nil)
+	return watcherBeadStore{
+		store: cache,
+		prime: func(ctx context.Context) {
+			_ = cache.Prime(ctx)
+		},
+		applyEvent: cache.ApplyEvent,
+	}
+}
+
+func beadStoreEnvForWatcher(workDir string, env map[string]string) map[string]string {
+	out := make(map[string]string, len(env)+4)
+	for key, value := range env {
+		out[key] = value
+	}
+	storeRoot := strings.TrimSpace(out["GC_STORE_ROOT"])
+	if storeRoot == "" {
+		storeRoot = strings.TrimSpace(out["GC_BEADS_SCOPE_ROOT"])
+	}
+	if storeRoot == "" {
+		storeRoot = strings.TrimSpace(out["GC_RIG_ROOT"])
+	}
+	if storeRoot == "" {
+		if beadsDir := strings.TrimSpace(out["BEADS_DIR"]); beadsDir != "" {
+			storeRoot = filepath.Dir(beadsDir)
+		}
+	}
+	if storeRoot == "" {
+		storeRoot = workDir
+	}
+	if storeRoot != "" {
+		out["GC_STORE_ROOT"] = storeRoot
+	}
+	if strings.TrimSpace(out["GC_STORE_SCOPE"]) == "" {
+		if rigRoot := strings.TrimSpace(out["GC_RIG_ROOT"]); rigRoot != "" && storeRoot == rigRoot {
+			out["GC_STORE_SCOPE"] = "rig"
+		} else {
+			out["GC_STORE_SCOPE"] = "city"
+		}
+	}
+	if strings.TrimSpace(out["BEADS_DIR"]) == "" && storeRoot != "" {
+		out["BEADS_DIR"] = filepath.Join(storeRoot, ".beads")
+	}
+	return out
 }
 
 func beadEventRelevant(ev events.Event, bead beads.Bead, agentName, currentBead string) bool {
@@ -1751,18 +1808,18 @@ func activityFromBeadEvent(ev events.Event, bead beads.Bead) (string, string, ma
 	}
 }
 
-func (p *Provider) refreshAssignmentProjection(threadID string, envelope StartupEnvelope, providerName string, bead beads.Bead, cache *beads.CachingStore) {
+func (p *Provider) refreshAssignmentProjection(threadID string, envelope StartupEnvelope, providerName string, bead beads.Bead, store beads.Store) {
 	convoyID := ""
 	convoyTitle := ""
 	convoyStatus := ""
 	convoyClosedCount := envelope.Assignment.ConvoyClosedCount
 	convoyTotalCount := envelope.Assignment.ConvoyTotalCount
-	if bead.ParentID != "" {
-		if parent, err := cache.Get(bead.ParentID); err == nil && parent.Type == "convoy" {
+	if store != nil && bead.ParentID != "" {
+		if parent, err := store.Get(bead.ParentID); err == nil && parent.Type == "convoy" {
 			convoyID = parent.ID
 			convoyTitle = parent.Title
 			convoyStatus = parent.Status
-			if children, err := cache.Children(parent.ID); err == nil {
+			if children, err := store.Children(parent.ID); err == nil {
 				total := len(children)
 				closed := 0
 				for _, child := range children {
@@ -1792,6 +1849,18 @@ func (p *Provider) refreshAssignmentProjection(threadID string, envelope Startup
 	if branch, worktreePath := beadGitContext(bead.Metadata); branch != "" || worktreePath != "" {
 		_ = p.rpcUpdateThreadMeta(threadID, branch, worktreePath)
 	}
+}
+
+func (p *Provider) dispatchThreadTitleFromBead(threadID string, bead beads.Bead) {
+	if strings.TrimSpace(bead.Title) == "" {
+		return
+	}
+	_ = p.rpcDispatchCommand(map[string]interface{}{
+		"type":      "thread.meta.update",
+		"commandId": p.nextCommandID("t3bridge-title"),
+		"threadId":  threadID,
+		"title":     bead.Title,
+	})
 }
 
 func beadGitContext(metadata map[string]string) (branch, worktreePath string) {
@@ -1826,8 +1895,13 @@ func (p *Provider) runEventWatcher(ctx context.Context, name string, cfg runtime
 	}
 	defer recorder.Close()
 
-	cache := beadStoreForWatcher(cfg.WorkDir, cfg.Env)
-	_ = cache.Prime(ctx)
+	beadStore := beadStoreForWatcher(cfg.WorkDir, cfg.Env)
+	if beadStore.store == nil {
+		return
+	}
+	if beadStore.prime != nil {
+		beadStore.prime(ctx)
+	}
 
 	afterSeq, err := recorder.LatestSeq()
 	if err != nil {
@@ -1841,6 +1915,12 @@ func (p *Provider) runEventWatcher(ctx context.Context, name string, cfg runtime
 
 	agentName := cfg.Env["GC_AGENT"]
 	currentBead := cfg.Env["GC_BEAD"]
+	if currentBead != "" {
+		if bead, err := beadStore.store.Get(currentBead); err == nil {
+			p.refreshAssignmentProjection(binding.ThreadID, envelope, providerName, bead, beadStore.store)
+			p.dispatchThreadTitleFromBead(binding.ThreadID, bead)
+		}
+	}
 
 	for {
 		ev, err := watcher.Next()
@@ -1850,23 +1930,20 @@ func (p *Provider) runEventWatcher(ctx context.Context, name string, cfg runtime
 		if ev.Type != events.BeadUpdated && ev.Type != events.BeadClosed && ev.Type != events.BeadCreated {
 			continue
 		}
-		cache.ApplyEvent(ev.Type, ev.Payload)
-		bead, err := cache.Get(ev.Subject)
+		if beadStore.applyEvent != nil {
+			beadStore.applyEvent(ev.Type, ev.Payload)
+		}
+		bead, err := beadStore.store.Get(ev.Subject)
 		if err != nil {
 			continue
 		}
 		if !beadEventRelevant(ev, bead, agentName, currentBead) {
 			continue
 		}
-		p.refreshAssignmentProjection(binding.ThreadID, envelope, providerName, bead, cache)
+		p.refreshAssignmentProjection(binding.ThreadID, envelope, providerName, bead, beadStore.store)
 		kind, summary, payload := activityFromBeadEvent(ev, bead)
 		if kind == "gc.bead.claimed" && bead.Title != "" {
-			_ = p.rpcDispatchCommand(map[string]interface{}{
-				"type":      "thread.meta.update",
-				"commandId": p.nextCommandID("t3bridge-title"),
-				"threadId":  binding.ThreadID,
-				"title":     bead.Title,
-			})
+			p.dispatchThreadTitleFromBead(binding.ThreadID, bead)
 		}
 		_ = p.dispatchActivity(binding.ThreadID, kind, summary, "info", payload)
 	}

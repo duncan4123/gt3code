@@ -313,6 +313,7 @@ func buildDesiredStateWithSessionBeads(
 	if store != nil {
 		assignedWorkBeads, assignedWorkStores, assignedWorkStoreRefs, storePartial = collectAssignedWorkBeadsWithStores(cfg, store, rigStores, suspendedRigPaths, sessionBeads)
 		bp.assignedWorkBeads = assignedWorkBeads
+		bp.assignedWorkStores = assignedWorkStores
 		bp.assignedWorkKnown = true
 		if storePartial {
 			fmt.Fprintf(stderr, "assignedWorkBeads: PARTIAL — store query failed, drain decisions suppressed\n") //nolint:errcheck

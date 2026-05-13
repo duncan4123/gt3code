@@ -23,6 +23,25 @@ agent = "witness"
 suspended = false
 
 [[rigs]]
+name = "agentic-flow"
+prefix = "af"
+suspended = true
+formulas_dir = "formulas"
+includes = [".gc/system/packs/gastown"]
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = true
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = true
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = true
+
+[[rigs]]
 name = "t3-jj"
 prefix = "tj"
 suspended = false
@@ -64,6 +83,29 @@ append_fragments = ["beads-rust-backend"]
 
 [[patches.agent]]
 dir = "beads_rust"
+name = "witness"
+suspended = false
+provider = "codex"
+append_fragments = ["beads-rust-backend"]
+
+[[patches.agent]]
+dir = "agentic-flow"
+name = "polecat"
+suspended = false
+provider = "codex"
+append_fragments = ["beads-rust-backend"]
+wake_mode = "resume"
+min_active_sessions = 1
+
+[[patches.agent]]
+dir = "agentic-flow"
+name = "refinery"
+suspended = false
+provider = "codex"
+append_fragments = ["beads-rust-backend"]
+
+[[patches.agent]]
+dir = "agentic-flow"
 name = "witness"
 suspended = false
 provider = "codex"
@@ -116,6 +158,11 @@ template = "refinery"
 mode = "always"
 
 [[patches.named_session]]
+dir = "agentic-flow"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
 dir = "t3-jj"
 template = "lander"
 mode = "always"
@@ -123,6 +170,11 @@ mode = "always"
 [[patches.named_session]]
 dir = "t3-jj"
 template = "sentinel"
+mode = "always"
+
+[[patches.named_session]]
+dir = "t3-jj"
+template = "planner"
 mode = "always"
 
 [beads]
@@ -136,9 +188,3 @@ formula_v2 = true
 
 [agent_defaults]
 append_fragments = ["cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]
-
-
-[[patches.named_session]]
-dir = "t3-jj"
-template = "planner"
-mode = "always"

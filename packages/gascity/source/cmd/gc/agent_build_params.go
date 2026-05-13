@@ -48,8 +48,9 @@ type agentBuildParams struct {
 	// assignedWorkBeads is the actionable assigned-work snapshot for this
 	// build. Pool new-tier materialization uses it to avoid treating sessions
 	// that already own work as available generic capacity.
-	assignedWorkBeads []beads.Bead
-	assignedWorkKnown bool
+	assignedWorkBeads  []beads.Bead
+	assignedWorkStores []beads.Store
+	assignedWorkKnown  bool
 
 	// beadNames caches qualifiedName → session_name mappings resolved
 	// during this build cycle. Populated lazily by resolveSessionName.

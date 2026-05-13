@@ -236,6 +236,35 @@ function gcAgentEffectiveRuntimeState(
   return agentGroup.runtimeState;
 }
 
+function GcThreadGroupBadges({
+  threadGroup,
+  primary,
+}: {
+  threadGroup: SidebarGcThreadGroup;
+  primary: boolean;
+}) {
+  return (
+    <>
+      <Badge
+        size="sm"
+        variant="outline"
+        className="rounded-full px-1.5 text-[.55rem] tracking-wide uppercase"
+      >
+        {threadGroup.kind}
+      </Badge>
+      {threadGroup.kind === "convoy" ? (
+        <Badge
+          size="sm"
+          variant="outline"
+          className="rounded-full px-1.5 text-[.55rem] tracking-wide uppercase"
+        >
+          {primary ? "primary" : "secondary"}
+        </Badge>
+      ) : null}
+    </>
+  );
+}
+
 export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   const [collapsedRigIds, setCollapsedRigIds] = useState<Set<string>>(() => new Set());
   const [collapsedAgentIds, setCollapsedAgentIds] = useState<Set<string>>(() => new Set());
@@ -676,13 +705,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           <span className="truncate text-[11px] font-medium leading-none">
                             {threadGroup.label}
                           </span>
-                          <Badge
-                            size="sm"
-                            variant="outline"
-                            className="rounded-full px-1.5 text-[.55rem] tracking-wide uppercase"
-                          >
-                            {threadGroup.kind}
-                          </Badge>
+                          <GcThreadGroupBadges threadGroup={threadGroup} primary={false} />
                           {threadGroup.progressLabel ? (
                             <span className="text-[.625rem] text-muted-foreground/55">
                               {threadGroup.progressLabel}
@@ -1014,13 +1037,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           <span className="truncate text-[11px] font-medium leading-none">
                             {threadGroup.label}
                           </span>
-                          <Badge
-                            size="sm"
-                            variant="outline"
-                            className="rounded-full px-1.5 text-[.55rem] tracking-wide uppercase"
-                          >
-                            {threadGroup.kind}
-                          </Badge>
+                          <GcThreadGroupBadges threadGroup={threadGroup} primary />
                           {threadGroup.progressLabel ? (
                             <span className="text-[.625rem] text-muted-foreground/55">
                               {threadGroup.progressLabel}
@@ -1450,13 +1467,10 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                                     <span className="truncate text-[11px] font-medium leading-none">
                                       {threadGroup.label}
                                     </span>
-                                    <Badge
-                                      size="sm"
-                                      variant="outline"
-                                      className="rounded-full px-1.5 text-[.55rem] tracking-wide uppercase"
-                                    >
-                                      {threadGroup.kind}
-                                    </Badge>
+                                    <GcThreadGroupBadges
+                                      threadGroup={threadGroup}
+                                      primary={false}
+                                    />
                                     {threadGroup.progressLabel ? (
                                       <span className="text-[.625rem] text-muted-foreground/55">
                                         {threadGroup.progressLabel}

@@ -241,6 +241,14 @@ func resolveTemplate(p *agentBuildParams, cfgAgent *config.Agent, qualifiedName 
 	}
 
 	// Step 8: Build agent environment.
+	storeRoot := p.cityPath
+	storeScope := "city"
+	storePrefix := config.EffectiveHQPrefix(p.city)
+	if rigName != "" {
+		storeRoot = rigRoot
+		storeScope = "rig"
+		storePrefix = findRigPrefix(rigName, p.rigs)
+	}
 	agentEnv := map[string]string{
 		"GC_SESSION_NAME":     sessName,
 		"GC_SESSION_ID":       sessionBeadID,
@@ -251,6 +259,9 @@ func resolveTemplate(p *agentBuildParams, cfgAgent *config.Agent, qualifiedName 
 		"BEADS_ACTOR":         sessName,
 		"GC_DIR":              workDir,
 		"GC_BEADS_SCOPE_ROOT": p.cityPath,
+		"GC_STORE_ROOT":       storeRoot,
+		"GC_STORE_SCOPE":      storeScope,
+		"GC_BEADS_PREFIX":     storePrefix,
 		// Explicit empty values matter here. tmux session creation uses `env -u`
 		// only for keys present with empty strings, which prevents stale rig
 		// scope from leaking out of the tmux server's inherited environment.
@@ -372,11 +383,12 @@ func resolveTemplate(p *agentBuildParams, cfgAgent *config.Agent, qualifiedName 
 	prependGCBinDirToPATH(env, env["GC_BIN"])
 	env = convergence.ScrubTokenEnv(env)
 	applyAssignedWorkContext(p.beadStore, SessionAssignmentLookup{
-		SessionName:       sessName,
-		AgentName:         qualifiedName,
-		AssignedWorkBeads: p.assignedWorkBeads,
-		AssignedWorkKnown: p.assignedWorkKnown,
-		Env:               env,
+		SessionName:        sessName,
+		AgentName:          qualifiedName,
+		AssignedWorkBeads:  p.assignedWorkBeads,
+		AssignedWorkStores: p.assignedWorkStores,
+		AssignedWorkKnown:  p.assignedWorkKnown,
+		Env:                env,
 	})
 
 	// Step 11: Expand session setup templates.
@@ -735,23 +747,28 @@ func templateParamsToConfig(tp TemplateParams) runtime.Config {
 }
 
 type SessionAssignmentLookup struct {
-	SessionName       string
-	AgentName         string
-	AssignedWorkBeads []beads.Bead
-	AssignedWorkKnown bool
-	Env               map[string]string
+	SessionName        string
+	AgentName          string
+	AssignedWorkBeads  []beads.Bead
+	AssignedWorkStores []beads.Store
+	AssignedWorkKnown  bool
+	Env                map[string]string
 }
 
 func applyAssignedWorkContext(store beads.Store, lookup SessionAssignmentLookup) {
 	if store == nil || lookup.Env == nil {
 		return
 	}
-	workBead, ok := findAssignedWorkBead(store, lookup.SessionName, lookup.AgentName, lookup.AssignedWorkBeads, lookup.AssignedWorkKnown)
+	workBead, workIndex, ok := findAssignedWorkBead(store, lookup.SessionName, lookup.AgentName, lookup.AssignedWorkBeads, lookup.AssignedWorkKnown)
 	if !ok {
 		return
 	}
 	lookup.Env["GC_BEAD"] = workBead.ID
 	lookup.Env["GC_BEAD_TITLE"] = workBead.Title
+	workStore := store
+	if workIndex >= 0 && workIndex < len(lookup.AssignedWorkStores) && lookup.AssignedWorkStores[workIndex] != nil {
+		workStore = lookup.AssignedWorkStores[workIndex]
+	}
 
 	if workBead.Ref != "" {
 		lookup.Env["GC_FORMULA"] = workBead.Ref
@@ -765,14 +782,14 @@ func applyAssignedWorkContext(store beads.Store, lookup SessionAssignmentLookup)
 		if current.ParentID == "" {
 			return
 		}
-		parent, err := store.Get(current.ParentID)
+		parent, err := workStore.Get(current.ParentID)
 		if err != nil {
 			return
 		}
 		if parent.Type == "convoy" && lookup.Env["GC_CONVOY"] == "" {
 			lookup.Env["GC_CONVOY"] = parent.ID
 			lookup.Env["GC_CONVOY_TITLE"] = parent.Title
-			if total, closed, ok := convoyProgress(store, parent.ID); ok {
+			if total, closed, ok := convoyProgress(workStore, parent.ID); ok {
 				lookup.Env["GC_CONVOY_TOTAL_COUNT"] = fmt.Sprintf("%d", total)
 				lookup.Env["GC_CONVOY_CLOSED_COUNT"] = fmt.Sprintf("%d", closed)
 				if total > 0 && closed >= total {
@@ -811,7 +828,7 @@ func convoyProgress(store beads.Store, convoyID string) (total int, closed int, 
 	return total, closed, true
 }
 
-func findAssignedWorkBead(store beads.Store, sessionName, agentName string, assignedWork []beads.Bead, assignedWorkKnown bool) (beads.Bead, bool) {
+func findAssignedWorkBead(store beads.Store, sessionName, agentName string, assignedWork []beads.Bead, assignedWorkKnown bool) (beads.Bead, int, bool) {
 	assignees := make([]string, 0, 2)
 	if sessionName != "" {
 		assignees = append(assignees, sessionName)
@@ -821,15 +838,15 @@ func findAssignedWorkBead(store beads.Store, sessionName, agentName string, assi
 	}
 	for _, status := range []string{"in_progress", "open"} {
 		for _, assignee := range assignees {
-			for _, candidate := range assignedWork {
+			for i, candidate := range assignedWork {
 				if candidate.Status == status && candidate.Assignee == assignee {
-					return candidate, true
+					return candidate, i, true
 				}
 			}
 		}
 	}
 	if assignedWorkKnown {
-		return beads.Bead{}, false
+		return beads.Bead{}, -1, false
 	}
 	for _, status := range []string{"in_progress", "open"} {
 		for _, assignee := range assignees {
@@ -837,10 +854,10 @@ func findAssignedWorkBead(store beads.Store, sessionName, agentName string, assi
 			if err != nil || len(matches) == 0 {
 				continue
 			}
-			return matches[0], true
+			return matches[0], -1, true
 		}
 	}
-	return beads.Bead{}, false
+	return beads.Bead{}, -1, false
 }
 
 func buildStartupEnvelope(tp TemplateParams, startupPrompt string) json.RawMessage {
