@@ -19,7 +19,8 @@ system. Jorje is the review surface.
 - `jj_workspace`: JJ workspace name.
 - `jj_change`: submitted JJ change ID.
 - `jj_parent`: parent/base revision used for the workspace.
-- `target`: target bookmark, usually `main`.
+- `target`: target bookmark, usually `integration/t3code-agent-controls-sidebar`.
+- `target_remote`: remote that owns the target bookmark, usually `jorje`.
 - `jorje_review`: optional Jorje review URL or pushed review ref.
 - `rejection_reason`: lander/sentinel reason for returning work to the pool.
 

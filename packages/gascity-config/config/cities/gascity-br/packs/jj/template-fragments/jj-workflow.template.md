@@ -5,6 +5,7 @@
 This rig uses JJ for code changes. Gas City/beads track ownership and lifecycle.
 JJ tracks code state. Jorje is the review surface.
 
+- Default trunk: `integration/t3code-agent-controls-sidebar@jorje`.
 - Treat `jj_change` as the durable code-change ID.
 - Treat `work_dir` as the active JJ workspace for a bead.
 - Use one JJ workspace per active code-writing bead.

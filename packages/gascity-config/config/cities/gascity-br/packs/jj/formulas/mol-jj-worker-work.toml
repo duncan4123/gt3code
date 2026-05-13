@@ -14,7 +14,11 @@ contract = "graph.v2"
 [vars]
 [vars.target]
 description = "Target bookmark to build on"
-default = "main"
+default = "integration/t3code-agent-controls-sidebar"
+
+[vars.target_remote]
+description = "Remote that owns the target bookmark"
+default = "jorje"
 
 [vars.lander]
 description = "Lander agent suffix"
@@ -35,6 +39,7 @@ META=$(brmeta get {{issue}})
 WORK_DIR=$(printf '%s' "$META" | jq -r '.work_dir // empty')
 JJ_WORKSPACE=$(printf '%s' "$META" | jq -r '.jj_workspace // empty')
 TARGET=$(printf '%s' "$META" | jq -r '.target // "{{target}}"')
+TARGET_REMOTE=$(printf '%s' "$META" | jq -r '.target_remote // "{{target_remote}}"')
 ```
 
 If `WORK_DIR` exists and is a directory, use it:
@@ -48,16 +53,18 @@ Otherwise create a bead-scoped workspace from the target bookmark:
 
 ```bash
 cd "${GC_RIG_ROOT:?GC_RIG_ROOT required}"
+jj git fetch --remote "$TARGET_REMOTE"
 SAFE_ISSUE=$(printf '%s' "{{issue}}" | tr -c 'A-Za-z0-9._-' '-')
 JJ_WORKSPACE="gc-${SAFE_ISSUE}-${GC_AGENT_BASE:-${GC_SESSION_NAME:-worker}}"
 WORK_DIR="$GC_RIG_ROOT/.gc/jj/workspaces/$JJ_WORKSPACE"
 mkdir -p "$(dirname "$WORK_DIR")"
-jj workspace add --name "$JJ_WORKSPACE" -r "$TARGET" -m "{{issue}}: work" "$WORK_DIR"
+jj workspace add --name "$JJ_WORKSPACE" -r "$TARGET@$TARGET_REMOTE" -m "{{issue}}: work" "$WORK_DIR"
 cd "$WORK_DIR"
 brmeta_set {{issue}} work_dir "$WORK_DIR"
 brmeta_set {{issue}} jj_workspace "$JJ_WORKSPACE"
-brmeta_set {{issue}} jj_parent "$TARGET"
+brmeta_set {{issue}} jj_parent "$TARGET@$TARGET_REMOTE"
 brmeta_set {{issue}} target "$TARGET"
+brmeta_set {{issue}} target_remote "$TARGET_REMOTE"
 ```
 
 Exit criteria: `pwd` is the bead workspace and `jj status` succeeds.

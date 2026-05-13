@@ -15,7 +15,11 @@ contract = "graph.v2"
 [vars]
 [vars.target]
 description = "Target bookmark to land onto"
-default = "main"
+default = "integration/t3code-agent-controls-sidebar"
+
+[vars.target_remote]
+description = "Remote that owns the target bookmark"
+default = "jorje"
 
 [vars.worker]
 description = "Worker pool suffix"
@@ -44,6 +48,7 @@ META=$(brmeta get "$WORK")
 JJ_CHANGE=$(printf '%s' "$META" | jq -r '.jj_change // empty')
 WORK_DIR=$(printf '%s' "$META" | jq -r '.work_dir // empty')
 TARGET=$(printf '%s' "$META" | jq -r '.target // "{{target}}"')
+TARGET_REMOTE=$(printf '%s' "$META" | jq -r '.target_remote // "{{target_remote}}"')
 ```
 
 Reject the bead if `jj_change` or `work_dir` is missing.
@@ -77,10 +82,10 @@ Only land one change per patrol iteration.
 
 ```bash
 cd "$WORK_DIR"
-jj git fetch --remote origin
-jj rebase -r "$JJ_CHANGE" -d "$TARGET"
-jj bookmark set "$TARGET" -r "$JJ_CHANGE" --allow-backwards
-jj git push --remote origin --bookmark "$TARGET"
+jj git fetch --remote "$TARGET_REMOTE"
+jj rebase -r "$JJ_CHANGE" -d "$TARGET@$TARGET_REMOTE"
+jj bookmark set "$TARGET" -r "$JJ_CHANGE"
+jj git push --remote "$TARGET_REMOTE" --bookmark "$TARGET"
 brmeta_set "$WORK" landed_commit "$(jj log -r "$JJ_CHANGE" --no-graph --template 'commit_id.short()')"
 brt close "$WORK" --reason fixed
 ```
@@ -97,7 +102,7 @@ description = """
 Pour the next lander patrol wisp and assign it to yourself:
 
 ```bash
-NEXT=$(gc bd mol wisp mol-jj-lander-patrol --root-only --var target={{target}} --var binding_prefix={{binding_prefix}} --json | jq -r '.new_epic_id')
+NEXT=$(gc bd mol wisp mol-jj-lander-patrol --root-only --var target={{target}} --var target_remote={{target_remote}} --var binding_prefix={{binding_prefix}} --json | jq -r '.new_epic_id')
 brt update "$NEXT" --assignee="$GC_ALIAS"
 ```
 """

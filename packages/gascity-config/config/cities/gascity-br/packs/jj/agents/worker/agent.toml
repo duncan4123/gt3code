@@ -1,5 +1,6 @@
 scope = "rig"
 wake_mode = "fresh"
+is_pool = true
 work_dir = ".gc/jj/agents/{{.Rig}}/workers/{{.AgentBase}}"
 nudge = "Run gc hook; claim one routed work bead, create a JJ workspace, and submit the change."
 default_sling_formula = "mol-jj-worker-work"

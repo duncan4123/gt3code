@@ -18,7 +18,8 @@ small, ordered work beads that can become a JJ stack.
 ## Metadata To Set
 
 ```text
-target=<target bookmark, usually main>
+target=integration/t3code-agent-controls-sidebar
+target_remote=jorje
 stack_id=<stable stack label>
 stack_index=<1-based order>
 depends_on=<previous bead id, when applicable>

@@ -33,6 +33,6 @@ jj workspace root
 jj workspace forget NAME
 jj describe -m "message"
 jj git push --remote jorje -c @
-jj bookmark set main -r CHANGE --allow-backwards
-jj git push --remote origin --bookmark main
+jj bookmark set integration/t3code-agent-controls-sidebar -r CHANGE
+jj git push --remote jorje --bookmark integration/t3code-agent-controls-sidebar
 ```

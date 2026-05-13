@@ -17,7 +17,7 @@ and close beads.
 If no patrol wisp is assigned to you:
 
 ```bash
-WISP=$(gc bd mol wisp mol-jj-lander-patrol --root-only --var target={{ .DefaultBranch }} --var binding_prefix={{ .BindingPrefix }} --json | jq -r '.new_epic_id')
+WISP=$(gc bd mol wisp mol-jj-lander-patrol --root-only --var target=integration/t3code-agent-controls-sidebar --var target_remote=jorje --var binding_prefix={{ .BindingPrefix }} --json | jq -r '.new_epic_id')
 brt update "$WISP" --assignee="$GC_ALIAS"
 ```
 

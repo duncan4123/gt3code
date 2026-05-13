@@ -73,6 +73,7 @@ provider = "codex"
 append_fragments = ["beads-rust-backend"]
 wake_mode = "resume"
 min_active_sessions = 1
+max_active_sessions = 5
 
 [[patches.agent]]
 dir = "beads_rust"
@@ -96,6 +97,7 @@ provider = "codex"
 append_fragments = ["beads-rust-backend"]
 wake_mode = "resume"
 min_active_sessions = 1
+max_active_sessions = 5
 
 [[patches.agent]]
 dir = "agentic-flow"
@@ -137,6 +139,7 @@ name = "lander"
 suspended = false
 provider = "codex"
 append_fragments = ["beads-rust-backend"]
+wake_mode = "resume"
 max_active_sessions = 1
 
 [[patches.agent]]
@@ -170,7 +173,7 @@ mode = "always"
 [[patches.named_session]]
 dir = "t3-jj"
 template = "sentinel"
-mode = "always"
+mode = "on_demand"
 
 [[patches.named_session]]
 dir = "t3-jj"
