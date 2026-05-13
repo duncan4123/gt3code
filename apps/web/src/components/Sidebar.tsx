@@ -169,6 +169,7 @@ import { useCommandPaletteStore } from "../commandPaletteStore";
 import {
   getSidebarThreadIdsToPrewarm,
   normalizeThreadSearchQuery,
+  normalizeWorkspacePath,
   resolveMissingGcRigProjects,
   resolveMissingGcWorkspaceProject,
   resolveAdjacentThreadId,
@@ -2884,10 +2885,355 @@ const SidebarGcCitiesSection = memo(function SidebarGcCitiesSection(
   props: SidebarGcCitiesSectionProps,
 ) {
   const [collapsed, setCollapsed] = useState(false);
+  const appSettingsConfirmThreadArchive = useSettings<boolean>(
+    (settings) => settings.confirmThreadArchive,
+  );
+  const appSettingsConfirmThreadDelete = useSettings<boolean>(
+    (settings) => settings.confirmThreadDelete,
+  );
+  const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
-  const selectedThreadCount = useThreadSelectionStore((state) => state.selectedThreadKeys.size);
+  const { archiveThread, deleteThread } = useThreadActions();
+  const markThreadUnread = useUiStateStore((state) => state.markThreadUnread);
+  const toggleThreadSelection = useThreadSelectionStore((state) => state.toggleThread);
+  const rangeSelectTo = useThreadSelectionStore((state) => state.rangeSelectTo);
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
+  const removeFromSelection = useThreadSelectionStore((state) => state.removeFromSelection);
   const setSelectionAnchor = useThreadSelectionStore((state) => state.setAnchor);
+  const [renamingThreadKey, setRenamingThreadKey] = useState<string | null>(null);
+  const [renamingTitle, setRenamingTitle] = useState("");
+  const [confirmingArchiveThreadKey, setConfirmingArchiveThreadKey] = useState<string | null>(null);
+  const renamingCommittedRef = useRef(false);
+  const renamingInputRef = useRef<HTMLInputElement | null>(null);
+  const confirmArchiveButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const orderedCityThreadKeys = useMemo(
+    () =>
+      [...props.threadById.values()].map((thread) =>
+        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+      ),
+    [props.threadById],
+  );
+  const { copyToClipboard: copyThreadIdToClipboard } = useCopyToClipboard<{
+    threadId: ThreadId;
+  }>({
+    onCopy: (ctx) => {
+      toastManager.add({
+        type: "success",
+        title: "Thread ID copied",
+        description: ctx.threadId,
+      });
+    },
+    onError: (error) => {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Failed to copy thread ID",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+      );
+    },
+  });
+  const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{
+    path: string;
+  }>({
+    onCopy: (ctx) => {
+      toastManager.add({
+        type: "success",
+        title: "Path copied",
+        description: ctx.path,
+      });
+    },
+    onError: (error) => {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Failed to copy path",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+      );
+    },
+  });
+  const openPrLink = useCallback((event: React.MouseEvent<HTMLElement>, prUrl: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const api = readLocalApi();
+    if (!api) {
+      toastManager.add({
+        type: "error",
+        title: "Link opening is unavailable.",
+      });
+      return;
+    }
+
+    void api.shell.openExternal(prUrl).catch((error) => {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Unable to open pull request link",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+      );
+    });
+  }, []);
+  const navigateToThread = useCallback(
+    (threadRef: ScopedThreadRef) => {
+      if (useThreadSelectionStore.getState().selectedThreadKeys.size > 0) {
+        clearSelection();
+      }
+      setSelectionAnchor(scopedThreadKey(threadRef));
+      if (isMobile) {
+        setOpenMobile(false);
+      }
+      void router.navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(threadRef),
+      });
+    },
+    [clearSelection, isMobile, router, setOpenMobile, setSelectionAnchor],
+  );
+  const handleThreadClick = useCallback(
+    (
+      event: React.MouseEvent,
+      threadRef: ScopedThreadRef,
+      orderedProjectThreadKeys: readonly string[],
+    ) => {
+      const isMac = isMacPlatform(navigator.platform);
+      const isModClick = isMac ? event.metaKey : event.ctrlKey;
+      const isShiftClick = event.shiftKey;
+      const threadKey = scopedThreadKey(threadRef);
+      const currentSelectionCount = useThreadSelectionStore.getState().selectedThreadKeys.size;
+
+      if (isModClick) {
+        event.preventDefault();
+        toggleThreadSelection(threadKey);
+        return;
+      }
+
+      if (isShiftClick) {
+        event.preventDefault();
+        rangeSelectTo(threadKey, orderedProjectThreadKeys);
+        return;
+      }
+
+      if (currentSelectionCount > 0) {
+        clearSelection();
+      }
+      setSelectionAnchor(threadKey);
+      if (isMobile) {
+        setOpenMobile(false);
+      }
+      void router.navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(threadRef),
+      });
+    },
+    [
+      clearSelection,
+      isMobile,
+      rangeSelectTo,
+      router,
+      setOpenMobile,
+      setSelectionAnchor,
+      toggleThreadSelection,
+    ],
+  );
+  const attemptArchiveThread = useCallback(
+    async (threadRef: ScopedThreadRef) => {
+      try {
+        await archiveThread(threadRef);
+      } catch (error) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to archive thread",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      }
+    },
+    [archiveThread],
+  );
+  const cancelRename = useCallback(() => {
+    setRenamingThreadKey(null);
+    renamingInputRef.current = null;
+  }, []);
+  const commitRename = useCallback(
+    async (threadRef: ScopedThreadRef, newTitle: string, originalTitle: string) => {
+      const threadKey = scopedThreadKey(threadRef);
+      const finishRename = () => {
+        setRenamingThreadKey((current) => {
+          if (current !== threadKey) return current;
+          renamingInputRef.current = null;
+          return null;
+        });
+      };
+
+      const trimmed = newTitle.trim();
+      if (trimmed.length === 0) {
+        toastManager.add({
+          type: "warning",
+          title: "Thread title cannot be empty",
+        });
+        finishRename();
+        return;
+      }
+      if (trimmed === originalTitle) {
+        finishRename();
+        return;
+      }
+      const api = readEnvironmentApi(threadRef.environmentId);
+      if (!api) {
+        finishRename();
+        return;
+      }
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "thread.meta.update",
+          commandId: newCommandId(),
+          threadId: threadRef.threadId,
+          title: trimmed,
+        });
+      } catch (error) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to rename thread",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      }
+      finishRename();
+    },
+    [],
+  );
+  const handleMultiSelectContextMenu = useCallback(
+    async (position: { x: number; y: number }) => {
+      const api = readLocalApi();
+      if (!api) return;
+      const threadKeys = [...useThreadSelectionStore.getState().selectedThreadKeys];
+      if (threadKeys.length === 0) return;
+      const count = threadKeys.length;
+
+      const clicked = await api.contextMenu.show(
+        [
+          { id: "mark-unread", label: `Mark unread (${count})` },
+          { id: "delete", label: `Delete (${count})`, destructive: true },
+        ],
+        position,
+      );
+
+      if (clicked === "mark-unread") {
+        for (const threadKey of threadKeys) {
+          const threadRef = parseScopedThreadKey(threadKey);
+          const thread = threadRef ? props.threadById.get(threadRef.threadId) : null;
+          markThreadUnread(threadKey, thread?.latestTurn?.completedAt);
+        }
+        clearSelection();
+        return;
+      }
+
+      if (clicked !== "delete") return;
+      if (appSettingsConfirmThreadDelete) {
+        const confirmed = await api.dialogs.confirm(
+          [
+            `Delete ${count} thread${count === 1 ? "" : "s"}?`,
+            "This permanently clears conversation history for these threads.",
+          ].join("\n"),
+        );
+        if (!confirmed) return;
+      }
+
+      const deletedThreadKeys = new Set(threadKeys);
+      for (const threadKey of threadKeys) {
+        const threadRef = parseScopedThreadKey(threadKey);
+        if (!threadRef || !props.threadById.has(threadRef.threadId)) continue;
+        await deleteThread(threadRef, {
+          deletedThreadKeys,
+        });
+      }
+      removeFromSelection(threadKeys);
+    },
+    [
+      appSettingsConfirmThreadDelete,
+      clearSelection,
+      deleteThread,
+      markThreadUnread,
+      props.threadById,
+      removeFromSelection,
+    ],
+  );
+  const handleThreadContextMenu = useCallback(
+    async (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
+      const api = readLocalApi();
+      if (!api) return;
+      const threadKey = scopedThreadKey(threadRef);
+      const thread = props.threadById.get(threadRef.threadId) ?? null;
+      if (!thread) return;
+      const threadWorkspacePath = thread.worktreePath ?? null;
+      const clicked = await api.contextMenu.show(
+        [
+          { id: "rename", label: "Rename thread" },
+          { id: "mark-unread", label: "Mark unread" },
+          { id: "copy-path", label: "Copy Path" },
+          { id: "copy-thread-id", label: "Copy Thread ID" },
+          { id: "delete", label: "Delete", destructive: true },
+        ],
+        position,
+      );
+
+      if (clicked === "rename") {
+        setRenamingThreadKey(threadKey);
+        setRenamingTitle(thread.title);
+        renamingCommittedRef.current = false;
+        return;
+      }
+
+      if (clicked === "mark-unread") {
+        markThreadUnread(threadKey, thread.latestTurn?.completedAt);
+        return;
+      }
+      if (clicked === "copy-path") {
+        if (!threadWorkspacePath) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Path unavailable",
+              description: "This thread does not have a workspace path to copy.",
+            }),
+          );
+          return;
+        }
+        copyPathToClipboard(threadWorkspacePath, { path: threadWorkspacePath });
+        return;
+      }
+      if (clicked === "copy-thread-id") {
+        copyThreadIdToClipboard(thread.id, { threadId: thread.id });
+        return;
+      }
+      if (clicked !== "delete") return;
+      if (appSettingsConfirmThreadDelete) {
+        const confirmed = await api.dialogs.confirm(
+          [
+            `Delete thread "${thread.title}"?`,
+            "This permanently clears conversation history for this thread.",
+          ].join("\n"),
+        );
+        if (!confirmed) {
+          return;
+        }
+      }
+      await deleteThread(threadRef);
+    },
+    [
+      appSettingsConfirmThreadDelete,
+      copyPathToClipboard,
+      copyThreadIdToClipboard,
+      deleteThread,
+      markThreadUnread,
+      props.threadById,
+    ],
+  );
   const renderThreadRows = useCallback(
     (threadIds: readonly ThreadId[], indentClassName?: string) =>
       threadIds.flatMap((threadId) => {
@@ -2897,52 +3243,59 @@ const SidebarGcCitiesSection = memo(function SidebarGcCitiesSection(
         }
         const threadRef = scopeThreadRef(thread.environmentId, thread.id);
         const threadKey = scopedThreadKey(threadRef);
-        const jumpLabel = props.threadJumpLabelByKey.get(threadKey);
-        const active = props.activeRouteThreadKey === threadKey;
         return [
-          <SidebarMenuSubItem
+          <SidebarThreadRow
             key={threadKey}
-            className="w-full"
-            data-thread-item={threadKey}
-            data-thread-selection-safe
-          >
-            <Link
-              to="/$environmentId/$threadId"
-              params={buildThreadRouteParams(threadRef)}
-              className={`flex min-h-6 w-full min-w-0 items-center gap-1.5 rounded-md py-1 pr-2 text-xs transition-colors ${
-                indentClassName ?? "pl-6"
-              } ${
-                active
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground/80 hover:bg-accent hover:text-foreground"
-              }`}
-              onClick={() => {
-                if (selectedThreadCount > 0) {
-                  clearSelection();
-                }
-                setSelectionAnchor(threadKey);
-                if (isMobile) {
-                  setOpenMobile(false);
-                }
-              }}
-            >
-              <span className="min-w-0 flex-1 truncate">{thread.title || "Untitled thread"}</span>
-              {jumpLabel ? (
-                <Kbd className="h-4 min-w-0 rounded-sm px-1.5 text-[10px]">{jumpLabel}</Kbd>
-              ) : null}
-            </Link>
-          </SidebarMenuSubItem>,
+            thread={thread}
+            projectCwd={null}
+            orderedProjectThreadKeys={orderedCityThreadKeys}
+            isActive={props.activeRouteThreadKey === threadKey}
+            {...(indentClassName ? { indentClassName } : {})}
+            jumpLabel={props.threadJumpLabelByKey.get(threadKey) ?? null}
+            appSettingsConfirmThreadArchive={appSettingsConfirmThreadArchive}
+            renamingThreadKey={renamingThreadKey}
+            renamingTitle={renamingTitle}
+            setRenamingTitle={setRenamingTitle}
+            renamingInputRef={renamingInputRef}
+            renamingCommittedRef={renamingCommittedRef}
+            confirmingArchiveThreadKey={confirmingArchiveThreadKey}
+            setConfirmingArchiveThreadKey={setConfirmingArchiveThreadKey}
+            confirmArchiveButtonRefs={confirmArchiveButtonRefs}
+            handleThreadClick={handleThreadClick}
+            navigateToThread={navigateToThread}
+            handleMultiSelectContextMenu={handleMultiSelectContextMenu}
+            handleThreadContextMenu={handleThreadContextMenu}
+            clearSelection={clearSelection}
+            commitRename={commitRename}
+            cancelRename={cancelRename}
+            attemptArchiveThread={attemptArchiveThread}
+            openPrLink={openPrLink}
+          />,
         ];
       }),
     [
+      appSettingsConfirmThreadArchive,
+      attemptArchiveThread,
+      cancelRename,
       clearSelection,
-      isMobile,
+      commitRename,
+      confirmArchiveButtonRefs,
+      confirmingArchiveThreadKey,
+      handleMultiSelectContextMenu,
+      handleThreadClick,
+      handleThreadContextMenu,
+      navigateToThread,
+      openPrLink,
+      orderedCityThreadKeys,
       props.activeRouteThreadKey,
       props.threadById,
       props.threadJumpLabelByKey,
-      selectedThreadCount,
-      setOpenMobile,
-      setSelectionAnchor,
+      renamingCommittedRef,
+      renamingInputRef,
+      renamingThreadKey,
+      renamingTitle,
+      setConfirmingArchiveThreadKey,
+      setRenamingTitle,
     ],
   );
 
@@ -3656,7 +4009,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                         }
                         newThreadShortcutLabel={newThreadShortcutLabel}
                         gcConfig={gcConfig}
-                        showGcFolders={gcCityRigGroups.length === 0}
+                        showGcFolders={Boolean(gcConfig)}
                         gcAgentMutationsInFlight={gcAgentMutationsInFlight}
                         gcAgentStartsInFlight={gcAgentStartsInFlight}
                         gcSupervisorMutationInFlight={gcSupervisorMutationInFlight}
@@ -3711,7 +4064,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
                 }
                 newThreadShortcutLabel={newThreadShortcutLabel}
                 gcConfig={gcConfig}
-                showGcFolders={gcCityRigGroups.length === 0}
+                showGcFolders={Boolean(gcConfig)}
                 gcAgentMutationsInFlight={gcAgentMutationsInFlight}
                 gcAgentStartsInFlight={gcAgentStartsInFlight}
                 gcSupervisorMutationInFlight={gcSupervisorMutationInFlight}
@@ -4396,6 +4749,14 @@ export default function Sidebar() {
       try {
         const nextConfig = await api.gc.setAgentSessionMode({ agent, mode });
         setGcConfig(nextConfig);
+        toastManager.add({
+          type: "success",
+          title: `Updated ${agent}`,
+          description:
+            mode === "always"
+              ? "Named session mode is now auto."
+              : "Named session mode is now demand.",
+        });
         const updatedAgent = nextConfig.agents.find((entry) => {
           const qualifiedName = entry.dir ? `${entry.dir}/${entry.name}` : entry.name;
           return qualifiedName === agent;
@@ -4593,7 +4954,9 @@ export default function Sidebar() {
   const gcCityThreads = useMemo(
     () =>
       visibleThreads.filter(
-        (thread) => !isThreadSearchActive || threadSearchState.matchingThreadIds.has(thread.id),
+        (thread) =>
+          !parseGcMeta(thread.customMetadata).isGcManaged &&
+          (!isThreadSearchActive || threadSearchState.matchingThreadIds.has(thread.id)),
       ),
     [isThreadSearchActive, threadSearchState.matchingThreadIds, visibleThreads],
   );
@@ -4601,16 +4964,70 @@ export default function Sidebar() {
     () => new Map(gcCityThreads.map((thread) => [thread.id, thread] as const)),
     [gcCityThreads],
   );
-  const gcCityRigGroups = useMemo(() => {
+  const projectOwnedGcRigNames = useMemo(() => {
+    const ownedRigNames = new Set<string>();
     if (!gcConfig) {
+      return ownedRigNames;
+    }
+    const projectCwds = new Set<string>();
+    const projectLabels = new Set<string>();
+    for (const project of sidebarProjects) {
+      for (const member of project.memberProjects) {
+        const cwd = normalizeWorkspacePath(member.cwd ?? "");
+        if (cwd) {
+          projectCwds.add(cwd);
+          const basename = cwd.split("/").toReversed().find(Boolean);
+          if (basename) {
+            projectLabels.add(basename);
+          }
+        }
+        if (member.name) {
+          projectLabels.add(member.name);
+        }
+      }
+      if (project.displayName) {
+        projectLabels.add(project.displayName);
+      }
+    }
+    for (const rig of gcConfig.rigs) {
+      const rigPath = normalizeWorkspacePath(rig.path);
+      const rigPathBasename = rigPath.split("/").toReversed().find(Boolean);
+      const rigNameBasename = rig.name.split("/").toReversed().find(Boolean);
+      if (
+        (rigPath && projectCwds.has(rigPath)) ||
+        (rigPathBasename && projectLabels.has(rigPathBasename)) ||
+        (rigNameBasename && projectLabels.has(rigNameBasename))
+      ) {
+        ownedRigNames.add(rig.name);
+      }
+    }
+    return ownedRigNames;
+  }, [gcConfig, sidebarProjects]);
+  const gcCityDisplayConfig = useMemo(() => {
+    if (!gcConfig || projectOwnedGcRigNames.size === 0) {
+      return gcConfig;
+    }
+    return {
+      ...gcConfig,
+      rigs: gcConfig.rigs.filter((rig) => !projectOwnedGcRigNames.has(rig.name)),
+      agents: gcConfig.agents.filter((agent) => {
+        const dir = agent.dir?.trim();
+        return !dir || !projectOwnedGcRigNames.has(dir);
+      }),
+    };
+  }, [gcConfig, projectOwnedGcRigNames]);
+  const gcCityRigGroups = useMemo(() => {
+    if (!gcCityDisplayConfig) {
       return [];
     }
-    const { rigGroups } = groupThreadsByRigAndAgent([...gcCityThreads], { config: gcConfig });
+    const { rigGroups } = groupThreadsByRigAndAgent([...gcCityThreads], {
+      config: gcCityDisplayConfig,
+    });
     return toSidebarGcRigGroups(rigGroups, {
       gcAgentActionStateByAgent,
       gcAgentStartsInFlight,
     });
-  }, [gcAgentActionStateByAgent, gcAgentStartsInFlight, gcCityThreads, gcConfig]);
+  }, [gcAgentActionStateByAgent, gcAgentStartsInFlight, gcCityDisplayConfig, gcCityThreads]);
   const gcCityThreadKeys = useMemo(
     () =>
       gcCityRigGroups
@@ -4668,7 +5085,7 @@ export default function Sidebar() {
   ]);
   const isManualProjectSorting = sidebarProjectSortOrder === "manual";
   const visibleSidebarThreadKeys = useMemo(() => {
-    const showProjectGcFolders = gcCityRigGroups.length === 0;
+    const showProjectGcFolders = Boolean(gcConfig);
     const projectThreadKeys = sortedProjects.flatMap((project) => {
       const projectThreads = sortThreads(
         (threadsByProjectKey.get(project.projectKey) ?? []).filter(
@@ -4721,7 +5138,6 @@ export default function Sidebar() {
     });
     return [...gcCityThreadKeys, ...projectThreadKeys];
   }, [
-    gcCityRigGroups.length,
     gcCityThreadKeys,
     gcConfig,
     sidebarThreadSortOrder,

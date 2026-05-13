@@ -81,6 +81,24 @@ function sameId(left: string | null | undefined, right: string | null | undefine
   return left === right;
 }
 
+function providerMetadataToCustomMetadata(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+): Record<string, string> | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+
+  const entries = Object.entries(metadata).flatMap(([key, value]) => {
+    if (typeof value !== "string") {
+      return [];
+    }
+    const trimmed = value.trim();
+    return trimmed ? [[key, trimmed] as const] : [];
+  });
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
 function hasAssistantMessageForTurn(
   messages: ReadonlyArray<OrchestrationMessage>,
   turnId: TurnId,
@@ -1559,12 +1577,17 @@ const make = Effect.gen(function* () {
         }
       }
 
-      if (event.type === "thread.metadata.updated" && event.payload.name) {
+      if (event.type === "thread.metadata.updated") {
+        const customMetadata = providerMetadataToCustomMetadata(event.payload.metadata);
+        if (!event.payload.name && !customMetadata) {
+          return;
+        }
         yield* orchestrationEngine.dispatch({
           type: "thread.meta.update",
           commandId: providerCommandId(event, "thread-meta-update"),
           threadId: thread.id,
-          title: event.payload.name,
+          ...(event.payload.name ? { title: event.payload.name } : {}),
+          ...(customMetadata ? { customMetadata } : {}),
         });
       }
 

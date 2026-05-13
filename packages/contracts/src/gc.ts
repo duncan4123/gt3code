@@ -776,12 +776,45 @@ export function groupThreadsByRigAndAgent<
   let cityScopedRigGroupId: string | null = null;
   const configRigs = options?.config?.rigs ?? [];
   const configRigByName = new Map(configRigs.map((rig) => [rig.name, rig] as const));
+  const threadReferencedRigIds = new Set<string>();
+  for (const thread of threads) {
+    const meta = parseGcMeta(thread.customMetadata);
+    const resolvedCity = normalizeMetadataValue(meta.city);
+    const canonicalGroupId = normalizeMetadataValue(meta.groupId);
+    const rig = normalizeMetadataValue(meta.rig);
+    const agent = normalizeMetadataValue(meta.agentQualified) ?? normalizeMetadataValue(meta.agent);
+    const cityWorkspaceGroupId =
+      resolvedCity && multiCityWorkspaceIds.has(resolvedCity) ? resolvedCity : null;
+    let resolvedRig =
+      meta.groupKind === "workspace" && cityWorkspaceGroupId
+        ? cityWorkspaceGroupId
+        : (canonicalGroupId ?? rig ?? deriveRigIdFromQualifiedAgent(agent ?? ""));
+    resolvedRig = qualifyMergedMultiCityRigId({
+      rig: resolvedRig,
+      city: resolvedCity,
+      isMergedMultiCityConfig,
+      multiCityWorkspaceIds,
+      configRigByName,
+    });
+    if (resolvedRig) {
+      threadReferencedRigIds.add(resolvedRig);
+    }
+  }
   const directlyRelevantRigs = configRigs.filter(
-    (rig) => projectCwds.size === 0 || projectContextMatchesRigPath(projectCwds, rig.path),
+    (rig) =>
+      projectCwds.size === 0 ||
+      projectContextMatchesRigPath(projectCwds, rig.path) ||
+      threadReferencedRigIds.has(rig.name),
   );
-  const relevantRigs = isMergedMultiCityConfig
-    ? expandRelevantRigsWithMultiCityRoots(configRigs, directlyRelevantRigs, multiCityWorkspaceIds)
-    : directlyRelevantRigs;
+  const shouldIncludeMultiCityRoots = isGlobalScope || isCityProject;
+  const relevantRigs =
+    isMergedMultiCityConfig && shouldIncludeMultiCityRoots
+      ? expandRelevantRigsWithMultiCityRoots(
+          configRigs,
+          directlyRelevantRigs,
+          multiCityWorkspaceIds,
+        )
+      : directlyRelevantRigs;
   if (relevantRigs && relevantRigs.length > 0) {
     const relevantRigNames = new Set(relevantRigs.map((rig) => rig.name));
     for (const rig of relevantRigs) {
@@ -810,7 +843,7 @@ export function groupThreadsByRigAndAgent<
           existingWorkspaceRig.isSuspended = workspaceSuspended;
           if (workspaceRig.lifecycle) {
             existingWorkspaceRig.lifecycle = workspaceRig.lifecycle;
-          } else if (options.config?.lifecycle) {
+          } else if (options?.config?.lifecycle) {
             existingWorkspaceRig.lifecycle = options.config.lifecycle;
           }
         }
@@ -848,7 +881,7 @@ export function groupThreadsByRigAndAgent<
       kind: "workspace",
       isConfigured: true,
       isSuspended: workspaceSuspended,
-      ...(options.config.lifecycle ? { lifecycle: options.config.lifecycle } : {}),
+      ...(options?.config?.lifecycle ? { lifecycle: options.config.lifecycle } : {}),
       agentGroupsById: new Map(),
     });
   }
@@ -1069,17 +1102,22 @@ export function groupThreadsByRigAndAgent<
     standaloneThreads,
     rigGroups: Array.from(rigGroupsById.values())
       .toSorted((a, b) => a.label.localeCompare(b.label))
-      .map((rigGroup) => ({
-        id: rigGroup.id,
-        label: rigGroup.label,
-        kind: rigGroup.kind,
-        isConfigured: rigGroup.isConfigured,
-        isSuspended: rigGroup.isSuspended,
-        ...(rigGroup.lifecycle ? { lifecycle: rigGroup.lifecycle } : {}),
-        agentGroups: Array.from(rigGroup.agentGroupsById.values()).toSorted((a, b) =>
-          a.label.localeCompare(b.label),
-        ),
-      })),
+      .map((rigGroup) => {
+        const result: VirtualRigGroup<TThread> = {
+          id: rigGroup.id,
+          label: rigGroup.label,
+          kind: rigGroup.kind,
+          isConfigured: rigGroup.isConfigured,
+          isSuspended: rigGroup.isSuspended,
+          agentGroups: Array.from(rigGroup.agentGroupsById.values()).toSorted((a, b) =>
+            a.label.localeCompare(b.label),
+          ),
+        };
+        if (rigGroup.lifecycle) {
+          result.lifecycle = rigGroup.lifecycle;
+        }
+        return result;
+      }),
   };
 }
 

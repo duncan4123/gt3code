@@ -1411,10 +1411,12 @@ function parseQuotedTomlArray(line: string, key: string): readonly string[] {
   return [...match[1]!.matchAll(/"([^"]+)"/g)].map((entry) => entry[1]!).filter(Boolean);
 }
 
+function isRigChildSection(trimmed: string): boolean {
+  return trimmed === "[[rigs.overrides]]" || trimmed.startsWith("[rigs.");
+}
+
 function findRigIncludesInCityToml(cityTomlContent: string, rigName: string): readonly string[] {
   const lines = cityTomlContent.split("\n");
-  const isRigChildSection = (trimmed: string): boolean =>
-    trimmed === "[[rigs.overrides]]" || trimmed.startsWith("[rigs.");
 
   for (let index = 0; index < lines.length; index += 1) {
     if (lines[index]?.trim() !== "[[rigs]]") continue;
@@ -1492,8 +1494,6 @@ function updateRigOverrideSuspended(
   const lines = cityTomlContent.split("\n");
   let rigStart = -1;
   let rigEnd = -1;
-  const isRigChildSection = (trimmed: string): boolean =>
-    trimmed === "[[rigs.overrides]]" || trimmed.startsWith("[rigs.");
 
   for (let index = 0; index < lines.length; index += 1) {
     if (lines[index]?.trim() !== "[[rigs]]") continue;
@@ -2663,23 +2663,22 @@ const makeGcApiClient = Effect.gen(function* () {
                 });
                 return null;
               });
-              let normalizedConfig = remote ? normalizeGcConfig(remote, city.path) : null;
-              if (!normalizedConfig) {
-                const cli = runGcCli(gcCliBinary, runtimeHome, city.path, ["config", "show"]);
-                if (cli.exitCode !== 0) {
-                  logGcWarning("gc city config cli fallback failed", {
-                    cityName: city.name,
-                    cityPath: city.path,
-                    exitCode: cli.exitCode,
-                    stderr: cli.stderr,
-                  });
-                } else {
-                  normalizedConfig = normalizeGcConfig(
-                    parseGcConfigShowToml(cli.stdout),
-                    city.path,
-                  );
-                }
+              let expandedConfig: GcConfigResult | null = null;
+              const cli = runGcCli(gcCliBinary, runtimeHome, city.path, ["config", "show"]);
+              if (cli.exitCode !== 0) {
+                logGcWarning("gc city config cli fallback failed", {
+                  cityName: city.name,
+                  cityPath: city.path,
+                  exitCode: cli.exitCode,
+                  stderr: cli.stderr,
+                });
+              } else {
+                expandedConfig = normalizeGcConfig(parseGcConfigShowToml(cli.stdout), city.path);
               }
+              let normalizedConfig = remote ? normalizeGcConfig(remote, city.path) : null;
+              normalizedConfig = normalizedConfig
+                ? mergeCliExpandedConfig(normalizedConfig, expandedConfig)
+                : expandedConfig;
               if (!normalizedConfig) {
                 return null;
               }

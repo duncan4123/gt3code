@@ -691,13 +691,72 @@ describe("groupThreadsByRigAndAgent", () => {
       projectName: "t3code",
     });
 
-    expect(projectScopedResult.rigGroups.map((group) => group.id)).toEqual([
-      "gastown",
-      "gastown/t3code",
-    ]);
-    expect(projectScopedResult.rigGroups.find((group) => group.id === "gastown")).toMatchObject({
-      kind: "workspace",
-      agentGroups: [{ qualifiedName: "gastown/mayor" }],
+    expect(projectScopedResult.rigGroups.map((group) => group.id)).toEqual(["gastown/t3code"]);
+    expect(projectScopedResult.rigGroups.some((group) => group.id === "gastown")).toBe(false);
+  });
+
+  it("keeps project-owned multicity rig folders even when ownership comes from thread metadata", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-worker",
+          customMetadata: {
+            "gc.agent": "t3-jj/worker",
+            "gc.agentQualified": "t3-jj/worker",
+            "gc.city": "gascity-br",
+            "gc.rig": "t3-jj",
+            "gc.groupKind": "rig",
+            "gc.groupId": "t3-jj",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "cities",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "gascity-br",
+              path: "/repo/packages/gascity-config/config/cities/gascity-br",
+              suspended: false,
+            },
+            {
+              name: "gascity-br/t3-jj",
+              path: "/repo/packages/gascity-config/config/cities/gascity-br/rigs/t3code",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "worker",
+              dir: "gascity-br/t3-jj",
+              suspended: false,
+              min_active_sessions: 1,
+              max_active_sessions: 4,
+              wake_mode: "fresh",
+            },
+          ],
+        },
+        projectCwd: "/repo",
+        projectName: "t3code",
+      },
+    );
+
+    expect(standaloneThreads).toEqual([]);
+    expect(rigGroups.map((group) => group.id)).toEqual(["gascity-br/t3-jj"]);
+    expect(rigGroups[0]).toMatchObject({
+      kind: "rig",
+      agentGroups: [
+        {
+          qualifiedName: "gascity-br/t3-jj/worker",
+          minActiveSessions: 1,
+          maxActiveSessions: 4,
+          wakeMode: "fresh",
+          threads: [{ id: "thread-worker" }],
+        },
+      ],
     });
   });
 

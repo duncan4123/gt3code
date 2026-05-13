@@ -144,22 +144,6 @@ function gcConfigToggleLabel(
       : `Suspend ${label} in config`;
 }
 
-function gcAgentSourceLabel(agentGroup: SidebarGcAgentGroup): string {
-  if (agentGroup.promptTemplate?.includes("/.gc/system/")) {
-    return "system";
-  }
-  if (
-    agentGroup.promptTemplate?.includes("/packs/") ||
-    agentGroup.promptTemplate?.startsWith("packs/")
-  ) {
-    return "pack";
-  }
-  if (agentGroup.startCommand) {
-    return "built-in";
-  }
-  return agentGroup.scope ?? "agent";
-}
-
 const NON_WAKEABLE_AGENT_RUNTIME_LABELS = new Set(["Running", "Ready", "Connecting", "Starting"]);
 
 function canWakeAgentSession(agentGroup: SidebarGcAgentGroup): boolean {
@@ -175,7 +159,6 @@ const RIG_FOLDER_INDENT_CLASSES = ["px-2", "px-4", "px-6"] as const;
 const AGENT_FOLDER_INDENT_CLASSES = ["px-4", "px-6", "px-8"] as const;
 const THREAD_GROUP_INDENT_CLASSES = ["px-6", "px-8", "px-10"] as const;
 const THREAD_INDENT_CLASSES = ["pl-6", "pl-8", "pl-10"] as const;
-const THREAD_GROUP_THREAD_INDENT_CLASSES = ["pl-8", "pl-10", "pl-12"] as const;
 const CONVOY_AGENT_INDENT_CLASSES = ["px-6", "px-8", "px-10"] as const;
 const CONVOY_THREAD_GROUP_INDENT_CLASSES = ["px-8", "px-10", "px-12"] as const;
 const CONVOY_THREAD_INDENT_CLASSES = ["pl-10", "pl-12", "pl-14"] as const;
@@ -208,7 +191,7 @@ function gcNestedRigParentId(
 function gcRigGroupDisplayLabel(rigGroup: SidebarGcRigGroup, parentId: string | undefined): string {
   const label = rigGroup.label.trim();
   const fallbackLabel =
-    rigGroup.id.split("/").filter(Boolean).at(-1) ??
+    rigGroup.id.split("/").toReversed().find(Boolean) ??
     (rigGroup.kind === "workspace" ? "City" : "Rig");
   if (!parentId) {
     return label || fallbackLabel;
@@ -303,10 +286,6 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   const agentFolderIndentClassName = gcDepthClassName(indentDepth, AGENT_FOLDER_INDENT_CLASSES);
   const threadGroupIndentClassName = gcDepthClassName(indentDepth, THREAD_GROUP_INDENT_CLASSES);
   const threadIndentClassName = gcDepthClassName(indentDepth, THREAD_INDENT_CLASSES);
-  const threadGroupThreadIndentClassName = gcDepthClassName(
-    indentDepth,
-    THREAD_GROUP_THREAD_INDENT_CLASSES,
-  );
 
   const toggleRig = (rigId: string) => {
     setCollapsedRigIds((current) => {
@@ -378,6 +357,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
         : agentGroup.namedSessionMode === "on_demand"
           ? "demand"
           : null;
+    const maxActiveSessions = agentGroup.maxActiveSessions;
     const canAdjustPoolSize =
       hasScaleControls &&
       !isMutating &&
@@ -393,14 +373,24 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
       canAdjustPoolSize &&
       typeof agentGroup.minActiveSessions === "number" &&
       agentGroup.minActiveSessions > 0;
+    const canAdjustPoolMaximum = canAdjustPoolSize && typeof maxActiveSessions === "number";
+    const canIncreasePoolMaximum = canAdjustPoolMaximum;
+    const canDecreasePoolMaximum =
+      canAdjustPoolMaximum &&
+      (maxActiveSessions ?? 0) > Math.max(0, agentGroup.minActiveSessions ?? 0);
     const canWakeSession =
       canWakeAgentSession(agentGroup) &&
       !rigGroup.isSuspended &&
       !isMutating &&
       !actionState &&
       !props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName);
-    const sourceLabel = gcAgentSourceLabel(agentGroup);
     const fragmentKey = `${options.keyPrefix ?? ""}${agentGroup.qualifiedName}`;
+    const groupedThreadIds = new Set(
+      (agentGroup.threadGroups ?? []).flatMap((threadGroup) => threadGroup.threadIds),
+    );
+    const ungroupedThreadIds = agentGroup.threadIds.filter(
+      (threadId) => !groupedThreadIds.has(threadId),
+    );
 
     return (
       <Fragment key={fragmentKey}>
@@ -414,7 +404,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
             <button
               type="button"
               data-thread-selection-safe
-              data-testid={`gc-agent-toggle-${gcControlTestIdSuffix(fragmentKey)}`}
+              data-testid={`gc-agent-folder-toggle-${gcControlTestIdSuffix(fragmentKey)}`}
               aria-expanded={!collapsedAgentIds.has(fragmentKey)}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md py-0.5 pr-1 transition-colors hover:bg-accent hover:text-foreground"
               onClick={(event) => {
@@ -430,242 +420,273 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               />
               <FolderIcon className="size-3 shrink-0" />
               <span className="truncate text-xs font-medium leading-none">{agentGroup.label}</span>
+            </button>
+            <div className="ml-auto flex items-center gap-1" data-thread-selection-safe>
+              {canWakeAgentSession(agentGroup) ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        data-thread-selection-safe
+                        data-testid={`gc-agent-wake-${gcControlTestIdSuffix(fragmentKey)}`}
+                        data-gc-agent={agentGroup.qualifiedName}
+                        aria-label={`Wake ${agentGroup.qualifiedName}`}
+                        disabled={!canWakeSession}
+                        className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-50"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          props.onWakeAgentSession(agentGroup.qualifiedName);
+                        }}
+                      >
+                        {actionState?.kind === "wake" ||
+                        props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName) ? (
+                          <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
+                        ) : (
+                          <RotateCcwIcon className="size-3.5 shrink-0" />
+                        )}
+                      </button>
+                    }
+                  />
+                  <TooltipPopup side="top">Wake session</TooltipPopup>
+                </Tooltip>
+              ) : null}
+              {hasScaleControls ? (
+                <div className="flex items-center gap-0.5">
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <button
+                          type="button"
+                          data-thread-selection-safe
+                          data-testid={`gc-agent-pool-min-decrement-${gcControlTestIdSuffix(fragmentKey)}`}
+                          data-gc-agent={agentGroup.qualifiedName}
+                          aria-label={`Decrease minimum active sessions for ${agentGroup.qualifiedName}`}
+                          disabled={!canDecreasePool}
+                          className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            props.onAdjustAgentMinActiveSessions(
+                              agentGroup.qualifiedName,
+                              Math.max(0, (agentGroup.minActiveSessions ?? 0) - 1),
+                            );
+                          }}
+                        >
+                          <MinusIcon className="size-3" />
+                        </button>
+                      }
+                    />
+                    <TooltipPopup side="top">Decrease minimum active sessions</TooltipPopup>
+                  </Tooltip>
+                  <Badge
+                    size="sm"
+                    variant="outline"
+                    data-testid={`gc-agent-pool-min-${gcControlTestIdSuffix(fragmentKey)}`}
+                    className="rounded-full px-1.5 text-[.55rem] tracking-wide uppercase"
+                  >
+                    min {agentGroup.minActiveSessions ?? 0}
+                  </Badge>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <button
+                          type="button"
+                          data-thread-selection-safe
+                          data-testid={`gc-agent-pool-min-increment-${gcControlTestIdSuffix(fragmentKey)}`}
+                          data-gc-agent={agentGroup.qualifiedName}
+                          aria-label={`Increase minimum active sessions for ${agentGroup.qualifiedName}`}
+                          disabled={!canIncreasePool}
+                          className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            props.onAdjustAgentMinActiveSessions(
+                              agentGroup.qualifiedName,
+                              (agentGroup.minActiveSessions ?? 0) + 1,
+                            );
+                          }}
+                        >
+                          <PlusIcon className="size-3" />
+                        </button>
+                      }
+                    />
+                    <TooltipPopup side="top">Increase minimum active sessions</TooltipPopup>
+                  </Tooltip>
+                </div>
+              ) : null}
+              {typeof maxActiveSessions === "number" ? (
+                <div className="flex items-center gap-0.5">
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <button
+                          type="button"
+                          data-thread-selection-safe
+                          data-testid={`gc-agent-pool-decrement-${gcControlTestIdSuffix(fragmentKey)}`}
+                          data-gc-agent={agentGroup.qualifiedName}
+                          aria-label={`Decrease maximum active sessions for ${agentGroup.qualifiedName}`}
+                          disabled={!canDecreasePoolMaximum}
+                          className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            props.onAdjustAgentMaxActiveSessions(
+                              agentGroup.qualifiedName,
+                              Math.max(
+                                Math.max(0, agentGroup.minActiveSessions ?? 0),
+                                maxActiveSessions - 1,
+                              ),
+                            );
+                          }}
+                        >
+                          <MinusIcon className="size-3" />
+                        </button>
+                      }
+                    />
+                    <TooltipPopup side="top">Decrease maximum active sessions</TooltipPopup>
+                  </Tooltip>
+                  <Badge
+                    size="sm"
+                    variant="outline"
+                    data-testid={`gc-agent-pool-max-${gcControlTestIdSuffix(fragmentKey)}`}
+                    className="rounded-full px-1.5 text-[.55rem] tracking-wide uppercase"
+                  >
+                    max {maxActiveSessions}
+                  </Badge>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <button
+                          type="button"
+                          data-thread-selection-safe
+                          data-testid={`gc-agent-pool-increment-${gcControlTestIdSuffix(fragmentKey)}`}
+                          data-gc-agent={agentGroup.qualifiedName}
+                          aria-label={`Increase maximum active sessions for ${agentGroup.qualifiedName}`}
+                          disabled={!canIncreasePoolMaximum}
+                          className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-50"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            props.onAdjustAgentMaxActiveSessions(
+                              agentGroup.qualifiedName,
+                              maxActiveSessions + 1,
+                            );
+                          }}
+                        >
+                          <PlusIcon className="size-3" />
+                        </button>
+                      }
+                    />
+                    <TooltipPopup side="top">Increase maximum active sessions</TooltipPopup>
+                  </Tooltip>
+                </div>
+              ) : null}
+              {nextNamedSessionMode ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        data-thread-selection-safe
+                        data-testid={`gc-agent-session-mode-${gcControlTestIdSuffix(fragmentKey)}`}
+                        data-gc-agent={agentGroup.qualifiedName}
+                        aria-label={`Switch ${agentGroup.qualifiedName} to ${nextNamedSessionMode} sessions`}
+                        disabled={isMutating}
+                        className="inline-flex h-5 cursor-pointer items-center justify-center rounded-md px-1.5 text-[.55rem] font-medium tracking-wide text-muted-foreground/70 uppercase transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-50"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          props.onToggleAgentSessionMode(
+                            agentGroup.qualifiedName,
+                            nextNamedSessionMode,
+                          );
+                        }}
+                      >
+                        {sessionModeLabel}
+                      </button>
+                    }
+                  />
+                  <TooltipPopup side="top">Switch named session mode</TooltipPopup>
+                </Tooltip>
+              ) : null}
+              {agentGroup.wakeMode ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        data-thread-selection-safe
+                        data-testid={`gc-agent-wake-mode-${gcControlTestIdSuffix(fragmentKey)}`}
+                        data-gc-agent={agentGroup.qualifiedName}
+                        aria-label={`Switch ${agentGroup.qualifiedName} wake mode`}
+                        disabled={isMutating}
+                        className="inline-flex h-5 cursor-pointer items-center justify-center rounded-md px-1.5 text-[.55rem] font-medium tracking-wide text-muted-foreground/70 uppercase transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-50"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          props.onToggleAgentWakeMode(
+                            agentGroup.qualifiedName,
+                            agentGroup.wakeMode === "resume" ? "fresh" : "resume",
+                          );
+                        }}
+                      >
+                        {agentGroup.wakeMode}
+                      </button>
+                    }
+                  />
+                  <TooltipPopup side="top">Switch wake mode</TooltipPopup>
+                </Tooltip>
+              ) : null}
               <Badge
                 size="sm"
                 variant="outline"
+                data-testid={`gc-agent-status-${gcControlTestIdSuffix(fragmentKey)}`}
                 className={`rounded-full px-1.5 text-[.55rem] tracking-wide uppercase ${statusBadgeClassName(
                   displayRuntimeState.tone,
                 )}`}
               >
                 {displayRuntimeState.label}
               </Badge>
-            </button>
-            {canWakeAgentSession(agentGroup) ? (
               <Tooltip>
                 <TooltipTrigger
                   render={
                     <button
                       type="button"
                       data-thread-selection-safe
-                      data-testid={`gc-agent-wake-${gcControlTestIdSuffix(fragmentKey)}`}
+                      data-testid={`gc-agent-toggle-${gcControlTestIdSuffix(fragmentKey)}`}
+                      data-gc-agent-action={gcControlTestIdSuffix(fragmentKey)}
                       data-gc-agent={agentGroup.qualifiedName}
-                      aria-label={`Wake ${agentGroup.qualifiedName}`}
-                      disabled={!canWakeSession}
-                      className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-50"
+                      data-gc-action-icon={
+                        isMutating ? "loading" : agentGroup.isExplicitlySuspended ? "play" : "stop"
+                      }
+                      aria-label={actionLabel}
+                      disabled={isMutating}
+                      className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60"
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
-                        props.onWakeAgentSession(agentGroup.qualifiedName);
+                        props.onToggleAgentSuspended(
+                          agentGroup.qualifiedName,
+                          !agentGroup.isExplicitlySuspended,
+                          agentGroup,
+                        );
                       }}
                     >
-                      {actionState?.kind === "wake" ||
-                      props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName) ? (
+                      {isMutating ? (
                         <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
+                      ) : agentGroup.isExplicitlySuspended ? (
+                        <PlayIcon className="size-3.5 shrink-0" />
                       ) : (
-                        <RotateCcwIcon className="size-3.5 shrink-0" />
+                        <SquareIcon className="size-3.5 shrink-0" />
                       )}
                     </button>
                   }
                 />
-                <TooltipPopup side="top">Wake session</TooltipPopup>
+                <TooltipPopup side="top">{actionLabel}</TooltipPopup>
               </Tooltip>
-            ) : null}
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    data-thread-selection-safe
-                    data-testid={`gc-agent-action-${gcControlTestIdSuffix(fragmentKey)}`}
-                    data-gc-agent={agentGroup.qualifiedName}
-                    data-gc-action-icon={
-                      isMutating ? "loading" : agentGroup.isExplicitlySuspended ? "play" : "stop"
-                    }
-                    aria-label={actionLabel}
-                    disabled={isMutating}
-                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      props.onToggleAgentSuspended(
-                        agentGroup.qualifiedName,
-                        !agentGroup.isExplicitlySuspended,
-                        agentGroup,
-                      );
-                    }}
-                  >
-                    {isMutating ? (
-                      <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
-                    ) : agentGroup.isExplicitlySuspended ? (
-                      <PlayIcon className="size-3.5 shrink-0" />
-                    ) : (
-                      <SquareIcon className="size-3.5 shrink-0" />
-                    )}
-                  </button>
-                }
-              />
-              <TooltipPopup side="top">{actionLabel}</TooltipPopup>
-            </Tooltip>
-            {hasScaleControls ? (
-              <div className="flex items-center gap-0.5" data-thread-selection-safe>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        type="button"
-                        data-thread-selection-safe
-                        data-testid={`gc-agent-scale-down-${gcControlTestIdSuffix(fragmentKey)}`}
-                        data-gc-agent={agentGroup.qualifiedName}
-                        aria-label={`Decrease minimum active sessions for ${agentGroup.qualifiedName}`}
-                        disabled={!canDecreasePool}
-                        className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          props.onAdjustAgentMinActiveSessions(
-                            agentGroup.qualifiedName,
-                            Math.max(0, (agentGroup.minActiveSessions ?? 0) - 1),
-                          );
-                        }}
-                      >
-                        <MinusIcon className="size-3" />
-                      </button>
-                    }
-                  />
-                  <TooltipPopup side="top">Decrease minimum active sessions</TooltipPopup>
-                </Tooltip>
-                <span className="min-w-6 text-center text-[.625rem] text-muted-foreground/70">
-                  {agentGroup.minActiveSessions ?? 0}
-                  {typeof agentGroup.maxActiveSessions === "number"
-                    ? `/${agentGroup.maxActiveSessions}`
-                    : ""}
-                </span>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        type="button"
-                        data-thread-selection-safe
-                        data-testid={`gc-agent-scale-up-${gcControlTestIdSuffix(fragmentKey)}`}
-                        data-gc-agent={agentGroup.qualifiedName}
-                        aria-label={`Increase minimum active sessions for ${agentGroup.qualifiedName}`}
-                        disabled={!canIncreasePool}
-                        className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          props.onAdjustAgentMinActiveSessions(
-                            agentGroup.qualifiedName,
-                            (agentGroup.minActiveSessions ?? 0) + 1,
-                          );
-                        }}
-                      >
-                        <PlusIcon className="size-3" />
-                      </button>
-                    }
-                  />
-                  <TooltipPopup side="top">Increase minimum active sessions</TooltipPopup>
-                </Tooltip>
-              </div>
-            ) : null}
-            {nextNamedSessionMode ? (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      data-thread-selection-safe
-                      data-testid={`gc-agent-session-mode-${gcControlTestIdSuffix(fragmentKey)}`}
-                      data-gc-agent={agentGroup.qualifiedName}
-                      aria-label={`Switch ${agentGroup.qualifiedName} to ${nextNamedSessionMode} sessions`}
-                      disabled={isMutating}
-                      className="inline-flex h-5 cursor-pointer items-center justify-center rounded-md px-1.5 text-[.55rem] font-medium tracking-wide text-muted-foreground/70 uppercase transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-50"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        props.onToggleAgentSessionMode(
-                          agentGroup.qualifiedName,
-                          nextNamedSessionMode,
-                        );
-                      }}
-                    >
-                      {sessionModeLabel}
-                    </button>
-                  }
-                />
-                <TooltipPopup side="top">Switch named session mode</TooltipPopup>
-              </Tooltip>
-            ) : null}
-            {agentGroup.wakeMode ? (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      data-thread-selection-safe
-                      data-testid={`gc-agent-wake-mode-${gcControlTestIdSuffix(fragmentKey)}`}
-                      data-gc-agent={agentGroup.qualifiedName}
-                      aria-label={`Switch ${agentGroup.qualifiedName} wake mode`}
-                      disabled={isMutating}
-                      className="inline-flex h-5 cursor-pointer items-center justify-center rounded-md px-1.5 text-[.55rem] font-medium tracking-wide text-muted-foreground/70 uppercase transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-50"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        props.onToggleAgentWakeMode(
-                          agentGroup.qualifiedName,
-                          agentGroup.wakeMode === "resume" ? "fresh" : "resume",
-                        );
-                      }}
-                    >
-                      {agentGroup.wakeMode}
-                    </button>
-                  }
-                />
-                <TooltipPopup side="top">Switch wake mode</TooltipPopup>
-              </Tooltip>
-            ) : null}
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span className="inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/45">
-                    {actionState || props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName) ? (
-                      <LoaderCircleIcon className="size-3 animate-spin" />
-                    ) : (
-                      <span className="text-[.55rem]">i</span>
-                    )}
-                  </span>
-                }
-              />
-              <TooltipPopup side="top">
-                <div className="space-y-1">
-                  <div className="text-xs font-medium">{agentGroup.qualifiedName}</div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {agentGroup.isPool
-                      ? `Pool minimum is ${agentGroup.minActiveSessions ?? 0}${
-                          typeof agentGroup.maxActiveSessions === "number"
-                            ? ` of ${agentGroup.maxActiveSessions}`
-                            : ""
-                        }.`
-                      : agentGroup.namedSessionMode
-                        ? `Named session mode is ${agentGroup.namedSessionMode}.`
-                        : typeof agentGroup.maxActiveSessions === "number"
-                          ? `Pool capacity is ${agentGroup.maxActiveSessions}.`
-                          : "No named session mode configured."}
-                  </div>
-                  <div className="max-w-72 space-y-0.5 text-[10px] text-muted-foreground/80">
-                    <div>
-                      scope {agentGroup.scope ?? "unknown"} · source {sourceLabel}
-                      {agentGroup.provider ? ` · provider ${agentGroup.provider}` : ""}
-                    </div>
-                    {agentGroup.defaultSlingFormula ? (
-                      <div>formula {agentGroup.defaultSlingFormula}</div>
-                    ) : null}
-                    {agentGroup.workDir ? <div>work {agentGroup.workDir}</div> : null}
-                    {agentGroup.startCommand ? <div>starts via command</div> : null}
-                  </div>
-                </div>
-              </TooltipPopup>
-            </Tooltip>
+            </div>
           </div>
         </SidebarMenuSubItem>
         {!collapsedAgentIds.has(fragmentKey) &&
@@ -724,6 +745,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                   </Fragment>
                 );
               })}
+              {ungroupedThreadIds.length > 0
+                ? props.renderThreadRows(ungroupedThreadIds, options.threadIndentClassName)
+                : null}
             </>
           ) : (
             props.renderThreadRows(agentGroup.threadIds, options.threadIndentClassName)
@@ -1003,6 +1027,22 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
         {!collapsedRigIds.has(rigGroup.id) &&
           (props.gcThreadGroupingMode === "convoy" && rigGroup.threadGroups ? (
             <>
+              {rigGroup.agentGroups.map((agentGroup) =>
+                renderAgentGroup(
+                  rigGroup,
+                  {
+                    ...agentGroup,
+                    threadIds: [],
+                    threadGroups: [],
+                  },
+                  {
+                    agentIndentClassName: agentFolderIndentClassName,
+                    threadGroupIndentClassName,
+                    threadIndentClassName,
+                    keyPrefix: `${rigGroup.id}:controls:`,
+                  },
+                ),
+              )}
               {rigGroup.threadGroups.map((threadGroup) => {
                 const groupKey = `${rigGroup.id}:${threadGroup.id}`;
                 const groupCollapsed = collapsedThreadGroupIds.has(groupKey);
@@ -1074,431 +1114,13 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               })}
             </>
           ) : (
-            rigGroup.agentGroups.map((agentGroup) => {
-              const isMutating = props.gcAgentMutationsInFlight.has(agentGroup.qualifiedName);
-              const actionState = props.gcAgentActionStateByAgent.get(agentGroup.qualifiedName);
-              const displayRuntimeState = gcAgentEffectiveRuntimeState(rigGroup, agentGroup);
-              const testIdSuffix = gcControlTestIdSuffix(agentGroup.qualifiedName);
-              const actionLabel = gcConfigToggleLabel(
-                "agent",
-                agentGroup.qualifiedName,
-                agentGroup.isExplicitlySuspended,
-              );
-              const hasScaleControls = agentGroup.isPool;
-              const showNamedSessionModeControl = Boolean(agentGroup.namedSessionMode);
-              const nextNamedSessionMode = !showNamedSessionModeControl
-                ? null
-                : agentGroup.namedSessionMode === "always"
-                  ? "on_demand"
-                  : agentGroup.namedSessionMode === "on_demand"
-                    ? "always"
-                    : null;
-              const sessionModeLabel = !showNamedSessionModeControl
-                ? null
-                : agentGroup.namedSessionMode === "always"
-                  ? "auto"
-                  : agentGroup.namedSessionMode === "on_demand"
-                    ? "demand"
-                    : null;
-              const canAdjustPoolSize =
-                hasScaleControls && typeof agentGroup.maxActiveSessions === "number";
-              const canAdjustPoolMinimum =
-                hasScaleControls && typeof agentGroup.minActiveSessions === "number";
-              const nextWakeMode =
-                agentGroup.wakeMode === "resume"
-                  ? "fresh"
-                  : agentGroup.wakeMode === "fresh"
-                    ? "resume"
-                    : null;
-              const canWakeSession =
-                canWakeAgentSession(agentGroup) &&
-                !rigGroup.isSuspended &&
-                !isMutating &&
-                !actionState &&
-                !props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName);
-              const sourceLabel = gcAgentSourceLabel(agentGroup);
-              return (
-                <Fragment key={`agent-${rigGroup.id}-${agentGroup.id}`}>
-                  <SidebarMenuSubItem
-                    className="w-full"
-                    data-thread-selection-safe
-                    data-testid={`gc-agent-folder-${testIdSuffix}`}
-                  >
-                    <div
-                      className={`flex items-center gap-1.5 py-1 text-muted-foreground/60 ${agentFolderIndentClassName}`}
-                    >
-                      <button
-                        type="button"
-                        data-thread-selection-safe
-                        data-testid={`gc-agent-folder-toggle-${testIdSuffix}`}
-                        aria-expanded={!collapsedAgentIds.has(agentGroup.qualifiedName)}
-                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md py-0.5 pr-1 transition-colors hover:bg-accent hover:text-foreground"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          toggleAgent(agentGroup.qualifiedName);
-                        }}
-                      >
-                        <ChevronRightIcon
-                          className={`size-3 shrink-0 transition-transform ${
-                            collapsedAgentIds.has(agentGroup.qualifiedName) ? "" : "rotate-90"
-                          }`}
-                        />
-                        <FolderIcon className="size-3 shrink-0" />
-                        <span className="truncate text-xs font-medium leading-none">
-                          {agentGroup.label}
-                        </span>
-                        <span className="rounded-full border border-border/60 px-1.5 py-0 text-[.55rem] font-semibold tracking-wide text-muted-foreground/70 uppercase">
-                          {sourceLabel}
-                        </span>
-                        {agentGroup.provider ? (
-                          <span className="rounded-full border border-border/60 px-1.5 py-0 text-[.55rem] font-semibold tracking-wide text-muted-foreground/70 uppercase">
-                            {agentGroup.provider}
-                          </span>
-                        ) : null}
-                      </button>
-                      <div className="ml-auto flex items-center gap-1">
-                        {nextWakeMode ? (
-                          <button
-                            type="button"
-                            data-thread-selection-safe
-                            data-testid={`gc-agent-wake-mode-${testIdSuffix}`}
-                            data-gc-agent-wake-mode={agentGroup.qualifiedName}
-                            aria-label={`Set ${agentGroup.qualifiedName} wake mode to ${nextWakeMode}`}
-                            disabled={isMutating}
-                            className="inline-flex h-5 cursor-pointer items-center justify-center rounded-md px-1.5 font-semibold tracking-wide text-muted-foreground/70 text-xs uppercase transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60 sm:text-[.625rem]"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              props.onToggleAgentWakeMode(agentGroup.qualifiedName, nextWakeMode);
-                            }}
-                          >
-                            {agentGroup.wakeMode}
-                          </button>
-                        ) : null}
-                        {canAdjustPoolMinimum ? (
-                          <>
-                            <button
-                              type="button"
-                              data-thread-selection-safe
-                              data-testid={`gc-agent-pool-min-decrement-${testIdSuffix}`}
-                              aria-label={`Decrease ${agentGroup.qualifiedName} minimum sessions`}
-                              disabled={isMutating || (agentGroup.minActiveSessions ?? 0) <= 0}
-                              className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                props.onAdjustAgentMinActiveSessions(
-                                  agentGroup.qualifiedName,
-                                  Math.max(0, (agentGroup.minActiveSessions ?? 0) - 1),
-                                );
-                              }}
-                            >
-                              <MinusIcon className="size-3.5 shrink-0" />
-                            </button>
-                            <Badge
-                              size="sm"
-                              variant="outline"
-                              data-testid={`gc-agent-pool-min-${testIdSuffix}`}
-                              className="rounded-full px-1.5 tracking-wide uppercase"
-                            >
-                              min {agentGroup.minActiveSessions}
-                            </Badge>
-                            <button
-                              type="button"
-                              data-thread-selection-safe
-                              data-testid={`gc-agent-pool-min-increment-${testIdSuffix}`}
-                              aria-label={`Increase ${agentGroup.qualifiedName} minimum sessions`}
-                              disabled={
-                                isMutating ||
-                                (typeof agentGroup.maxActiveSessions === "number" &&
-                                  (agentGroup.minActiveSessions ?? 0) >=
-                                    agentGroup.maxActiveSessions)
-                              }
-                              className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                props.onAdjustAgentMinActiveSessions(
-                                  agentGroup.qualifiedName,
-                                  (agentGroup.minActiveSessions ?? 0) + 1,
-                                );
-                              }}
-                            >
-                              <PlusIcon className="size-3.5 shrink-0" />
-                            </button>
-                          </>
-                        ) : null}
-                        {canAdjustPoolSize ? (
-                          <>
-                            <button
-                              type="button"
-                              data-thread-selection-safe
-                              data-testid={`gc-agent-pool-decrement-${testIdSuffix}`}
-                              aria-label={`Decrease ${agentGroup.qualifiedName} max sessions`}
-                              disabled={
-                                isMutating ||
-                                (agentGroup.maxActiveSessions ?? 0) <=
-                                  Math.max(0, agentGroup.minActiveSessions ?? 0)
-                              }
-                              className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                props.onAdjustAgentMaxActiveSessions(
-                                  agentGroup.qualifiedName,
-                                  Math.max(
-                                    Math.max(0, agentGroup.minActiveSessions ?? 0),
-                                    (agentGroup.maxActiveSessions ?? 0) - 1,
-                                  ),
-                                );
-                              }}
-                            >
-                              <MinusIcon className="size-3.5 shrink-0" />
-                            </button>
-                            <Badge
-                              size="sm"
-                              variant="outline"
-                              data-testid={`gc-agent-pool-max-${testIdSuffix}`}
-                              className="rounded-full px-1.5 tracking-wide uppercase"
-                            >
-                              max {agentGroup.maxActiveSessions}
-                            </Badge>
-                            <button
-                              type="button"
-                              data-thread-selection-safe
-                              data-testid={`gc-agent-pool-increment-${testIdSuffix}`}
-                              aria-label={`Increase ${agentGroup.qualifiedName} max sessions`}
-                              disabled={isMutating}
-                              className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                props.onAdjustAgentMaxActiveSessions(
-                                  agentGroup.qualifiedName,
-                                  (agentGroup.maxActiveSessions ?? 0) + 1,
-                                );
-                              }}
-                            >
-                              <PlusIcon className="size-3.5 shrink-0" />
-                            </button>
-                          </>
-                        ) : null}
-                        {sessionModeLabel && nextNamedSessionMode ? (
-                          <button
-                            type="button"
-                            data-thread-selection-safe
-                            data-testid={`gc-agent-session-mode-${testIdSuffix}`}
-                            data-gc-agent-session-mode={agentGroup.qualifiedName}
-                            aria-label={`Set ${agentGroup.qualifiedName} session mode to ${nextNamedSessionMode}`}
-                            disabled={isMutating}
-                            className="inline-flex h-5 cursor-pointer items-center justify-center rounded-md px-1.5 font-semibold tracking-wide text-muted-foreground/70 text-xs uppercase transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60 sm:text-[.625rem]"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              props.onToggleAgentSessionMode(
-                                agentGroup.qualifiedName,
-                                nextNamedSessionMode,
-                              );
-                            }}
-                          >
-                            {sessionModeLabel}
-                          </button>
-                        ) : null}
-                        <Badge
-                          size="sm"
-                          variant="outline"
-                          data-testid={`gc-agent-status-${testIdSuffix}`}
-                          className={`rounded-full px-1.5 tracking-wide uppercase ${statusBadgeClassName(
-                            displayRuntimeState.tone,
-                          )}`}
-                        >
-                          {displayRuntimeState.label}
-                        </Badge>
-                        {canWakeAgentSession(agentGroup) ? (
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <button
-                                  type="button"
-                                  data-thread-selection-safe
-                                  data-testid={`gc-agent-wake-${testIdSuffix}`}
-                                  data-gc-agent={agentGroup.qualifiedName}
-                                  aria-label={`Wake ${agentGroup.qualifiedName}`}
-                                  disabled={!canWakeSession}
-                                  className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-50"
-                                  onClick={(event) => {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    props.onWakeAgentSession(agentGroup.qualifiedName);
-                                  }}
-                                >
-                                  {actionState?.kind === "wake" ||
-                                  props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName) ? (
-                                    <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
-                                  ) : (
-                                    <RotateCcwIcon className="size-3.5 shrink-0" />
-                                  )}
-                                </button>
-                              }
-                            />
-                            <TooltipPopup side="top">Wake session</TooltipPopup>
-                          </Tooltip>
-                        ) : null}
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <button
-                                type="button"
-                                data-thread-selection-safe
-                                data-testid={`gc-agent-toggle-${testIdSuffix}`}
-                                data-gc-agent={agentGroup.qualifiedName}
-                                data-gc-action-icon={
-                                  isMutating
-                                    ? "loading"
-                                    : agentGroup.isExplicitlySuspended
-                                      ? "play"
-                                      : "stop"
-                                }
-                                aria-label={actionLabel}
-                                disabled={isMutating}
-                                className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60"
-                                onClick={(event) => {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  props.onToggleAgentSuspended(
-                                    agentGroup.qualifiedName,
-                                    !agentGroup.isExplicitlySuspended,
-                                    agentGroup,
-                                  );
-                                }}
-                              >
-                                {isMutating ? (
-                                  <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
-                                ) : agentGroup.isExplicitlySuspended ? (
-                                  <PlayIcon className="size-3.5 shrink-0" />
-                                ) : (
-                                  <SquareIcon className="size-3.5 shrink-0" />
-                                )}
-                              </button>
-                            }
-                          />
-                          <TooltipPopup side="top">
-                            <div className="space-y-1">
-                              <div>{actionLabel}</div>
-                              {agentGroup.description ? (
-                                <div className="max-w-72 text-[10px] text-muted-foreground">
-                                  {agentGroup.description}
-                                </div>
-                              ) : null}
-                              <div className="text-[10px] text-muted-foreground">
-                                {actionState?.kind === "pool-size"
-                                  ? `Updating pool size to max ${actionState.maxActiveSessions}.`
-                                  : actionState?.kind === "pool-min"
-                                    ? `Updating pool minimum to ${actionState.minActiveSessions}.`
-                                    : actionState?.kind === "wake-mode"
-                                      ? `Switching wake mode to ${actionState.wakeMode}.`
-                                      : actionState?.kind === "session-mode"
-                                        ? actionState.targetMode === "always"
-                                          ? "Switching named session mode to auto-start."
-                                          : "Switching named session mode to on-demand."
-                                        : `${displayRuntimeState.label}. ${
-                                            agentGroup.namedSessionMode === "always"
-                                              ? "Named session auto-start is enabled."
-                                              : agentGroup.namedSessionMode === "on_demand"
-                                                ? "Named session starts on demand."
-                                                : agentGroup.isPool &&
-                                                    typeof agentGroup.maxActiveSessions === "number"
-                                                  ? `Pool capacity is ${agentGroup.maxActiveSessions}.`
-                                                  : "No named session mode configured."
-                                          }`}
-                              </div>
-                              <div className="max-w-72 space-y-0.5 text-[10px] text-muted-foreground/80">
-                                <div>
-                                  scope {agentGroup.scope ?? "unknown"} · source {sourceLabel}
-                                  {agentGroup.provider ? ` · provider ${agentGroup.provider}` : ""}
-                                </div>
-                                {agentGroup.defaultSlingFormula ? (
-                                  <div>formula {agentGroup.defaultSlingFormula}</div>
-                                ) : null}
-                                {agentGroup.workDir ? <div>work {agentGroup.workDir}</div> : null}
-                                {agentGroup.startCommand ? <div>starts via command</div> : null}
-                              </div>
-                            </div>
-                          </TooltipPopup>
-                        </Tooltip>
-                      </div>
-                    </div>
-                  </SidebarMenuSubItem>
-                  {!collapsedAgentIds.has(agentGroup.qualifiedName) &&
-                    (agentGroup.threadGroups && agentGroup.threadGroups.length > 0 ? (
-                      <>
-                        {agentGroup.threadGroups.map((threadGroup) => {
-                          const groupKey = `${agentGroup.qualifiedName}:${threadGroup.id}`;
-                          const groupCollapsed = collapsedThreadGroupIds.has(groupKey);
-                          return (
-                            <Fragment key={groupKey}>
-                              <SidebarMenuSubItem
-                                className="w-full"
-                                data-thread-selection-safe
-                                data-testid={`gc-thread-group-${gcControlTestIdSuffix(groupKey)}`}
-                              >
-                                <div
-                                  className={`flex items-center gap-1.5 py-0.5 text-muted-foreground/60 ${threadGroupIndentClassName}`}
-                                >
-                                  <button
-                                    type="button"
-                                    data-thread-selection-safe
-                                    data-testid={`gc-thread-group-toggle-${gcControlTestIdSuffix(groupKey)}`}
-                                    aria-expanded={!groupCollapsed}
-                                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md py-0.5 pr-1 transition-colors hover:bg-accent hover:text-foreground"
-                                    onClick={(event) => {
-                                      event.preventDefault();
-                                      event.stopPropagation();
-                                      toggleThreadGroup(groupKey);
-                                    }}
-                                  >
-                                    <ChevronRightIcon
-                                      className={`size-3 shrink-0 transition-transform ${
-                                        groupCollapsed ? "" : "rotate-90"
-                                      }`}
-                                    />
-                                    <FolderIcon className="size-3 shrink-0" />
-                                    <span className="truncate text-[11px] font-medium leading-none">
-                                      {threadGroup.label}
-                                    </span>
-                                    <GcThreadGroupBadges
-                                      threadGroup={threadGroup}
-                                      primary={false}
-                                    />
-                                    {threadGroup.progressLabel ? (
-                                      <span className="text-[.625rem] text-muted-foreground/55">
-                                        {threadGroup.progressLabel}
-                                      </span>
-                                    ) : null}
-                                    {threadGroup.status ? (
-                                      <span className="text-[.625rem] text-muted-foreground/55">
-                                        {threadGroup.status}
-                                      </span>
-                                    ) : null}
-                                  </button>
-                                </div>
-                              </SidebarMenuSubItem>
-                              {!groupCollapsed &&
-                                props.renderThreadRows(
-                                  threadGroup.threadIds,
-                                  threadGroupThreadIndentClassName,
-                                )}
-                            </Fragment>
-                          );
-                        })}
-                      </>
-                    ) : (
-                      props.renderThreadRows(agentGroup.threadIds, threadIndentClassName)
-                    ))}
-                </Fragment>
-              );
-            })
+            rigGroup.agentGroups.map((agentGroup) =>
+              renderAgentGroup(rigGroup, agentGroup, {
+                agentIndentClassName: agentFolderIndentClassName,
+                threadGroupIndentClassName,
+                threadIndentClassName,
+              }),
+            )
           ))}
         {!collapsedRigIds.has(rigGroup.id) && childRigGroups.length > 0 ? (
           <SidebarGcFolders

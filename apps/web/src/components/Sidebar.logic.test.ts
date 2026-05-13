@@ -998,6 +998,71 @@ describe("partitionProjectThreadsForSidebar", () => {
     ]);
     expect(result.hiddenStandaloneThreads).toEqual([]);
   });
+
+  it("shows GC-managed project threads inside integration folders when GC folders are enabled", () => {
+    const threads = [
+      makeThread({ id: ThreadId.make("thread-native"), title: "Native thread" }),
+      makeThread({
+        id: ThreadId.make("thread-worker"),
+        title: "Worker thread",
+        customMetadata: {
+          "gc.agent": "t3-jj/worker",
+          "gc.agentQualified": "t3-jj/worker",
+          "gc.city": "gascity-br",
+          "gc.rig": "t3-jj",
+          "gc.groupKind": "rig",
+          "gc.groupId": "t3-jj",
+        },
+      }),
+    ];
+
+    const result = partitionProjectThreadsForSidebar({
+      threads,
+      activeThreadId: undefined,
+      isThreadListExpanded: true,
+      previewLimit: 6,
+      includeGcFolders: true,
+      gcConfig: {
+        workspace: { name: "cities", suspended: false },
+        rigs: [
+          {
+            name: "gascity-br",
+            path: "/repo/packages/gascity-config/config/cities/gascity-br",
+            suspended: false,
+          },
+          {
+            name: "gascity-br/t3-jj",
+            path: "/repo/packages/gascity-config/config/cities/gascity-br/rigs/t3code",
+            suspended: false,
+          },
+        ],
+        agents: [
+          {
+            name: "worker",
+            dir: "gascity-br/t3-jj",
+            suspended: false,
+            min_active_sessions: 1,
+            max_active_sessions: 4,
+            wake_mode: "fresh",
+          },
+        ],
+      },
+      projectCwd: "/repo",
+      projectName: "t3code",
+    });
+
+    expect(result.visibleStandaloneThreads.map((thread) => thread.id)).toEqual([
+      ThreadId.make("thread-native"),
+    ]);
+    expect(result.rigGroups.map((group) => group.id)).toEqual(["gascity-br/t3-jj"]);
+    expect(result.rigGroups[0]?.agentGroups[0]).toMatchObject({
+      qualifiedName: "gascity-br/t3-jj/worker",
+      minActiveSessions: 1,
+      maxActiveSessions: 4,
+      wakeMode: "fresh",
+      threads: [{ id: ThreadId.make("thread-worker") }],
+    });
+  });
 });
 
 function makeProject(overrides: Partial<Project> = {}): Project {
