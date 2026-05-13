@@ -16,6 +16,7 @@ import (
 	"github.com/gastownhall/gascity/internal/config"
 	"github.com/gastownhall/gascity/internal/fsys"
 	"github.com/gastownhall/gascity/internal/runtime"
+	"github.com/gastownhall/gascity/internal/shellquote"
 	"github.com/spf13/cobra"
 )
 
@@ -604,7 +605,18 @@ func buildPrimeContext(cityPath, cityName string, a *config.Agent, rigs []config
 
 	ctx.Branch = os.Getenv("GC_BRANCH")
 	ctx.DefaultBranch = defaultBranchFor(ctx.WorkDir)
-	ctx.WorkQuery = expandAgentCommandTemplate(cityPath, cityName, a, rigs, "work_query", a.EffectiveWorkQuery(), stderr)
+	ctx.WorkQuery = primeWorkQuery(cityPath, cityName, a, rigs, stderr)
 	ctx.SlingQuery = expandAgentCommandTemplate(cityPath, cityName, a, rigs, "sling_query", a.EffectiveSlingQuery(), stderr)
 	return ctx
+}
+
+func primeWorkQuery(cityPath, cityName string, a *config.Agent, rigs []config.Rig, stderr io.Writer) string {
+	if strings.TrimSpace(a.WorkQuery) != "" {
+		return expandAgentCommandTemplate(cityPath, cityName, a, rigs, "work_query", a.EffectiveWorkQuery(), stderr)
+	}
+	if strings.TrimSpace(os.Getenv("GC_TEMPLATE")) != "" &&
+		(strings.TrimSpace(os.Getenv("GC_SESSION_NAME")) != "" || strings.TrimSpace(os.Getenv("GC_SESSION_ID")) != "") {
+		return "gc hook"
+	}
+	return shellquote.Join([]string{"gc", "hook", a.QualifiedName()})
 }

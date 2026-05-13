@@ -1747,11 +1747,25 @@ func beadStoreEnvForWatcher(workDir string, env map[string]string) map[string]st
 	return out
 }
 
-func beadEventRelevant(ev events.Event, bead beads.Bead, agentName, currentBead string) bool {
-	if ev.Actor == agentName {
+func beadEventRelevant(ev events.Event, bead beads.Bead, identifiers []string, currentBead, currentConvoy string) bool {
+	for _, identifier := range identifiers {
+		if identifier == "" {
+			continue
+		}
+		if ev.Actor == identifier {
+			return true
+		}
+		if bead.Assignee == identifier {
+			return true
+		}
+		if bead.Metadata["gc.routed_to"] == identifier {
+			return true
+		}
+	}
+	if currentConvoy != "" && ev.Subject == currentConvoy {
 		return true
 	}
-	if bead.Assignee == agentName {
+	if currentBead != "" && bead.ParentID == currentBead {
 		return true
 	}
 	if currentBead == "" {
@@ -1809,9 +1823,9 @@ func activityFromBeadEvent(ev events.Event, bead beads.Bead) (string, string, ma
 }
 
 func (p *Provider) refreshAssignmentProjection(threadID string, envelope StartupEnvelope, providerName string, bead beads.Bead, store beads.Store) {
-	convoyID := ""
-	convoyTitle := ""
-	convoyStatus := ""
+	convoyID := envelope.Assignment.ConvoyID
+	convoyTitle := envelope.Assignment.ConvoyTitle
+	convoyStatus := envelope.Assignment.ConvoyStatus
 	convoyClosedCount := envelope.Assignment.ConvoyClosedCount
 	convoyTotalCount := envelope.Assignment.ConvoyTotalCount
 	if store != nil && bead.ParentID != "" {
@@ -1913,8 +1927,9 @@ func (p *Provider) runEventWatcher(ctx context.Context, name string, cfg runtime
 	}
 	defer watcher.Close()
 
-	agentName := cfg.Env["GC_AGENT"]
+	eventIdentifiers := watcherEventIdentifiers(cfg.Env)
 	currentBead := cfg.Env["GC_BEAD"]
+	currentConvoy := cfg.Env["GC_CONVOY"]
 	if currentBead != "" {
 		if bead, err := beadStore.store.Get(currentBead); err == nil {
 			p.refreshAssignmentProjection(binding.ThreadID, envelope, providerName, bead, beadStore.store)
@@ -1937,7 +1952,7 @@ func (p *Provider) runEventWatcher(ctx context.Context, name string, cfg runtime
 		if err != nil {
 			continue
 		}
-		if !beadEventRelevant(ev, bead, agentName, currentBead) {
+		if !beadEventRelevant(ev, bead, eventIdentifiers, currentBead, currentConvoy) {
 			continue
 		}
 		p.refreshAssignmentProjection(binding.ThreadID, envelope, providerName, bead, beadStore.store)
@@ -1947,6 +1962,30 @@ func (p *Provider) runEventWatcher(ctx context.Context, name string, cfg runtime
 		}
 		_ = p.dispatchActivity(binding.ThreadID, kind, summary, "info", payload)
 	}
+}
+
+func watcherEventIdentifiers(env map[string]string) []string {
+	raw := []string{
+		env["GC_AGENT"],
+		env["GC_ALIAS"],
+		env["GC_SESSION_ID"],
+		env["GC_SESSION_NAME"],
+		env["GC_TEMPLATE"],
+	}
+	seen := make(map[string]struct{}, len(raw))
+	identifiers := make([]string, 0, len(raw))
+	for _, value := range raw {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		identifiers = append(identifiers, value)
+	}
+	return identifiers
 }
 
 func (p *Provider) ensureEventWatcher(name string, cfg runtime.Config, binding threadBinding, envelope StartupEnvelope, providerName string) {

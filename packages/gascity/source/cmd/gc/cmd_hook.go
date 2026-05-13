@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/gastownhall/gascity/internal/beads"
 	"github.com/gastownhall/gascity/internal/config"
 )
 
@@ -112,12 +113,6 @@ func cmdHookWithFormat(args []string, inject bool, hookFormat string, stdout, st
 		return 1
 	}
 
-	cityName := loadedCityName(cfg, cityPath)
-	workQuery := a.EffectiveWorkQuery()
-	// Expand {{.Rig}}/{{.AgentBase}} in user-supplied work_query so agent-side
-	// hook invocation sees the same rig substitution as the controller-side
-	// probes in build_desired_state.go / session_reconcile.go. #793.
-	workQuery = expandAgentCommandTemplate(cityPath, cityName, &a, cfg.Rigs, "work_query", workQuery, stderr)
 	workDir := agentCommandDir(cityPath, &a, cfg.Rigs)
 
 	// Build the work query subprocess environment. Rig-backed agents get
@@ -127,6 +122,7 @@ func cmdHookWithFormat(args []string, inject bool, hookFormat string, stdout, st
 	// also key off session identity. Explicit hook targets get resolved
 	// names; named-session context preserves the runtime-supplied owner
 	// env while selecting the backing config through GC_TEMPLATE.
+	cityName := loadedCityName(cfg, cityPath)
 	resolvedAgentName := a.QualifiedName()
 	agentForQuery := resolvedAgentName
 	sessionForQuery := ""
@@ -160,10 +156,141 @@ func cmdHookWithFormat(args []string, inject bool, hookFormat string, stdout, st
 		overrides["GC_TEMPLATE"] = ""
 	}
 	queryEnv := mergeRuntimeEnv(os.Environ(), overrides)
+	if strings.TrimSpace(a.WorkQuery) == "" &&
+		!providerUsesBdStoreContract(rawBeadsProviderForScope(overrides["GC_STORE_ROOT"], cityPath)) {
+		return doDefaultHookQuery(cityPath, cfg, &a, overrides, stdout, stderr)
+	}
+
+	workQuery := a.EffectiveWorkQuery()
+	// Expand {{.Rig}}/{{.AgentBase}} in user-supplied work_query so agent-side
+	// hook invocation sees the same rig substitution as the controller-side
+	// probes in build_desired_state.go / session_reconcile.go. #793.
+	workQuery = expandAgentCommandTemplate(cityPath, cityName, &a, cfg.Rigs, "work_query", workQuery, stderr)
 	runner := func(command, dir string) (string, error) {
 		return shellWorkQueryWithEnv(command, dir, queryEnv)
 	}
 	return doHook(workQuery, workDir, inject, runner, stdout, stderr)
+}
+
+func doDefaultHookQuery(cityPath string, _ *config.City, a *config.Agent, env map[string]string, stdout, stderr io.Writer) int {
+	storeRoot := strings.TrimSpace(env["GC_STORE_ROOT"])
+	if storeRoot == "" {
+		storeRoot = cityPath
+	}
+	store, err := openStoreAtForCity(storeRoot, cityPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "gc hook: open work store: %v\n", err) //nolint:errcheck
+		return 1
+	}
+
+	items, err := defaultHookQueryItems(store, a, env)
+	if err != nil {
+		fmt.Fprintf(stderr, "gc hook: default work query: %v\n", err) //nolint:errcheck
+		return 1
+	}
+	if len(items) == 0 {
+		fmt.Fprint(stdout, "[]") //nolint:errcheck
+		return 1
+	}
+	data, err := json.Marshal(items)
+	if err != nil {
+		fmt.Fprintf(stderr, "gc hook: encode work query output: %v\n", err) //nolint:errcheck
+		return 1
+	}
+	fmt.Fprint(stdout, string(data)) //nolint:errcheck
+	return 0
+}
+
+func defaultHookQueryItems(store beads.Store, a *config.Agent, env map[string]string) ([]beads.Bead, error) {
+	for _, identity := range defaultHookIdentities(env) {
+		for _, candidate := range defaultHookIdentityCandidates(identity) {
+			items, err := store.ListByAssignee(candidate, "in_progress", 1)
+			if err != nil {
+				return nil, err
+			}
+			if len(items) > 0 {
+				return items[:1], nil
+			}
+		}
+	}
+	for _, identity := range defaultHookIdentities(env) {
+		for _, candidate := range defaultHookIdentityCandidates(identity) {
+			items, err := store.Ready(beads.ReadyQuery{Assignee: candidate, Limit: 1})
+			if err != nil {
+				return nil, err
+			}
+			if len(items) > 0 {
+				return items[:1], nil
+			}
+		}
+	}
+	if !defaultHookIncludesRouted(env) {
+		return nil, nil
+	}
+	ready, err := store.Ready()
+	if err != nil {
+		return nil, err
+	}
+	targets := defaultHookRouteTargets(a)
+	for _, item := range ready {
+		if strings.TrimSpace(item.Assignee) != "" {
+			continue
+		}
+		routedTo := strings.TrimSpace(item.Metadata["gc.routed_to"])
+		for _, target := range targets {
+			if routedTo == target {
+				return []beads.Bead{item}, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+func defaultHookIdentities(env map[string]string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, key := range []string{"GC_SESSION_ID", "GC_SESSION_NAME", "GC_ALIAS"} {
+		value := strings.TrimSpace(env[key])
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func defaultHookIdentityCandidates(identity string) []string {
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return nil
+	}
+	legacy := legacyControlDispatcherIdentity(identity)
+	if legacy == "" {
+		return []string{identity}
+	}
+	return []string{identity, legacy}
+}
+
+func defaultHookRouteTargets(a *config.Agent) []string {
+	target := a.QualifiedName()
+	if a.PoolName != "" {
+		target = a.PoolName
+	}
+	out := []string{target}
+	if legacy := legacyControlDispatcherTarget(target); legacy != "" {
+		out = append(out, legacy)
+	}
+	return out
+}
+
+func defaultHookIncludesRouted(env map[string]string) bool {
+	switch strings.TrimSpace(env["GC_SESSION_ORIGIN"]) {
+	case "", "ephemeral":
+		return true
+	default:
+		return false
+	}
 }
 
 // hookQueryEnv returns the full work-query environment for a hook subprocess.

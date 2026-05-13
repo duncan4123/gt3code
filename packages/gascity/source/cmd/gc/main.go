@@ -908,6 +908,9 @@ func openBdStoreAt(storePath, cityPath string) (beads.Store, error) {
 		if direct, ok := openOptimizedDoltliteStore(storePath, store); ok {
 			return direct, nil
 		}
+		if cityUsesDoltliteBeadsBackend(cityPath) {
+			return nil, fmt.Errorf("open doltlite city store %s: native doltlite store unavailable", storePath)
+		}
 		return store, nil
 	}
 	cfg, err := loadCityConfig(cityPath, io.Discard)
@@ -917,6 +920,9 @@ func openBdStoreAt(storePath, cityPath string) (beads.Store, error) {
 	store := bdStoreForRig(storePath, cityPath, cfg)
 	if direct, ok := openOptimizedDoltliteStore(storePath, store); ok {
 		return direct, nil
+	}
+	if cityUsesDoltliteBeadsBackend(cityPath) {
+		return nil, fmt.Errorf("open doltlite rig store %s: native doltlite store unavailable", storePath)
 	}
 	return store, nil
 }

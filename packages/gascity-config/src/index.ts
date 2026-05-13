@@ -419,10 +419,14 @@ export function materializeGascityRuntime(
   if (!existsSync(sourceBdBinaryPath) || !statSync(sourceBdBinaryPath).isFile()) {
     throw new Error(`beads binary does not exist or is not a file: ${sourceBdBinaryPath}`);
   }
-  const sourceBrBinaryPath = resolveManagedBrBinaryPath({
-    ...binaryTarget,
-    brBinaryPath: options.brBinaryPath,
-  });
+  const brBinaryTarget =
+    options.brBinaryPath === undefined
+      ? binaryTarget
+      : {
+          ...binaryTarget,
+          brBinaryPath: options.brBinaryPath,
+        };
+  const sourceBrBinaryPath = resolveManagedBrBinaryPath(brBinaryTarget);
   if (!existsSync(sourceBrBinaryPath) || !statSync(sourceBrBinaryPath).isFile()) {
     throw new Error(`beads_rust binary does not exist or is not a file: ${sourceBrBinaryPath}`);
   }

@@ -24,6 +24,14 @@ set -euo pipefail
 op="${1:?usage: gc-beads-br <operation> [args...]}"
 shift
 
+ISSUE_METADATA_MAP_CACHE_FILE=""
+cleanup_issue_metadata_cache() {
+  if [ -n "${ISSUE_METADATA_MAP_CACHE_FILE:-}" ]; then
+    rm -f "$ISSUE_METADATA_MAP_CACHE_FILE"
+  fi
+}
+trap cleanup_issue_metadata_cache EXIT
+
 # If BR_DIR is set, change to that directory so br uses it as the store root.
 # Gas City exec providers project GC_STORE_ROOT for city/rig-scoped stores.
 if [ -n "${BR_DIR:-}" ]; then
@@ -90,8 +98,8 @@ hex_decode() {
 
 issue_metadata_json() {
   local id="$1"
-  if [ -n "${ISSUE_METADATA_MAP_CACHE:-}" ]; then
-    jq -cn --argjson metadata_map "$ISSUE_METADATA_MAP_CACHE" --arg id "$id" '$metadata_map[$id] // {}'
+  if [ -n "${ISSUE_METADATA_MAP_CACHE_FILE:-}" ] && [ -s "$ISSUE_METADATA_MAP_CACHE_FILE" ]; then
+    jq -cn --slurpfile metadata_map "$ISSUE_METADATA_MAP_CACHE_FILE" --arg id "$id" '($metadata_map[0][$id] // {})'
     return 0
   fi
   "${BR_BASE_CMD[@]}" gc-metadata get "$id" 2>/dev/null || echo '{}'
@@ -254,7 +262,8 @@ br_list_to_gc() {
     echo '[]'
     return 0
   fi
-  ISSUE_METADATA_MAP_CACHE=$(load_issue_metadata_map)
+  ISSUE_METADATA_MAP_CACHE_FILE=$(mktemp "${TMPDIR:-/tmp}/gc-beads-br-metadata.XXXXXX")
+  load_issue_metadata_map >"$ISSUE_METADATA_MAP_CACHE_FILE"
   while IFS= read -r obj; do
     br_object_to_gc "$obj"
   done < <(printf '%s' "$payload" | br_stream_objects) | jq -s .

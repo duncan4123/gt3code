@@ -221,6 +221,9 @@ func (cs *controllerState) openRigStore(provider, rigName, rigPath, prefix strin
 		if direct, ok := openOptimizedDoltliteStore(scopeRoot, store); ok {
 			return direct
 		}
+		if cityUsesDoltliteBeadsBackend(cs.cityPath) {
+			return unavailableStore{err: fmt.Errorf("open doltlite rig store %s: native doltlite store unavailable", scopeRoot)}
+		}
 		return store
 	}
 }
