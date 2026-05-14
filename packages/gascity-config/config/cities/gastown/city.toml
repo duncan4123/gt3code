@@ -389,8 +389,3 @@ provider = "t3bridge"
 
 [daemon]
 formula_v2 = true
-
-[[patches.named_session]]
-dir = "gastown"
-template = "mayor"
-mode = "on_demand"
