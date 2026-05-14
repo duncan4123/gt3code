@@ -12,16 +12,20 @@
 # path, and full-scale R blows the CI 15-minute budget in the prepare phase
 # alone.
 #
-# Ceiling enforced at BENCH_MAX_MULTIPLIER (default 2×) on file-backed
-# reads + writes (wrapped) and autocommit writes. In-memory and reads-
-# in-autocommit are reporting-only.
+# Ceiling enforced at BENCH_MAX_MULTIPLIER (default 2.0×) on individual
+# read/write ratios and BENCH_AVG_MAX_MULTIPLIER (default 1.6×) on
+# section averages.
 #
 set -e
 
 DOLTLITE=${DOLTLITE:-./doltlite}
 SQLITE3=${SQLITE3:-./sqlite3}
+BENCH_TIMER_SQLITE=${BENCH_TIMER_SQLITE:-./bench_timer_sqlite}
+BENCH_TIMER_DOLTLITE=${BENCH_TIMER_DOLTLITE:-./bench_timer_doltlite}
+SQLITE_AUTOCOMMIT_PRAGMAS=${SQLITE_AUTOCOMMIT_PRAGMAS:-"PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;"}
 ROWS=${BENCH_ROWS:-1000}
-BENCH_MAX_MULTIPLIER=${BENCH_MAX_MULTIPLIER:-2}
+BENCH_MAX_MULTIPLIER=${BENCH_MAX_MULTIPLIER:-2.0}
+BENCH_AVG_MAX_MULTIPLIER=${BENCH_AVG_MAX_MULTIPLIER:-1.6}
 SEED=42
 TMPDIR=$(mktemp -d)
 
@@ -87,12 +91,18 @@ def write_prepare_types(f):
 # Each test file: prepare + ".print BENCH_START" + workload + ".print BENCH_END"
 # The runner times between START and END markers
 
+def stable_seed(name):
+    h = 0
+    for ch in name:
+        h = ((h * 131) + ord(ch)) % 10000
+    return $SEED + h
+
 def make_test(name, prepare_fn, workload_fn):
     random.seed($SEED)  # Reset for deterministic prepare
     with open(f'{d}/{name}.sql', 'w') as f:
         prepare_fn(f)
         f.write(".print BENCH_START\n")
-        random.seed($SEED + hash(name) % 10000)  # Unique workload seed
+        random.seed(stable_seed(name))  # Unique deterministic workload seed
         workload_fn(f)
         f.write(".print BENCH_END\n")
 
@@ -370,7 +380,8 @@ make_test("oltp_read_write_ac",       prep_main, w_read_write_autocommit)
 PYEOF
 
 # ============================================================
-# Run each test: single CLI invocation, SQL timestamps for timing
+# Run each test: single invocation, host-clock timing when the timer
+# helper is available. Fall back to SQL timestamps for local ad hoc runs.
 # ============================================================
 run_bench() {
   local engine="$1" binary="$2" sql_file="$3" db_template="$4"
@@ -380,11 +391,28 @@ run_bench() {
     db="/tmp/bench_${engine}_${RANDOM}_$$.db"
     rm -f "$db"
   fi
+  local bench_sql_file="$sql_file"
+  if [ "$engine" = "sqlite" ] && [ -n "${SQLITE_BENCH_PRAGMAS:-}" ]; then
+    bench_sql_file="$TMPDIR/pragma_${engine}_${RANDOM}_$$.sql"
+    printf "%s\n" "$SQLITE_BENCH_PRAGMAS" > "$bench_sql_file"
+    cat "$sql_file" >> "$bench_sql_file"
+  fi
+  local timer=""
+  if [ "$engine" = "sqlite" ] && [ -x "$BENCH_TIMER_SQLITE" ]; then
+    timer="$BENCH_TIMER_SQLITE"
+  elif [ "$engine" = "doltlite" ] && [ -x "$BENCH_TIMER_DOLTLITE" ]; then
+    timer="$BENCH_TIMER_DOLTLITE"
+  fi
+  if [ -n "$timer" ]; then
+    "$timer" "$db" "$bench_sql_file"
+    if [ "$db" != ":memory:" ]; then rm -f "$db"; fi
+    return
+  fi
   local output
   output=$(sed \
     -e "s/\.print BENCH_START/SELECT 'TS_START:' || CAST((julianday('now')*86400000000) AS INTEGER);/" \
     -e "s/\.print BENCH_END/SELECT 'TS_END:' || CAST((julianday('now')*86400000000) AS INTEGER);/" \
-    "$sql_file" | "$binary" "$db" 2>&1)
+    "$bench_sql_file" | "$binary" "$db" 2>&1)
   if [ "$db" != ":memory:" ]; then rm -f "$db"; fi
   # Extract timestamps and compute delta
   echo "$output" | python3 -c "
@@ -443,11 +471,14 @@ READ_TESTS="oltp_point_select oltp_range_select oltp_sum_range oltp_order_range 
 WRITE_TESTS="oltp_bulk_insert oltp_insert oltp_update_index oltp_update_non_index oltp_delete_insert oltp_write_only types_delete_insert oltp_read_write"
 WRITE_TESTS_AC="oltp_bulk_insert_ac oltp_insert_ac oltp_update_index_ac oltp_update_non_index_ac oltp_delete_insert_ac oltp_write_only_ac types_delete_insert_ac oltp_read_write_ac"
 
+BENCH_RESULTS_FILE="$TMPDIR/bench_results.tsv"
+: > "$BENCH_RESULTS_FILE"
+
 # ============================================================
 # Output markdown table
 # ============================================================
 run_section() {
-  local tests="$1" db_sq="$2" db_dl="$3"
+  local section="$1" tests="$2" db_sq="$3" db_dl="$4"
   local ratio_sum=0
   local ratio_count=0
   local avg_ratio="--"
@@ -469,6 +500,7 @@ run_section() {
   else
     ratio="--"
   fi
+  printf '%s\t%s\t%s\t%s\n' "$section" "$t" "$s" "$d" >> "$BENCH_RESULTS_FILE"
   echo "| $t | $s_display | $d_display | ${ratio} |"
   done
   if [ "$ratio_count" -gt 0 ]; then
@@ -482,34 +514,35 @@ echo "## Sysbench-Style Benchmark (BLOB PK): Doltlite vs SQLite"
 echo ""
 echo "_Companion to the classic Sysbench-Style Benchmark. Every workload here"
 echo "runs against tables with a 16-byte big-endian \`BLOB PRIMARY KEY\`._"
-echo "_File-backed sections gated at ${BENCH_MAX_MULTIPLIER}× — in-memory_"
-echo "_and autocommit reads are reporting-only._"
+echo "_Individual ratios gated at ${BENCH_MAX_MULTIPLIER}×; section averages gated at ${BENCH_AVG_MAX_MULTIPLIER}×._"
 echo ""
 echo "### In-Memory"
 echo ""
 echo "#### Reads"
 echo ""
-run_section "$READ_TESTS" ":memory:" ":memory:"
+run_section "mem_reads" "$READ_TESTS" ":memory:" ":memory:"
 echo ""
 echo "#### Writes"
 echo ""
-run_section "$WRITE_TESTS" ":memory:" ":memory:"
+run_section "mem_writes" "$WRITE_TESTS" ":memory:" ":memory:"
 echo ""
 echo "### File-Backed"
 echo ""
 echo "#### Reads"
 echo ""
-run_section "$READ_TESTS" "/tmp/bench_file" "/tmp/bench_file"
+run_section "file_reads" "$READ_TESTS" "$TMPDIR/bench_file" "$TMPDIR/bench_file"
 echo ""
 echo "#### Writes"
 echo ""
-run_section "$WRITE_TESTS" "/tmp/bench_file" "/tmp/bench_file"
+run_section "file_writes" "$WRITE_TESTS" "$TMPDIR/bench_file" "$TMPDIR/bench_file"
 
 echo ""
 echo "### File-Backed (autocommit)"
 echo ""
 echo "_Each statement runs as its own transaction — exposes per-commit_"
 echo "_fixed costs that the wrapped-in-BEGIN/COMMIT tests amortize away._"
+echo "_SQLite uses WAL mode with synchronous=FULL in this section so_"
+echo "_the comparison uses SQLite's durable WAL autocommit path._"
 echo ""
 echo "#### Reads"
 echo ""
@@ -517,14 +550,14 @@ echo "_Reads have no commit cost; these are the same SQL files as the_"
 echo "_File-Backed Reads section, included here for symmetry and to_"
 echo "_catch any per-statement overhead doltlite pays on the read path._"
 echo ""
-run_section "$READ_TESTS" "/tmp/bench_file" "/tmp/bench_file"
+SQLITE_BENCH_PRAGMAS="$SQLITE_AUTOCOMMIT_PRAGMAS" run_section "ac_reads" "$READ_TESTS" "$TMPDIR/bench_file" "$TMPDIR/bench_file"
 echo ""
 echo "#### Writes"
 echo ""
-run_section "$WRITE_TESTS_AC" "/tmp/bench_file" "/tmp/bench_file"
+SQLITE_BENCH_PRAGMAS="$SQLITE_AUTOCOMMIT_PRAGMAS" run_section "ac_writes" "$WRITE_TESTS_AC" "$TMPDIR/bench_file" "$TMPDIR/bench_file"
 
 echo ""
-echo "_${ROWS} rows, single CLI invocation per test, workload-only timing via SQL timestamps._"
+echo "_${ROWS} rows, single invocation per test, workload-only timing via host monotonic clock when available._"
 
 # ============================================================
 # Enforce performance ceiling — gates the same shape sysbench_compare.sh
@@ -532,16 +565,20 @@ echo "_${ROWS} rows, single CLI invocation per test, workload-only timing via SQ
 # a regression on BLOB PK shows up as a CI failure.
 # ============================================================
 check_ceiling() {
-  local tests="$1" db_sq="$2" db_dl="$3" max="$4"
+  local section="$1" tests="$2" max="$3"
   local failed=0
   for t in $tests; do
-    s=$(run_bench_stable "$t" sqlite "$SQLITE3" "$TMPDIR/$t.sql" "$db_sq")
-    d=$(run_bench_stable "$t" doltlite "$DOLTLITE" "$TMPDIR/$t.sql" "$db_dl")
+    local line
+    line=$(awk -F '\t' -v section="$section" -v test="$t" \
+      '$1==section && $2==test {print $3 "\t" $4; exit}' \
+      "$BENCH_RESULTS_FILE")
+    s="${line%%$'\t'*}"
+    d="${line#*$'\t'}"
     if [ "$s" -gt 0 ] 2>/dev/null && [ "$d" -ge 0 ] 2>/dev/null; then
       over=$(python3 -c "r=$d/$s; print(1 if r>$max else 0)")
       if [ "$over" = "1" ]; then
         ratio=$(python3 -c "print(f'{$d/$s:.2f}')")
-        echo "FAIL: $t = ${ratio}x (ceiling: ${max}x)" >&2
+        echo "FAIL: $section/$t = ${ratio}x (ceiling: ${max}x)" >&2
         failed=1
       fi
     fi
@@ -549,14 +586,55 @@ check_ceiling() {
   return $failed
 }
 
+check_average_ceiling() {
+  local section="$1" tests="$2" max="$3"
+  local ratio
+  ratio=$(python3 - "$BENCH_RESULTS_FILE" "$section" "$tests" <<'PYEOF'
+import sys
+path, section, tests = sys.argv[1], sys.argv[2], sys.argv[3].split()
+wanted = set(tests)
+ratios = []
+with open(path) as f:
+    for line in f:
+        cols = line.rstrip("\n").split("\t")
+        if len(cols) < 4 or cols[0] != section or cols[1] not in wanted:
+            continue
+        s, d = int(cols[2]), int(cols[3])
+        if s > 0 and d >= 0:
+            ratios.append(d / s)
+if ratios:
+    print(f"{sum(ratios) / len(ratios):.2f}")
+else:
+    print("")
+PYEOF
+)
+  if [ -n "$ratio" ]; then
+    over=$(python3 -c "r=$ratio; print(1 if r>$max else 0)")
+    if [ "$over" = "1" ]; then
+      echo "FAIL: $section average = ${ratio}x (ceiling: ${max}x)" >&2
+      return 1
+    fi
+  fi
+  return 0
+}
+
 echo ""
-echo "### Performance Ceiling Check (${BENCH_MAX_MULTIPLIER}x)"
+echo "### Performance Ceiling Check (${BENCH_MAX_MULTIPLIER}x individual, ${BENCH_AVG_MAX_MULTIPLIER}x average)"
 echo ""
 
 ceiling_ok=0
-check_ceiling "$READ_TESTS"     "/tmp/bench_file" "/tmp/bench_file" "$BENCH_MAX_MULTIPLIER" || ceiling_ok=1
-check_ceiling "$WRITE_TESTS"    "/tmp/bench_file" "/tmp/bench_file" "$BENCH_MAX_MULTIPLIER" || ceiling_ok=1
-check_ceiling "$WRITE_TESTS_AC" "/tmp/bench_file" "/tmp/bench_file" "$BENCH_MAX_MULTIPLIER" || ceiling_ok=1
+check_ceiling "mem_reads"   "$READ_TESTS"     "$BENCH_MAX_MULTIPLIER" || ceiling_ok=1
+check_ceiling "mem_writes"  "$WRITE_TESTS"    "$BENCH_MAX_MULTIPLIER" || ceiling_ok=1
+check_ceiling "file_reads"  "$READ_TESTS"     "$BENCH_MAX_MULTIPLIER" || ceiling_ok=1
+check_ceiling "file_writes" "$WRITE_TESTS"    "$BENCH_MAX_MULTIPLIER" || ceiling_ok=1
+check_ceiling "ac_reads"    "$READ_TESTS"     "$BENCH_MAX_MULTIPLIER" || ceiling_ok=1
+check_ceiling "ac_writes"   "$WRITE_TESTS_AC" "$BENCH_MAX_MULTIPLIER" || ceiling_ok=1
+check_average_ceiling "mem_reads"   "$READ_TESTS"     "$BENCH_AVG_MAX_MULTIPLIER" || ceiling_ok=1
+check_average_ceiling "mem_writes"  "$WRITE_TESTS"    "$BENCH_AVG_MAX_MULTIPLIER" || ceiling_ok=1
+check_average_ceiling "file_reads"  "$READ_TESTS"     "$BENCH_AVG_MAX_MULTIPLIER" || ceiling_ok=1
+check_average_ceiling "file_writes" "$WRITE_TESTS"    "$BENCH_AVG_MAX_MULTIPLIER" || ceiling_ok=1
+check_average_ceiling "ac_reads"    "$READ_TESTS"     "$BENCH_AVG_MAX_MULTIPLIER" || ceiling_ok=1
+check_average_ceiling "ac_writes"   "$WRITE_TESTS_AC" "$BENCH_AVG_MAX_MULTIPLIER" || ceiling_ok=1
 
 if [ "$ceiling_ok" = "0" ]; then
   echo "All tests within ceilings."

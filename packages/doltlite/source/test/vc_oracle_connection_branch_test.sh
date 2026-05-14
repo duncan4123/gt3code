@@ -1,18 +1,4 @@
 #!/bin/bash
-#
-# Oracle test: connection-time branch selection.
-#
-# DoltLite selects a branch from the database path using either:
-#   db.sqlite@branch
-#   db.sqlite/branch
-# and defaults to main when no branch is specified.
-#
-# Dolt exposes the same branch-selection semantics as a global CLI flag:
-#   dolt --branch <branch> sql ...
-#
-# This oracle compares the resulting active_branch() and visible table
-# contents across both engines.
-#
 
 set -u
 set -o pipefail
@@ -23,6 +9,7 @@ TMPROOT=$(mktemp -d)
 trap "rm -rf $TMPROOT" EXIT
 pass=0; fail=0
 FAILED_NAMES=""
+source "$(dirname "$0")/lib/vc_oracle_common.sh"
 
 run_dl() {
   local dbspec="$1" query="$2"
@@ -87,15 +74,7 @@ oracle() {
   dl_out=$(run_dl "$dbspec" "$q" 2>>"$dir/dl.err" | tr -d '\r')
   dt_out=$(run_dt "$dir/dt" "$branch" "$q" 2>>"$dir/dt.err")
 
-  if [ "$dl_out" = "$dt_out" ]; then
-    pass=$((pass+1))
-  else
-    fail=$((fail+1))
-    FAILED_NAMES="$FAILED_NAMES $name"
-    echo "  FAIL: $name"
-    echo "    doltlite:"; echo "$dl_out" | sed 's/^/      /'
-    echo "    dolt:";     echo "$dt_out" | sed 's/^/      /'
-  fi
+  vc_oracle_assert_match "$name" "$dl_out" "$dt_out"
 }
 
 oracle_with_query() {
@@ -108,15 +87,7 @@ oracle_with_query() {
   dl_out=$(run_dl "$dbspec" "$query" 2>>"$dir/dl.err" | tr -d '\r')
   dt_out=$(run_dt "$dir/dt" "$branch" "$query" 2>>"$dir/dt.err")
 
-  if [ "$dl_out" = "$dt_out" ]; then
-    pass=$((pass+1))
-  else
-    fail=$((fail+1))
-    FAILED_NAMES="$FAILED_NAMES $name"
-    echo "  FAIL: $name"
-    echo "    doltlite:"; echo "$dl_out" | sed 's/^/      /'
-    echo "    dolt:";     echo "$dt_out" | sed 's/^/      /'
-  fi
+  vc_oracle_assert_match "$name" "$dl_out" "$dt_out"
 }
 
 oracle_with_mutation() {
@@ -136,15 +107,7 @@ oracle_with_mutation() {
   dl_out=$(run_dl "$dbspec" "$query" 2>>"$dir/dl.err" | tr -d '\r')
   dt_out=$(run_dt "$dir/dt" "$branch" "$query" 2>>"$dir/dt.err")
 
-  if [ "$dl_out" = "$dt_out" ]; then
-    pass=$((pass+1))
-  else
-    fail=$((fail+1))
-    FAILED_NAMES="$FAILED_NAMES $name"
-    echo "  FAIL: $name"
-    echo "    doltlite:"; echo "$dl_out" | sed 's/^/      /'
-    echo "    dolt:";     echo "$dt_out" | sed 's/^/      /'
-  fi
+  vc_oracle_assert_match "$name" "$dl_out" "$dt_out"
 }
 
 oracle_error() {

@@ -1,29 +1,4 @@
 #!/bin/bash
-#
-# Version-control oracle test: dolt_diff_stat and dolt_diff_summary
-#
-# Compares doltlite's two new TVFs against Dolt 1.86.0+ across a
-# range of scenarios:
-#
-#   dolt_diff_stat(from, to [, table])
-#     table_name, rows_unmodified, rows_added, rows_deleted,
-#     rows_modified, cells_added, cells_deleted, cells_modified,
-#     old_row_count, new_row_count, old_cell_count, new_cell_count
-#
-#   dolt_diff_summary(from, to [, table])
-#     from_table_name, to_table_name, diff_type, data_change,
-#     schema_change
-#
-# Both TVFs take (from_ref, to_ref) with an optional third argument
-# to filter to a single table. Refs resolve via the same rules as
-# dolt_log (hash, branch name, HEAD~N, etc.).
-#
-# Normalization: Dolt emits data_change/schema_change as 'true'/'false';
-# doltlite emits 1/0. Both are mapped to 0/1 for comparison. Rows are
-# sorted for order-independence.
-#
-# Usage: bash vc_oracle_diff_stat_test.sh [path/to/doltlite] [path/to/dolt]
-#
 
 set -u
 set -o pipefail
@@ -50,11 +25,8 @@ normalize_summary() {
     | sort
 }
 
-# Oracle for dolt_diff_stat over a commit range. The setup creates
-# whatever history is needed; the query is run in a single engine
-# invocation with the setup so refs like HEAD~N resolve correctly.
 oracle_stat() {
-  local name="$1" setup="$2" from="$3" to="$4" tbl="${5:-}"
+  local name="$1" setup="$2" from="$3" to="$4" tbl="${5:-}" allow_empty="${6:-}"
   local dir="$TMPROOT/${name}_stat"
   mkdir -p "$dir/dl" "$dir/dt"
 
@@ -82,20 +54,15 @@ oracle_stat() {
     } | "$DOLT" sql -c -r csv 2>"$dir/dt.err" | tr -d '"' | normalize_stat
   )
 
-  if [ "$dl_out" = "$dt_out" ]; then
-    pass=$((pass+1))
+  if [ "$allow_empty" = "EXPECT_EMPTY" ]; then
+    vc_oracle_assert_match_allow_empty "${name}_stat" "$dl_out" "$dt_out"
   else
-    fail=$((fail+1))
-    FAILED_NAMES="$FAILED_NAMES ${name}_stat"
-    echo "  FAIL: ${name}_stat"
-    echo "    doltlite:"; echo "$dl_out" | sed 's/^/      /'
-    echo "    dolt:";     echo "$dt_out" | sed 's/^/      /'
+    vc_oracle_assert_match "${name}_stat" "$dl_out" "$dt_out"
   fi
 }
 
-# Oracle for dolt_diff_summary.
 oracle_summary() {
-  local name="$1" setup="$2" from="$3" to="$4" tbl="${5:-}"
+  local name="$1" setup="$2" from="$3" to="$4" tbl="${5:-}" allow_empty="${6:-}"
   local dir="$TMPROOT/${name}_summary"
   mkdir -p "$dir/dl" "$dir/dt"
 
@@ -123,19 +90,13 @@ oracle_summary() {
     } | "$DOLT" sql -c -r csv 2>"$dir/dt.err" | tr -d '"' | normalize_summary
   )
 
-  if [ "$dl_out" = "$dt_out" ]; then
-    pass=$((pass+1))
+  if [ "$allow_empty" = "EXPECT_EMPTY" ]; then
+    vc_oracle_assert_match_allow_empty "${name}_summary" "$dl_out" "$dt_out"
   else
-    fail=$((fail+1))
-    FAILED_NAMES="$FAILED_NAMES ${name}_summary"
-    echo "  FAIL: ${name}_summary"
-    echo "    doltlite:"; echo "$dl_out" | sed 's/^/      /'
-    echo "    dolt:";     echo "$dt_out" | sed 's/^/      /'
+    vc_oracle_assert_match "${name}_summary" "$dl_out" "$dt_out"
   fi
 }
 
-# Convenience: run BOTH stat and summary oracles against the same
-# setup and commit range.
 oracle_both() {
   oracle_stat    "$@"
   oracle_summary "$@"
@@ -153,7 +114,7 @@ echo ""
 
 echo "--- no changes ---"
 
-oracle_both "no_changes" "$SEED" "HEAD" "HEAD"
+oracle_both "no_changes" "$SEED" "HEAD" "HEAD" "" "EXPECT_EMPTY"
 
 echo "--- single row modify ---"
 
@@ -198,7 +159,14 @@ SELECT dolt_commit('-m', 'c2');
 
 echo "--- table creation / drop ---"
 
-oracle_both "create_table_empty" "
+# stat for create-table-of-empty-rows yields no rows on both sides; summary still
+# reports one row for the table creation.
+oracle_stat    "create_table_empty" "
+CREATE TABLE t(id INT PRIMARY KEY, v INT);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'c1');
+" "HEAD~1" "HEAD" "" "EXPECT_EMPTY"
+oracle_summary "create_table_empty" "
 CREATE TABLE t(id INT PRIMARY KEY, v INT);
 SELECT dolt_add('-A');
 SELECT dolt_commit('-m', 'c1');
@@ -208,7 +176,17 @@ oracle_both "create_table_with_rows" "
 $SEED
 " "HEAD~1" "HEAD"
 
-oracle_both "drop_table_empty" "
+# stat for drop-table-of-empty-rows yields no rows on both sides; summary still
+# reports one row for the drop.
+oracle_stat    "drop_table_empty" "
+CREATE TABLE t(id INT PRIMARY KEY, v INT);
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'c1');
+DROP TABLE t;
+SELECT dolt_add('-A');
+SELECT dolt_commit('-m', 'c2');
+" "HEAD~1" "HEAD" "" "EXPECT_EMPTY"
+oracle_summary "drop_table_empty" "
 CREATE TABLE t(id INT PRIMARY KEY, v INT);
 SELECT dolt_add('-A');
 SELECT dolt_commit('-m', 'c1');

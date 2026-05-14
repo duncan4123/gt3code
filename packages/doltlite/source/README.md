@@ -14,6 +14,51 @@ prolly tree engine backed by a single-file content-addressed chunk store.
 [Why DoltLite?](https://www.dolthub.com/blog/2026-04-27-why-doltlite/) DoltLite
 can be embedded in any language enabling local-first use cases for Dolt.
 
+## Install
+
+Prebuilt binaries: [github.com/dolthub/doltlite/releases](https://github.com/dolthub/doltlite/releases).
+
+Each install method places the same set of files (paths shown for `/usr/local`):
+
+- `bin/doltlite`, `bin/doltlite-remotesrv` — the CLI shell and remote sync server
+- `include/doltlite.h` — embedding header (the SQLite C API, under our name; `#include <doltlite.h>`)
+- `include/doltlite_remotesrv.h` — in-process remote server API
+- `lib/libdoltlite.a` — static library
+- `lib/libdoltlite.{so,dylib}` — shared library
+
+### macOS (Apple Silicon) / Linux (x86_64 or arm64)
+
+```
+sudo bash -c 'curl -fsSL https://github.com/dolthub/doltlite/releases/latest/download/install.sh | bash'
+```
+
+### Debian / Ubuntu
+
+`.deb` packages ship for both `amd64` and `arm64`. Substitute `$ARCH` below:
+
+```
+VER=$(curl -fsSL https://api.github.com/repos/dolthub/doltlite/releases/latest | jq -r .tag_name | sed 's/^v//')
+ARCH=amd64   # or arm64
+BASE=https://github.com/dolthub/doltlite/releases/download/v${VER}
+wget ${BASE}/libdoltlite0_${VER}_${ARCH}.deb ${BASE}/doltlite_${VER}_${ARCH}.deb
+sudo dpkg -i libdoltlite0_*.deb doltlite_*.deb
+```
+
+Add `libdoltlite-dev_${VER}_${ARCH}.deb` for the header and static library.
+
+### Windows
+
+Download `doltlite-tools-win-x64-<ver>.zip` from
+[releases](https://github.com/dolthub/doltlite/releases), extract `doltlite.exe`, add to `PATH`.
+
+## Bindings
+
+Language-specific wrappers around `libdoltlite`. Each one exposes the full `sqlite3_*` C API plus the dolt version-control functions.
+
+| Language | Package | Source |
+|---|---|---|
+| Node.js / Bun | `@dolthub/doltlite` | [dolthub/doltlite-node](https://github.com/dolthub/doltlite-node) |
+
 ## Building
 
 ### macOS / Linux
@@ -81,10 +126,11 @@ make -C ext/wasm dist
 
 ## Using as a C Library
 
-Doltlite is designed as a drop-in replacement for SQLite. It uses the same
-`sqlite3.h` header and `sqlite3_*` API, so existing C programs work without
-code changes — just link against `libdoltlite` instead of `libsqlite3` to get
-version control. The build produces `libdoltlite.a` (static) and
+Doltlite exposes the full SQLite C API (`sqlite3_open`, `sqlite3_exec`,
+`sqlite3_prepare_v2`, ...) through `doltlite.h`. Existing C programs port
+by changing `#include "sqlite3.h"` to `#include <doltlite.h>` and linking
+against `libdoltlite` instead of `libsqlite3` — no other source changes —
+to get version control. The build produces `libdoltlite.a` (static) and
 `libdoltlite.dylib`/`.so` (shared) with the full prolly tree engine and all
 Dolt functions included.
 
@@ -129,7 +175,12 @@ standard `sqlite3` module, zero code changes:
 
 ```bash
 cd build
+# Linux:
 LD_PRELOAD=./libdoltlite.so python3 ../examples/quickstart.py
+# macOS: Python's _sqlite3 is statically linked against the system SQLite,
+# so LD_PRELOAD / DYLD_INSERT_LIBRARIES won't redirect it. Load doltlite
+# explicitly via ctypes instead:
+#   python3 -c 'import ctypes; ctypes.CDLL("./libdoltlite.dylib"); import runpy; runpy.run_path("../examples/quickstart.py")'
 ```
 
 **Go** ([`examples/go/main.go`](examples/go/main.go)) — uses
@@ -611,6 +662,14 @@ SELECT dolt_pull('origin', 'main');
 
 ##### Remote Server (`doltlite-remotesrv`)
 
+> [!WARNING]
+> The remote protocol currently provides no authentication, authorization,
+> or transport security. The server binds to `127.0.0.1` by default and a
+> 64 MiB chunk / 128 MiB request cap is enforced as defense-in-depth, but
+> these are stopgaps. Run only on trusted networks (or behind a reverse
+> proxy that adds TLS + auth) until [issue #228](https://github.com/dolthub/doltlite/issues/228)
+> ships a secure remote protocol.
+
 Doltlite includes a standalone HTTP server for serving databases over the
 network. Build it alongside doltlite:
 
@@ -623,6 +682,8 @@ Start serving a directory of databases:
 
 ```
 ./doltlite-remotesrv -p 8080 /path/to/databases/
+# To bind to all interfaces (e.g. behind a TLS-terminating reverse proxy):
+./doltlite-remotesrv -p 8080 --bind 0.0.0.0 /path/to/databases/
 ```
 
 Every `.db` file in that directory becomes accessible at
@@ -638,7 +699,7 @@ have are sent.
 
 ```sql
 SELECT dolt_version();
--- "v0.7.4"
+-- e.g. "v0.10.6"
 ```
 
 Zero-arg scalar returning the build's version string (from
@@ -766,7 +827,7 @@ invocation).
 
 ### Doltlite Shell Tests
 
-39 test suites covering all features:
+40 test suites covering all features:
 
 ```bash
 # Run all suites

@@ -10,12 +10,6 @@
 
 #include <string.h>
 
-/* In-memory view of a single violation row. Mirrors the shape of
-** a ConflictRow but without the base/our/their distinction —
-** violations come from ONE side of the merge or from a post-merge
-** walk, so there's a single value payload. violation_type picks
-** the namespace (FK / unique / check) and violation_info is a
-** free-form JSON string describing the specific constraint. */
 static void freeViolationRow(ConstraintViolationRow *r){
   if( !r ) return;
   sqlite3_free(r->pKey);
@@ -127,9 +121,9 @@ static int serializeViolations(
     for(j=0; j<aTables[i].nRows; j++){
       int ni = aTables[i].aRows[j].zInfo
              ? (int)strlen(aTables[i].aRows[j].zInfo) : 0;
-      sz += 1          /* violation_type */
+      sz += 1
           + 4 + aTables[i].aRows[j].nKey
-          + 8          /* intKey */
+          + 8
           + 4 + aTables[i].aRows[j].nVal
           + 4 + ni;
     }
@@ -227,7 +221,7 @@ static int loadAllViolations(
     int nl, nr;
     if( p+2 > data+nData ){ rc = SQLITE_CORRUPT; goto fail; }
     nl = p[0] | (p[1]<<8); p += 2;
-    if( nl<0 || p+nl > data+nData ){ rc = SQLITE_CORRUPT; goto fail; }
+    if( nl<0 || (size_t)nl > (size_t)(data+nData - p) ){ rc = SQLITE_CORRUPT; goto fail; }
     aTables[i].zName = sqlite3_malloc(nl+1);
     if( !aTables[i].zName ){ rc = SQLITE_NOMEM; goto fail; }
     memcpy(aTables[i].zName, p, nl); aTables[i].zName[nl] = 0;
@@ -235,10 +229,16 @@ static int loadAllViolations(
     if( p+4 > data+nData ){ rc = SQLITE_CORRUPT; goto fail; }
     nr = p[0]|(p[1]<<8)|(p[2]<<16)|(p[3]<<24); p+=4;
     if( nr<0 ){ rc = SQLITE_CORRUPT; goto fail; }
+    /* Validate that nr rows can possibly fit in remaining bytes (each row
+    ** carries at least 1+4+8+4+4 = 21 header bytes), and use
+    ** sqlite3_malloc64 to avoid 32-bit multiplication overflow. */
+    if( (sqlite3_uint64)nr > (sqlite3_uint64)(data+nData - p) ){
+      rc = SQLITE_CORRUPT; goto fail;
+    }
     aTables[i].nRows = nr;
-    aTables[i].aRows = sqlite3_malloc(nr ? nr * (int)sizeof(ConstraintViolationRow) : 1);
+    aTables[i].aRows = sqlite3_malloc64(nr ? (sqlite3_uint64)nr * sizeof(ConstraintViolationRow) : 1);
     if( !aTables[i].aRows ){ rc = SQLITE_NOMEM; goto fail; }
-    memset(aTables[i].aRows, 0, nr ? nr * (int)sizeof(ConstraintViolationRow) : 1);
+    memset(aTables[i].aRows, 0, nr ? (sqlite3_uint64)nr * sizeof(ConstraintViolationRow) : 1);
 
     for(j=0; j<nr; j++){
       ConstraintViolationRow *r = &aTables[i].aRows[j];
@@ -247,7 +247,7 @@ static int loadAllViolations(
       r->violationType = *p++;
       if( p+4 > data+nData ){ rc = SQLITE_CORRUPT; goto fail; }
       kvl = p[0]|(p[1]<<8)|(p[2]<<16)|(p[3]<<24); p+=4;
-      if( kvl<0 || p+kvl > data+nData ){ rc = SQLITE_CORRUPT; goto fail; }
+      if( kvl<0 || (size_t)kvl > (size_t)(data+nData - p) ){ rc = SQLITE_CORRUPT; goto fail; }
       if( kvl>0 ){
         rc = dupBytes(p, kvl, &r->pKey);
         if( rc!=SQLITE_OK ) goto fail;
@@ -261,7 +261,7 @@ static int loadAllViolations(
       p += 8;
       if( p+4 > data+nData ){ rc = SQLITE_CORRUPT; goto fail; }
       vvl = p[0]|(p[1]<<8)|(p[2]<<16)|(p[3]<<24); p+=4;
-      if( vvl<0 || p+vvl > data+nData ){ rc = SQLITE_CORRUPT; goto fail; }
+      if( vvl<0 || (size_t)vvl > (size_t)(data+nData - p) ){ rc = SQLITE_CORRUPT; goto fail; }
       if( vvl>0 ){
         rc = dupBytes(p, vvl, &r->pVal);
         if( rc!=SQLITE_OK ) goto fail;
@@ -270,7 +270,7 @@ static int loadAllViolations(
       p += vvl;
       if( p+4 > data+nData ){ rc = SQLITE_CORRUPT; goto fail; }
       nil_ = p[0]|(p[1]<<8)|(p[2]<<16)|(p[3]<<24); p+=4;
-      if( nil_<0 || p+nil_ > data+nData ){ rc = SQLITE_CORRUPT; goto fail; }
+      if( nil_<0 || (size_t)nil_ > (size_t)(data+nData - p) ){ rc = SQLITE_CORRUPT; goto fail; }
       if( nil_>0 ){
         r->zInfo = sqlite3_malloc(nil_+1);
         if( !r->zInfo ){ rc = SQLITE_NOMEM; goto fail; }
@@ -319,9 +319,6 @@ static int storeUpdatedViolations(
   return doltliteSaveWorkingSet(db);
 }
 
-/* Public append API — used by the post-merge walk (Phase 4) to
-** record each detected violation. Copies the caller's bytes so
-** the caller can release its own buffers immediately. */
 int doltliteAppendConstraintViolation(
   sqlite3 *db,
   const char *zTable,
@@ -384,8 +381,6 @@ int doltliteClearAllConstraintViolations(sqlite3 *db){
   return doltliteSaveWorkingSet(db);
 }
 
-/* ── Summary vtable: dolt_constraint_violations ──────────── */
-
 typedef struct CvSumVtab CvSumVtab;
 struct CvSumVtab { sqlite3_vtab base; sqlite3 *db; };
 typedef struct CvSumCur CvSumCur;
@@ -430,9 +425,6 @@ static int cvsFilter(sqlite3_vtab_cursor *cur, int n, const char *s, int a, sqli
   CvSumCur *c = (CvSumCur*)cur;
   CvSumVtab *vt = (CvSumVtab*)cur->pVtab;
   (void)n;(void)s;(void)a;(void)v;
-  /* SQLite may call xFilter more than once per cursor (join rescan,
-  ** re-entry). Drop any tables loaded by the prior call before
-  ** reloading, otherwise we leak them. */
   freeViolationTables(c->aTables, c->nTables);
   c->aTables = 0;
   c->nTables = 0;
@@ -473,8 +465,6 @@ static sqlite3_module cvSummaryModule = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
-/* ── Per-table vtable: dolt_constraint_violations_<table> ─ */
-
 typedef struct CvRowVtab CvRowVtab;
 struct CvRowVtab {
   sqlite3_vtab base;
@@ -492,16 +482,10 @@ struct CvRowCur {
   int iRow;
 };
 
-/* Per-table schema: violation_type TEXT, <user PK+value cols>,
-** violation_info TEXT. The user columns keep their original
-** declared names so (violation_type, pk, v1, v2, violation_info)
-** is the row shape. */
 static char *cvrBuildSchema(const DoltliteColInfo *ci){
   sqlite3_str *pStr = sqlite3_str_new(0);
   int i;
   char *z;
-  /* sqlite3_str_new() never returns NULL; OOM propagates through
-  ** sqlite3_str_finish() which returns NULL on failure. */
   sqlite3_str_appendall(pStr, "CREATE TABLE x(violation_type TEXT");
   for(i=0; i<ci->nCol; i++){
     sqlite3_str_appendf(pStr, ", \"%w\"", ci->azName[i]);
@@ -656,31 +640,33 @@ static int cvrColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col){
   return SQLITE_OK;
 }
 
-/* Per-row DELETE on dolt_constraint_violations_<table> needs a stable unique
-** rowid even when:
-**   1) the user PK is not SQLite's integer rowid, and/or
-**   2) one user row produces multiple violation rows.
-**
-** So the synthetic rowid must include both the offending row identity and
-** the specific violation identity. */
 static sqlite3_int64 cvrViolationRowid(const ConstraintViolationRow *r){
   u64 h = 1469598103934665603ULL;
   int i;
-
   if( r->nKey>0 && r->pKey ){
     for(i=0; i<r->nKey; i++){
       h ^= (u64)r->pKey[i];
       h *= 1099511628211ULL;
     }
-  }else{
-    const u8 *p = (const u8*)&r->intKey;
-    for(i=0; i<(int)sizeof(r->intKey); i++){
-      h ^= (u64)p[i];
+  }
+  h *= 1099511628211ULL;
+  {
+    u64 k = (u64)r->intKey;
+    for(i=0; i<8; i++){
+      h ^= (k >> (i*8)) & 0xff;
       h *= 1099511628211ULL;
     }
   }
-
+  h *= 1099511628211ULL;
+  if( r->nVal>0 && r->pVal ){
+    for(i=0; i<r->nVal; i++){
+      h ^= (u64)r->pVal[i];
+      h *= 1099511628211ULL;
+    }
+  }
+  h *= 1099511628211ULL;
   h ^= (u64)r->violationType;
+  h *= 1099511628211ULL;
   h *= 1099511628211ULL;
   if( r->zInfo ){
     for(i=0; r->zInfo[i]; i++){
@@ -688,8 +674,6 @@ static sqlite3_int64 cvrViolationRowid(const ConstraintViolationRow *r){
       h *= 1099511628211ULL;
     }
   }
-
-  if( h==0 ) h = 1;
   return (sqlite3_int64)(h & 0x7fffffffffffffffULL);
 }
 
@@ -709,10 +693,6 @@ static int cvrBestIndex(sqlite3_vtab *v, sqlite3_index_info *p){
   return SQLITE_OK;
 }
 
-/* DELETE support: user clears a violation from the per-table
-** vtable to signal "I've resolved this". The synthetic rowid
-** includes both the offending row and the specific violation,
-** so compare against the same computed rowid here. */
 static int cvrUpdate(
   sqlite3_vtab *pVtab,
   int nArg,
@@ -776,14 +756,6 @@ static sqlite3_module cvRowModule = {
   0,0,0,0,0,0,0,0,0,0,0
 };
 
-/* Walk the session's user tables and register a
-** dolt_constraint_violations_<table> vtable for each one that
-** doesn't already have one. Safe to call repeatedly —
-** doltliteForEachUserTable skips tables whose module is
-** already registered. Exposed so the commit / checkout / merge
-** / reset flows can refresh the surface for tables created
-** mid-session, matching how the diff / history / at / blame
-** / conflicts vtables get refreshed. */
 int doltliteRefreshConstraintViolationTables(sqlite3 *db){
   return doltliteForEachUserTable(db, "dolt_constraint_violations_", &cvRowModule);
 }

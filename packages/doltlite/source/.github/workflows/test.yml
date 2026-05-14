@@ -40,6 +40,9 @@ jobs:
         make doltlite
         make doltlite-lib
         make testfixture
+        # doltlite_parity.sh compares against the package-built stock
+        # SQLite CLI instead of whatever sqlite3 the runner image provides.
+        make DOLTLITE_PROLLY=0 sqlite3
         # Stock SQLite lib for concurrent_branch_test
         make libsqlite3.a USE_AMALGAMATION=0
 
@@ -127,6 +130,12 @@ jobs:
           libdoltlite.a -lz -lpthread -lm
         ./prepared_stmt_reuse_test
 
+    # Wires the previously-orphan C tests into CI. All tests in
+    # test/run_c_tests.sh are gating and must pass.
+    - name: Orphan C tests
+      run: cd build && make c-tests
+      timeout-minutes: 15
+
     - name: Python integration test
       run: cd build && LD_PRELOAD=./libdoltlite.so python3 ../examples/quickstart.py
 
@@ -211,48 +220,77 @@ jobs:
           tkt-7bbfb7d442 tkt-4dd95f6943 tkt-2d1a5c67d \
           tkt-f3e5abed55
 
-  crash-sqlite-test:
+  concurrency-stress:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install crash-test dependencies
+    - name: Configure
       run: |
-        sudo apt-get update
-        sudo apt-get install -y tcl-dev libtommath-dev build-essential zlib1g-dev
-
-    - name: Configure SQLITE_TEST build
-      run: |
-        mkdir -p build-crash && cd build-crash
-        TCL_CONFIG=$(find /usr/lib /usr/lib/x86_64-linux-gnu /usr/share -name tclConfig.sh 2>/dev/null | grep -v miniconda | head -1)
+        mkdir -p build && cd build
+        TCL_CONFIG=$(find /usr -name tclConfig.sh 2>/dev/null | head -1)
         if [ -n "$TCL_CONFIG" ]; then
-          ../configure --with-tcl=$(dirname "$TCL_CONFIG")
+          ../configure --with-tcl=$(dirname $TCL_CONFIG)
         else
           ../configure
         fi
 
-    - name: Build crash-test binaries
+    - name: Build concurrency stress
       run: |
-        cd build-crash
-        TCL_CONFIG=$(find /usr/lib /usr/lib/x86_64-linux-gnu /usr/share -name tclConfig.sh 2>/dev/null | grep -v miniconda | head -1)
-        . "$TCL_CONFIG"
-        make OPTIONS='-DSQLITE_TEST=1 -DSQLITE_CRASH_TEST=1' \
-          OPTS="$TCL_INCLUDE_SPEC" \
-          libdoltlite.a doltlite-crashtest crash_recovery_test_sqlite_test
+        cd build
+        make concurrent_stress_test
+      timeout-minutes: 5
 
-    - name: Native crash recovery test (SQLITE_TEST)
+    - name: Run concurrency stress
       run: |
-        cd build-crash
-        ./crash_recovery_test_sqlite_test
-      timeout-minutes: 10
+        cd build
+        DOLTLITE_STRESS_SECONDS=480 ./concurrent_stress_test
+      timeout-minutes: 9
 
-    - name: Crash injection durability test (SQLITE_TEST)
+  vc-concurrency-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure
       run: |
-        cd build-crash
-        bash ../test/crash_injection_test.sh ./doltlite-crashtest
-      timeout-minutes: 15
+        mkdir -p build && cd build
+        TCL_CONFIG=$(find /usr -name tclConfig.sh 2>/dev/null | head -1)
+        if [ -n "$TCL_CONFIG" ]; then
+          ../configure --with-tcl=$(dirname $TCL_CONFIG)
+        else
+          ../configure
+        fi
+
+    - name: Build version-control concurrency stress
+      run: |
+        cd build
+        make vc_concurrency_test
+        make vc_ref_mutation_stress_test
+      timeout-minutes: 5
+
+    - name: Run version-control concurrency stress
+      run: |
+        cd build
+        deadline=$((SECONDS + 480))
+        runs=0
+        while [ "$SECONDS" -lt "$deadline" ]; do
+          runs=$((runs + 1))
+          if [ $((runs % 100)) -eq 0 ]; then
+            echo "vc_concurrency_test run ${runs}"
+          fi
+          ./vc_concurrency_test > /tmp/vc_concurrency_test.out || {
+            cat /tmp/vc_concurrency_test.out
+            exit 1
+          }
+        done
+        echo "completed ${runs} vc_concurrency_test runs"
+        ./vc_ref_mutation_stress_test
+      timeout-minutes: 9
 
   oracle-tests:
     runs-on: ubuntu-latest

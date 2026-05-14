@@ -10,22 +10,6 @@
 #include "doltlite_internal.h"
 #include <string.h>
 
-/* dolt_commit_ancestors: parent-graph view, one row per (commit,
-** parent) edge plus one row per root commit with NULL parent.
-**
-** Mirrors Dolt's table of the same name:
-**   commit_hash  TEXT     — a commit reachable from HEAD
-**   parent_hash  TEXT     — one of its parents (NULL for the root)
-**   parent_index INTEGER  — 0-based position of the parent in this
-**                            commit's parent list (0 for root)
-**
-** This is the shape consumers want for traversing the commit graph
-** by edges instead of trying to derive ordering from dolt_log.date,
-** which is second-resolution and breaks on tight script timing —
-** see issue dolthub/doltlite#740. With this view a walker can
-** start from HEAD and follow parent_hash deterministically.
-*/
-
 typedef struct CommitAncestorsVtab CommitAncestorsVtab;
 struct CommitAncestorsVtab {
   sqlite3_vtab base;
@@ -35,17 +19,15 @@ struct CommitAncestorsVtab {
 typedef struct CommitAncestorsCursor CommitAncestorsCursor;
 struct CommitAncestorsCursor {
   sqlite3_vtab_cursor base;
-  /* BFS queue of unvisited commits */
   ProllyHash *aQueue;
   int qHead, qTail, qAlloc;
   ProllyHashSet visited;
   int visitedInit;
-  /* Currently-loaded commit + which parent we're emitting */
   ProllyHash curHash;
   char zCurHex[PROLLY_HASH_SIZE*2+1];
   DoltliteCommit curCommit;
-  int curParents;     /* >=1; 1 for root (synthetic NULL parent row) */
-  int curParentIdx;   /* 0..curParents-1 */
+  int curParents;
+  int curParentIdx;
   int hasRow;
   i64 iRowid;
 };
@@ -116,8 +98,8 @@ static int caClose(sqlite3_vtab_cursor *pCursor){
   return SQLITE_OK;
 }
 
-/* Pull the next unvisited commit off the queue, load it, set up the
-** parent-emit window. hasRow=1 on success, 0 when graph exhausted. */
+static int caEnqueue(CommitAncestorsCursor *pCur, const ProllyHash *p);
+
 static int caLoadNextCommit(CommitAncestorsCursor *pCur, sqlite3 *db){
   int i, rc;
 
@@ -141,24 +123,15 @@ static int caLoadNextCommit(CommitAncestorsCursor *pCur, sqlite3 *db){
     doltliteHashToHex(&cur, pCur->zCurHex);
     pCur->hasRow = 1;
     pCur->curParents = doltliteCommitParentCount(&pCur->curCommit);
-    /* Root commit: emit one row with NULL parent_hash so consumers
-    ** can detect graph anchors. Otherwise emit one row per parent. */
     if( pCur->curParents == 0 ) pCur->curParents = 1;
     pCur->curParentIdx = 0;
 
-    /* Enqueue real parents for later visits. */
     for(i = 0; i < doltliteCommitParentCount(&pCur->curCommit); i++){
       const ProllyHash *pParent = doltliteCommitParentHash(&pCur->curCommit, i);
-      if( !pParent || prollyHashIsEmpty(pParent) ) continue;
-      if( pCur->qTail >= pCur->qAlloc ){
-        int nNew = pCur->qAlloc ? pCur->qAlloc*2 : 16;
-        ProllyHash *tmp = sqlite3_realloc(pCur->aQueue,
-                                           nNew*(int)sizeof(ProllyHash));
-        if( !tmp ) return SQLITE_NOMEM;
-        pCur->aQueue = tmp;
-        pCur->qAlloc = nNew;
+      if( pParent ){
+        rc = caEnqueue(pCur, pParent);
+        if( rc!=SQLITE_OK ) return rc;
       }
-      pCur->aQueue[pCur->qTail++] = *pParent;
     }
     return SQLITE_OK;
   }
@@ -171,23 +144,22 @@ static int caNext(sqlite3_vtab_cursor *pCursor){
   pCur->iRowid++;
   pCur->curParentIdx++;
   if( pCur->curParentIdx >= pCur->curParents ){
-    /* Done with this commit's parents; pull the next commit. */
     return caLoadNextCommit(pCur, pVtab->db);
   }
   return SQLITE_OK;
 }
 
-/* Push a commit hash onto the BFS queue, growing the queue if
-** needed. Skips empty hashes. */
 static int caEnqueue(CommitAncestorsCursor *pCur, const ProllyHash *p){
   if( prollyHashIsEmpty(p) ) return SQLITE_OK;
   if( pCur->qTail >= pCur->qAlloc ){
-    int nNew = pCur->qAlloc ? pCur->qAlloc*2 : 16;
-    ProllyHash *tmp = sqlite3_realloc(pCur->aQueue,
-                                       nNew*(int)sizeof(ProllyHash));
+    i64 nNew = pCur->qAlloc ? (i64)pCur->qAlloc * 2 : (i64)16;
+    ProllyHash *tmp;
+    if( nNew > (i64)0x7fffffff/(i64)sizeof(ProllyHash) ) return SQLITE_NOMEM;
+    tmp = sqlite3_realloc(pCur->aQueue,
+                          (int)(nNew * (i64)sizeof(ProllyHash)));
     if( !tmp ) return SQLITE_NOMEM;
     pCur->aQueue = tmp;
-    pCur->qAlloc = nNew;
+    pCur->qAlloc = (int)nNew;
   }
   pCur->aQueue[pCur->qTail++] = *p;
   return SQLITE_OK;
@@ -215,21 +187,25 @@ static int caFilter(
   if( rc!=SQLITE_OK ) return rc;
   pCur->visitedInit = 1;
 
-  /* Seed the BFS from EVERY ref tip — branches, tags, and the
-  ** session HEAD — so the table exposes the full repo graph,
-  ** matching Dolt's dolt_commit_ancestors semantics. The visited
-  ** set deduplicates shared ancestors. */
   doltliteGetSessionHead(pVtab->db, &head);
   rc = caEnqueue(pCur, &head);
   if( rc!=SQLITE_OK ) return rc;
 
-  for( i = 0; i < cs->nBranches; i++ ){
-    rc = caEnqueue(pCur, &cs->aBranches[i].commitHash);
-    if( rc!=SQLITE_OK ) return rc;
+  {
+    int nBr; const BranchRef *aBr;
+    refsTableGetBranches(&cs->refs, &nBr, &aBr);
+    for( i = 0; i < nBr; i++ ){
+      rc = caEnqueue(pCur, &aBr[i].commitHash);
+      if( rc!=SQLITE_OK ) return rc;
+    }
   }
-  for( i = 0; i < cs->nTags; i++ ){
-    rc = caEnqueue(pCur, &cs->aTags[i].commitHash);
-    if( rc!=SQLITE_OK ) return rc;
+  {
+    int nTg; const TagRef *aTg;
+    refsTableGetTags(&cs->refs, &nTg, &aTg);
+    for( i = 0; i < nTg; i++ ){
+      rc = caEnqueue(pCur, &aTg[i].commitHash);
+      if( rc!=SQLITE_OK ) return rc;
+    }
   }
 
   if( pCur->qTail == 0 ) return SQLITE_OK;
@@ -260,7 +236,6 @@ static int caColumn(
     case 1: {
       int realParents = doltliteCommitParentCount(c);
       if( realParents == 0 ){
-        /* Root commit: NULL parent. */
         sqlite3_result_null(ctx);
       }else if( idx < realParents ){
         const ProllyHash *pParent = doltliteCommitParentHash(c, idx);

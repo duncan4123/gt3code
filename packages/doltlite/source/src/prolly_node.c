@@ -23,11 +23,9 @@ int prollyNodeParse(ProllyNode *pNode, const u8 *pData, int nData){
 
   memset(pNode, 0, sizeof(*pNode));
 
-
   if( nData<PROLLY_HDR_SIZE ){
     return SQLITE_CORRUPT;
   }
-
 
   magic = PROLLY_GET_U32(pData + PROLLY_MAGIC_OFF);
   if( magic!=PROLLY_NODE_MAGIC ){
@@ -59,13 +57,11 @@ int prollyNodeParse(ProllyNode *pNode, const u8 *pData, int nData){
     return SQLITE_OK;
   }
 
-
   nOffsets = (int)(count + 1) * 4 * 2;
   minSize = PROLLY_HDR_SIZE + nOffsets;
   if( nData<minSize ){
     return SQLITE_CORRUPT;
   }
-
 
   pCur = pData + PROLLY_HDR_SIZE;
   pNode->aKeyOff = (const u32*)pCur;
@@ -73,9 +69,7 @@ int prollyNodeParse(ProllyNode *pNode, const u8 *pData, int nData){
   pNode->aValOff = (const u32*)pCur;
   pCur += (count + 1) * 4;
 
-
   pNode->pKeyData = pCur;
-
 
   totalKeyBytes = PROLLY_GET_U32((const u8*)&pNode->aKeyOff[count]);
   pNode->pValData = pCur + totalKeyBytes;
@@ -162,6 +156,22 @@ void prollyNodeChildHash(const ProllyNode *pNode, int i, ProllyHash *pHash){
   memcpy(pHash->data, pNode->pValData + off, PROLLY_HASH_SIZE);
 }
 
+static SQLITE_INLINE int prollyKeyComparePrefix(
+  const u8 *pLeft,
+  const u8 *pRight,
+  int n
+){
+  int i;
+  if( n<=32 ){
+    for(i=0; i<n; i++){
+      int c = (int)pLeft[i] - (int)pRight[i];
+      if( c ) return c;
+    }
+    return 0;
+  }
+  return memcmp(pLeft, pRight, n);
+}
+
 int prollyNodeSearchBlob(
   const ProllyNode *pNode,
   const u8 *pKey,
@@ -185,9 +195,8 @@ int prollyNodeSearchBlob(
     mid = lo + (hi - lo) / 2;
     prollyNodeKey(pNode, mid, &pMidKey, &nMidKey);
 
-
     nCmp = nMidKey < nKey ? nMidKey : nKey;
-    c = memcmp(pKey, pMidKey, nCmp);
+    c = prollyKeyComparePrefix(pKey, pMidKey, nCmp);
     if( c==0 ) c = nKey - nMidKey;
 
     if( c==0 ){
@@ -199,7 +208,6 @@ int prollyNodeSearchBlob(
       lo = mid + 1;
     }
   }
-
 
   if( lo>=pNode->nItems ){
     *pRes = 1;
@@ -235,7 +243,6 @@ int prollyNodeSearchInt(const ProllyNode *pNode, i64 intKey, int *pRes){
     }
   }
 
-
   if( lo>=pNode->nItems ){
     *pRes = 1;
     return pNode->nItems - 1;
@@ -255,49 +262,77 @@ void prollyNodeBuilderInit(ProllyNodeBuilder *b, u8 level, u8 flags){
 }
 
 static int builderGrowOffsets(ProllyNodeBuilder *b){
-  int nNeeded = b->nItems + 2;
-  if( nNeeded>b->nAlloc ){
-    int nNew = b->nAlloc ? b->nAlloc * 2 : PROLLY_BUILDER_INIT_CAP;
+  i64 nNeeded = (i64)b->nItems + 2;
+  if( nNeeded > (i64)0x7fffffff/(i64)sizeof(u32) ) return SQLITE_NOMEM;
+  if( nNeeded > (i64)b->nAlloc ){
+    i64 nNew = b->nAlloc ? (i64)b->nAlloc * 2 : (i64)PROLLY_BUILDER_INIT_CAP;
     u32 *aNew;
-    while( nNew<nNeeded ) nNew *= 2;
+    while( nNew < nNeeded ){
+      if( nNew > (i64)0x7fffffff/(i64)sizeof(u32)/2 ){
+        nNew = (i64)0x7fffffff/(i64)sizeof(u32);
+        break;
+      }
+      nNew *= 2;
+    }
+    if( nNew < nNeeded ) return SQLITE_NOMEM;
 
-    aNew = (u32*)sqlite3_realloc(b->aKeyOff, nNew * sizeof(u32));
+    aNew = (u32*)sqlite3_realloc(b->aKeyOff, (int)(nNew * (i64)sizeof(u32)));
     if( !aNew ) return SQLITE_NOMEM;
     b->aKeyOff = aNew;
 
-    aNew = (u32*)sqlite3_realloc(b->aValOff, nNew * sizeof(u32));
+    aNew = (u32*)sqlite3_realloc(b->aValOff, (int)(nNew * (i64)sizeof(u32)));
     if( !aNew ) return SQLITE_NOMEM;
     b->aValOff = aNew;
 
-    b->nAlloc = nNew;
+    b->nAlloc = (int)nNew;
   }
   return SQLITE_OK;
 }
 
 static int builderGrowKeyBuf(ProllyNodeBuilder *b, int nAdd){
-  int nNeeded = b->nKeyBytes + nAdd;
-  if( nNeeded>b->nKeyBufAlloc ){
-    int nNew = b->nKeyBufAlloc ? b->nKeyBufAlloc * 2 : PROLLY_BUILDER_INIT_BUF;
+  i64 nNeeded;
+  if( nAdd<0 ) return SQLITE_NOMEM;
+  nNeeded = (i64)b->nKeyBytes + (i64)nAdd;
+  if( nNeeded > (i64)0x7fffffff ) return SQLITE_NOMEM;
+  if( nNeeded > (i64)b->nKeyBufAlloc ){
+    i64 nNew = b->nKeyBufAlloc ? (i64)b->nKeyBufAlloc * 2 : (i64)PROLLY_BUILDER_INIT_BUF;
     u8 *pNew;
-    while( nNew<nNeeded ) nNew *= 2;
-    pNew = (u8*)sqlite3_realloc(b->pKeyBuf, nNew);
+    while( nNew < nNeeded ){
+      if( nNew > (i64)0x7fffffff/2 ){
+        nNew = (i64)0x7fffffff;
+        break;
+      }
+      nNew *= 2;
+    }
+    if( nNew < nNeeded ) return SQLITE_NOMEM;
+    pNew = (u8*)sqlite3_realloc(b->pKeyBuf, (int)nNew);
     if( !pNew ) return SQLITE_NOMEM;
     b->pKeyBuf = pNew;
-    b->nKeyBufAlloc = nNew;
+    b->nKeyBufAlloc = (int)nNew;
   }
   return SQLITE_OK;
 }
 
 static int builderGrowValBuf(ProllyNodeBuilder *b, int nAdd){
-  int nNeeded = b->nValBytes + nAdd;
-  if( nNeeded>b->nValBufAlloc ){
-    int nNew = b->nValBufAlloc ? b->nValBufAlloc * 2 : PROLLY_BUILDER_INIT_BUF;
+  i64 nNeeded;
+  if( nAdd<0 ) return SQLITE_NOMEM;
+  nNeeded = (i64)b->nValBytes + (i64)nAdd;
+  if( nNeeded > (i64)0x7fffffff ) return SQLITE_NOMEM;
+  if( nNeeded > (i64)b->nValBufAlloc ){
+    i64 nNew = b->nValBufAlloc ? (i64)b->nValBufAlloc * 2 : (i64)PROLLY_BUILDER_INIT_BUF;
     u8 *pNew;
-    while( nNew<nNeeded ) nNew *= 2;
-    pNew = (u8*)sqlite3_realloc(b->pValBuf, nNew);
+    while( nNew < nNeeded ){
+      if( nNew > (i64)0x7fffffff/2 ){
+        nNew = (i64)0x7fffffff;
+        break;
+      }
+      nNew *= 2;
+    }
+    if( nNew < nNeeded ) return SQLITE_NOMEM;
+    pNew = (u8*)sqlite3_realloc(b->pValBuf, (int)nNew);
     if( !pNew ) return SQLITE_NOMEM;
     b->pValBuf = pNew;
-    b->nValBufAlloc = nNew;
+    b->nValBufAlloc = (int)nNew;
   }
   return SQLITE_OK;
 }
@@ -313,27 +348,19 @@ int prollyNodeBuilderAdd(
     return SQLITE_FULL;
   }
 
-
   rc = builderGrowOffsets(b);
   if( rc ) return rc;
-
 
   rc = builderGrowKeyBuf(b, nKey);
   if( rc ) return rc;
   rc = builderGrowValBuf(b, nVal);
   if( rc ) return rc;
 
-
   if( b->nItems==0 ){
     b->aKeyOff[0] = 0;
     b->aValOff[0] = 0;
   }
 
-
-  /* Guard against `NULL + 0` pointer arithmetic — the builder's
-  ** buffers are lazily allocated and stay NULL until the first
-  ** non-empty byte, and `p + 0` on a null pointer is UB per
-  ** C11 6.5.6/8 even though the value is never dereferenced. */
   if( nKey > 0 ){
     memcpy(b->pKeyBuf + b->nKeyBytes, pKey, nKey);
     b->nKeyBytes += nKey;
@@ -366,7 +393,6 @@ int prollyNodeBuilderFinish(ProllyNodeBuilder *b, u8 **ppOut, int *pnOut){
   pBuf = (u8*)sqlite3_malloc(nTotal);
   if( !pBuf ) return SQLITE_NOMEM;
 
-
   PROLLY_PUT_U32(pBuf + PROLLY_MAGIC_OFF, PROLLY_NODE_MAGIC);
   pBuf[PROLLY_LEVEL_OFF] = b->level;
   PROLLY_PUT_U16(pBuf + PROLLY_COUNT_OFF, (u16)b->nItems);
@@ -374,24 +400,20 @@ int prollyNodeBuilderFinish(ProllyNodeBuilder *b, u8 **ppOut, int *pnOut){
 
   pCur = pBuf + PROLLY_HDR_SIZE;
 
-
   for(i=0; i<=b->nItems; i++){
     PROLLY_PUT_U32(pCur, b->aKeyOff[i]);
     pCur += 4;
   }
-
 
   for(i=0; i<=b->nItems; i++){
     PROLLY_PUT_U32(pCur, b->aValOff[i]);
     pCur += 4;
   }
 
-
   if( b->nKeyBytes>0 ){
     memcpy(pCur, b->pKeyBuf, b->nKeyBytes);
     pCur += b->nKeyBytes;
   }
-
 
   if( b->nValBytes>0 ){
     memcpy(pCur, b->pValBuf, b->nValBytes);

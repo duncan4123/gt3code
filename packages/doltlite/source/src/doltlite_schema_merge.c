@@ -67,7 +67,6 @@ char *extractColNameFromDef(const char *zDef){
   const char *s = zDef;
   int len;
 
-
   while( *s && isspace((unsigned char)*s) ) s++;
   if( !*s ) return 0;
 
@@ -82,6 +81,8 @@ int migrateDiffCb(void *pArg, const ProllyDiffChange *pChange){
   int aType[64], aOffset[64];
   int nFields = 0;
   int sj, bindIdx;
+  sqlite3_stmt *pStmt;
+  int bIsAdd;
 
   if( pChange->type == PROLLY_DIFF_DELETE ) return SQLITE_OK;
 
@@ -89,6 +90,14 @@ int migrateDiffCb(void *pArg, const ProllyDiffChange *pChange){
   nVal = pChange->nNewVal;
   if( !pVal || nVal<=0 ) return SQLITE_OK;
 
+  /* PROLLY_DIFF_ADD: their branch inserted a new row that doesn't exist
+  ** in the merged working set (row-merge was skipped because of schema
+  ** actions). UPDATE WHERE rowid=? would match zero rows, leaving the
+  ** new column NULL. Use the INSERT statement so the row materializes
+  ** with all their-side column values. */
+  bIsAdd = (pChange->type == PROLLY_DIFF_ADD);
+  pStmt = bIsAdd ? ctx->pIns : ctx->pUpd;
+  if( !pStmt ) return SQLITE_OK;
 
   {
     const u8 *hp = pVal;
@@ -97,12 +106,15 @@ int migrateDiffCb(void *pArg, const ProllyDiffChange *pChange){
     int hdrBytes, off;
 
     hdrBytes = dlReadVarint(hp, hpEnd, &hdrSize);
+    if( hdrBytes<=0 ) return SQLITE_CORRUPT;
+    if( (u64)hdrBytes > hdrSize || hdrSize > (u64)nVal ) return SQLITE_CORRUPT;
     hp += hdrBytes;
     off = (int)hdrSize;
 
     while( hp < pVal+hdrSize && hp < hpEnd && nFields<64 ){
       u64 st;
       int stBytes = dlReadVarint(hp, pVal+hdrSize, &st);
+      if( stBytes<=0 ) return SQLITE_CORRUPT;
       hp += stBytes;
       aType[nFields] = (int)st;
       aOffset[nFields] = off;
@@ -111,40 +123,53 @@ int migrateDiffCb(void *pArg, const ProllyDiffChange *pChange){
     }
   }
 
-  sqlite3_reset(ctx->pUpd);
+  sqlite3_reset(pStmt);
   bindIdx = 1;
-  for(sj=0; sj<ctx->nCols; sj++){
-    if( ctx->aiColIdx[sj]<0 || !ctx->azColNames[sj] ) continue;
-    if( ctx->aiColIdx[sj] < nFields ){
-      int brc = doltliteBindField(ctx->pUpd, bindIdx, pVal, nVal,
-                                  aType[ctx->aiColIdx[sj]],
-                                  aOffset[ctx->aiColIdx[sj]]);
+  if( bIsAdd ){
+    /* Bind rowid first, then every column from their schema in declared
+    ** order. The INSERT statement was built to match this binding order:
+    ** INSERT INTO "t"(rowid, "c1", "c2", ...) VALUES(?,?,?,...). */
+    int brc = sqlite3_bind_int64(pStmt, bindIdx++, pChange->intKey);
+    if( brc!=SQLITE_OK ) return brc;
+    for(sj=0; sj<ctx->nAllCols; sj++){
+      int rec = ctx->aiAllColIdx[sj];
+      if( rec>=0 && rec<nFields ){
+        brc = doltliteBindField(pStmt, bindIdx, pVal, nVal,
+                                aType[rec], aOffset[rec]);
+      }else{
+        brc = sqlite3_bind_null(pStmt, bindIdx);
+      }
       if( brc!=SQLITE_OK ) return brc;
-    }else{
-      int brc = sqlite3_bind_null(ctx->pUpd, bindIdx);
+      bindIdx++;
+    }
+  }else{
+    for(sj=0; sj<ctx->nCols; sj++){
+      if( ctx->aiColIdx[sj]<0 || !ctx->azColNames[sj] ) continue;
+      if( ctx->aiColIdx[sj] < nFields ){
+        int brc = doltliteBindField(pStmt, bindIdx, pVal, nVal,
+                                    aType[ctx->aiColIdx[sj]],
+                                    aOffset[ctx->aiColIdx[sj]]);
+        if( brc!=SQLITE_OK ) return brc;
+      }else{
+        int brc = sqlite3_bind_null(pStmt, bindIdx);
+        if( brc!=SQLITE_OK ) return brc;
+      }
+      bindIdx++;
+    }
+    {
+      int brc = sqlite3_bind_int64(pStmt, bindIdx, pChange->intKey);
       if( brc!=SQLITE_OK ) return brc;
     }
-    bindIdx++;
   }
+
   {
-    int brc = sqlite3_bind_int64(ctx->pUpd, bindIdx, pChange->intKey);
-    int src;
-    if( brc!=SQLITE_OK ) return brc;
-    src = sqlite3_step(ctx->pUpd);
+    int src = sqlite3_step(pStmt);
     if( src!=SQLITE_DONE ) return src;
   }
 
   return SQLITE_OK;
 }
 
-/* After schema merge decides to ADD COLUMN X from theirs, every
-** row that exists on theirs needs X backfilled onto ours. Parse
-** their CREATE TABLE to find each new column's ordinal, then diff
-** their table against anc and UPDATE each row on ours with the
-** value of the new column. Rows that only exist on theirs (diff
-** ADD) also need the update. Rows DELETEd on theirs are skipped
-** (trySchemaColumnMerge has already rejected drop-on-one-side
-** edit-on-other, so we shouldn't see that case here). */
 int migrateSchemaRowData(
   sqlite3 *db,
   const ProllyHash *pAncCatHash,
@@ -166,7 +191,6 @@ int migrateSchemaRowData(
 
   if( !cs || !pCache || nActions<=0 ) return SQLITE_OK;
 
-
   rc = doltliteLoadCatalog(db, pAncCatHash, &aAncTables, &nAncTables, 0);
   if( rc!=SQLITE_OK ) return rc;
   rc = doltliteLoadCatalog(db, pTheirCatHash, &aTheirTables, &nTheirTables, 0);
@@ -174,7 +198,6 @@ int migrateSchemaRowData(
     doltliteFreeCatalog(aAncTables, nAncTables);
     return rc;
   }
-
 
   rc = loadSchemaFromCatalog(db, cs, pCache, pTheirCatHash,
                               &aTheirSchema, &nTheirSchema);
@@ -191,26 +214,24 @@ int migrateSchemaRowData(
     char **azColNames = 0;
     int *aiColIdx = 0;
     int nCols = 0;
+    char **azAllColNames = 0;
+    int *aiAllColIdx = 0;
+    int nAllCols = 0;
+    int nAllColsAlloc = 0;
     int sj;
 
     if( pAct->nAddColumns<=0 ) continue;
-
 
     theirTE = doltliteFindTableByName(aTheirTables, nTheirTables,
                                        pAct->zTableName);
     if( !theirTE ) continue;
 
-
     theirSE = findSchemaEntry(aTheirSchema, nTheirSchema, pAct->zTableName);
     if( !theirSE || !theirSE->zSql ) continue;
-
 
     {
       DoltliteColInfo theirCols;
       memset(&theirCols, 0, sizeof(theirCols));
-
-
-
 
       azColNames = sqlite3_malloc(pAct->nAddColumns * (int)sizeof(char*));
       aiColIdx = sqlite3_malloc(pAct->nAddColumns * (int)sizeof(int));
@@ -233,14 +254,12 @@ int migrateSchemaRowData(
       }
       if( rc!=SQLITE_OK ) break;
 
-
       {
         const char *zSql = theirSE->zSql;
         const char *p = zSql;
         int colOrdinal = 0;
         int depth = 0;
         const char *segStart;
-
 
         while( *p && *p!='(' ) p++;
         if( !*p ){ rc = SQLITE_CORRUPT; goto next_action; }
@@ -307,10 +326,47 @@ int migrateSchemaRowData(
                       aiColIdx[sj] = colOrdinal;
                     }
                   }
-                  sqlite3_free(zColName);
-                  if( rc!=SQLITE_OK ){
-                    goto next_action;
+
+                  /* Record every their-side column (in declared order)
+                  ** so we can build a full INSERT for PROLLY_DIFF_ADD
+                  ** rows that don't exist in the merged working set yet. */
+                  if( nAllCols >= nAllColsAlloc ){
+                    i64 nNew = nAllColsAlloc ? (i64)nAllColsAlloc * 2 : 8;
+                    char **azNew;
+                    int *aiNew;
+                    while( nNew < (i64)(nAllCols + 1) ){
+                      if( nNew > (i64)0x7fffffff/2 ){
+                        nNew = (i64)0x7fffffff; break;
+                      }
+                      nNew *= 2;
+                    }
+                    if( nNew < (i64)(nAllCols + 1)
+                     || nNew > (i64)0x7fffffff/(i64)sizeof(char*)
+                     || nNew > (i64)0x7fffffff/(i64)sizeof(int) ){
+                      sqlite3_free(zColName);
+                      rc = SQLITE_NOMEM;
+                      goto next_action;
+                    }
+                    azNew = sqlite3_realloc(azAllColNames,
+                                            (int)(nNew * (i64)sizeof(char*)));
+                    aiNew = sqlite3_realloc(aiAllColIdx,
+                                             (int)(nNew * (i64)sizeof(int)));
+                    if( !azNew || !aiNew ){
+                      if( azNew ) azAllColNames = azNew;
+                      if( aiNew ) aiAllColIdx = aiNew;
+                      sqlite3_free(zColName);
+                      rc = SQLITE_NOMEM;
+                      goto next_action;
+                    }
+                    azAllColNames = azNew;
+                    aiAllColIdx = aiNew;
+                    nAllColsAlloc = (int)nNew;
                   }
+                  /* Ownership of zColName transfers to azAllColNames. */
+                  azAllColNames[nAllCols] = zColName;
+                  aiAllColIdx[nAllCols] = colOrdinal;
+                  nAllCols++;
+
                   colOrdinal++;
                 }
               }
@@ -327,7 +383,6 @@ int migrateSchemaRowData(
 
       nCols = pAct->nAddColumns;
 
-
       {
         int hasAny = 0;
         for(sj=0; sj<nCols; sj++){
@@ -336,12 +391,12 @@ int migrateSchemaRowData(
         if( !hasAny ) goto next_action;
       }
 
-
       {
         char *zUpdate;
         char *zSet = 0;
         int paramIdx = 1;
         sqlite3_stmt *pUpd = 0;
+        sqlite3_stmt *pIns = 0;
 
         for(sj=0; sj<nCols; sj++){
           if( aiColIdx[sj]<0 || !azColNames[sj] ) continue;
@@ -370,6 +425,48 @@ int migrateSchemaRowData(
         sqlite3_free(zUpdate);
         if( rc!=SQLITE_OK ) goto next_action;
 
+        /* Build the INSERT used for PROLLY_DIFF_ADD rows. Bindings are:
+        ** ?1=rowid, ?2..?N+1 = every column of their schema in declared
+        ** order. The callback fills NULL for any record-field index
+        ** that's missing from the their-side record bytes. */
+        if( nAllCols>0 ){
+          char *zCols = 0;
+          char *zVals = 0;
+          int p;
+          for(sj=0; sj<nAllCols; sj++){
+            char *zNewC = zCols
+              ? sqlite3_mprintf("%s, \"%w\"", zCols, azAllColNames[sj])
+              : sqlite3_mprintf("\"%w\"", azAllColNames[sj]);
+            sqlite3_free(zCols);
+            zCols = zNewC;
+            if( !zCols ){ rc = SQLITE_NOMEM; sqlite3_free(zVals); break; }
+          }
+          for(p=0; p<nAllCols && rc==SQLITE_OK; p++){
+            char *zNewV = zVals
+              ? sqlite3_mprintf("%s, ?%d", zVals, p+2)
+              : sqlite3_mprintf("?%d", p+2);
+            sqlite3_free(zVals);
+            zVals = zNewV;
+            if( !zVals ){ rc = SQLITE_NOMEM; break; }
+          }
+          if( rc==SQLITE_OK ){
+            char *zInsert = sqlite3_mprintf(
+                "INSERT INTO \"%w\"(rowid, %s) VALUES(?1, %s)",
+                pAct->zTableName, zCols, zVals);
+            if( !zInsert ){
+              rc = SQLITE_NOMEM;
+            }else{
+              rc = sqlite3_prepare_v2(db, zInsert, -1, &pIns, 0);
+              sqlite3_free(zInsert);
+            }
+          }
+          sqlite3_free(zCols);
+          sqlite3_free(zVals);
+          if( rc!=SQLITE_OK ){
+            sqlite3_finalize(pUpd);
+            goto next_action;
+          }
+        }
 
         {
           struct TableEntry *ancTE;
@@ -388,12 +485,16 @@ int migrateSchemaRowData(
           diffCtx.aiColIdx = aiColIdx;
           diffCtx.azColNames = azColNames;
           diffCtx.nCols = nCols;
+          diffCtx.pIns = pIns;
+          diffCtx.aiAllColIdx = aiAllColIdx;
+          diffCtx.nAllCols = nAllCols;
 
           rc = prollyDiff(cs, pCache, &ancRoot, &theirTE->root,
                           theirTE->flags, migrateDiffCb, &diffCtx);
         }
 
         sqlite3_finalize(pUpd);
+        sqlite3_finalize(pIns);
       }
     }
 
@@ -404,6 +505,11 @@ next_action:
       sqlite3_free(azColNames);
     }
     sqlite3_free(aiColIdx);
+    if( azAllColNames ){
+      for(sj=0; sj<nAllCols; sj++) sqlite3_free(azAllColNames[sj]);
+      sqlite3_free(azAllColNames);
+    }
+    sqlite3_free(aiAllColIdx);
 
     if( rc!=SQLITE_OK ) break;
   }

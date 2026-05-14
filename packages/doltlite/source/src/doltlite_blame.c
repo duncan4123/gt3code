@@ -13,19 +13,6 @@
 #include <string.h>
 #include <time.h>
 
-/* dolt_blame_<table> semantics:
-**
-** For each LIVE row in the current table, report the most recent
-** commit that introduced the row's current value. Walked first-
-** parent from HEAD. At a linear commit, blame = that commit if the
-** row's value differs from its value in the parent. At a merge
-** commit (2+ parents), blame = merge commit if the row's value
-** differs from its value in the merge base (LCA of parents).
-**
-** Walking past the root is handled by treating a missing parent
-** table as "row not present" — any still-unblamed row at the root
-** commit will therefore be blamed to it. */
-
 typedef struct BlameRow BlameRow;
 struct BlameRow {
   i64 intKey;
@@ -69,11 +56,6 @@ struct BlamePkTmp {
   int isIntegerType;
 };
 
-/* Collect PK column names (in pk-position order) and their record
-** field indices (cid from PRAGMA table_info). Also returns the cid
-** of the rowid-aliased INTEGER PK column if any, else -1 — used at
-** emit time to decide whether to pull the value from cursor intKey
-** or from the record payload. */
 static int blameLoadPkColumns(
   sqlite3 *db,
   const char *zTable,
@@ -125,7 +107,6 @@ static int blameLoadPkColumns(
     return rc;
   }
 
-  /* Insertion-sort tmp[] by pkPos so emit order matches PK declaration. */
   for(i=1; i<nTmp; i++){
     BlamePkTmp t = tmp[i];
     j = i - 1;
@@ -152,10 +133,6 @@ static int blameLoadPkColumns(
     n++;
   }
 
-  /* Identify the rowid-aliased INTEGER PK column if this is a
-  ** single-column INTEGER PRIMARY KEY: SQLite treats it as the
-  ** rowid, so its value must come from cursor.intKey, not the
-  ** record payload which won't include a field for it. */
   if( nTmp == 1 && tmp[0].isIntegerType ){
     intPkCid = tmp[0].cid;
   }
@@ -214,8 +191,6 @@ static void blameFreeRows(BlameCursor *c){
   c->nAlloc = 0;
 }
 
-/* Load every live row of the current table into the cursor. Returns
-** SQLITE_OK with nRows==0 if the table has no rows at HEAD. */
 static int blameCollectLiveRows(
   BlameCursor *pCur,
   ChunkStore *cs,
@@ -236,13 +211,8 @@ static int blameCollectLiveRows(
     int nKey = 0, nVal = 0;
     BlameRow *r;
 
-    if( pCur->nRows >= pCur->nAlloc ){
-      int nNew = pCur->nAlloc ? pCur->nAlloc*2 : 64;
-      BlameRow *aNew = sqlite3_realloc(pCur->aRows, nNew*(int)sizeof(BlameRow));
-      if( !aNew ){ prollyCursorClose(&cur); return SQLITE_NOMEM; }
-      pCur->aRows = aNew;
-      pCur->nAlloc = nNew;
-    }
+    rc = DOLTLITE_GROW_ARRAY(&pCur->aRows, &pCur->nAlloc, pCur->nRows + 1, 64);
+    if( rc!=SQLITE_OK ){ prollyCursorClose(&cur); return rc; }
     r = &pCur->aRows[pCur->nRows];
     memset(r, 0, sizeof(*r));
 
@@ -274,10 +244,6 @@ static int blameCollectLiveRows(
   return SQLITE_OK;
 }
 
-/* Seek a single row by its stored key in the given table root and
-** return SQLITE_OK with `ppVal`/`pnVal` set to the row's value
-** bytes if found, or NULL/0 if the row doesn't exist. On error,
-** returns the error code. */
 static int blameSeekRowInTree(
   ChunkStore *cs,
   ProllyCache *pCache,
@@ -313,9 +279,34 @@ static int blameSeekRowInTree(
   return SQLITE_OK;
 }
 
-/* Returns 1 if pA..+nA and pB..+nB encode the same row value for
-** blame purposes. Treats NULL-vs-missing as "missing"; missing vs
-** present is always different. */
+static int blameBlobKeyCmp(
+  const u8 *pA, int nA,
+  const u8 *pB, int nB
+){
+  int n = (nA < nB) ? nA : nB;
+  int c = memcmp(pA, pB, n);
+  if( c ) return c;
+  return nA - nB;
+}
+
+static int blameCursorCompareRowKey(
+  ProllyCursor *pRefCur,
+  u8 flags,
+  const BlameRow *pRow
+){
+  if( flags & PROLLY_NODE_INTKEY ){
+    i64 refKey = prollyCursorIntKey(pRefCur);
+    if( refKey < pRow->intKey ) return -1;
+    if( refKey > pRow->intKey ) return 1;
+    return 0;
+  }else{
+    const u8 *pRefKey = 0;
+    int nRefKey = 0;
+    prollyCursorKey(pRefCur, &pRefKey, &nRefKey);
+    return blameBlobKeyCmp(pRefKey, nRefKey, pRow->pKey, pRow->nKey);
+  }
+}
+
 static int blameRowValueEqual(const u8 *pA, int nA, const u8 *pB, int nB){
   int isA = (pA && nA>0);
   int isB = (pB && nB>0);
@@ -325,8 +316,6 @@ static int blameRowValueEqual(const u8 *pA, int nA, const u8 *pB, int nB){
   return memcmp(pA, pB, nA)==0;
 }
 
-/* Load a table's root hash and flags at the given catalog hash.
-** Returns SQLITE_NOTFOUND if the table doesn't exist there. */
 static int blameLoadTableRoot(
   sqlite3 *db,
   const ProllyHash *pCatHash,
@@ -356,8 +345,6 @@ static int blameLoadTableRoot(
   return SQLITE_OK;
 }
 
-/* Record blame info on pRow. Duplicates the commit's strings since
-** the DoltliteCommit is freed immediately after. */
 static int blameAssign(
   BlameRow *pRow,
   const ProllyHash *pCommitHash,
@@ -377,9 +364,6 @@ static int blameAssign(
   return SQLITE_OK;
 }
 
-/* Compare each unblamed row against its value in pRefRoot (parent
-** or merge base) and blame the row to pCommitHash if different.
-** pRefRoot may be NULL/empty to indicate "row not present in ref". */
 static int blameCompareAgainstRef(
   sqlite3 *db,
   BlameCursor *pCur,
@@ -392,10 +376,15 @@ static int blameCompareAgainstRef(
 ){
   ChunkStore *cs = doltliteGetChunkStore(db);
   ProllyCache *pCache = doltliteGetCache(db);
+  ProllyCursor refCur;
   ProllyHash refRoot;
   u8 refFlags = 0;
   int haveRef = 0;
-  int rc, i;
+  int refCurOpen = 0;
+  int refCurValid = 0;
+  int canScanRef = 0;
+  int rc = SQLITE_OK;
+  int i;
 
   (void)pCurRoot;
 
@@ -405,6 +394,18 @@ static int blameCompareAgainstRef(
     else if( rc!=SQLITE_NOTFOUND ) return rc;
   }
 
+  canScanRef = haveRef
+      && !prollyHashIsEmpty(&refRoot)
+      && ((refFlags & PROLLY_NODE_INTKEY)==(curFlags & PROLLY_NODE_INTKEY));
+  if( canScanRef ){
+    int res = 0;
+    prollyCursorInit(&refCur, cs, pCache, &refRoot, refFlags);
+    refCurOpen = 1;
+    rc = prollyCursorFirst(&refCur, &res);
+    if( rc!=SQLITE_OK ) goto blame_compare_done;
+    refCurValid = (res==0);
+  }
+
   for(i=0; i<pCur->nRows; i++){
     BlameRow *r = &pCur->aRows[i];
     const u8 *pRefVal = 0;
@@ -412,27 +413,41 @@ static int blameCompareAgainstRef(
     if( r->blamed ) continue;
 
     if( haveRef ){
-      rc = blameSeekRowInTree(cs, pCache, &refRoot, refFlags, r, &pRefVal, &nRefVal);
-      if( rc!=SQLITE_OK ) return rc;
+      if( canScanRef ){
+        int cmp = 1;
+        while( refCurValid ){
+          cmp = blameCursorCompareRowKey(&refCur, refFlags, r);
+          if( cmp>=0 ) break;
+          rc = prollyCursorNext(&refCur);
+          if( rc!=SQLITE_OK ) goto blame_compare_done;
+          refCurValid = prollyCursorIsValid(&refCur);
+        }
+        if( refCurValid && cmp==0 ){
+          prollyCursorValue(&refCur, &pRefVal, &nRefVal);
+        }
+      }else{
+        rc = blameSeekRowInTree(cs, pCache, &refRoot, refFlags, r,
+                                &pRefVal, &nRefVal);
+        if( rc!=SQLITE_OK ) goto blame_compare_done;
+      }
     }
 
     if( !blameRowValueEqual(r->pCurVal, r->nCurVal, pRefVal, nRefVal) ){
       rc = blameAssign(r, pCommitHash, pCommit);
-      if( rc!=SQLITE_OK ) return rc;
+      if( rc!=SQLITE_OK ) goto blame_compare_done;
       pCur->nUnresolved--;
     }
   }
-  return SQLITE_OK;
+
+blame_compare_done:
+  if( refCurOpen ) prollyCursorClose(&refCur);
+  return rc;
 }
 
 static int blameUnresolvedCount(BlameCursor *pCur){
   return pCur->nUnresolved;
 }
 
-/* For merge blame we need the merge base across every parent, not just
-** the first two. Fold pairwise merge-base resolution left-to-right:
-** base(p0,p1,p2) := base(base(p0,p1), p2). If any step has no common
-** ancestor, the merge has no shared base across all parents. */
 static int blameFindAllParentMergeBase(
   sqlite3 *db,
   const DoltliteCommit *pCommit,
@@ -470,8 +485,6 @@ static int blameFindAllParentMergeBase(
   return SQLITE_OK;
 }
 
-/* Main blame walk. Starts from HEAD, walks first-parent, and at
-** each commit applies the linear or merge comparison rule. */
 static int blameWalk(
   BlameCursor *pCur,
   sqlite3 *db,
@@ -502,7 +515,6 @@ static int blameWalk(
     }
 
     if( doltliteCommitParentCount(&commit) >= 2 ){
-      /* Merge commit: compare against the merge base of all parents. */
       ProllyHash baseHash;
       DoltliteCommit baseCommit;
       memset(&baseHash, 0, sizeof(baseHash));
@@ -527,8 +539,6 @@ static int blameWalk(
           return rc;
         }
       }else if( haveCurTable ){
-        /* No merge base (disjoint histories): any live row here is
-        ** blamed to this merge. */
         rc = blameCompareAgainstRef(db, pCur, zTableName,
                                     &curTableRoot, curFlags,
                                     0, &walk, &commit);
@@ -538,7 +548,6 @@ static int blameWalk(
         }
       }
     }else{
-      /* Linear commit: compare against first parent's table. */
       const ProllyHash *pParent = doltliteCommitParentHash(&commit, 0);
       if( pParent && !prollyHashIsEmpty(pParent) ){
         DoltliteCommit parentCommit;
@@ -556,8 +565,6 @@ static int blameWalk(
           return rc;
         }
       }else if( haveCurTable ){
-        /* Root commit: any unblamed row that exists here is blamed
-        ** to the root. */
         rc = blameCompareAgainstRef(db, pCur, zTableName,
                                     &curTableRoot, curFlags,
                                     0, &walk, &commit);
@@ -568,7 +575,6 @@ static int blameWalk(
       }
     }
 
-    /* Advance first-parent. */
     {
       const ProllyHash *pParent = doltliteCommitParentHash(&commit, 0);
       if( pParent && !prollyHashIsEmpty(pParent) ){
@@ -745,17 +751,9 @@ static int bmColumn(sqlite3_vtab_cursor *pCursor,
   if( iCol < nPk ){
     int cid = v->aPkColIdx[iCol];
     if( cid == v->intPkCid ){
-      /* Rowid-alias INTEGER PK — value is the cursor's intKey, not
-      ** a record field. */
       sqlite3_result_int64(ctx, r->intKey);
     }else if( r->pCurVal && r->nCurVal>0 ){
       DoltliteRecordInfo ri;
-      /* Non-rowid PK tables are auto-converted to WITHOUT ROWID in
-      ** build.c, so records store the PK columns first in PRIMARY KEY
-      ** declaration order. aPkColIdx is sorted by pkPos, so iCol is
-      ** exactly the PK col's record-field index regardless of its
-      ** declared cid. (Blame projects only PK cols so non-PK record
-      ** fields never come into play here.) */
       doltliteParseRecord(r->pCurVal, r->nCurVal, &ri);
       if( iCol < ri.nField ){
         doltliteResultField(ctx, r->pCurVal, r->nCurVal,

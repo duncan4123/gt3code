@@ -1,31 +1,4 @@
 #!/bin/bash
-#
-# Version-control oracle test: dolt_diff_<table>(from_ref, to_ref) TVF form
-#
-# Dolt exposes row-level range diffs via a generic TVF
-# `dolt_diff(from_ref, to_ref, table_name)` whose output schema is
-# per-table. SQLite eponymous TVFs declare a static schema at
-# connect time, so we expose the same functionality by adding
-# (from_ref, to_ref) as positional args to the existing
-# `dolt_diff_<table>` virtual table — the table name rides in the
-# module name, where it's already per-instance, and the schema is
-# the same as the no-arg form.
-#
-# The oracle query uses the doltlite form:
-#
-#   SELECT * FROM dolt_diff_users('HEAD~1', 'HEAD')
-#
-# and a sed transformation rewrites it for Dolt to:
-#
-#   SELECT * FROM dolt_diff('HEAD~1', 'HEAD', 'users')
-#
-# Each row is serialized as "R|<pk>|<to_vals>|<from_vals>|<diff_type>"
-# so the commit hash columns (which differ between engines —
-# doltlite emits resolved hashes, Dolt emits the ref literal) are
-# intentionally excluded from the comparison.
-#
-# Usage: bash vc_oracle_diff_tvf_test.sh [path/to/doltlite] [path/to/dolt]
-#
 
 set -u
 
@@ -35,9 +8,8 @@ TMPROOT=$(mktemp -d)
 trap "rm -rf $TMPROOT" EXIT
 pass=0; fail=0
 FAILED_NAMES=""
+source "$(dirname "$0")/lib/vc_oracle_common.sh"
 
-# Translate setup SQL (SELECT dolt_* → CALL dolt_*) and the query
-# (dolt_diff_<t>(...) → dolt_diff(..., '<t>')) for Dolt.
 translate_for_dolt() {
   sed -E '
     s/SELECT[[:space:]]+(dolt_[a-z_]+\()/CALL \1/g
@@ -46,7 +18,7 @@ translate_for_dolt() {
 }
 
 oracle() {
-  local name="$1" setup="$2" query="$3"
+  local name="$1" setup="$2" query="$3" allow_empty="${4:-}"
   local dir="$TMPROOT/$name"
   mkdir -p "$dir/dl" "$dir/dt"
 
@@ -71,14 +43,10 @@ oracle() {
   ) > "$dir/dt.raw"
   dt_out=$(tr -d '"\r' < "$dir/dt.raw" | grep '^R|' | sort)
 
-  if [ "$dl_out" = "$dt_out" ]; then
-    pass=$((pass+1))
+  if [ "$allow_empty" = "EXPECT_EMPTY" ]; then
+    vc_oracle_assert_match_allow_empty "$name" "$dl_out" "$dt_out"
   else
-    fail=$((fail+1))
-    FAILED_NAMES="$FAILED_NAMES $name"
-    echo "  FAIL: $name"
-    echo "    doltlite:"; echo "$dl_out" | sed 's/^/      /'
-    echo "    dolt:";     echo "$dt_out" | sed 's/^/      /'
+    vc_oracle_assert_match "$name" "$dl_out" "$dt_out"
   fi
 }
 
@@ -109,7 +77,6 @@ oracle "slice_full_range" "$SETUP_LINEAR" \
 
 echo "--- ref types ---"
 
-# Named refs: branch names.
 oracle "slice_branch_refs" "
 CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
 INSERT INTO t VALUES (1, 1);
@@ -119,7 +86,6 @@ INSERT INTO t VALUES (2, 2);
 SELECT dolt_add('-A'); SELECT dolt_commit('-m', 'feat_c1');
 " "SELECT CONCAT('R|', IFNULL(to_id,''), '|', IFNULL(to_v,''), '|', IFNULL(from_id,''), '|', IFNULL(from_v,''), '|', diff_type) FROM dolt_diff_t('main', 'feat');"
 
-# Tags.
 oracle "slice_tag_refs" "
 CREATE TABLE t(id INTEGER PRIMARY KEY, v INT);
 INSERT INTO t VALUES (1, 1);
@@ -141,7 +107,8 @@ INSERT INTO t VALUES (99, 99);
 echo "--- no diff (same ref both sides) ---"
 
 oracle "slice_no_change" "$SETUP_LINEAR" \
-  "SELECT CONCAT('R|', IFNULL(to_id,''), '|', IFNULL(to_v,''), '|', IFNULL(from_id,''), '|', IFNULL(from_v,''), '|', diff_type) FROM dolt_diff_t('HEAD', 'HEAD');"
+  "SELECT CONCAT('R|', IFNULL(to_id,''), '|', IFNULL(to_v,''), '|', IFNULL(from_id,''), '|', IFNULL(from_v,''), '|', diff_type) FROM dolt_diff_t('HEAD', 'HEAD');" \
+  "EXPECT_EMPTY"
 
 echo "--- multi-column table ---"
 

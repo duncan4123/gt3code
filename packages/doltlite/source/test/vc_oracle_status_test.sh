@@ -1,14 +1,4 @@
 #!/bin/bash
-#
-# Version-control oracle test: dolt_status
-#
-# Runs identical working-set scenarios against doltlite and Dolt, then
-# compares the normalized `dolt_status` output. Catches divergence in how
-# each engine classifies new/modified/deleted/renamed tables, staged vs
-# unstaged, and mixed states.
-#
-# Usage: bash vc_oracle_status_test.sh [path/to/doltlite] [path/to/dolt]
-#
 
 set -u
 set -o pipefail
@@ -21,19 +11,15 @@ pass=0; fail=0
 FAILED_NAMES=""
 source "$(dirname "$0")/lib/vc_oracle_common.sh"
 
-# Strip CRLF only; status rows are already in sort order.
 normalize() {
   tr -d '\r'
 }
 
-# Run a scenario. $1=name, $2=setup SQL in doltlite syntax.
-# The harness rewrites `SELECT dolt_*(...)` -> `CALL dolt_*(...)` for Dolt.
 oracle() {
-  local name="$1" setup="$2"
+  local name="$1" setup="$2" allow_empty="${3:-}"
   local dir="$TMPROOT/$name"
   mkdir -p "$dir/dl" "$dir/dt"
 
-  # doltlite side: single tab-separated column, no csv quoting.
   local dl_out
   dl_out=$(printf "%s\n.headers off\n.mode list\n.separator '\t'\nSELECT table_name || char(9) || staged || char(9) || status FROM dolt_status ORDER BY table_name, staged, status;\n" "$setup" \
            | "$DOLTLITE" "$dir/dl/db" 2>"$dir/dl.err" \
@@ -54,14 +40,10 @@ oracle() {
   local dt_out
   dt_out=$(vc_oracle_tail_csv_body "$dir/dt.raw" | normalize)
 
-  if [ "$dl_out" = "$dt_out" ]; then
-    pass=$((pass+1))
+  if [ "$allow_empty" = "EXPECT_EMPTY" ]; then
+    vc_oracle_assert_match_allow_empty "$name" "$dl_out" "$dt_out"
   else
-    fail=$((fail+1))
-    FAILED_NAMES="$FAILED_NAMES $name"
-    echo "  FAIL: $name"
-    echo "    doltlite:"; echo "$dl_out" | sed 's/^/      /'
-    echo "    dolt:"    ; echo "$dt_out" | sed 's/^/      /'
+    vc_oracle_assert_match "$name" "$dl_out" "$dt_out"
   fi
 }
 
@@ -73,7 +55,7 @@ echo "--- empty / baseline ---"
 oracle "empty_fresh_db" "
 -- no DDL, no commits; both sides should report empty status
 SELECT 1;
-"
+" "EXPECT_EMPTY"
 
 echo "--- new tables ---"
 

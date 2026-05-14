@@ -9,10 +9,6 @@
 #define MUTMAP_INIT_CAP 16
 #define MUTMAP_MIN_HASH 32
 
-/* Sortable 8-byte big-endian encoding of an i64 — the high bit is
-** flipped so unsigned byte-lex order matches signed integer order.
-** Matches the on-disk INTKEY layout in prolly_node.c (see
-** prollyNodeIntKey, which decodes via `u ^ (1<<63)`). */
 i64 prollyMutMapEntryIntKey(const ProllyMutMapEntry *e){
   const u8 *p = e->pKey;
   u64 u;
@@ -34,20 +30,11 @@ static void encodeIntKeyBE(i64 v, u8 buf[8]){
   buf[7] = (u8)u;
 }
 
-/* Rebinds (pKey, nKey) to a sortable encoding of intKey when the map is
-** in INT mode. INT-mode callers MUST pass (NULL, 0, intKey) — passing
-** byte-form keys with a meaningful intKey alongside is ambiguous and
-** would silently let bytes win, corrupting key order. The assert catches
-** that misuse during development; for INT-mode entries originating from
-** Merge re-insert (where pKey is already the encoded 8 bytes) callers
-** pass intKey=0 and the assert holds. */
 static void prepKey(ProllyMutMap *mm,
                     const u8 **ppKey, int *pnKey,
                     i64 intKey, u8 buf[8]){
   if( !mm->isIntKey ) return;
   if( *ppKey != 0 && *pnKey > 0 ){
-    /* Caller passed pre-encoded bytes (Merge re-insert path). intKey
-    ** must be 0 by convention so we don't have two key sources. */
     assert( intKey == 0 );
     return;
   }
@@ -68,22 +55,17 @@ static int compareEntries(
   return 0;
 }
 
-/* Big-endian zero-padded 8-byte prefix of a key.
-** Lex order on this u64 matches lex order on the first min(nKey,8) key
-** bytes when both keys are zero-padded to 8 bytes. Used as a fast-path
-** for sort/compare so most pairs resolve without falling through to
-** memcmp. Reads no bytes past nKey. */
 static u64 keyPrefix64(const u8 *pKey, int nKey){
   u64 r = 0;
   switch( nKey>=8 ? 8 : nKey ){
-    case 8: r |= (u64)pKey[7];        /* fall through */
-    case 7: r |= (u64)pKey[6] << 8;   /* fall through */
-    case 6: r |= (u64)pKey[5] << 16;  /* fall through */
-    case 5: r |= (u64)pKey[4] << 24;  /* fall through */
-    case 4: r |= (u64)pKey[3] << 32;  /* fall through */
-    case 3: r |= (u64)pKey[2] << 40;  /* fall through */
-    case 2: r |= (u64)pKey[1] << 48;  /* fall through */
-    case 1: r |= (u64)pKey[0] << 56;  /* fall through */
+    case 8: r |= (u64)pKey[7];
+    case 7: r |= (u64)pKey[6] << 8;
+    case 6: r |= (u64)pKey[5] << 16;
+    case 5: r |= (u64)pKey[4] << 24;
+    case 4: r |= (u64)pKey[3] << 32;
+    case 3: r |= (u64)pKey[2] << 40;
+    case 2: r |= (u64)pKey[1] << 48;
+    case 1: r |= (u64)pKey[0] << 56;
     case 0: break;
   }
   return r;
@@ -116,9 +98,6 @@ static u32 hashKey(const u8 *pKey, int nKey){
   return h;
 }
 
-/* (prefix, phys) pair packed for cache-friendly sort. Lex order on
-** prefix matches the first 8 bytes of the key; when prefixes tie we
-** fall through to a full compareEntries() against mm->aEntries. */
 typedef struct OrderPair {
   u64 prefix;
   int phys;
@@ -145,24 +124,16 @@ static void mutmapInsertionSort(ProllyMutMap *mm, OrderPair *a, int lo, int hi){
   }
 }
 
-/* Quicksort with median-of-3 pivot, insertion-sort fallback for small
-** ranges, and tail-call elimination on the larger partition to bound
-** stack depth at O(log N). Compare is inlined via orderPairCmp — no
-** function pointer or global context. */
 static void mutmapQuickSort(ProllyMutMap *mm, OrderPair *a, int lo, int hi){
   while( hi - lo > 16 ){
     int mid = lo + ((hi - lo) >> 1);
     int i, j;
     OrderPair pivot, t;
-    /* Median-of-3 pivot selection: order a[lo], a[mid], a[hi] then
-    ** stash the median at a[hi-1] as the pivot. */
     if( orderPairCmp(mm, &a[lo], &a[mid]) > 0 ){ t=a[lo]; a[lo]=a[mid]; a[mid]=t; }
     if( orderPairCmp(mm, &a[lo], &a[hi]) > 0 ){ t=a[lo]; a[lo]=a[hi]; a[hi]=t; }
     if( orderPairCmp(mm, &a[mid], &a[hi]) > 0 ){ t=a[mid]; a[mid]=a[hi]; a[hi]=t; }
     t = a[mid]; a[mid] = a[hi-1]; a[hi-1] = t;
     pivot = a[hi-1];
-    /* Partition. a[lo] <= pivot, a[hi] >= pivot already, so we scan
-    ** the interior. */
     i = lo;
     j = hi - 1;
     for(;;){
@@ -171,9 +142,7 @@ static void mutmapQuickSort(ProllyMutMap *mm, OrderPair *a, int lo, int hi){
       if( i >= j ) break;
       t = a[i]; a[i] = a[j]; a[j] = t;
     }
-    /* Restore pivot to its final position. */
     t = a[i]; a[i] = a[hi-1]; a[hi-1] = t;
-    /* Recurse on the smaller side, iterate on the larger. */
     if( i - lo < hi - i ){
       mutmapQuickSort(mm, a, lo, i - 1);
       lo = i + 1;
@@ -185,11 +154,6 @@ static void mutmapQuickSort(ProllyMutMap *mm, OrderPair *a, int lo, int hi){
   mutmapInsertionSort(mm, a, lo, hi);
 }
 
-/* Sort mm->aOrder[0..nEntries-1] by key. Builds a (prefix, phys)
-** scratch array, sorts that with a typed compare, then writes the
-** phys indices back to aOrder. The scratch buffer is cached on the
-** mutmap and grows in lockstep with nAlloc — flush-then-reuse loops
-** pay one alloc total, not one per flush. */
 static int mutmapSortOrder(ProllyMutMap *mm){
   int n = mm->nEntries;
   OrderPair *scratch;
@@ -228,8 +192,20 @@ static int decodeLevel(ProllyMutMap *mm, int stored){
   return stored - mm->levelBase;
 }
 
+static int entryHasInlineKey(ProllyMutMapEntry *e){
+  return e->pKey==e->aKeyInline;
+}
+
+static void fixInlineKeyPtr(ProllyMutMapEntry *e){
+  if( e->nKey > 0 && e->nKey <= (int)sizeof(e->aKeyInline) ){
+    e->pKey = e->aKeyInline;
+  }
+}
+
 static void freeEntryData(ProllyMutMapEntry *e){
-  sqlite3_free(e->pKey);
+  if( !entryHasInlineKey(e) ){
+    sqlite3_free(e->pKey);
+  }
   sqlite3_free(e->pVal);
   e->pKey = 0;
   e->pVal = 0;
@@ -250,8 +226,12 @@ static int copyEntryData(ProllyMutMap *mm, ProllyMutMapEntry *e,
   e->pVal = 0;
   e->nVal = 0;
   if( pKey && nKey>0 ){
-    e->pKey = (u8*)sqlite3_malloc(nKey);
-    if( !e->pKey ) return SQLITE_NOMEM;
+    if( nKey <= (int)sizeof(e->aKeyInline) ){
+      e->pKey = e->aKeyInline;
+    }else{
+      e->pKey = (u8*)sqlite3_malloc(nKey);
+      if( !e->pKey ) return SQLITE_NOMEM;
+    }
     memcpy(e->pKey, pKey, nKey);
     e->nKey = nKey;
     e->keyPrefix = keyPrefix64(pKey, nKey);
@@ -260,7 +240,9 @@ static int copyEntryData(ProllyMutMap *mm, ProllyMutMapEntry *e,
   if( pVal && nVal>0 ){
     e->pVal = (u8*)sqlite3_malloc(nVal);
     if( !e->pVal ){
-      sqlite3_free(e->pKey);
+      if( !entryHasInlineKey(e) ){
+        sqlite3_free(e->pKey);
+      }
       e->pKey = 0;
       return SQLITE_NOMEM;
     }
@@ -436,9 +418,13 @@ static int ensureCapacity(ProllyMutMap *mm){
       return SQLITE_NOMEM;
     }
     if( mm->nEntries > 0 ){
+      int i;
       memcpy(aNew, mm->aEntries, mm->nEntries * sizeof(ProllyMutMapEntry));
       memcpy(aOrderNew, mm->aOrder, mm->nEntries * sizeof(int));
       memcpy(aPosNew, mm->aPos, mm->nEntries * sizeof(int));
+      for(i=0; i<mm->nEntries; i++){
+        fixInlineKeyPtr(&aNew[i]);
+      }
     }
     sqlite3_free(mm->aEntries);
     sqlite3_free(mm->aOrder);
@@ -451,6 +437,18 @@ static int ensureCapacity(ProllyMutMap *mm){
   return SQLITE_OK;
 }
 
+static void insertOrderEntry(ProllyMutMap *mm, int idx, int phys){
+  int i;
+  if( idx < mm->nEntries ){
+    memmove(&mm->aOrder[idx+1], &mm->aOrder[idx],
+            (mm->nEntries - idx) * sizeof(int));
+  }
+  mm->aOrder[idx] = phys;
+  for(i=idx; i<=mm->nEntries; i++){
+    mm->aPos[mm->aOrder[i]] = i;
+  }
+}
+
 int prollyMutMapInit(ProllyMutMap *mm, u8 isIntKey){
   return prollyMutMapInitMode(mm, isIntKey, 1);
 }
@@ -459,6 +457,7 @@ int prollyMutMapInitMode(ProllyMutMap *mm, u8 isIntKey, u8 keepSorted){
   memset(mm, 0, sizeof(*mm));
   mm->isIntKey = isIntKey;
   mm->keepSorted = keepSorted;
+  mm->orderDirty = keepSorted ? 0 : 1;
   return SQLITE_OK;
 }
 
@@ -500,7 +499,7 @@ int prollyMutMapInsert(
   u8 keyBuf[8];
   prepKey(mm, &pKey, &nKey, intKey, keyBuf);
 
-  if( mm->keepSorted ){
+  if( mm->keepSorted || !mm->orderDirty ){
     idx = bsearch_key(mm, pKey, nKey, &found);
     if( found ){
       phys = mm->aOrder[idx];
@@ -532,7 +531,6 @@ int prollyMutMapInsert(
   if( rc!=SQLITE_OK ) return rc;
 
   {
-    int i;
     ProllyMutMapEntry *e;
     phys = mm->nEntries;
     e = &mm->aEntries[phys];
@@ -543,16 +541,8 @@ int prollyMutMapInsert(
     if( rc!=SQLITE_OK ){
       return rc;
     }
-    if( mm->keepSorted ){
-      if( idx < mm->nEntries ){
-        memmove(&mm->aOrder[idx+1], &mm->aOrder[idx],
-                (mm->nEntries - idx) * sizeof(int));
-      }
-      mm->aOrder[idx] = phys;
-      mm->aPos[phys] = idx;
-      for(i = idx + 1; i <= mm->nEntries; i++){
-        mm->aPos[mm->aOrder[i]] = i;
-      }
+    if( mm->keepSorted || !mm->orderDirty ){
+      insertOrderEntry(mm, idx, phys);
     }else{
       mm->aOrder[phys] = phys;
       mm->aPos[phys] = phys;
@@ -564,9 +554,6 @@ int prollyMutMapInsert(
   if( !mm->keepSorted ){
     hashInsertPhys(mm, phys);
   }
-  /* New entry shifts every later sorted position by +1 — invalidate any
-  ** mmIdx caches held by other cursors. In-place updates above this
-  ** branch don't reach here so they correctly leave generation alone. */
   mm->generation++;
   return SQLITE_OK;
 }
@@ -579,7 +566,7 @@ int prollyMutMapDelete(
   u8 keyBuf[8];
   prepKey(mm, &pKey, &nKey, intKey, keyBuf);
 
-  if( mm->keepSorted ){
+  if( mm->keepSorted || !mm->orderDirty ){
     idx = bsearch_key(mm, pKey, nKey, &found);
     if( found ){
       phys = mm->aOrder[idx];
@@ -616,7 +603,6 @@ int prollyMutMapDelete(
   if( rc!=SQLITE_OK ) return rc;
 
   {
-    int i;
     ProllyMutMapEntry *e;
     phys = mm->nEntries;
     e = &mm->aEntries[phys];
@@ -627,16 +613,8 @@ int prollyMutMapDelete(
     if( rc!=SQLITE_OK ){
       return rc;
     }
-    if( mm->keepSorted ){
-      if( idx < mm->nEntries ){
-        memmove(&mm->aOrder[idx+1], &mm->aOrder[idx],
-                (mm->nEntries - idx) * sizeof(int));
-      }
-      mm->aOrder[idx] = phys;
-      mm->aPos[phys] = idx;
-      for(i = idx + 1; i <= mm->nEntries; i++){
-        mm->aPos[mm->aOrder[i]] = i;
-      }
+    if( mm->keepSorted || !mm->orderDirty ){
+      insertOrderEntry(mm, idx, phys);
     }else{
       mm->aOrder[phys] = phys;
       mm->aPos[phys] = phys;
@@ -657,10 +635,6 @@ void prollyMutMapPushSavepoint(ProllyMutMap *mm, int level){
   mm->currentSavepointLevel = level;
 }
 
-/* Order matters: restore in-place mutations from the undo log
-** FIRST, then drop fresh-key inserts with bornAt >= level. Doing it
-** the other way would drop in-place-mutated entries before their
-** undo record gets applied, losing the restored state. */
 int prollyMutMapRollbackToSavepoint(ProllyMutMap *mm, int level){
   int i;
   int rc;
@@ -682,7 +656,6 @@ int prollyMutMapRollbackToSavepoint(ProllyMutMap *mm, int level){
     mm->nUndo--;
   }
 
-
   {
     int oldN = mm->nEntries;
     int *aMap = 0;
@@ -698,6 +671,7 @@ int prollyMutMapRollbackToSavepoint(ProllyMutMap *mm, int level){
       }else{
         if( newN != i ){
           mm->aEntries[newN] = mm->aEntries[i];
+          fixInlineKeyPtr(&mm->aEntries[newN]);
         }
         aMap[i] = newN++;
       }
@@ -732,9 +706,6 @@ int prollyMutMapRollbackToSavepoint(ProllyMutMap *mm, int level){
     if( rc!=SQLITE_OK ) return rc;
   }
 
-  /* Rollback both reorders entries (compaction) and applies undo-log
-  ** in-place restorations — both can change what cursors see at any
-  ** mmIdx, so unconditionally invalidate cached positions. */
   mm->generation++;
 
   mm->currentSavepointLevel = level - 1;
@@ -818,9 +789,6 @@ int prollyMutMapResolveSortedPos(
   *pFound = 0;
   if( mm->nEntries==0 ) return SQLITE_OK;
   prepKey(mm, &pKey, &nKey, intKey, keyBuf);
-  /* bsearch_key reads through aOrder; for unsorted maps we need to
-  ** materialize the sort first. ensureOrder is a no-op when keepSorted
-  ** is set or when the order is already clean. */
   rc = ensureOrder(mm);
   if( rc!=SQLITE_OK ) return rc;
   *pIdx = bsearch_key(mm, pKey, nKey, pFound);
@@ -829,6 +797,11 @@ int prollyMutMapResolveSortedPos(
 
 int prollyMutMapOrderIndexFromEntry(ProllyMutMap *mm, ProllyMutMapEntry *pEntry){
   int phys = (int)(pEntry - mm->aEntries);
+  if( mm->keepSorted ){
+    int found = 0;
+    int idx = bsearch_key(mm, pEntry->pKey, pEntry->nKey, &found);
+    return found ? idx : mm->nEntries;
+  }
   if( !mm->keepSorted && mm->orderDirty ){
     return rankEntryWithoutOrder(mm, phys);
   }
@@ -879,10 +852,6 @@ void prollyMutMapIterLast(ProllyMutMapIter *it, ProllyMutMap *mm){
   it->idx = mm->nEntries>0 ? mm->nEntries - 1 : mm->nEntries;
 }
 
-/* Wipes data only — currentSavepointLevel is context not data. A
-** flushMutMap mid-savepoint calls clear and the mutmap continues to
-** live under the same savepoint, so subsequent writes must still
-** attribute to that level. */
 void prollyMutMapClear(ProllyMutMap *mm){
   int i;
   for(i=0; i<mm->nEntries; i++){
@@ -962,12 +931,16 @@ int prollyMutMapClone(ProllyMutMap **out, const ProllyMutMap *src){
       de->pKey = 0;
       de->pVal = 0;
       if( se->pKey && se->nKey > 0 ){
-        de->pKey = (u8*)sqlite3_malloc(se->nKey);
-        if( !de->pKey ){
-          dst->nEntries = i;
-          prollyMutMapFree(dst);
-          sqlite3_free(dst);
-          return SQLITE_NOMEM;
+        if( se->nKey <= (int)sizeof(de->aKeyInline) ){
+          de->pKey = de->aKeyInline;
+        }else{
+          de->pKey = (u8*)sqlite3_malloc(se->nKey);
+          if( !de->pKey ){
+            dst->nEntries = i;
+            prollyMutMapFree(dst);
+            sqlite3_free(dst);
+            return SQLITE_NOMEM;
+          }
         }
         memcpy(de->pKey, se->pKey, se->nKey);
         de->nKey = se->nKey;
@@ -977,7 +950,9 @@ int prollyMutMapClone(ProllyMutMap **out, const ProllyMutMap *src){
       if( se->pVal && se->nVal > 0 ){
         de->pVal = (u8*)sqlite3_malloc(se->nVal);
         if( !de->pVal ){
-          sqlite3_free(de->pKey);
+          if( !entryHasInlineKey(de) ){
+            sqlite3_free(de->pKey);
+          }
           de->pKey = 0;
           dst->nEntries = i;
           prollyMutMapFree(dst);
@@ -1051,8 +1026,6 @@ int prollyMutMapMerge(ProllyMutMap *pDst, ProllyMutMap *pSrc){
   int i, rc;
   for(i=0; i<pSrc->nEntries; i++){
     ProllyMutMapEntry *e = &pSrc->aEntries[i];
-    /* Entry's pKey/nKey are already in encoded byte form for both INT
-    ** and BLOB maps, so prepKey in the callee is a no-op. */
     if( e->op==PROLLY_EDIT_INSERT ){
       rc = prollyMutMapInsert(pDst, e->pKey, e->nKey, 0,
                                e->pVal, e->nVal);

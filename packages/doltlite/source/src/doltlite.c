@@ -114,7 +114,7 @@ static int doltliteSaveTxnState(sqlite3 *db, DoltliteTxnState *p){
   memset(p, 0, sizeof(*p));
   if( !cs ) return SQLITE_ERROR;
 
-  memcpy(&p->refsHash, &cs->refsHash, sizeof(ProllyHash));
+  memcpy(&p->refsHash, refsTableGetHash(&cs->refs), sizeof(ProllyHash));
 
   p->zSessionBranch = sqlite3_mprintf("%s", doltliteGetSessionBranch(db));
   if( !p->zSessionBranch ){
@@ -142,7 +142,7 @@ static int doltliteRestoreTxnState(sqlite3 *db, DoltliteTxnState *p){
 
   if( !cs ) return SQLITE_ERROR;
 
-  memcpy(&cs->refsHash, &p->refsHash, sizeof(ProllyHash));
+  refsTableSetHash(&cs->refs, &p->refsHash);
   if( prollyHashIsEmpty(&p->refsHash) ){
     chunkStoreClearRefs(cs);
   }else{
@@ -174,12 +174,6 @@ static int doltliteRestoreTxnStateOnFailure(
   return rc==SQLITE_OK ? opRc : rc;
 }
 
-/* Commit-race guard. Takes the graph lock, refreshes ref state from
-** disk, then verifies the session's head still matches the branch
-** tip. If another connection advanced the branch between the start
-** of this commit and the lock acquisition, we return SQLITE_BUSY
-** and the caller aborts — otherwise we'd silently overwrite the
-** concurrent commit. */
 static int doltliteRefreshAndConfirmHead(
   sqlite3 *db,
   ChunkStore *cs,
@@ -236,13 +230,11 @@ int doltliteHasUncommittedChanges(sqlite3 *db){
     return hasUserTables;
   }
 
-
   doltliteGetSessionStaged(db, &stagedHash);
   if( !prollyHashIsEmpty(&stagedHash)
    && prollyHashCompare(&headCatHash, &stagedHash)!=0 ){
     return 1;
   }
-
 
   {
     ChunkStore *cs = doltliteGetChunkStore(db);
@@ -584,7 +576,7 @@ static int doltliteAdvanceBranch(
   rc = doltliteSaveTxnState(db, &saved);
   if( rc!=SQLITE_OK ) return rc;
 
-  if( cs->nBranches==0 ){
+  if( refsTableBranchCount(&cs->refs)==0 ){
     rc = chunkStoreAddBranch(cs, branch, pNewHead);
     if( rc==SQLITE_OK ){
       rc = chunkStoreSetDefaultBranch(cs, branch);
@@ -727,6 +719,9 @@ static int doltliteSavepointIsTopLevelTxn(sqlite3 *db){
   return db->pSavepoint!=0 && db->nSavepoint==0;
 }
 
+/* SQLite represents a top-level SAVEPOINT as the transaction boundary.
+** Doltlite treats that like autocommit for VC operations: seal the boundary
+** instead of leaving a savepoint that later ROLLBACK TO can undo. */
 static int doltliteVcSealTopLevelSavepointTxn(sqlite3 *db){
   if( doltliteSavepointIsTopLevelTxn(db) ){
     return sqlite3_exec(db, "COMMIT", 0, 0, 0);
@@ -893,12 +888,6 @@ static int addCheckIgnore(
   return rc;
 }
 
-/* Append a TableEntry to a growing array, duping its zName so the
-** destination array has independent ownership. Required because the
-** source entry's zName is usually borrowed from another catalog
-** array (aWorking / aStaged) that will be freed separately — a
-** plain struct copy would alias the pointer and set up a
-** double-free. */
 static int addAppendTableEntry(
   sqlite3_context *context,
   struct TableEntry **paEntries,
@@ -943,9 +932,88 @@ static struct TableEntry *addFindEntryByName(
   return 0;
 }
 
-/* Rebind staged entries to the current working catalog's runtime iTable before
-** serializing a staged catalog. This keeps partial staging from re-emitting
-** stale rootpage identity loaded from HEAD or an older staged snapshot. */
+typedef struct AddNameSlot AddNameSlot;
+struct AddNameSlot {
+  const char *zName;
+  int iEntry;
+};
+
+typedef struct AddNameIndex AddNameIndex;
+struct AddNameIndex {
+  struct TableEntry *aEntry;
+  AddNameSlot *aSlot;
+  int nSlot;
+};
+
+static u32 addNameHash(const char *z){
+  u32 h = 2166136261u;
+  while( z && *z ){
+    h ^= (unsigned char)*z;
+    h *= 16777619u;
+    z++;
+  }
+  return h;
+}
+
+static int addNameIndexInit(
+  AddNameIndex *pIdx,
+  struct TableEntry *aEntry,
+  int nEntry
+){
+  int nSlot = 16;
+  int i;
+
+  memset(pIdx, 0, sizeof(*pIdx));
+  pIdx->aEntry = aEntry;
+  if( nEntry<=0 ) return SQLITE_OK;
+  while( nSlot < nEntry*2 ) nSlot *= 2;
+  pIdx->aSlot = sqlite3_malloc(nSlot * (int)sizeof(AddNameSlot));
+  if( !pIdx->aSlot ) return SQLITE_NOMEM;
+  memset(pIdx->aSlot, 0, nSlot * (int)sizeof(AddNameSlot));
+  pIdx->nSlot = nSlot;
+
+  for(i=0; i<nEntry; i++){
+    u32 slot;
+    if( !aEntry[i].zName ) continue;
+    slot = addNameHash(aEntry[i].zName) & (u32)(nSlot - 1);
+    while( pIdx->aSlot[slot].zName ){
+      if( strcmp(pIdx->aSlot[slot].zName, aEntry[i].zName)==0 ){
+        break;
+      }
+      slot = (slot + 1) & (u32)(nSlot - 1);
+    }
+    if( !pIdx->aSlot[slot].zName ){
+      pIdx->aSlot[slot].zName = aEntry[i].zName;
+      pIdx->aSlot[slot].iEntry = i + 1;
+    }
+  }
+  return SQLITE_OK;
+}
+
+static void addNameIndexFree(AddNameIndex *pIdx){
+  sqlite3_free(pIdx->aSlot);
+  memset(pIdx, 0, sizeof(*pIdx));
+}
+
+static struct TableEntry *addNameIndexFind(
+  const AddNameIndex *pIdx,
+  const char *zName
+){
+  u32 slot;
+  int i;
+  if( !zName || pIdx->nSlot==0 ) return 0;
+  slot = addNameHash(zName) & (u32)(pIdx->nSlot - 1);
+  for(i=0; i<pIdx->nSlot; i++){
+    AddNameSlot *pSlot = &pIdx->aSlot[slot];
+    if( !pSlot->zName ) return 0;
+    if( strcmp(pSlot->zName, zName)==0 ){
+      return &pIdx->aEntry[pSlot->iEntry - 1];
+    }
+    slot = (slot + 1) & (u32)(pIdx->nSlot - 1);
+  }
+  return 0;
+}
+
 static void addAlignStagedEntriesToWorking(
   struct TableEntry *aWorking,
   int nWorking,
@@ -953,14 +1021,27 @@ static void addAlignStagedEntriesToWorking(
   int nStaged
 ){
   int i;
+  AddNameIndex workingIdx;
+  if( addNameIndexInit(&workingIdx, aWorking, nWorking)!=SQLITE_OK ){
+    for(i=0; i<nStaged; i++){
+      struct TableEntry *pWorking;
+      if( !aStaged[i].zName ) continue;
+      pWorking = addFindEntryByName(aWorking, nWorking, aStaged[i].zName);
+      if( pWorking ){
+        aStaged[i].iTable = pWorking->iTable;
+      }
+    }
+    return;
+  }
   for(i=0; i<nStaged; i++){
     struct TableEntry *pWorking;
     if( !aStaged[i].zName ) continue;
-    pWorking = addFindEntryByName(aWorking, nWorking, aStaged[i].zName);
+    pWorking = addNameIndexFind(&workingIdx, aStaged[i].zName);
     if( pWorking ){
       aStaged[i].iTable = pWorking->iTable;
     }
   }
+  addNameIndexFree(&workingIdx);
 }
 
 static int addLoadWorkingAndStagedCatalogs(
@@ -1035,6 +1116,10 @@ static int addStageAllTables(
   int k;
   int useWorkingHash = 1;
   int rc;
+  AddNameIndex stagedIdx;
+  AddNameIndex workingIdx;
+  int stagedIdxInit = 0;
+  int workingIdxInit = 0;
 
   rc = addLoadWorkingAndStagedCatalogs(db, pWorkingHash,
                                        &aWorking, &nWorking,
@@ -1043,6 +1128,21 @@ static int addStageAllTables(
     sqlite3_result_error(context, "failed to load staged catalog", -1);
     return rc;
   }
+  rc = addNameIndexInit(&stagedIdx, aStaged, nStaged);
+  if( rc!=SQLITE_OK ){
+    addFreeEntries(aWorking, nWorking, aStaged, nStaged, aNew, nNew);
+    sqlite3_result_error_nomem(context);
+    return rc;
+  }
+  stagedIdxInit = 1;
+  rc = addNameIndexInit(&workingIdx, aWorking, nWorking);
+  if( rc!=SQLITE_OK ){
+    addNameIndexFree(&stagedIdx);
+    addFreeEntries(aWorking, nWorking, aStaged, nStaged, aNew, nNew);
+    sqlite3_result_error_nomem(context);
+    return rc;
+  }
+  workingIdxInit = 1;
 
   for(k=0; k<nWorking; k++){
     const char *zName = aWorking[k].zName;
@@ -1051,17 +1151,21 @@ static int addStageAllTables(
       int ignored = 0;
       rc = addCheckIgnore(db, context, zName, &ignored);
       if( rc!=SQLITE_OK ){
+        if( workingIdxInit ) addNameIndexFree(&workingIdx);
+        if( stagedIdxInit ) addNameIndexFree(&stagedIdx);
         addFreeEntries(aWorking, nWorking, aStaged, nStaged, aNew, nNew);
         return rc;
       }
       if( ignored ){
         useWorkingHash = 0;
-        pUse = addFindEntryByName(aStaged, nStaged, zName);
+        pUse = addNameIndexFind(&stagedIdx, zName);
         if( !pUse ) continue;
       }
     }
     rc = addAppendTableEntry(context, &aNew, &nNew, pUse);
     if( rc!=SQLITE_OK ){
+      if( workingIdxInit ) addNameIndexFree(&workingIdx);
+      if( stagedIdxInit ) addNameIndexFree(&stagedIdx);
       addFreeEntries(aWorking, nWorking, aStaged, nStaged, aNew, nNew);
       return rc;
     }
@@ -1070,11 +1174,13 @@ static int addStageAllTables(
   for(k=0; k<nStaged; k++){
     const char *zName = aStaged[k].zName;
     if( aStaged[k].iTable<=1 || !zName ) continue;
-    if( addFindEntryByName(aWorking, nWorking, zName) ) continue;
+    if( addNameIndexFind(&workingIdx, zName) ) continue;
     {
       int ignored = 0;
       rc = addCheckIgnore(db, context, zName, &ignored);
       if( rc!=SQLITE_OK ){
+        if( workingIdxInit ) addNameIndexFree(&workingIdx);
+        if( stagedIdxInit ) addNameIndexFree(&stagedIdx);
         addFreeEntries(aWorking, nWorking, aStaged, nStaged, aNew, nNew);
         return rc;
       }
@@ -1083,6 +1189,8 @@ static int addStageAllTables(
     useWorkingHash = 0;
     rc = addAppendTableEntry(context, &aNew, &nNew, &aStaged[k]);
     if( rc!=SQLITE_OK ){
+      if( workingIdxInit ) addNameIndexFree(&workingIdx);
+      if( stagedIdxInit ) addNameIndexFree(&stagedIdx);
       addFreeEntries(aWorking, nWorking, aStaged, nStaged, aNew, nNew);
       return rc;
     }
@@ -1095,6 +1203,8 @@ static int addStageAllTables(
     addAlignStagedEntriesToWorking(aWorking, nWorking, aNew, nNew);
     rc = addWriteStagedCatalog(db, cs, aNew, nNew);
   }
+  if( workingIdxInit ) addNameIndexFree(&workingIdx);
+  if( stagedIdxInit ) addNameIndexFree(&stagedIdx);
   addFreeEntries(aWorking, nWorking, aStaged, nStaged, aNew, nNew);
   if( rc!=SQLITE_OK ){
     sqlite3_result_error_code(context, rc);
@@ -1329,8 +1439,6 @@ static void doltliteAddFunc(
     goto add_cleanup;
   }
 
-
-
   for(i=0; i<argc; i++){
     const char *arg = (const char*)sqlite3_value_text(argv[i]);
     if( !arg ) continue;
@@ -1404,10 +1512,8 @@ static void doltliteCommitFunc(
     return;
   }
 
-  /* Top-level SAVEPOINT acts as the transaction boundary. Dolt seals
-  ** that boundary even when dolt_commit() later errors, so persist it
-  ** up front. Plain BEGIN / nested SAVEPOINT cases defer COMMIT until
-  ** after argument validation succeeds. */
+  /* Top-level SAVEPOINT is sealed before option validation because Dolt keeps
+  ** that SQL transaction boundary durable even when dolt_commit later errors. */
   if( sealTopLevel ){
     (void)sqlite3_exec(db, "COMMIT", 0, 0, 0);
   }
@@ -1508,12 +1614,6 @@ static void doltliteCommitFunc(
     }
   }
 
-  /* Commit guard: if the working set has any unresolved constraint
-  ** violations from a previous merge, refuse to proceed unless the
-  ** caller passed --force. Matches Dolt's behaviour of blocking
-  ** commits until the user either clears violations by deleting
-  ** the offending rows from dolt_constraint_violations_<table> or
-  ** explicitly forces the commit through. */
   if( !force && doltliteSessionHasConstraintViolations(db) ){
     sqlite3_result_error(context,
       "cannot commit: unresolved entries in dolt_constraint_violations. "
@@ -1552,8 +1652,8 @@ static void doltliteCommitFunc(
    && (!db->autoCommit
        || sqlite3_txn_state(db, "main")!=SQLITE_TXN_NONE
        || db->pSavepoint) ){
-    /* For BEGIN / nested SAVEPOINT, only close the SQL transaction once
-    ** dolt_commit() has survived argument parsing and basic validation. */
+    /* Plain BEGIN and nested SAVEPOINT cases stay rollbackable until argument
+    ** validation and basic commit guards have succeeded. */
     (void)sqlite3_exec(db, "COMMIT", 0, 0, 0);
   }
 
@@ -1576,7 +1676,26 @@ static void doltliteCommitFunc(
     ProllyHash workingHash, headCatHash, stagedHash;
     struct TableEntry *aWorking = 0, *aHead = 0, *aStaged = 0;
     int nWorking = 0, nHead = 0, nStaged = 0;
+    int nStagedAlloc = 0;
     int j, k;
+    AddNameIndex workingIdx;
+    AddNameIndex headIdx;
+    AddNameIndex stagedIdx;
+    u8 *aRemoveStaged = 0;
+
+    memset(&workingIdx, 0, sizeof(workingIdx));
+    memset(&headIdx, 0, sizeof(headIdx));
+    memset(&stagedIdx, 0, sizeof(stagedIdx));
+
+    #define FREE_ADD_MODIFIED_CATALOGS() do { \
+      sqlite3_free(aRemoveStaged); \
+      addNameIndexFree(&workingIdx); \
+      addNameIndexFree(&headIdx); \
+      addNameIndexFree(&stagedIdx); \
+      doltliteFreeCatalog(aWorking, nWorking); \
+      doltliteFreeCatalog(aHead, nHead); \
+      doltliteFreeCatalog(aStaged, nStaged); \
+    } while(0)
 
     rc = doltliteFlushCatalogToHash(db, &workingHash);
     if( rc!=SQLITE_OK ){
@@ -1586,14 +1705,15 @@ static void doltliteCommitFunc(
     rc = doltliteLoadCatalog(db, &workingHash, &aWorking, &nWorking, 0);
     if( rc!=SQLITE_OK ){
       sqlite3_result_error(context, "failed to load working catalog", -1);
+      FREE_ADD_MODIFIED_CATALOGS();
       return;
     }
     rc = doltliteGetHeadCatalogHash(db, &headCatHash);
     if( rc==SQLITE_OK && !prollyHashIsEmpty(&headCatHash) ){
       rc = doltliteLoadCatalog(db, &headCatHash, &aHead, &nHead, 0);
       if( rc!=SQLITE_OK ){
-        doltliteFreeCatalog(aWorking, nWorking);
         sqlite3_result_error(context, "failed to load HEAD catalog", -1);
+        FREE_ADD_MODIFIED_CATALOGS();
         return;
       }
     }
@@ -1605,59 +1725,65 @@ static void doltliteCommitFunc(
       rc = doltliteLoadCatalog(db, &headCatHash, &aStaged, &nStaged, 0);
     }
     if( rc!=SQLITE_OK ){
-      doltliteFreeCatalog(aWorking, nWorking);
-      doltliteFreeCatalog(aHead, nHead);
       sqlite3_result_error(context, "failed to load staged catalog", -1);
+      FREE_ADD_MODIFIED_CATALOGS();
       return;
     }
 
+    nStagedAlloc = nStaged + nWorking + 1;
+    if( nStagedAlloc>0 ){
+      struct TableEntry *aNewStaged = sqlite3_realloc(
+          aStaged, nStagedAlloc*(int)sizeof(struct TableEntry));
+      if( !aNewStaged ){
+        sqlite3_result_error_nomem(context);
+        FREE_ADD_MODIFIED_CATALOGS();
+        return;
+      }
+      aStaged = aNewStaged;
+    }
+    aRemoveStaged = sqlite3_malloc(nStagedAlloc>0 ? nStagedAlloc : 1);
+    if( !aRemoveStaged ){
+      sqlite3_result_error_nomem(context);
+      FREE_ADD_MODIFIED_CATALOGS();
+      return;
+    }
+    memset(aRemoveStaged, 0, nStagedAlloc>0 ? nStagedAlloc : 1);
+
+    rc = addNameIndexInit(&workingIdx, aWorking, nWorking);
+    if( rc==SQLITE_OK ) rc = addNameIndexInit(&headIdx, aHead, nHead);
+    if( rc==SQLITE_OK ) rc = addNameIndexInit(&stagedIdx, aStaged, nStaged);
+    if( rc!=SQLITE_OK ){
+      sqlite3_result_error_nomem(context);
+      FREE_ADD_MODIFIED_CATALOGS();
+      return;
+    }
 
     for(j=0; j<nWorking; j++){
       const char *zName = aWorking[j].zName;
-      int inHead = 0;
       int updated = 0;
       char *zDup;
-      for(k=0; k<nHead; k++){
-        if( aHead[k].zName && zName && strcmp(aHead[k].zName, zName)==0 ){
-          inHead = 1; break;
-        }
-      }
-      if( !inHead ) continue;
+      struct TableEntry *pStaged;
+      if( !addNameIndexFind(&headIdx, zName) ) continue;
 
-      for(k=0; k<nStaged; k++){
-        if( aStaged[k].zName && zName && strcmp(aStaged[k].zName, zName)==0 ){
+      pStaged = addNameIndexFind(&stagedIdx, zName);
+      if( pStaged ){
+          k = (int)(pStaged - aStaged);
           zDup = zName ? sqlite3_mprintf("%s", zName) : 0;
           if( zName && !zDup ){
-            doltliteFreeCatalog(aWorking, nWorking);
-            doltliteFreeCatalog(aHead, nHead);
-            doltliteFreeCatalog(aStaged, nStaged);
             sqlite3_result_error_nomem(context);
+            FREE_ADD_MODIFIED_CATALOGS();
             return;
           }
           sqlite3_free(aStaged[k].zName);
           aStaged[k] = aWorking[j];
           aStaged[k].zName = zDup;
           updated = 1;
-          break;
-        }
       }
       if( !updated ){
-        struct TableEntry *aNew = sqlite3_realloc(aStaged,
-            (nStaged+1)*(int)sizeof(struct TableEntry));
-        if( !aNew ){
-          doltliteFreeCatalog(aWorking, nWorking);
-          doltliteFreeCatalog(aHead, nHead);
-          doltliteFreeCatalog(aStaged, nStaged);
-          sqlite3_result_error_nomem(context);
-          return;
-        }
-        aStaged = aNew;
         zDup = zName ? sqlite3_mprintf("%s", zName) : 0;
         if( zName && !zDup ){
-          doltliteFreeCatalog(aWorking, nWorking);
-          doltliteFreeCatalog(aHead, nHead);
-          doltliteFreeCatalog(aStaged, nStaged);
           sqlite3_result_error_nomem(context);
+          FREE_ADD_MODIFIED_CATALOGS();
           return;
         }
         aStaged[nStaged] = aWorking[j];
@@ -1666,38 +1792,35 @@ static void doltliteCommitFunc(
       }
     }
 
-
     for(k=0; k<nHead; k++){
       const char *zName = aHead[k].zName;
-      int inWorking = 0;
-      int j2;
-      for(j2=0; j2<nWorking; j2++){
-        if( aWorking[j2].zName && zName && strcmp(aWorking[j2].zName, zName)==0 ){
-          inWorking = 1; break;
-        }
-      }
-      if( inWorking ) continue;
-
-      for(j2=0; j2<nStaged; j2++){
-        if( aStaged[j2].zName && zName && strcmp(aStaged[j2].zName, zName)==0 ){
-          sqlite3_free(aStaged[j2].zName);
-          if( j2+1<nStaged ){
-            memmove(&aStaged[j2], &aStaged[j2+1],
-                    (nStaged-j2-1)*(int)sizeof(struct TableEntry));
-          }
-          nStaged--;
-          break;
-        }
+      struct TableEntry *pStaged;
+      if( addNameIndexFind(&workingIdx, zName) ) continue;
+      pStaged = addNameIndexFind(&stagedIdx, zName);
+      if( pStaged ){
+        int j2 = (int)(pStaged - aStaged);
+        if( j2>=0 && j2<nStaged ) aRemoveStaged[j2] = 1;
       }
     }
-
+    for(k=0; k<nStaged; ){
+      if( aRemoveStaged[k] ){
+        sqlite3_free(aStaged[k].zName);
+        if( k+1<nStaged ){
+          memmove(&aStaged[k], &aStaged[k+1],
+                  (nStaged-k-1)*(int)sizeof(struct TableEntry));
+          memmove(&aRemoveStaged[k], &aRemoveStaged[k+1],
+                  (nStaged-k-1)*(int)sizeof(u8));
+        }
+        nStaged--;
+        continue;
+      }
+      k++;
+    }
 
     if( nStaged==0 ){
-      doltliteFreeCatalog(aWorking, nWorking);
-      doltliteFreeCatalog(aHead, nHead);
-      doltliteFreeCatalog(aStaged, nStaged);
       sqlite3_result_error(context,
         "nothing to commit, working tree clean (use dolt_add to stage changes)", -1);
+      FREE_ADD_MODIFIED_CATALOGS();
       return;
     }
 
@@ -1715,15 +1838,13 @@ static void doltliteCommitFunc(
       }
     }
 
-    doltliteFreeCatalog(aWorking, nWorking);
-    doltliteFreeCatalog(aHead, nHead);
-    doltliteFreeCatalog(aStaged, nStaged);
+    FREE_ADD_MODIFIED_CATALOGS();
+    #undef FREE_ADD_MODIFIED_CATALOGS
     if( rc!=SQLITE_OK ){
       sqlite3_result_error_code(context, rc);
       return;
     }
   }
-
 
   {
     ProllyHash cfHash;
@@ -1734,7 +1855,6 @@ static void doltliteCommitFunc(
       return;
     }
   }
-
 
   doltliteGetSessionStaged(db, &catalogHash);
   if( prollyHashIsEmpty(&catalogHash) ){
@@ -1754,7 +1874,6 @@ static void doltliteCommitFunc(
       return;
     }
   }
-
 
   {
     u8 isMerging = 0;
@@ -1777,7 +1896,6 @@ static void doltliteCommitFunc(
       }
     }
   }
-
 
   {
     ProllyHash parentHash;
@@ -1839,13 +1957,7 @@ static void doltliteCommitFunc(
       }
     }
 
-
     {
-      /* Reject all-whitespace messages, but otherwise preserve the
-      ** message verbatim — Dolt 1.87.0 dropped its trim-on-store
-      ** behavior, so doltlite stores the message bytes as given.
-      ** zTrimmedMessage stays unset; the original zMessage flows
-      ** straight into doltliteCreateAndStoreCommitWithTime below. */
       const char *p = zMessage;
       while( *p==' ' || *p=='\t' || *p=='\n' || *p=='\r' ) p++;
       if( *p==0 ){
@@ -1870,7 +1982,6 @@ static void doltliteCommitFunc(
 
   doltliteGetSessionHead(db, &sessionHeadBeforeLock);
 
-
   rc = doltliteRefreshAndConfirmHead(db, cs, &sessionHeadBeforeLock);
   if( rc==SQLITE_BUSY ){
     sqlite3_result_error(context,
@@ -1883,7 +1994,6 @@ static void doltliteCommitFunc(
     return;
   }
 
-
   {
     u8 wasMerging = 0;
     doltliteGetSessionMergeState(db, &wasMerging, 0, 0);
@@ -1892,11 +2002,6 @@ static void doltliteCommitFunc(
     }
   }
 
-  /* Once the commit lands, any constraint violations that were in
-  ** the working set are now part of committed state (force path)
-  ** or were resolved before the guard let us through (non-force
-  ** path). Either way, clear them so the NEXT commit isn't
-  ** blocked by a stale flag. */
   {
     extern int doltliteClearAllConstraintViolations(sqlite3*);
     if( doltliteSessionHasConstraintViolations(db) ){
@@ -2275,12 +2380,10 @@ static void doltliteResetFunc(
     goto reset_cleanup;
   }
 
-
   if( doltliteGetHeadCatalogHash(db, &preResetHeadCatHash)==SQLITE_OK
    && !prollyHashIsEmpty(&preResetHeadCatHash) ){
     havePreResetHead = 1;
   }
-
 
   azPaths = (const char**)sqlite3_malloc(sizeof(char*) * (argc>0?argc:1));
   if( !azPaths ){ sqlite3_result_error_nomem(context); goto reset_cleanup; }
@@ -2337,11 +2440,6 @@ static void doltliteResetFunc(
     goto reset_cleanup;
   }
 
-  /* Dolt's SQL reset only has true path-limited semantics for the
-  ** single-path form. With multiple positional paths it falls back to
-  ** the no-arg unstage-all behavior, even if some names are missing.
-  ** Match that contract instead of treating multi-path reset as an
-  ** atomic per-path operation. */
   if( nPaths>1 && !isHard && !isSoft && !zRef ){
     nPaths = 0;
   }
@@ -2375,7 +2473,6 @@ static void doltliteResetFunc(
   }
   sqlite3_free(azPaths);
   azPaths = 0;
-
 
   if( isSoft && !zRef ){
     sqlite3_result_int(context, 0);
@@ -2429,7 +2526,9 @@ static void doltliteResetFunc(
     }
   }
 
-  doltliteSetSessionStaged(db, &targetCatHash);
+  if( !isSoft ){
+    doltliteSetSessionStaged(db, &targetCatHash);
+  }
 
   if( isHard ){
 
@@ -2441,12 +2540,6 @@ static void doltliteResetFunc(
       goto reset_cleanup;
     }
 
-
-    /* Preserve tables that exist in working but not in pre-reset HEAD
-    ** (user-created since HEAD). dolt_reset --hard targets HEAD's
-    ** catalog, but the user probably doesn't want their in-progress
-    ** CREATE TABLE silently deleted. Merge those tables into the
-    ** target catalog before applying the reset. */
     if( havePreResetHead ){
       rc = doltlitePreserveUntrackedTablesOnHardReset(
         db, cs, &preResetHeadCatHash, &targetCatHash
@@ -2468,14 +2561,8 @@ static void doltliteResetFunc(
       goto reset_cleanup;
     }
 
-    /* Hard reset discards any in-progress merge working state.
-    ** Otherwise a conflicted working set can be rewound to HEAD
-    ** while the stale conflicts catalog is still persisted. */
     doltliteClearSessionMergeState(db);
 
-    /* Hard reset discards the working tree, so any post-merge
-    ** constraint violations attached to it go with it. Otherwise
-    ** the session hash lingers and blocks the next commit. */
     {
       extern int doltliteClearAllConstraintViolations(sqlite3*);
       if( doltliteSessionHasConstraintViolations(db) ){
@@ -2576,7 +2663,6 @@ static void doltliteMergeFunc(
   if( !cs ){ sqlite3_result_error(context, "no database", -1); return; }
   if( argc<1 ){ sqlite3_result_error(context, "usage: dolt_merge('branch')", -1); return; }
 
-
   for(i=0; i<argc; i++){
     const char *arg = (const char*)sqlite3_value_text(argv[i]);
     if( !arg ) continue;
@@ -2640,19 +2726,16 @@ static void doltliteMergeFunc(
     return;
   }
 
-
   rc = doltliteResolveRef(db, zBranch, &theirHead);
   if( rc!=SQLITE_OK || prollyHashIsEmpty(&theirHead) ){
     sqlite3_result_error(context, "merge source not found", -1);
     return;
   }
 
-
   if( prollyHashCompare(&ourHead, &theirHead)==0 ){
     sqlite3_result_text(context, "Already up to date", -1, SQLITE_STATIC);
     return;
   }
-
 
   if( doltliteHasUncommittedChanges(db) ){
     sqlite3_result_error(context,
@@ -2660,24 +2743,17 @@ static void doltliteMergeFunc(
     return;
   }
 
-
   rc = doltliteFindAncestor(db, &ourHead, &theirHead, &ancestorHash);
   if( rc!=SQLITE_OK || prollyHashIsEmpty(&ancestorHash) ){
     sqlite3_result_error(context, "no common ancestor found", -1);
     return;
   }
 
-
   if( prollyHashCompare(&ancestorHash, &theirHead)==0 ){
     sqlite3_result_text(context, "Already up to date", -1, SQLITE_STATIC);
     return;
   }
 
-
-  /* Fast-forward merge: ours is an ancestor of theirs, so the merge
-  ** reduces to advancing our branch pointer to theirHead without
-  ** creating a merge commit. --no-ff forces a merge commit even
-  ** when ff would be possible (matches git behavior). */
   if( prollyHashCompare(&ancestorHash, &ourHead)==0 && !noFastForward ){
     rc = mergeFastForward(db, context, cs, &ourHead, &theirHead);
     return;
@@ -2755,7 +2831,6 @@ static void doltliteMergeFunc(
     }
     graphLocked = 1;
 
-
     rc = doltliteSwitchCatalog(db, &mergedCatHash);
     doltliteCommitClear(&ourCommit);
     doltliteCommitClear(&theirCommit);
@@ -2769,7 +2844,6 @@ static void doltliteMergeFunc(
           doltliteRestoreTxnStateOnFailure(db, &savedState, rc));
       return;
     }
-
 
     if( nSchemaActions > 0 ){
       rc = doltliteApplyMergeSchemaActions(db, &ancCatHash, &theirCatHash,
@@ -2812,19 +2886,6 @@ static void doltliteMergeFunc(
     }
   }
 
-  /* Post-merge constraint detection. Release the graph lock
-  ** first so the merged catalog and working set are fully
-  ** visible to the walkers.
-  **
-  ** The merged catalog is installed (schema reflects the merged
-  ** DDL, Table.pFKey is loaded), so PRAGMA foreign_key_check
-  ** sees any row where one side's child references a parent
-  ** the other side deleted. Unique-index detection walks each
-  ** table's UNIQUE indexes and records merge-introduced
-  ** duplicates in the violations vtable without rewriting the
-  ** base table. Each detected violation lands in
-  ** dolt_constraint_violations_<table>; dolt_commit refuses to
-  ** proceed while any violation remains. */
   if( graphLocked ){
     chunkStoreUnlock(cs);
     graphLocked = 0;
@@ -2840,16 +2901,6 @@ static void doltliteMergeFunc(
     int nUnique = 0;
     int nCheck = 0;
     char *zDetectErrMsg = 0;
-    /* Pass the three-way-merge ancestor catalog hash so each
-    ** walker can filter out pre-existing violations — rows that
-    ** were already broken before either side of the merge
-    ** started. Dolt's semantics only flag merge-introduced
-    ** violations, not any violating row that happens to be in
-    ** the post-merge tree. zDetectErrMsg captures any user-facing
-    ** error text a walker wants to surface (e.g. the WITHOUT
-    ** ROWID refusal) — we pass it through to the merge result
-    ** so users get an actionable message instead of "SQL logic
-    ** error". */
     int vrc = doltliteDetectMergeFkViolations(db, &ancCatHash,
                                               &zDetectErrMsg, &nViolations);
     if( vrc == SQLITE_OK ){
@@ -2910,8 +2961,12 @@ static void doltliteMergeFunc(
           sqlite3_result_error_code(context, rc);
         }else{
           sqlite3_result_error(context,
-            "Merge resulted in constraint violations. Resolve the rows in "
-            "dolt_constraint_violations and then commit with dolt_commit.",
+            "Merge aborted: would have introduced constraint violations. "
+            "The merge and the would-be violations have been rolled back "
+            "with the enclosing savepoint, so dolt_constraint_violations "
+            "is empty. To inspect the violations, re-run the merge inside "
+            "a plain BEGIN/COMMIT transaction (no SAVEPOINT) so the "
+            "violations are preserved instead of rolled back.",
             -1);
         }
         break;
@@ -3053,11 +3108,6 @@ static int doltliteLoadHeadAndParentedCommit(
   return SQLITE_OK;
 }
 
-/* Shared tail for cherry-pick and revert: treat both as degenerate
-** merges and reuse doltliteMergeCatalogs with synthesized anc/our/
-** theirs triples. Cherry-pick uses (parent, HEAD, pick), revert
-** uses (pick, HEAD, parent) — swapping their-vs-ancestor inverts
-** the changes. Conflicts surface the same way a real merge would. */
 static int applyMergedCatalogAndCommit(
   sqlite3 *db,
   sqlite3_context *context,
@@ -3197,8 +3247,12 @@ static int applyMergedCatalogAndCommit(
         rc = doltliteRestoreTxnStateOnFailure(db, &savedState, SQLITE_OK);
         if( rc!=SQLITE_OK ) return rc;
         sqlite3_result_error(context,
-          "Merge resulted in constraint violations. Resolve the rows in "
-          "dolt_constraint_violations and then commit with dolt_commit.",
+          "Merge aborted: would have introduced constraint violations. "
+          "The merge and the would-be violations have been rolled back "
+          "with the enclosing savepoint, so dolt_constraint_violations "
+          "is empty. Re-run the merge in autocommit mode (outside a "
+          "transaction) to inspect the violations in "
+          "dolt_constraint_violations.",
           -1);
         break;
       }
@@ -3456,7 +3510,6 @@ static void doltliteRevertFunc(
     return;
   }
 
-
   {
     char msg[512];
     sqlite3_snprintf(sizeof(msg), msg, "Revert \"%s\"",
@@ -3489,11 +3542,6 @@ static void doltliteRevertFunc(
   }
 }
 
-/* Collect the set of commits reachable from pHeadHash but NOT from
-** pUpstreamHash. Walks upstream's full ancestor graph into a hash
-** set (BFS), then walks head first-parent backward and records every
-** commit that isn't already in that set. Emits the replay list in
-** oldest-first order (so iteration N's parent is N-1). */
 static int doltliteRebaseCollectReplaySet(
   sqlite3 *db,
   const ProllyHash *pHeadHash,
@@ -3553,8 +3601,6 @@ static int doltliteRebaseCollectReplaySet(
   sqlite3_free(queue);
   queue = 0;
 
-  /* Walk HEAD backward via first-parent, stopping at the first
-  ** commit that's already in upstream's ancestry. */
   walk = *pHeadHash;
   while( !prollyHashIsEmpty(&walk) && !prollyHashSetContains(&upstreamAncestors, &walk) ){
     DoltliteCommit c;
@@ -3581,7 +3627,6 @@ static int doltliteRebaseCollectReplaySet(
     doltliteCommitClear(&c);
   }
 
-  /* Reverse so the output is oldest-first (ancestor-first). */
   for(i=0; i<nReplay/2; i++){
     ProllyHash tmp = aReplay[i];
     aReplay[i] = aReplay[nReplay-1-i];
@@ -3600,10 +3645,6 @@ cleanup:
   return rc;
 }
 
-/* Linear-replay rebase: the non-interactive path. Called by the
-** rebase dispatcher when no -i / --continue / --abort flag is
-** present. Atomic: any replay error or conflict restores the
-** pre-rebase state via the save/restore txn envelope. */
 static int doltliteRebaseLinearReplay(
   sqlite3 *db,
   sqlite3_context *context,
@@ -3761,7 +3802,6 @@ rollback:
   return SQLITE_ERROR;
 }
 
-/* A single plan entry materialized from the dolt_rebase table. */
 typedef struct RebasePlanRow RebasePlanRow;
 struct RebasePlanRow {
   double order;
@@ -3869,8 +3909,6 @@ static void rebaseFreePlan(RebasePlanRow *aPlan, int nPlan){
   sqlite3_free(aPlan);
 }
 
-/* Read the user's (possibly edited) rebase plan back out of the
-** dolt_rebase table, sorted by rebase_order. */
 static int rebaseReadPlan(sqlite3 *db, RebasePlanRow **paPlan, int *pnPlan){
   sqlite3_stmt *pStmt = 0;
   RebasePlanRow *aPlan = 0;
@@ -4184,8 +4222,6 @@ static int rebaseDeleteWorkingBranchRefs(sqlite3 *db, ChunkStore *cs, void *pArg
   return chunkStoreDeleteBranch(cs, zWorkingBranch);
 }
 
-/* Best-effort cleanup for an in-progress interactive rebase working branch.
-** Used when start or continue fails after the temp branch exists. */
 static void rebaseDiscardWorkingBranch(
   sqlite3 *db,
   const char *zOrigBranch,
@@ -4233,19 +4269,10 @@ static void rebaseAbortConflictedContinue(
     (void)chunkStoreDeleteBranch(cs, zWorkingBranch);
     (void)chunkStoreSerializeRefs(cs);
     (void)chunkStoreCommit(cs);
-    /* Refresh the surviving branch's working-set blob against the final
-    ** post-delete ref graph. Without this, rebase abort under savepoint can
-    ** reopen with stale metadata that still references the discarded temp
-    ** branch state. */
     (void)doltlitePersistWorkingSet(db);
   }
 }
 
-/* Interactive start (`dolt_rebase('-i', 'upstream')`). Creates a
-** working branch dolt_rebase_<orig>, checks it out pointing at
-** upstream, writes the rebase state into the working set, and
-** materializes the default plan into a SQL table named dolt_rebase
-** that the user can edit via DML before calling --continue. */
 static void doltliteRebaseInteractiveStart(
   sqlite3_context *context,
   sqlite3 *db,
@@ -4311,10 +4338,6 @@ static void doltliteRebaseInteractiveStart(
     return;
   }
 
-  /* Copy the original branch name off the session struct — the
-  ** upcoming dolt_checkout('dolt_rebase_feat') will free the
-  ** current p->zBranch pointer, and any uncopied reference we hold
-  ** would dangle into freed memory. */
   zOrig = sqlite3_mprintf("%s", doltliteGetSessionBranch(db));
   zReturnBranch = sqlite3_mprintf("%s", chunkStoreGetDefaultBranch(cs));
   zWorking = sqlite3_mprintf("dolt_rebase_%s", zOrig ? zOrig : "");
@@ -4339,16 +4362,9 @@ static void doltliteRebaseInteractiveStart(
     }
   }
 
-  /* Flush the original branch's current working catalog so --abort
-  ** can restore exactly what the user had before the rebase. */
   rc = doltliteFlushCatalogToHash(db, &preRebaseCat);
   if( rc!=SQLITE_OK ) goto fail;
 
-  /* Create the working branch at upstream and switch to it. We still
-  ** use the rollback-safe checkout helper so that abort/failure cleanup
-  ** can restore state precisely, but successful interactive rebase start
-  ** follows Dolt's branch-style transaction policy and seals the current
-  ** SQL txn/savepoint state before returning. */
   rc = chunkStoreAddBranch(cs, zWorking, &upstreamHash);
   if( rc!=SQLITE_OK ){
     zFailMsg = "rebase working branch already exists";
@@ -4358,22 +4374,12 @@ static void doltliteRebaseInteractiveStart(
   rc = doltliteCheckoutBranchForRebase(db, zWorking);
   if( rc!=SQLITE_OK ) goto fail;
 
-  /* Materialize the default plan as a real SQL table on the
-  ** working branch. Create and populate BEFORE setting the rebase
-  ** state — each DDL/DML statement opens a write trans that
-  ** reloads the working set from disk, which would clobber any
-  ** in-memory rebase state we set beforehand. By deferring the
-  ** state flip until after the plan table is populated, the
-  ** reloads pick up a clean "no rebase yet" state, and the final
-  ** persist atomically flips disk to rebase=1 along with the plan. */
   rc = rebaseCreateAndPopulatePlanTable(db, aReplay, nReplay);
   if( rc!=SQLITE_OK ){
     zFailMsg = "failed to create dolt_rebase table";
     goto fail;
   }
 
-  /* Now set the rebase state on the session and persist it.
-  ** Nothing after this triggers a reload before -i returns. */
   doltliteSetSessionRebaseState(db, 1, &preRebaseCat, &upstreamHash,
                                 zOrig, zReturnBranch);
   rc = doltlitePersistWorkingSet(db);
@@ -4412,8 +4418,6 @@ fail:
   }
 }
 
-/* Interactive abort: the working branch is thrown away and the
-** session returns to the original branch unchanged. */
 static void doltliteRebaseInteractiveAbort(
   sqlite3_context *context,
   sqlite3 *db
@@ -4444,10 +4448,6 @@ static void doltliteRebaseInteractiveAbort(
     return;
   }
 
-  /* The working branch has the dolt_rebase plan table as an
-  ** uncommitted change. Drop it so checkout doesn't refuse, and
-  ** clear the session rebase state so the post-checkout persist
-  ** doesn't leak stale values. */
   rebaseDiscardWorkingBranch(db, zOrigBranch, zWorking);
   if( cs && zReturnBranch && zReturnBranch[0] ){
     rc = chunkStoreSetDefaultBranch(cs, zReturnBranch);
@@ -4491,11 +4491,6 @@ static void doltliteRebaseInteractiveAbort(
   sqlite3_result_text(context, "Interactive rebase aborted", -1, SQLITE_STATIC);
 }
 
-/* Interactive continue: read the user-edited plan, drop the
-** dolt_rebase table, group the plan rows into pick/squash/fixup
-** groups, replay each group as one combined commit on top of the
-** working branch, then move the original branch ref to the new
-** tip and checkout the original branch. */
 static void doltliteRebaseInteractiveContinue(
   sqlite3_context *context,
   sqlite3 *db
@@ -4533,11 +4528,6 @@ static void doltliteRebaseInteractiveContinue(
   zWorking = rebaseBuildWorkingBranchName(zOrigBranchConst);
   if( !zReturnBranch || !zWorking || !zOrigBranch ){ rc = SQLITE_NOMEM; goto abort_err; }
 
-  /* The plan table was created by the preceding -i call inside a VC helper
-  ** statement. On some paths the next VC helper statement does not see that
-  ** new schema object until something touches the table directly first.
-  ** Warm it up before validating so --continue works without requiring the
-  ** caller to query dolt_rebase manually. */
   (void)sqlite3_exec(db, "SELECT 1 FROM main.dolt_rebase LIMIT 0", 0, 0, 0);
 
   zStep = "validate plan";
@@ -4560,8 +4550,6 @@ static void doltliteRebaseInteractiveContinue(
   rc = doltliteEnsureWriteTxnAndSavepoints(db);
   if( rc!=SQLITE_OK ) goto abort_err;
 
-  /* Flush catalog (now without dolt_rebase) to get the clean base
-  ** catalog hash that iterating merges will build on. */
   i = 0;
   while( i < nPlan && strcmp(aPlan[i].zAction, "drop")==0 ) i++;
   if( i < nPlan
@@ -4583,10 +4571,6 @@ static void doltliteRebaseInteractiveContinue(
   if( rc!=SQLITE_OK ) goto abort_err;
   doltliteGetSessionHead(db, &curHead);
 
-  /* Walk the plan in order, grouping each pick/reword with any
-  ** immediately-following squash/fixup rows. A group finishes at
-  ** the next pick/reword (or end of plan) and produces ONE
-  ** combined commit with the accumulated content and message. */
   i = 0;
   while( i < nPlan ){
     int j;
@@ -4611,12 +4595,6 @@ static void doltliteRebaseInteractiveContinue(
   rc = doltliteMutateRefs(db, rebaseFinalizeContinueRefs, &refsCtx);
   if( rc!=SQLITE_OK ) goto abort_err;
 
-  /* Clear rebase state on the working branch's session state before we
-  ** switch back to the original branch. We still use the rollback-safe
-  ** checkout helper for correctness during the internal handoff, but a
-  ** successful interactive continue follows Dolt's branch-style txn
-  ** policy and seals the caller's savepoints / explicit transaction
-  ** before returning. */
   doltliteClearSessionRebaseState(db);
   zStep = "persist cleared rebase state";
   rc = doltlitePersistWorkingSet(db);
@@ -4688,7 +4666,6 @@ abort_err_silent:
   sqlite3_free(zWorking);
 }
 
-/* Dispatcher for dolt_rebase. */
 static void doltliteRebaseFunc(
   sqlite3_context *context,
   int argc,
@@ -4817,12 +4794,6 @@ static void doltliteConfigFunc(sqlite3_context *context, int argc, sqlite3_value
   }
 }
 
-/* dolt_version() — 0-arg scalar returning the build's version
-** string (DOLTLITE_VERSION macro, set from `git describe` at
-** compile time). Used for peer version negotiation in the
-** decentralized setup, bug-report ergonomics, and schema
-** migrations that branch on engine version. Dolt ships an
-** equivalent DOLT_VERSION() with the same argcount contract. */
 static void doltliteVersionFunc(sqlite3_context *ctx, int argc, sqlite3_value **argv){
   (void)argv;
   if( argc!=0 ){
@@ -4833,11 +4804,6 @@ static void doltliteVersionFunc(sqlite3_context *ctx, int argc, sqlite3_value **
   sqlite3_result_text(ctx, DOLTLITE_VERSION, -1, SQLITE_STATIC);
 }
 
-/* On first open of a writable chunk store with no branches, create
-** an empty initial commit on "main" so a fresh database has a valid
-** HEAD to commit against. Skipped on read-only or in-memory stores
-** and when branches already exist (a previous seed ran, or the file
-** was cloned from a remote). */
 static void doltliteMaybeSeedRepo(sqlite3 *db){
   ChunkStore *cs = doltliteGetChunkStore(db);
   ProllyHash emptyParent;
@@ -4846,7 +4812,7 @@ static void doltliteMaybeSeedRepo(sqlite3 *db){
   int rc;
 
   if( !cs ) return;
-  if( cs->nBranches > 0 ) return;
+  if( refsTableBranchCount(&cs->refs) > 0 ) return;
   if( sqlite3_db_readonly(db, "main")==1 ) return;
 
   memset(&emptyParent, 0, sizeof(emptyParent));

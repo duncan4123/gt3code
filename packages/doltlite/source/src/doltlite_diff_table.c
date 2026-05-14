@@ -54,12 +54,6 @@ static char *buildDiffSchema(DoltliteColInfo *ci){
   }
   sqlite3_str_appendall(pStr, ", from_commit TEXT, from_commit_date TEXT"
                               ", diff_type TEXT"
-                              /* Hidden TVF arguments: used to expose the
-                              ** dolt_diff(from_ref, to_ref, table) shape as
-                              ** dolt_diff_<table>(from_ref, to_ref). Both
-                              ** must be supplied together; if either is
-                              ** absent the vtab falls back to its full-
-                              ** history no-arg behavior. */
                               ", from_ref TEXT HIDDEN"
                               ", to_ref TEXT HIDDEN)");
   z = sqlite3_str_finish(pStr);
@@ -108,29 +102,17 @@ typedef struct DiffTblCursor DiffTblCursor;
 struct DiffTblCursor {
   sqlite3_vtab_cursor base;
 
-
   DiffPair *aPairs;
   int nPairs;
   int iPair;
   int pairsDone;
 
-
   ProllyDiffIter diffIter;
   int diffIterOpen;
 
-
-  /* Per-pair schema snapshots at the from- and to-commit catalog
-  ** hashes. Populated only when the two commits have a different
-  ** schema hash (needFilter==1) so that changeIsSchemaOnly can
-  ** compare shared columns and filter out modifications that are
-  ** purely schema-level with no data change. Each side carries
-  ** aColToRec[] so record fields can be read by declared-column
-  ** index even when the WITHOUT-ROWID PK-first permutation moves
-  ** columns around relative to the declaration. */
   DoltliteColInfo fromColInfo;
   DoltliteColInfo toColInfo;
   int    needFilter;
-
 
   AuditRow row;
   int hasRow;
@@ -152,6 +134,7 @@ static void closeDiffIter(DiffTblCursor *pCur){
 }
 
 typedef struct CmTblInfo CmTblInfo;
+typedef struct CmTblMap CmTblMap;
 struct CmTblInfo {
   ProllyHash key;
   ProllyHash tblRoot;
@@ -162,34 +145,106 @@ struct CmTblInfo {
   char       zHexName[PROLLY_HASH_SIZE*2+1];
 };
 
-static int mapFind(const CmTblInfo *aMap, int nMap, const ProllyHash *pKey){
-  int i;
-  for(i=0; i<nMap; i++){
-    if( prollyHashCompare(&aMap[i].key, pKey)==0 ) return i;
-  }
-  return -1;
+struct CmTblMap {
+  CmTblInfo *aEntry;
+  int nEntry;
+  int nAlloc;
+  int *aSlot;
+  int nSlot;
+};
+
+static u32 cmHashSlot(const ProllyHash *pKey, int nSlot){
+  u32 h;
+  memcpy(&h, pKey->data, sizeof(h));
+  return h & (u32)(nSlot - 1);
 }
 
-static int mapPut(CmTblInfo **paMap, int *pnMap, const ProllyHash *pKey,
-                  const ProllyHash *pTblRoot,
-                  const ProllyHash *pCatHash,
-                  const ProllyHash *pSchemaHash,
-                  u8 flags,
-                  const char *zHexName, i64 date){
-  int idx = mapFind(*paMap, *pnMap, pKey);
+static void cmMapFree(CmTblMap *pMap){
+  sqlite3_free(pMap->aEntry);
+  sqlite3_free(pMap->aSlot);
+  memset(pMap, 0, sizeof(*pMap));
+}
+
+static int cmMapRebuild(CmTblMap *pMap, int nSlot){
+  int i;
+  int *aSlot;
+  aSlot = sqlite3_malloc(nSlot * (int)sizeof(int));
+  if( !aSlot ) return SQLITE_NOMEM;
+  memset(aSlot, 0, nSlot * (int)sizeof(int));
+
+  for(i=0; i<pMap->nEntry; i++){
+    u32 slot = cmHashSlot(&pMap->aEntry[i].key, nSlot);
+    while( aSlot[slot]!=0 ){
+      slot = (slot + 1) & (u32)(nSlot - 1);
+    }
+    aSlot[slot] = i + 1;
+  }
+
+  sqlite3_free(pMap->aSlot);
+  pMap->aSlot = aSlot;
+  pMap->nSlot = nSlot;
+  return SQLITE_OK;
+}
+
+static int cmMapEnsureSlots(CmTblMap *pMap){
+  int nSlot;
+  if( pMap->nSlot>0 && (pMap->nEntry + 1)*2 <= pMap->nSlot ){
+    return SQLITE_OK;
+  }
+  nSlot = pMap->nSlot ? pMap->nSlot*2 : 16;
+  while( nSlot < (pMap->nEntry + 1)*2 ) nSlot *= 2;
+  return cmMapRebuild(pMap, nSlot);
+}
+
+static CmTblInfo *cmMapFind(CmTblMap *pMap, const ProllyHash *pKey){
+  u32 slot;
+  int i;
+  if( pMap->nSlot==0 ) return 0;
+  slot = cmHashSlot(pKey, pMap->nSlot);
+  for(i=0; i<pMap->nSlot; i++){
+    int idx = pMap->aSlot[slot];
+    if( idx==0 ) return 0;
+    if( prollyHashCompare(&pMap->aEntry[idx-1].key, pKey)==0 ){
+      return &pMap->aEntry[idx-1];
+    }
+    slot = (slot + 1) & (u32)(pMap->nSlot - 1);
+  }
+  return 0;
+}
+
+static int cmMapPut(CmTblMap *pMap, const ProllyHash *pKey,
+                    const ProllyHash *pTblRoot,
+                    const ProllyHash *pCatHash,
+                    const ProllyHash *pSchemaHash,
+                    u8 flags,
+                    const char *zHexName, i64 date){
   CmTblInfo *e;
-  if( idx<0 ){
-    CmTblInfo *aNew = sqlite3_realloc(*paMap,
-                          (*pnMap+1)*(int)sizeof(CmTblInfo));
-    if( !aNew ) return SQLITE_NOMEM;
-    *paMap = aNew;
-    e = &aNew[*pnMap];
+  int rc;
+
+  e = cmMapFind(pMap, pKey);
+  if( !e ){
+    u32 slot;
+    rc = cmMapEnsureSlots(pMap);
+    if( rc!=SQLITE_OK ) return rc;
+    if( pMap->nEntry >= pMap->nAlloc ){
+      int nNew = pMap->nAlloc ? pMap->nAlloc*2 : 16;
+      CmTblInfo *aNew = sqlite3_realloc(pMap->aEntry,
+                            nNew*(int)sizeof(CmTblInfo));
+      if( !aNew ) return SQLITE_NOMEM;
+      pMap->aEntry = aNew;
+      pMap->nAlloc = nNew;
+    }
+    e = &pMap->aEntry[pMap->nEntry];
     memset(e, 0, sizeof(*e));
     e->key = *pKey;
-    (*pnMap)++;
-  }else{
-    e = &(*paMap)[idx];
+    slot = cmHashSlot(pKey, pMap->nSlot);
+    while( pMap->aSlot[slot]!=0 ){
+      slot = (slot + 1) & (u32)(pMap->nSlot - 1);
+    }
+    pMap->aSlot[slot] = pMap->nEntry + 1;
+    pMap->nEntry++;
   }
+
   e->tblRoot = *pTblRoot;
   e->catHash = *pCatHash;
   e->schemaHash = *pSchemaHash;
@@ -279,8 +334,7 @@ static int seedWorkingChildInfo(
   sqlite3 *db,
   const ProllyHash *pHeadHash,
   const char *zTableName,
-  CmTblInfo **paMap,
-  int *pnMap
+  CmTblMap *pMap
 ){
   ProllyHash workingCat;
   ProllyHash workingTblRoot;
@@ -300,8 +354,8 @@ static int seedWorkingChildInfo(
   rc = loadTblRootAtCommit(db, &workingCat, zTableName, &workingTblRoot,
                            &workingFlags, &workingSchemaHash);
   if( rc!=SQLITE_OK ) return rc;
-  return mapPut(paMap, pnMap, pHeadHash, &workingTblRoot, &workingCat,
-                &workingSchemaHash, workingFlags, zWorking, 0);
+  return cmMapPut(pMap, pHeadHash, &workingTblRoot, &workingCat,
+                  &workingSchemaHash, workingFlags, zWorking, 0);
 }
 
 static int appendCurrentDiffPair(
@@ -311,18 +365,15 @@ static int appendCurrentDiffPair(
   const ProllyHash *pCurTblRoot,
   const ProllyHash *pCurSchemaHash,
   u8 curFlags,
-  CmTblInfo *aMap,
-  int nMap
+  CmTblMap *pMap
 ){
   CmTblInfo *pInfo;
-  int idx;
   int rootsDiffer;
   int schemasDiffer;
   u8 fromFlags;
 
-  idx = mapFind(aMap, nMap, pCurr);
-  if( idx<0 ) return SQLITE_OK;
-  pInfo = &aMap[idx];
+  pInfo = cmMapFind(pMap, pCurr);
+  if( !pInfo ) return SQLITE_OK;
   rootsDiffer = prollyHashCompare(&pInfo->tblRoot, pCurTblRoot)!=0;
   schemasDiffer = prollyHashCompare(&pInfo->schemaHash, pCurSchemaHash)!=0;
   if( !rootsDiffer && !schemasDiffer ) return SQLITE_OK;
@@ -336,8 +387,7 @@ static int appendCurrentDiffPair(
 }
 
 static int registerCommitParents(
-  CmTblInfo **paMap,
-  int *pnMap,
+  CmTblMap *pMap,
   ProllyHashSet *pSeen,
   ProllyHash **paStack,
   int *pnStack,
@@ -355,8 +405,8 @@ static int registerCommitParents(
   for(i=0; i<doltliteCommitParentCount(pCommit); i++){
     pParent = doltliteCommitParentHash(pCommit, i);
     if( !pParent ) continue;
-    rc = mapPut(paMap, pnMap, pParent, pCurTblRoot, &pCommit->catalogHash,
-                pCurSchemaHash, curFlags, zCurHex, pCommit->timestamp);
+    rc = cmMapPut(pMap, pParent, pCurTblRoot, &pCommit->catalogHash,
+                  pCurSchemaHash, curFlags, zCurHex, pCommit->timestamp);
     if( rc!=SQLITE_OK ) return rc;
   }
   for(i=0; i<doltliteCommitParentCount(pCommit); i++){
@@ -368,20 +418,11 @@ static int registerCommitParents(
   return SQLITE_OK;
 }
 
-/* Walk history toward the root, emitting one DiffPair per commit
-** whose table root (or schema) differs from the commit that follows
-** it. aMap is keyed by commit hash and stores "what child info do we
-** have for this commit?" — when we pop a commit off the stack, we
-** compare its table root with the child info already registered
-** under its own hash and, if different, emit a pair. Before walking
-** further we register the parent(s) in aMap with this commit's data,
-** so when a parent gets visited later it already has a child. */
 static int buildDiffPairs(DiffTblCursor *pCur, sqlite3 *db,
                           const char *zTableName){
   ChunkStore *cs = doltliteGetChunkStore(db);
   ProllyHash headHash;
-  CmTblInfo *aMap = 0;
-  int nMap = 0;
+  CmTblMap map;
   ProllyHash *aStack = 0;
   int nStack = 0, nStackAlloc = 0;
   ProllyHashSet seen;
@@ -392,10 +433,11 @@ static int buildDiffPairs(DiffTblCursor *pCur, sqlite3 *db,
   int i;
 
   if( !cs ) return SQLITE_OK;
+  memset(&map, 0, sizeof(map));
 
   doltliteGetSessionHead(db, &headHash);
   if( prollyHashIsEmpty(&headHash) ) return SQLITE_OK;
-  rc = seedWorkingChildInfo(db, &headHash, zTableName, &aMap, &nMap);
+  rc = seedWorkingChildInfo(db, &headHash, zTableName, &map);
   if( rc!=SQLITE_OK ) goto walk_done;
 
   rc = prollyHashSetInit(&seen, 64);
@@ -431,16 +473,14 @@ static int buildDiffPairs(DiffTblCursor *pCur, sqlite3 *db,
 
     doltliteHashToHex(&curr, curHex);
     rc = appendCurrentDiffPair(pCur, &curr, &commit, &curTblRoot,
-                               &curSchemaHash, curFlags, aMap, nMap);
+                               &curSchemaHash, curFlags, &map);
     if( rc==SQLITE_OK ){
-      rc = registerCommitParents(&aMap, &nMap, &seen,
-                                 &aStack, &nStack, &nStackAlloc,
+      rc = registerCommitParents(&map, &seen, &aStack, &nStack, &nStackAlloc,
                                  &commit, &curTblRoot,
                                  &curSchemaHash, curFlags, curHex);
     }
     doltliteCommitClear(&commit);
     if( rc!=SQLITE_OK ) break;
-
 
     if( nStack==0 ){
       currInited = 0;
@@ -451,7 +491,7 @@ static int buildDiffPairs(DiffTblCursor *pCur, sqlite3 *db,
   }
 
 walk_done:
-  sqlite3_free(aMap);
+  cmMapFree(&map);
   sqlite3_free(aStack);
   if( seenInit ) prollyHashSetFree(&seen);
   return rc;
@@ -523,12 +563,6 @@ static int buildWorkingDiffPair(
   return rc;
 }
 
-/* TVF slice builder: produce exactly one DiffPair between the two
-** supplied refs. Matches Dolt's dolt_diff(from_ref, to_ref, table)
-** shape — one pair, net diff between endpoints, no history walk.
-** to_ref == 'WORKING' diffs against the current working catalog
-** (staged + pending); from_ref == 'WORKING' is not supported by
-** Dolt either and returns an empty slice. */
 static int buildSliceDiffPair(
   DiffTblCursor *pCur,
   sqlite3 *db,
@@ -581,9 +615,6 @@ static int buildSliceDiffPair(
                                       &toSchemaHash);
     if( rc==SQLITE_NOTFOUND ) rc = SQLITE_OK;
     if( rc!=SQLITE_OK ) return rc;
-    /* Flush working catalog only if we need its hash; otherwise
-    ** leave toCatHash empty so column resolution falls back to
-    ** the table root itself. */
     rc = doltliteFlushCatalogToHash(db, &toCatHash);
     if( rc!=SQLITE_OK ) return rc;
     memcpy(zToLabel, "WORKING", 7);
@@ -604,7 +635,6 @@ static int buildSliceDiffPair(
     doltliteHashToHex(&toHash, zToLabel);
   }
 
-  /* No-op slice: same endpoint or identical table roots. */
   if( !toIsWorking
    && prollyHashCompare(&fromHash, &toHash)==0 ){
     return SQLITE_OK;
@@ -614,9 +644,6 @@ static int buildSliceDiffPair(
     return SQLITE_OK;
   }
 
-  /* Use whichever side has a non-zero flags bitfield as the
-  ** diff-iteration flags (both sides should agree for a single
-  ** table, but be tolerant when one side is missing). */
   if( !fromFlags ) fromFlags = toFlags;
   if( !toFlags ) toFlags = fromFlags;
 
@@ -632,12 +659,6 @@ static void freePairCols(DiffTblCursor *pCur){
   pCur->needFilter = 0;
 }
 
-/* Load a DoltliteColInfo snapshot (including aColToRec[]) for
-** zTableName at the schema recorded in pCatHash. Opens a fresh
-** in-memory SQLite, replays the recorded CREATE TABLE, then
-** runs doltliteGetColumnNames() against that temp db so the
-** WITHOUT-ROWID PK-first permutation is computed from the same
-** PRAGMA table_info the rest of the engine uses. */
 static int loadColInfoAtCatalog(
   sqlite3 *db,
   const ProllyHash *pCatHash,
@@ -697,10 +718,8 @@ static int fieldValuesEqual(
   i64 ai, bi;
   int aLen, bLen;
 
-
   if( aType==0 && bType==0 ) return 1;
   if( aType==0 || bType==0 ) return 0;
-
 
   {
     int aIsInt = (aType>=1 && aType<=6) || aType==8 || aType==9;
@@ -724,7 +743,6 @@ static int fieldValuesEqual(
     }
   }
 
-
   if( aType != bType ) return 0;
   aLen = dlSerialTypeLen(aType);
   if( aLen<0 ) return 0;
@@ -733,13 +751,6 @@ static int fieldValuesEqual(
   return memcmp(pA+aOff, pB+bOff, aLen)==0;
 }
 
-/* Return true if the pOld→pNew MODIFY is purely a schema-level
-** reshape with no data change. Compares shared columns by name
-** and reads each field via the side's aColToRec[] permutation so
-** WITHOUT-ROWID tables (PK-first record layout) map declared
-** indices back to the correct record field. Columns that exist
-** on only one side must be NULL on that side to still qualify
-** as schema-only. */
 static int changeIsSchemaOnly(
   const u8 *pFromRec, int nFromRec,
   const u8 *pToRec,   int nToRec,
@@ -753,7 +764,6 @@ static int changeIsSchemaOnly(
   if( !pFromCi || !pToCi ) return 0;
   doltliteParseRecord(pFromRec, nFromRec, &fromRi);
   doltliteParseRecord(pToRec,   nToRec,   &toRi);
-
 
   for(i=0; i<pToCi->nCol; i++){
     int fromIdx;
@@ -801,7 +811,6 @@ static int openNextPairIter(DiffTblCursor *pCur, sqlite3 *db){
   ProllyCache *pCache = doltliteGetCache(db);
   DiffTblVtab *pVtab = (DiffTblVtab*)pCur->base.pVtab;
   int rc;
-
 
   freePairCols(pCur);
 
@@ -865,7 +874,6 @@ static int advanceToNextRow(DiffTblCursor *pCur, sqlite3 *db,
           continue;
         }
 
-
         pCur->row.pOldVal = 0;
         pCur->row.nOldVal = 0;
         pCur->row.pNewVal = 0;
@@ -890,7 +898,6 @@ static int advanceToNextRow(DiffTblCursor *pCur, sqlite3 *db,
 
       closeDiffIter(pCur);
     }
-
 
     if( pCur->pairsDone ){
       return SQLITE_OK;
@@ -968,17 +975,6 @@ static int dtBestIndex(sqlite3_vtab *pVtab, sqlite3_index_info *pInfo){
   int iFromRefEq = -1;
   int iToRefEq = -1;
   int nUser = p->cols.nCol;
-  /* Schema layout after buildDiffSchema():
-  **   0..nUser-1       : user cols (to_<col>)
-  **   nUser            : to_commit
-  **   nUser+1          : to_commit_date
-  **   nUser+2..2n+1    : from_<col>
-  **   2n+2             : from_commit
-  **   2n+3             : from_commit_date
-  **   2n+4             : diff_type
-  **   2n+5             : from_ref  (HIDDEN — TVF arg 1)
-  **   2n+6             : to_ref    (HIDDEN — TVF arg 2)
-  */
   int toCommitCol = nUser;
   int fromRefCol  = 2*nUser + 5;
   int toRefCol    = 2*nUser + 6;
@@ -996,8 +992,6 @@ static int dtBestIndex(sqlite3_vtab *pVtab, sqlite3_index_info *pInfo){
   }
 
   if( iFromRefEq>=0 && iToRefEq>=0 ){
-    /* TVF slice form: dolt_diff_<table>(from_ref, to_ref). Both
-    ** hidden args are bound; build exactly one diff pair. */
     pInfo->idxNum = DT_IDX_SLICE;
     pInfo->aConstraintUsage[iFromRefEq].argvIndex = 1;
     pInfo->aConstraintUsage[iFromRefEq].omit = 1;
@@ -1041,7 +1035,6 @@ static int dtFilter(sqlite3_vtab_cursor *cur,
   sqlite3 *db = pVtab->db;
   int rc;
   (void)idxStr;
-
 
   closeDiffIter(c);
   clearAuditRow(&c->row);
@@ -1104,7 +1097,6 @@ static int dtColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col){
   AuditRow *r = &c->row;
   int nCols = pVtab->cols.nCol;
 
-
   if( nCols > 0 && col < nCols ){
     doltliteResultUserCol(ctx, &pVtab->cols, r->pNewVal, r->nNewVal,
                           r->intKey, col);
@@ -1147,9 +1139,6 @@ static int dtColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col){
       case PROLLY_DIFF_MODIFY: sqlite3_result_text(ctx,"modified",-1,SQLITE_STATIC); break;
     }
   }else{
-    /* Hidden TVF arg columns (from_ref, to_ref) — never materialized
-    ** in the result set, but SQLite may still ask for them during
-    ** query planning. Always return NULL. */
     sqlite3_result_null(ctx);
   }
 

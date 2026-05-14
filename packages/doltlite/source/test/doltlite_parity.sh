@@ -1,56 +1,25 @@
 #!/bin/bash
-#
-# SQLite parity tests for DoltLite.
-#
-# Runs identical SQL through both ./doltlite and the system sqlite3,
-# compares output. Any difference is a FAIL.
-#
 DOLTLITE=./doltlite
-SQLITE3=$(command -v sqlite3 2>/dev/null || echo /usr/bin/sqlite3)
-PASS=0; FAIL=0; SKIP=0; ERRORS=""
+SQLITE3=./sqlite3
+PASS=0; FAIL=0; ERRORS=""
 
 if [ ! -x "$DOLTLITE" ]; then
   echo "ERROR: $DOLTLITE not found or not executable"
   exit 1
 fi
 
-if ! command -v "$SQLITE3" >/dev/null 2>&1; then
-  echo "ERROR: system sqlite3 not found in PATH"
+if [ ! -x "$SQLITE3" ]; then
+  echo "ERROR: $SQLITE3 not found or not executable"
   exit 1
 fi
 
-# Detect system sqlite3 version for feature gating
 SQLITE_VERSION=$("$SQLITE3" :memory: "SELECT sqlite_version();" 2>/dev/null)
-SQLITE_MAJOR=$(echo "$SQLITE_VERSION" | cut -d. -f1)
-SQLITE_MINOR=$(echo "$SQLITE_VERSION" | cut -d. -f2)
 
 echo "=== DoltLite SQLite Parity Tests ==="
 echo "DoltLite:       $DOLTLITE"
-echo "System sqlite3: $SQLITE3 (version $SQLITE_VERSION)"
+echo "Package sqlite3: $SQLITE3 (version $SQLITE_VERSION)"
 echo ""
 
-# Feature flags based on sqlite3 version
-HAS_WINDOW=0   # window functions: 3.25+
-HAS_JSON=0     # json functions: 3.38+ (built-in), or 3.9+ (extension)
-HAS_UPSERT=0   # upsert: 3.24+
-HAS_CTE=0      # CTEs: 3.8.3+
-
-if [ "$SQLITE_MAJOR" -gt 3 ] || { [ "$SQLITE_MAJOR" -eq 3 ] && [ "$SQLITE_MINOR" -ge 25 ]; }; then
-  HAS_WINDOW=1
-fi
-if [ "$SQLITE_MAJOR" -gt 3 ] || { [ "$SQLITE_MAJOR" -eq 3 ] && [ "$SQLITE_MINOR" -ge 9 ]; }; then
-  # json may be available as extension from 3.9; test it
-  if echo "SELECT json_array(1,2,3);" | "$SQLITE3" :memory: >/dev/null 2>&1; then
-    HAS_JSON=1
-  fi
-fi
-if [ "$SQLITE_MAJOR" -gt 3 ] || { [ "$SQLITE_MAJOR" -eq 3 ] && [ "$SQLITE_MINOR" -ge 9 ]; }; then
-  HAS_CTE=1
-fi
-
-# ---------------------------------------------------------------
-# Test runner: compare output of identical SQL on both engines
-# ---------------------------------------------------------------
 run_parity() {
   local name="$1"
   local sql="$2"
@@ -67,16 +36,6 @@ run_parity() {
   fi
 }
 
-skip_test() {
-  local name="$1"
-  local reason="$2"
-  SKIP=$((SKIP+1))
-  echo "  SKIP: $name ($reason)"
-}
-
-# ================================================================
-# 1. Basic CRUD
-# ================================================================
 echo "--- Basic CRUD ---"
 
 run_parity "insert_select" "
@@ -119,9 +78,6 @@ INSERT OR IGNORE INTO t VALUES(1,'second');
 SELECT * FROM t;
 "
 
-# ================================================================
-# 2. Aggregate functions
-# ================================================================
 echo "--- Aggregates ---"
 
 run_parity "count" "
@@ -193,9 +149,6 @@ INSERT INTO t VALUES(2,20);
 SELECT TOTAL(val) FROM t;
 "
 
-# ================================================================
-# 3. JOIN variants
-# ================================================================
 echo "--- JOINs ---"
 
 SETUP_JOIN="
@@ -246,9 +199,6 @@ INSERT INTO c VALUES(1,1,42);
 SELECT a.v, c.val FROM a JOIN b ON a.id=b.a_id JOIN c ON b.id=c.b_id;
 "
 
-# ================================================================
-# 4. Subqueries
-# ================================================================
 echo "--- Subqueries ---"
 
 run_parity "scalar_subquery" "
@@ -297,13 +247,9 @@ INSERT INTO t VALUES(3,'b',30);
 SELECT id, val FROM t t1 WHERE val = (SELECT MAX(val) FROM t t2 WHERE t2.grp=t1.grp) ORDER BY id;
 "
 
-# ================================================================
-# 5. Window functions
-# ================================================================
 echo "--- Window functions ---"
 
-if [ "$HAS_WINDOW" -eq 1 ]; then
-  run_parity "row_number" "
+run_parity "row_number" "
 CREATE TABLE t(id INTEGER PRIMARY KEY, grp TEXT, val INTEGER);
 INSERT INTO t VALUES(1,'a',10);
 INSERT INTO t VALUES(2,'a',20);
@@ -312,7 +258,7 @@ INSERT INTO t VALUES(4,'b',40);
 SELECT id, grp, ROW_NUMBER() OVER (PARTITION BY grp ORDER BY val) AS rn FROM t ORDER BY id;
 "
 
-  run_parity "rank_dense_rank" "
+run_parity "rank_dense_rank" "
 CREATE TABLE t(id INTEGER PRIMARY KEY, val INTEGER);
 INSERT INTO t VALUES(1,10);
 INSERT INTO t VALUES(2,20);
@@ -321,7 +267,7 @@ INSERT INTO t VALUES(4,30);
 SELECT id, val, RANK() OVER (ORDER BY val) AS rnk, DENSE_RANK() OVER (ORDER BY val) AS drnk FROM t ORDER BY id;
 "
 
-  run_parity "lead_lag" "
+run_parity "lead_lag" "
 CREATE TABLE t(id INTEGER PRIMARY KEY, val INTEGER);
 INSERT INTO t VALUES(1,10);
 INSERT INTO t VALUES(2,20);
@@ -330,7 +276,7 @@ INSERT INTO t VALUES(4,40);
 SELECT id, val, LAG(val,1) OVER (ORDER BY id) AS prev, LEAD(val,1) OVER (ORDER BY id) AS next FROM t ORDER BY id;
 "
 
-  run_parity "sum_over" "
+run_parity "sum_over" "
 CREATE TABLE t(id INTEGER PRIMARY KEY, val INTEGER);
 INSERT INTO t VALUES(1,10);
 INSERT INTO t VALUES(2,20);
@@ -338,7 +284,7 @@ INSERT INTO t VALUES(3,30);
 SELECT id, val, SUM(val) OVER (ORDER BY id) AS running FROM t ORDER BY id;
 "
 
-  run_parity "ntile" "
+run_parity "ntile" "
 CREATE TABLE t(id INTEGER PRIMARY KEY, val INTEGER);
 INSERT INTO t VALUES(1,10);
 INSERT INTO t VALUES(2,20);
@@ -346,13 +292,7 @@ INSERT INTO t VALUES(3,30);
 INSERT INTO t VALUES(4,40);
 SELECT id, NTILE(2) OVER (ORDER BY id) AS tile FROM t ORDER BY id;
 "
-else
-  skip_test "window_functions" "sqlite3 $SQLITE_VERSION < 3.25"
-fi
 
-# ================================================================
-# 6. NULL handling
-# ================================================================
 echo "--- NULL handling ---"
 
 run_parity "is_null" "
@@ -399,9 +339,6 @@ run_parity "ifnull" "
 SELECT IFNULL(NULL, 'default'), IFNULL('value', 'default');
 "
 
-# ================================================================
-# 7. Type coercion and affinity
-# ================================================================
 echo "--- Type coercion / affinity ---"
 
 run_parity "typeof" "
@@ -432,9 +369,6 @@ run_parity "real_precision" "
 SELECT round(1.0/3.0, 12);
 "
 
-# ================================================================
-# 8. ORDER BY with COLLATE
-# ================================================================
 echo "--- ORDER BY / COLLATE ---"
 
 run_parity "order_asc_desc" "
@@ -474,9 +408,6 @@ INSERT INTO t VALUES(5,20);
 SELECT v FROM t ORDER BY v;
 "
 
-# ================================================================
-# 9. LIMIT / OFFSET
-# ================================================================
 echo "--- LIMIT / OFFSET ---"
 
 run_parity "limit" "
@@ -505,9 +436,6 @@ INSERT INTO t VALUES(1);
 SELECT * FROM t LIMIT 0;
 "
 
-# ================================================================
-# 10. CASE expressions
-# ================================================================
 echo "--- CASE expressions ---"
 
 run_parity "case_simple" "
@@ -531,9 +459,6 @@ SELECT CASE NULL WHEN NULL THEN 'match' ELSE 'no match' END;
 SELECT CASE WHEN NULL THEN 'true' ELSE 'false' END;
 "
 
-# ================================================================
-# 11. Date/time functions
-# ================================================================
 echo "--- Date/time functions ---"
 
 run_parity "date_func" "
@@ -570,36 +495,32 @@ run_parity "date_arithmetic" "
 SELECT julianday('2024-03-15') - julianday('2024-03-01');
 "
 
-# ================================================================
-# 12. JSON functions
-# ================================================================
 echo "--- JSON functions ---"
 
-if [ "$HAS_JSON" -eq 1 ]; then
-  run_parity "json_array" "
+run_parity "json_array" "
 SELECT json_array(1,2,'three',NULL);
 "
 
-  run_parity "json_object" "
+run_parity "json_object" "
 SELECT json_object('a',1,'b','two');
 "
 
-  run_parity "json_extract" "
+run_parity "json_extract" "
 SELECT json_extract('{\"a\":1,\"b\":[2,3]}', '\$.a');
 SELECT json_extract('{\"a\":1,\"b\":[2,3]}', '\$.b[0]');
 "
 
-  run_parity "json_type" "
+run_parity "json_type" "
 SELECT json_type('{\"a\":1}', '\$.a');
 SELECT json_type('{\"a\":\"hello\"}', '\$.a');
 "
 
-  run_parity "json_valid" "
+run_parity "json_valid" "
 SELECT json_valid('{\"a\":1}');
 SELECT json_valid('not json');
 "
 
-  run_parity "json_group_array" "
+run_parity "json_group_array" "
 CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT);
 INSERT INTO t VALUES(1,'a');
 INSERT INTO t VALUES(2,'b');
@@ -607,19 +528,13 @@ INSERT INTO t VALUES(3,'c');
 SELECT json_group_array(v) FROM t ORDER BY id;
 "
 
-  run_parity "json_group_object" "
+run_parity "json_group_object" "
 CREATE TABLE t(id INTEGER PRIMARY KEY, k TEXT, v INTEGER);
 INSERT INTO t VALUES(1,'x',10);
 INSERT INTO t VALUES(2,'y',20);
 SELECT json_group_object(k,v) FROM t ORDER BY id;
 "
-else
-  skip_test "json_functions" "sqlite3 $SQLITE_VERSION lacks JSON support"
-fi
 
-# ================================================================
-# 13. UNION, INTERSECT, EXCEPT
-# ================================================================
 echo "--- Set operations ---"
 
 run_parity "union" "
@@ -668,18 +583,14 @@ INSERT INTO b VALUES(4);
 SELECT v FROM a EXCEPT SELECT v FROM b ORDER BY v;
 "
 
-# ================================================================
-# 14. CTEs (WITH ... AS)
-# ================================================================
 echo "--- CTEs ---"
 
-if [ "$HAS_CTE" -eq 1 ]; then
-  run_parity "simple_cte" "
+run_parity "simple_cte" "
 WITH nums AS (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3)
 SELECT * FROM nums ORDER BY n;
 "
 
-  run_parity "recursive_cte" "
+run_parity "recursive_cte" "
 WITH RECURSIVE cnt(x) AS (
   SELECT 1
   UNION ALL
@@ -688,7 +599,7 @@ WITH RECURSIVE cnt(x) AS (
 SELECT x FROM cnt;
 "
 
-  run_parity "cte_with_table" "
+run_parity "cte_with_table" "
 CREATE TABLE t(id INTEGER PRIMARY KEY, parent_id INTEGER, name TEXT);
 INSERT INTO t VALUES(1,NULL,'root');
 INSERT INTO t VALUES(2,1,'a');
@@ -702,19 +613,13 @@ WITH RECURSIVE tree(id, name, depth) AS (
 SELECT id, name, depth FROM tree ORDER BY id;
 "
 
-  run_parity "multiple_ctes" "
+run_parity "multiple_ctes" "
 WITH
   a AS (SELECT 1 AS x UNION ALL SELECT 2),
   b AS (SELECT x*10 AS y FROM a)
 SELECT * FROM b ORDER BY y;
 "
-else
-  skip_test "cte" "sqlite3 $SQLITE_VERSION < 3.9"
-fi
 
-# ================================================================
-# 15. CAST expressions
-# ================================================================
 echo "--- CAST ---"
 
 run_parity "cast_text_to_int" "
@@ -745,9 +650,6 @@ run_parity "cast_blob" "
 SELECT typeof(CAST('hello' AS BLOB));
 "
 
-# ================================================================
-# Additional: string functions
-# ================================================================
 echo "--- String functions ---"
 
 run_parity "length" "
@@ -794,9 +696,6 @@ run_parity "zeroblob" "
 SELECT typeof(zeroblob(4)), length(zeroblob(4));
 "
 
-# ================================================================
-# Additional: math/numeric functions
-# ================================================================
 echo "--- Math / numeric ---"
 
 run_parity "abs" "
@@ -815,9 +714,6 @@ run_parity "round" "
 SELECT round(3.14159, 2), round(3.5), round(-2.5);
 "
 
-# ================================================================
-# Additional: misc
-# ================================================================
 echo "--- Miscellaneous ---"
 
 run_parity "between" "
@@ -919,8 +815,6 @@ run_parity "concatenation" "
 SELECT 'hello' || ' ' || 'world';
 "
 
-# --- Multi-row DELETE (issue #168) ---
-
 run_parity "delete_multi_row" "
 CREATE TABLE dt(id INT PRIMARY KEY, val INT);
 INSERT INTO dt VALUES(1,1),(2,2),(3,3),(4,4),(5,5);
@@ -945,12 +839,115 @@ DELETE FROM dm WHERE id%10=0;
 SELECT count(*) FROM dm;
 "
 
-# ================================================================
-# Summary
-# ================================================================
+echo "--- FK actions ---"
+
+run_parity "fk_action_cascade_clean" "
+PRAGMA foreign_keys=ON;
+CREATE TABLE parent(pk INTEGER PRIMARY KEY);
+CREATE TABLE child(pk INTEGER PRIMARY KEY, pv INT, FOREIGN KEY(pv) REFERENCES parent(pk) ON DELETE CASCADE);
+INSERT INTO parent VALUES (1),(2),(3);
+INSERT INTO child VALUES (100,1),(101,1),(200,2);
+DELETE FROM parent WHERE pk=1;
+SELECT pk,pv FROM child ORDER BY pk;
+SELECT count(*) FROM parent;
+SELECT count(*) FROM child;
+"
+
+run_parity "fk_action_cascade_orphan" "
+PRAGMA foreign_keys=OFF;
+CREATE TABLE parent(pk INTEGER PRIMARY KEY);
+CREATE TABLE child(pk INTEGER PRIMARY KEY, pv INT, FOREIGN KEY(pv) REFERENCES parent(pk));
+INSERT INTO parent VALUES (1),(2);
+INSERT INTO child VALUES (300,1);
+DELETE FROM parent WHERE pk=1;
+PRAGMA foreign_key_check;
+SELECT pk FROM parent ORDER BY pk;
+SELECT pk,pv FROM child ORDER BY pk;
+"
+
+run_parity "fk_action_set_null_clean" "
+PRAGMA foreign_keys=ON;
+CREATE TABLE parent(pk INTEGER PRIMARY KEY);
+CREATE TABLE child(pk INTEGER PRIMARY KEY, pv INT, FOREIGN KEY(pv) REFERENCES parent(pk) ON DELETE SET NULL);
+INSERT INTO parent VALUES (1),(2);
+INSERT INTO child VALUES (100,1),(200,2),(300,2);
+DELETE FROM parent WHERE pk=1;
+SELECT pk, ifnull(pv,'NULL') FROM child ORDER BY pk;
+"
+
+run_parity "fk_action_update_cascade_clean" "
+PRAGMA foreign_keys=ON;
+CREATE TABLE parent(pk INTEGER PRIMARY KEY);
+CREATE TABLE child(pk INTEGER PRIMARY KEY, pv INT, FOREIGN KEY(pv) REFERENCES parent(pk) ON UPDATE CASCADE);
+INSERT INTO parent VALUES (1),(2);
+INSERT INTO child VALUES (100,1),(200,2),(300,2);
+UPDATE parent SET pk=10 WHERE pk=1;
+SELECT pk,pv FROM child ORDER BY pk;
+SELECT pk FROM parent ORDER BY pk;
+"
+
+run_parity "fk_action_no_action_explicit" "
+PRAGMA foreign_keys=OFF;
+CREATE TABLE parent(pk INTEGER PRIMARY KEY);
+CREATE TABLE child(pk INTEGER PRIMARY KEY, pv INT, FOREIGN KEY(pv) REFERENCES parent(pk) ON DELETE NO ACTION);
+INSERT INTO parent VALUES (1),(2);
+INSERT INTO child VALUES (300,1),(200,2);
+DELETE FROM parent WHERE pk=1;
+PRAGMA foreign_key_check;
+SELECT pk FROM parent ORDER BY pk;
+SELECT pk,pv FROM child ORDER BY pk;
+"
+
+run_parity "fk_action_multicolumn_cascade" "
+PRAGMA foreign_keys=ON;
+CREATE TABLE parent(a INT, b INT, PRIMARY KEY(a,b));
+CREATE TABLE child(pk INTEGER PRIMARY KEY, ca INT, cb INT, FOREIGN KEY(ca,cb) REFERENCES parent(a,b) ON DELETE CASCADE);
+INSERT INTO parent VALUES (1,1),(2,2);
+INSERT INTO child VALUES (100,1,1),(200,2,2),(300,2,2);
+DELETE FROM parent WHERE a=1 AND b=1;
+SELECT pk,ca,cb FROM child ORDER BY pk;
+SELECT count(*) FROM parent;
+"
+
+run_parity "fk_action_multicolumn_set_null" "
+PRAGMA foreign_keys=ON;
+CREATE TABLE parent(a INT, b INT, PRIMARY KEY(a,b));
+CREATE TABLE child(pk INTEGER PRIMARY KEY, ca INT, cb INT, FOREIGN KEY(ca,cb) REFERENCES parent(a,b) ON DELETE SET NULL);
+INSERT INTO parent VALUES (1,1),(2,2);
+INSERT INTO child VALUES (100,1,1),(200,2,2),(300,2,2);
+DELETE FROM parent WHERE a=1 AND b=1;
+SELECT pk, ifnull(ca,'NULL'), ifnull(cb,'NULL') FROM child ORDER BY pk;
+"
+
+run_parity "fk_action_update_divergent" "
+PRAGMA foreign_keys=ON;
+CREATE TABLE parent(pk INTEGER PRIMARY KEY);
+CREATE TABLE child(pk INTEGER PRIMARY KEY, pv INT, FOREIGN KEY(pv) REFERENCES parent(pk) ON UPDATE CASCADE ON DELETE CASCADE);
+INSERT INTO parent VALUES (1),(2);
+INSERT INTO child VALUES (100,1),(200,2);
+UPDATE parent SET pk=10 WHERE pk=1;
+SELECT pk,pv FROM child ORDER BY pk;
+UPDATE parent SET pk=20 WHERE pk=2;
+SELECT pk,pv FROM child ORDER BY pk;
+DELETE FROM parent WHERE pk=10;
+SELECT pk,pv FROM child ORDER BY pk;
+SELECT pk FROM parent ORDER BY pk;
+"
+
+run_parity "fk_action_set_default" "
+PRAGMA foreign_keys=ON;
+CREATE TABLE parent(pk INTEGER PRIMARY KEY);
+CREATE TABLE child(pk INTEGER PRIMARY KEY, pv INT DEFAULT 99, FOREIGN KEY(pv) REFERENCES parent(pk) ON DELETE SET DEFAULT);
+INSERT INTO parent VALUES (1),(2),(99);
+INSERT INTO child VALUES (100,1),(200,2),(300,2);
+DELETE FROM parent WHERE pk=1;
+SELECT pk,pv FROM child ORDER BY pk;
+SELECT pk FROM parent ORDER BY pk;
+"
+
 echo ""
 echo "======================================="
-echo "Results: $PASS passed, $FAIL failed, $SKIP skipped out of $((PASS+FAIL+SKIP)) tests"
+echo "Results: $PASS passed, $FAIL failed out of $((PASS+FAIL)) tests"
 echo "======================================="
 if [ $FAIL -gt 0 ]; then
   echo ""

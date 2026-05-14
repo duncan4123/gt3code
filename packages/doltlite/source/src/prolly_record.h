@@ -4,6 +4,12 @@
 
 #include "sqliteInt.h"
 
+/*
+** Read a SQLite-style varint from p (bounded by pEnd) into *pVal.
+** Returns the number of bytes consumed, or 0 on short input.
+** A return of 0 is the sentinel for "truncated"; callers MUST check
+** this to distinguish a parse failure from a legitimate single-byte 0.
+*/
 static inline int dlReadVarint(const u8 *p, const u8 *pEnd, u64 *pVal){
   u64 v;
   int i;
@@ -15,15 +21,14 @@ static inline int dlReadVarint(const u8 *p, const u8 *pEnd, u64 *pVal){
     v = (v << 7) | (p[i] & 0x7f);
     if( !(p[i] & 0x80) ){ *pVal = v; return i + 1; }
   }
+  /* Either we exhausted 9 bytes without termination (valid) or we ran
+  ** off pEnd before finding a terminating byte. The latter is short
+  ** input; signal it with the 0 sentinel. */
+  if( i < 9 ){ *pVal = 0; return 0; }
   *pVal = v;
   return i;
 }
 
-/* SQLite record serial-type → payload length. Types 0-6 are fixed
-** int widths (0, 1, 2, 3, 4, 6, 8), 7 is float8, 8/9 are the literal
-** 0/1 with no payload. Even types >= 12 are BLOBs of (st-12)/2 bytes,
-** odd types >= 13 are TEXT of (st-13)/2 bytes — both round to the
-** same length, so the /2 below handles either parity. */
 static inline int dlSerialTypeLen(u64 st){
   static const u8 aLen[] = {0, 1, 2, 3, 4, 6, 8};
   if( st <= 6 ) return aLen[st];

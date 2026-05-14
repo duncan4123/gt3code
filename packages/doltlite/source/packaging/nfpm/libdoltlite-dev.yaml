@@ -1,0 +1,48 @@
+# nfpm config for libdoltlite-dev — header + static library, mirroring
+# what `libsqlite3-dev` ships. Required to compile programs that
+# `#include <doltlite.h>` or want to statically link against
+# libdoltlite.a.
+name: libdoltlite-dev
+arch: "${PKG_ARCH}"
+platform: linux
+version: "${VERSION}"
+section: libdevel
+priority: optional
+maintainer: DoltHub <team@dolthub.com>
+description: |
+  DoltLite development files — header and static library for compiling
+  programs that link against doltlite. Companion to libdoltlite0.
+vendor: DoltHub
+homepage: https://github.com/dolthub/doltlite
+license: Apache-2.0
+
+depends:
+  - libdoltlite0 (= ${VERSION})
+
+contents:
+  # Install the header as doltlite.h only. We deliberately do NOT ship
+  # /usr/include/sqlite3.h: it collides with libsqlite3-dev (extremely
+  # common as a transitive dep — Python dev headers, php, perl, etc.)
+  # and `dpkg -i` fails. Users `#include <doltlite.h>`; the file
+  # content is the same generated SQLite amalgamation header.
+  - src: build/sqlite3.h
+    dst: /usr/include/doltlite.h
+    file_info:
+      mode: 0644
+  - src: src/doltlite_remotesrv.h
+    dst: /usr/include/doltlite_remotesrv.h
+    file_info:
+      mode: 0644
+  - src: build/libdoltlite.a
+    dst: /usr/lib/${DEB_HOST_MULTIARCH}/libdoltlite.a
+    file_info:
+      mode: 0644
+  # Unversioned symlink lives in the -dev package, pointing at the
+  # SONAME-matched file shipped by libdoltlite0. This is the standard
+  # Debian split: the linker name (libfoo.so) is dev-only; the SONAME
+  # name (libfoo.so.N) is in the runtime package.
+  - src: libdoltlite.so.0
+    dst: /usr/lib/${DEB_HOST_MULTIARCH}/libdoltlite.so
+    type: symlink
+  - src: LICENSE.md
+    dst: /usr/share/doc/libdoltlite-dev/copyright

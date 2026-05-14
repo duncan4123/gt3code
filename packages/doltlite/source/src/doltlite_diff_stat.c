@@ -149,12 +149,6 @@ static i64 dsReadInt(const u8 *p, int nBytes){
   return v;
 }
 
-/* SQLite packs integers into the narrowest serial type that fits, so
-** 42 may be stored as type-1 (1 byte) on one side and type-2 (2 bytes)
-** on the other. Raw memcmp of fields would call those "modified".
-** Here we coerce any integer-family type (1..6, 8, 9) to a signed
-** int64 and compare numerically, so equal numeric values produce
-** equal cell counts regardless of encoding width. */
 static int dsFieldValuesEqual(
   int aType, const u8 *pA, int nA, int aOff,
   int bType, const u8 *pB, int nB, int bOff
@@ -192,11 +186,58 @@ static int dsFieldValuesEqual(
   return memcmp(pA+aOff, pB+bOff, aLen)==0;
 }
 
+typedef struct DsColMap DsColMap;
+struct DsColMap {
+  int *aToFrom;
+  u8 *aFromMatched;
+  int nTo;
+  int nFrom;
+};
+
+static void dsFreeColMap(DsColMap *pMap){
+  sqlite3_free(pMap->aToFrom);
+  sqlite3_free(pMap->aFromMatched);
+  memset(pMap, 0, sizeof(*pMap));
+}
+
+static int dsBuildColMap(
+  char **azFromCols, int nFromCols,
+  char **azToCols, int nToCols,
+  DsColMap *pMap
+){
+  int i, j;
+  memset(pMap, 0, sizeof(*pMap));
+  pMap->nTo = nToCols;
+  pMap->nFrom = nFromCols;
+  if( nToCols>0 ){
+    pMap->aToFrom = sqlite3_malloc(nToCols * (int)sizeof(int));
+    if( !pMap->aToFrom ) return SQLITE_NOMEM;
+  }
+  if( nFromCols>0 ){
+    pMap->aFromMatched = sqlite3_malloc(nFromCols * (int)sizeof(u8));
+    if( !pMap->aFromMatched ){
+      dsFreeColMap(pMap);
+      return SQLITE_NOMEM;
+    }
+    memset(pMap->aFromMatched, 0, nFromCols * (int)sizeof(u8));
+  }
+  for(i=0; i<nToCols; i++){
+    pMap->aToFrom[i] = -1;
+    for(j=0; j<nFromCols; j++){
+      if( strcmp(azFromCols[j], azToCols[i])==0 ){
+        pMap->aToFrom[i] = j;
+        pMap->aFromMatched[j] = 1;
+        break;
+      }
+    }
+  }
+  return SQLITE_OK;
+}
+
 static int dsCountChangedCells(
   const u8 *pFromRec, int nFromRec,
   const u8 *pToRec,   int nToRec,
-  char **azFromCols,  int nFromCols,
-  char **azToCols,    int nToCols
+  const DsColMap *pColMap
 ){
   DoltliteRecordInfo fromRi, toRi;
   int i, changed = 0;
@@ -204,13 +245,9 @@ static int dsCountChangedCells(
   doltliteParseRecord(pFromRec, nFromRec, &fromRi);
   doltliteParseRecord(pToRec,   nToRec,   &toRi);
 
-
-  for(i=0; i<nToCols; i++){
-    int fromIdx;
-    for(fromIdx=0; fromIdx<nFromCols; fromIdx++){
-      if( strcmp(azFromCols[fromIdx], azToCols[i])==0 ) break;
-    }
-    if( fromIdx>=nFromCols ){
+  for(i=0; i<pColMap->nTo; i++){
+    int fromIdx = pColMap->aToFrom ? pColMap->aToFrom[i] : -1;
+    if( fromIdx<0 ){
 
       if( i<toRi.nField && toRi.aType[i]!=0 ) changed++;
       continue;
@@ -223,12 +260,8 @@ static int dsCountChangedCells(
     }
   }
 
-  for(i=0; i<nFromCols; i++){
-    int toIdx;
-    for(toIdx=0; toIdx<nToCols; toIdx++){
-      if( strcmp(azToCols[toIdx], azFromCols[i])==0 ) break;
-    }
-    if( toIdx<nToCols ) continue;
+  for(i=0; i<pColMap->nFrom; i++){
+    if( pColMap->aFromMatched && pColMap->aFromMatched[i] ) continue;
     if( i>=fromRi.nField ) continue;
     if( fromRi.aType[i]!=0 ) changed++;
   }
@@ -305,12 +338,14 @@ static int dsComputeTableStats(
   char *zFromSql = 0, *zToSql = 0;
   char **azFromCols = 0, **azToCols = 0;
   int nFromCols = 0, nToCols = 0;
+  DsColMap colMap;
   i64 oldCount = 0, newCount = 0;
   i64 rowsMod = 0, rowsAdd = 0, rowsDel = 0;
   i64 cellsMod = 0, cellsAdd = 0, cellsDel = 0;
   int rc;
 
   memset(pOut, 0, sizeof(*pOut));
+  memset(&colMap, 0, sizeof(colMap));
 
   rc = doltliteLoadCatalog(db, pFromCatHash, &aFrom, &nFromCat, 0);
   if( rc!=SQLITE_OK ) return rc;
@@ -340,7 +375,6 @@ static int dsComputeTableStats(
 
   if( !hasFrom && !hasTo ) return SQLITE_OK;
 
-
   if( hasFrom ){
     rc = dsLoadCreateSql(db, pFromCatHash, zTableName, &zFromSql);
     if( rc!=SQLITE_OK ) return rc;
@@ -360,6 +394,10 @@ static int dsComputeTableStats(
     hasFrom && hasTo &&
     strcmp(zFromSql ? zFromSql : "", zToSql ? zToSql : "")!=0;
 
+  if( hasFrom && hasTo ){
+    rc = dsBuildColMap(azFromCols, nFromCols, azToCols, nToCols, &colMap);
+    if( rc!=SQLITE_OK ) goto done;
+  }
 
   if( hasFrom ){
     rc = dsCountRows(db, &fromRoot, fromFlags, &oldCount);
@@ -369,7 +407,6 @@ static int dsComputeTableStats(
     rc = dsCountRows(db, &toRoot, toFlags, &newCount);
     if( rc!=SQLITE_OK ) goto done;
   }
-
 
   if( hasFrom && hasTo
    && prollyHashCompare(&fromRoot, &toRoot)!=0 ){
@@ -398,7 +435,7 @@ static int dsComputeTableStats(
           int changed = dsCountChangedCells(
               pChange->pOldVal, pChange->nOldVal,
               pChange->pNewVal, pChange->nNewVal,
-              azFromCols, nFromCols, azToCols, nToCols);
+              &colMap);
           if( changed>0 ){
             rowsMod++;
             cellsMod += changed;
@@ -412,11 +449,6 @@ static int dsComputeTableStats(
     rc = SQLITE_OK;
   }
 
-
-  /* Column-count delta: if the schema widened/narrowed, every
-  ** surviving row gains or loses cells even if the data is identical.
-  ** Count those as cellsAdded/cellsDeleted so dolt_diff_stat matches
-  ** Dolt's reported totals. */
   if( hasFrom && hasTo ){
     i64 rowsInBoth = oldCount - rowsDel;
     if( rowsInBoth < 0 ) rowsInBoth = 0;
@@ -426,7 +458,6 @@ static int dsComputeTableStats(
       cellsDel += (i64)rowsInBoth * (nFromCols - nToCols);
     }
   }
-
 
   if( !hasFrom && hasTo ){
     rowsAdd = newCount;
@@ -467,6 +498,7 @@ done:
   sqlite3_free(zToSql);
   dsFreeColNames(azFromCols, nFromCols);
   dsFreeColNames(azToCols, nToCols);
+  dsFreeColMap(&colMap);
   return rc;
 }
 

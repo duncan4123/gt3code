@@ -171,7 +171,7 @@ static int loadAllConflicts(
     int nl, nc;
     if( p+2 > data+nData ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
     nl = p[0]|(p[1]<<8); p+=2;
-    if( nl<0 || p+nl > data+nData ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
+    if( nl<0 || (size_t)nl > (size_t)(data+nData - p) ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
     aTables[i].zName = sqlite3_malloc(nl+1);
     if( !aTables[i].zName ){ rc = SQLITE_NOMEM; goto conflicts_cleanup; }
     memcpy(aTables[i].zName, p, nl); aTables[i].zName[nl]=0;
@@ -179,17 +179,23 @@ static int loadAllConflicts(
     if( p+4 > data+nData ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
     nc = p[0]|(p[1]<<8)|(p[2]<<16)|(p[3]<<24); p+=4;
     if( nc<0 ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
+    /* Validate that nc*sizeof(struct ConflictRow) fits within remaining bytes
+    ** (each row carries at least 4+8+4+4+4 = 24 header bytes), and use
+    ** sqlite3_malloc64 to avoid 32-bit multiplication overflow. */
+    if( (sqlite3_uint64)nc > (sqlite3_uint64)(data+nData - p) ){
+      rc = SQLITE_CORRUPT; goto conflicts_cleanup;
+    }
     aTables[i].nConflicts = nc;
-    aTables[i].aRows = sqlite3_malloc(nc * (int)sizeof(struct ConflictRow));
+    aTables[i].aRows = sqlite3_malloc64((sqlite3_uint64)nc * sizeof(struct ConflictRow));
     if( !aTables[i].aRows ){ rc = SQLITE_NOMEM; goto conflicts_cleanup; }
-    memset(aTables[i].aRows, 0, nc * (int)sizeof(struct ConflictRow));
+    memset(aTables[i].aRows, 0, (sqlite3_uint64)nc * sizeof(struct ConflictRow));
 
     for(j=0; j<nc; j++){
       struct ConflictRow *cr = &aTables[i].aRows[j];
       int kvl, bvl, ovl, tvl;
       if( p+4 > data+nData ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
       kvl = p[0]|(p[1]<<8)|(p[2]<<16)|(p[3]<<24); p+=4;
-      if( kvl<0 || p+kvl > data+nData ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
+      if( kvl<0 || (size_t)kvl > (size_t)(data+nData - p) ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
       if(kvl>0){
         cr->pKey = sqlite3_malloc(kvl);
         if( !cr->pKey ){ rc = SQLITE_NOMEM; goto conflicts_cleanup; }
@@ -203,7 +209,7 @@ static int loadAllConflicts(
       p+=8;
       if( p+4 > data+nData ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
       bvl = p[0]|(p[1]<<8)|(p[2]<<16)|(p[3]<<24); p+=4;
-      if( bvl<0 || p+bvl > data+nData ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
+      if( bvl<0 || (size_t)bvl > (size_t)(data+nData - p) ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
       if(bvl>0){
         cr->pBaseVal = sqlite3_malloc(bvl);
         if( !cr->pBaseVal ){ rc = SQLITE_NOMEM; goto conflicts_cleanup; }
@@ -213,7 +219,7 @@ static int loadAllConflicts(
       p += bvl;
       if( p+4 > data+nData ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
       ovl = p[0]|(p[1]<<8)|(p[2]<<16)|(p[3]<<24); p+=4;
-      if( ovl<0 || p+ovl > data+nData ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
+      if( ovl<0 || (size_t)ovl > (size_t)(data+nData - p) ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
       if(ovl>0){
         cr->pOurVal = sqlite3_malloc(ovl);
         if( !cr->pOurVal ){ rc = SQLITE_NOMEM; goto conflicts_cleanup; }
@@ -223,7 +229,7 @@ static int loadAllConflicts(
       p += ovl;
       if( p+4 > data+nData ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
       tvl = p[0]|(p[1]<<8)|(p[2]<<16)|(p[3]<<24); p+=4;
-      if( tvl<0 || p+tvl > data+nData ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
+      if( tvl<0 || (size_t)tvl > (size_t)(data+nData - p) ){ rc = SQLITE_CORRUPT; goto conflicts_cleanup; }
       if(tvl>0){
         cr->pTheirVal = sqlite3_malloc(tvl);
         if( !cr->pTheirVal ){ rc = SQLITE_NOMEM; goto conflicts_cleanup; }
@@ -480,7 +486,6 @@ static int cfrFilter(sqlite3_vtab_cursor *cur, int n, const char *s, int a, sqli
   rc = loadAllConflicts(vt->db, doltliteGetChunkStore(vt->db), &c->aTables, &c->nTables);
   if( rc!=SQLITE_OK ) return rc;
 
-
   for(i=0; i<c->nTables; i++){
     if( c->aTables[i].zName && strcmp(c->aTables[i].zName, vt->zTableName)==0 ){
       c->iTableIdx = i;
@@ -501,10 +506,6 @@ static int cfrEof(sqlite3_vtab_cursor *cur){
   return c->iRow >= c->aTables[c->iTableIdx].nConflicts;
 }
 
-/* Thin wrapper around doltliteResultUserCol kept for call-site
-** readability — the cfr column projection has four call sites
-** (base, ours, theirs, and the diff-type bookkeeping) that all
-** want the same argument order. */
 static void cfrEmitRecordCol(
   sqlite3_context *ctx,
   const u8 *pRec, int nRec,
@@ -524,22 +525,45 @@ static const char *cfrDiffType(const u8 *pBase, int nBase,
   return "modified";
 }
 
-/* For row-wise DELETE on dolt_conflicts_<table>, the vtab rowid must uniquely
-** identify a conflict row even when the user PK is not SQLite's integer
-** rowid. Use the raw serialized prolly key when present; integer PK conflicts
-** continue to use intKey directly. */
 static sqlite3_int64 cfrConflictRowid(const struct ConflictRow *cr){
+  u64 h = 1469598103934665603ULL;
+  int i;
   if( cr->nKey>0 && cr->pKey ){
-    u64 h = 1469598103934665603ULL;
-    int i;
     for(i=0; i<cr->nKey; i++){
       h ^= (u64)cr->pKey[i];
       h *= 1099511628211ULL;
     }
-    if( h==0 ) h = 1;
-    return (sqlite3_int64)(h & 0x7fffffffffffffffULL);
   }
-  return (sqlite3_int64)cr->intKey;
+  h *= 1099511628211ULL;
+  {
+    u64 k = (u64)cr->intKey;
+    for(i=0; i<8; i++){
+      h ^= (k >> (i*8)) & 0xff;
+      h *= 1099511628211ULL;
+    }
+  }
+  h *= 1099511628211ULL;
+  if( cr->nBaseVal>0 && cr->pBaseVal ){
+    for(i=0; i<cr->nBaseVal; i++){
+      h ^= (u64)cr->pBaseVal[i];
+      h *= 1099511628211ULL;
+    }
+  }
+  h *= 1099511628211ULL;
+  if( cr->nOurVal>0 && cr->pOurVal ){
+    for(i=0; i<cr->nOurVal; i++){
+      h ^= (u64)cr->pOurVal[i];
+      h *= 1099511628211ULL;
+    }
+  }
+  h *= 1099511628211ULL;
+  if( cr->nTheirVal>0 && cr->pTheirVal ){
+    for(i=0; i<cr->nTheirVal; i++){
+      h ^= (u64)cr->pTheirVal[i];
+      h *= 1099511628211ULL;
+    }
+  }
+  return (sqlite3_int64)(h & 0x7fffffffffffffffULL);
 }
 
 static int cfrColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col){
@@ -553,7 +577,6 @@ static int cfrColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int col){
   if( c->iTableIdx < 0 ) return SQLITE_OK;
   if( c->iRow >= c->aTables[c->iTableIdx].nConflicts ) return SQLITE_OK;
   cr = &c->aTables[c->iTableIdx].aRows[c->iRow];
-
 
   nUserCols = v->cols.nCol;
   colBaseStart  = 1;
@@ -625,7 +648,6 @@ static int cfrUpdate(
 
   (void)pRowid;
 
-
   if( nArg != 1 ){
     pVtab->zErrMsg = sqlite3_mprintf("only DELETE is supported on conflict tables");
     return SQLITE_ERROR;
@@ -633,10 +655,8 @@ static int cfrUpdate(
 
   deleteRowid = sqlite3_value_int64(apArg[0]);
 
-
   rc = loadAllConflicts(v->db, cs, &aTables, &nTables);
   if( rc!=SQLITE_OK ) return rc;
-
 
   for(i=0; i<nTables; i++){
     if( !aTables[i].zName || strcmp(aTables[i].zName, v->zTableName)!=0 )
@@ -646,11 +666,9 @@ static int cfrUpdate(
       if( cfrConflictRowid(&aTables[i].aRows[j]) == deleteRowid ){
         removeConflictRow(&aTables[i], j);
 
-
         if( aTables[i].nConflicts == 0 ){
           removeConflictTable(aTables, &nTables, i);
         }
-
 
         rc = storeUpdatedConflicts(v->db, cs, aTables, nTables);
         freeConflictTables(aTables, nTables);
@@ -739,11 +757,6 @@ static void conflictsResolveFunc(sqlite3_context *ctx, int argc, sqlite3_value *
     return;
   }
 
-  /* --ours vs --theirs are asymmetric: "ours" is already in the
-  ** working set (the merge left our side intact and logged theirs in
-  ** the conflict entry), so we just drop the conflict table. "theirs"
-  ** below has to apply each entry's theirVal as a real row mutation
-  ** before dropping, otherwise the working set still has our value. */
   if( strcmp(zMode,"--ours")==0 ){
 
     for(i=0; i<nTables; i++){
@@ -785,7 +798,6 @@ static void conflictsResolveFunc(sqlite3_context *ctx, int argc, sqlite3_value *
     for(i=0; i<nTables; i++){
       if( !aTables[i].zName || strcmp(aTables[i].zName, zTable)!=0 ) continue;
       found = 1;
-
 
       for(j=0; j<aTables[i].nConflicts; j++){
         struct ConflictRow *cr = &aTables[i].aRows[j];

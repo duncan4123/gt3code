@@ -1,20 +1,4 @@
 #!/bin/bash
-#
-# Version-control oracle test: dolt_tags
-#
-# Runs identical tag-management scenarios against doltlite and Dolt and
-# compares the normalized dolt_tags output. Catches divergence in how each
-# engine reports tag listings, the per-tag tagger metadata and message,
-# and which commit a tag points at.
-#
-# Columns compared: tag_name, tag_hash (normalized), message. The
-# tagger/email/date columns are excluded because their values come from
-# process state and legitimately differ across the two engines unless
-# every scenario passes --author overrides; the message and pointed-at
-# commit are the load-bearing semantic axes.
-#
-# Usage: bash vc_oracle_tags_test.sh [path/to/doltlite] [path/to/dolt]
-#
 
 set -u
 set -o pipefail
@@ -41,7 +25,7 @@ normalize() {
 }
 
 oracle() {
-  local name="$1" setup="$2"
+  local name="$1" setup="$2" allow_empty="${3:-}"
   local dir="$TMPROOT/$name"
   mkdir -p "$dir/dl" "$dir/dt"
 
@@ -67,14 +51,10 @@ oracle() {
   local dt_out
   dt_out=$(vc_oracle_tail_csv_body "$dir/dt.raw" | normalize)
 
-  if [ "$dl_out" = "$dt_out" ]; then
-    pass=$((pass+1))
+  if [ "$allow_empty" = "EXPECT_EMPTY" ]; then
+    vc_oracle_assert_match_allow_empty "$name" "$dl_out" "$dt_out"
   else
-    fail=$((fail+1))
-    FAILED_NAMES="$FAILED_NAMES $name"
-    echo "  FAIL: $name"
-    echo "    doltlite:"; echo "$dl_out" | sed 's/^/      /'
-    echo "    dolt:"    ; echo "$dt_out" | sed 's/^/      /'
+    vc_oracle_assert_match "$name" "$dl_out" "$dt_out"
   fi
 }
 
@@ -117,7 +97,7 @@ echo "--- baseline ---"
 
 oracle "no_tags_on_fresh_repo" "
 SELECT 1;
-"
+" "EXPECT_EMPTY"
 
 echo "--- single tag ---"
 
@@ -226,7 +206,7 @@ SELECT dolt_add('-A');
 SELECT dolt_commit('-m', 'first');
 SELECT dolt_tag('temp');
 SELECT dolt_tag('-d', 'temp');
-"
+" "EXPECT_EMPTY"
 
 oracle "delete_one_keep_others" "
 CREATE TABLE t(id INTEGER PRIMARY KEY);
