@@ -6,21 +6,21 @@ install_agent_hooks = ["codex"]
 [[rigs]]
 name = "beads_rust"
 prefix = "gb"
-suspended = false
+suspended = true
 formulas_dir = "formulas"
 includes = [".gc/system/packs/gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "refinery"
-suspended = false
+suspended = true
 
 [[rigs.overrides]]
 agent = "witness"
-suspended = false
+suspended = true
 
 [[rigs]]
 name = "agentic-flow"
@@ -72,8 +72,8 @@ suspended = false
 provider = "codex"
 append_fragments = ["beads-rust-backend"]
 wake_mode = "resume"
-min_active_sessions = 1
 max_active_sessions = 5
+min_active_sessions = 1
 
 [[patches.agent]]
 dir = "beads_rust"
@@ -96,8 +96,8 @@ suspended = false
 provider = "codex"
 append_fragments = ["beads-rust-backend"]
 wake_mode = "resume"
-min_active_sessions = 1
 max_active_sessions = 5
+min_active_sessions = 1
 
 [[patches.agent]]
 dir = "agentic-flow"
@@ -118,7 +118,7 @@ dir = "t3-jj"
 name = "planner"
 suspended = false
 provider = "codex"
-append_fragments = ["beads-rust-backend"]
+append_fragments = ["beads-rust-backend", "cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]
 wake_mode = "resume"
 max_active_sessions = 1
 min_active_sessions = 0
@@ -128,8 +128,8 @@ dir = "t3-jj"
 name = "worker"
 suspended = false
 provider = "codex"
-append_fragments = ["beads-rust-backend"]
-wake_mode = "fresh"
+append_fragments = ["beads-rust-backend", "cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]
+wake_mode = "resume"
 max_active_sessions = 4
 min_active_sessions = 1
 
@@ -138,7 +138,7 @@ dir = "t3-jj"
 name = "lander"
 suspended = false
 provider = "codex"
-append_fragments = ["beads-rust-backend"]
+append_fragments = ["beads-rust-backend", "cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]
 wake_mode = "resume"
 max_active_sessions = 1
 
@@ -147,7 +147,7 @@ dir = "t3-jj"
 name = "sentinel"
 suspended = false
 provider = "codex"
-append_fragments = ["beads-rust-backend"]
+append_fragments = ["beads-rust-backend", "cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]
 max_active_sessions = 1
 
 [[patches.agent]]
