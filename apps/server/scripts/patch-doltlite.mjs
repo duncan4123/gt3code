@@ -10,7 +10,7 @@
  */
 
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -20,7 +20,8 @@ const workspaceRoot = resolve(serverDir, "..", "..");
 
 // ── 1. Locate libdoltlite.a ──────────────────────────────────────────────────
 
-const doltliteRoot = process.env.DOLTLITE_BUILD_DIR ?? "/data/projects/doltlite";
+const bundledDoltliteBuildDir = join(workspaceRoot, "packages", "doltlite", "build");
+const doltliteRoot = process.env.DOLTLITE_BUILD_DIR ?? bundledDoltliteBuildDir;
 const libPath = existsSync(join(doltliteRoot, "libdoltlite.a"))
   ? join(doltliteRoot, "libdoltlite.a")
   : join(doltliteRoot, "build", "libdoltlite.a");
@@ -168,6 +169,7 @@ function verifyAddon(pkgDirToCheck) {
 // ── 4. Check if rebuild is needed (avoid redundant rebuilds) ─────────────────
 
 const addonPath = join(pkgDir, "build", "Release", "better_sqlite3.node");
+const versionFile = join(pkgDir, "build", "Release", ".doltlite-version");
 if (existsSync(addonPath)) {
   // Quick check: if the addon links against libdoltlite, skip rebuild.
   try {
@@ -180,6 +182,15 @@ if (existsSync(addonPath)) {
           // Check if libdoltlite.a is newer than the addon — force rebuild if so
           const addonMtime = statSync(addonPath).mtimeMs;
           const libMtime = statSync(libPath).mtimeMs;
+          let linkedLibPath = undefined;
+          if (existsSync(versionFile)) {
+            try {
+              linkedLibPath = JSON.parse(readFileSync(versionFile, "utf8")).libPath;
+            } catch {}
+          }
+          if (linkedLibPath !== libPath) {
+            console.log("[patch-doltlite] Addon was built from a different libdoltlite — rebuilding.");
+          } else
           if (libMtime > addonMtime) {
             console.log("[patch-doltlite] libdoltlite.a is newer than addon — rebuilding.");
           } else {
@@ -188,7 +199,6 @@ if (existsSync(addonPath)) {
             );
             // Ensure version file exists even when skipping rebuild
             try {
-              const versionFile = join(pkgDir, "build", "Release", ".doltlite-version");
               if (!existsSync(versionFile)) {
                 const gitHash = execSync("git rev-parse --short HEAD", {
                   cwd: doltliteRoot,
@@ -198,6 +208,7 @@ if (existsSync(addonPath)) {
                   versionFile,
                   JSON.stringify({
                     commit: gitHash,
+                    libPath,
                     libBuilt: new Date(libMtime).toISOString(),
                     addonBuilt: new Date(addonMtime).toISOString(),
                   }) + "\n",
@@ -256,6 +267,7 @@ try {
       join(pkgDir, "build", "Release", ".doltlite-version"),
       JSON.stringify({
         commit: gitHash,
+        libPath,
         libBuilt: libMtime,
         addonBuilt: new Date().toISOString(),
       }) + "\n",
