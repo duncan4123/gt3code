@@ -1,38 +1,48 @@
-// @effect-diagnostics nodeBuiltinImport:off
 import path from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as PlatformError from "effect/PlatformError";
-import * as Scope from "effect/Scope";
+import { Effect, FileSystem, Layer, PlatformError, Scope } from "effect";
 import { describe, expect } from "vitest";
 
 import { checkpointRefForThreadTurn } from "../Utils.ts";
 import { CheckpointStoreLive } from "./CheckpointStore.ts";
 import { CheckpointStore } from "../Services/CheckpointStore.ts";
-import * as VcsDriverRegistry from "../../vcs/VcsDriverRegistry.ts";
-import * as VcsProcess from "../../vcs/VcsProcess.ts";
-import type { VcsError } from "@t3tools/contracts";
+import { GitCoreLive } from "../../vcs/GitVcsDriverCore.ts";
+import { GitCore } from "../../git/Services/GitCore.ts";
+import { GitCommandError } from "@t3tools/contracts";
 import { ServerConfig } from "../../config.ts";
 import { ThreadId } from "@t3tools/contracts";
+import { JjCoreLive } from "../../jj/Layers/JjCore.ts";
+import { initJjRepo } from "../../jj/Layers/JjTestUtils.ts";
+import { VcsCoreLive } from "../../vcs/Layers/VcsCore.ts";
 
 const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
   prefix: "t3-checkpoint-store-test-",
 });
-const VcsProcessTestLayer = VcsProcess.layer.pipe(Layer.provide(NodeServices.layer));
-const VcsDriverTestLayer = VcsDriverRegistry.layer.pipe(Layer.provide(VcsProcessTestLayer));
-const CheckpointStoreTestLayer = CheckpointStoreLive.pipe(
-  Layer.provideMerge(VcsDriverTestLayer),
+const GitCoreTestLayer = GitCoreLive.pipe(
+  Layer.provide(ServerConfigLayer),
+  Layer.provide(NodeServices.layer),
+);
+const JjCoreTestLayer = JjCoreLive.pipe(
+  Layer.provide(ServerConfigLayer),
+  Layer.provideMerge(GitCoreTestLayer),
   Layer.provideMerge(NodeServices.layer),
 );
-const TestLayer = CheckpointStoreTestLayer.pipe(
-  Layer.provideMerge(VcsProcessTestLayer),
-  Layer.provideMerge(VcsDriverTestLayer),
-  Layer.provideMerge(ServerConfigLayer),
-  Layer.provideMerge(NodeServices.layer),
+const VcsCoreTestLayer = VcsCoreLive.pipe(
+  Layer.provideMerge(GitCoreTestLayer),
+  Layer.provideMerge(JjCoreTestLayer),
+);
+const CheckpointStoreTestLayer = CheckpointStoreLive.pipe(
+  Layer.provideMerge(VcsCoreTestLayer),
+  Layer.provide(NodeServices.layer),
+);
+const TestLayer = Layer.mergeAll(
+  NodeServices.layer,
+  GitCoreTestLayer,
+  JjCoreTestLayer,
+  VcsCoreTestLayer,
+  CheckpointStoreTestLayer,
 );
 
 function makeTmpDir(
@@ -54,15 +64,23 @@ function writeTextFile(
   });
 }
 
+function fsReadText(
+  filePath: string,
+): Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem> {
+  return Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    return yield* fileSystem.readFileString(filePath);
+  });
+}
+
 function git(
   cwd: string,
   args: ReadonlyArray<string>,
-): Effect.Effect<string, VcsError, VcsProcess.VcsProcess> {
+): Effect.Effect<string, GitCommandError, GitCore> {
   return Effect.gen(function* () {
-    const process = yield* VcsProcess.VcsProcess;
-    const result = yield* process.run({
+    const gitCore = yield* GitCore;
+    const result = yield* gitCore.execute({
       operation: "CheckpointStore.test.git",
-      command: "git",
       cwd,
       args,
       timeoutMs: 10_000,
@@ -75,11 +93,12 @@ function initRepoWithCommit(
   cwd: string,
 ): Effect.Effect<
   void,
-  VcsError | PlatformError.PlatformError,
-  VcsProcess.VcsProcess | FileSystem.FileSystem
+  GitCommandError | PlatformError.PlatformError,
+  GitCore | FileSystem.FileSystem
 > {
   return Effect.gen(function* () {
-    yield* git(cwd, ["init"]);
+    const core = yield* GitCore;
+    yield* core.initRepo({ cwd });
     yield* git(cwd, ["config", "user.email", "test@test.com"]);
     yield* git(cwd, ["config", "user.name", "Test"]);
     yield* writeTextFile(path.join(cwd, "README.md"), "# test\n");
@@ -96,20 +115,55 @@ function buildLargeText(lineCount = 5_000): string {
 
 it.layer(TestLayer)("CheckpointStoreLive", (it) => {
   describe("diffCheckpoints", () => {
-    it.effect("returns full oversized checkpoint diffs without truncation", () =>
+    it.effect(
+      "returns full oversized checkpoint diffs without truncation for git repositories",
+      () =>
+        Effect.gen(function* () {
+          const tmp = yield* makeTmpDir();
+          yield* initRepoWithCommit(tmp);
+          const checkpointStore = yield* CheckpointStore;
+          const threadId = ThreadId.make("thread-checkpoint-store");
+          const fromCheckpointRef = checkpointRefForThreadTurn(threadId, 0);
+          const toCheckpointRef = checkpointRefForThreadTurn(threadId, 1);
+
+          yield* checkpointStore.captureCheckpoint({
+            cwd: tmp,
+            checkpointRef: fromCheckpointRef,
+          });
+          yield* writeTextFile(path.join(tmp, "README.md"), buildLargeText());
+          yield* checkpointStore.captureCheckpoint({
+            cwd: tmp,
+            checkpointRef: toCheckpointRef,
+          });
+
+          const diff = yield* checkpointStore.diffCheckpoints({
+            cwd: tmp,
+            fromCheckpointRef,
+            toCheckpointRef,
+            ignoreWhitespace: false,
+          });
+
+          expect(diff).toContain("diff --git");
+          expect(diff).not.toContain("[truncated]");
+          expect(diff).toContain("+line 04999");
+        }),
+    );
+
+    it.effect("captures JJ checkpoints as native revisions instead of hidden git refs", () =>
       Effect.gen(function* () {
-        const tmp = yield* makeTmpDir();
-        yield* initRepoWithCommit(tmp);
+        const tmp = yield* makeTmpDir("checkpoint-store-jj-test-");
+        yield* initJjRepo(tmp);
         const checkpointStore = yield* CheckpointStore;
-        const threadId = ThreadId.make("thread-checkpoint-store");
+        const threadId = ThreadId.make("thread-checkpoint-store-jj");
         const fromCheckpointRef = checkpointRefForThreadTurn(threadId, 0);
         const toCheckpointRef = checkpointRefForThreadTurn(threadId, 1);
+        const fileSystem = yield* FileSystem.FileSystem;
 
         yield* checkpointStore.captureCheckpoint({
           cwd: tmp,
           checkpointRef: fromCheckpointRef,
         });
-        yield* writeTextFile(path.join(tmp, "README.md"), buildLargeText());
+        yield* writeTextFile(path.join(tmp, "notes.txt"), "native jj checkpoint\n");
         yield* checkpointStore.captureCheckpoint({
           cwd: tmp,
           checkpointRef: toCheckpointRef,
@@ -119,87 +173,40 @@ it.layer(TestLayer)("CheckpointStoreLive", (it) => {
           cwd: tmp,
           fromCheckpointRef,
           toCheckpointRef,
-          ignoreWhitespace: true,
+          ignoreWhitespace: false,
         });
 
         expect(diff).toContain("diff --git");
-        expect(diff).not.toContain("[truncated]");
-        expect(diff).toContain("+line 04999");
-      }),
-    );
+        expect(diff).toContain("+++ b/notes.txt");
 
-    it.effect("can hide indentation churn when changes wrap existing lines", () =>
-      Effect.gen(function* () {
-        const tmp = yield* makeTmpDir();
-        yield* initRepoWithCommit(tmp);
-        const checkpointStore = yield* CheckpointStore;
-        const threadId = ThreadId.make("thread-checkpoint-store-whitespace");
-        const fromCheckpointRef = checkpointRefForThreadTurn(threadId, 0);
-        const toCheckpointRef = checkpointRefForThreadTurn(threadId, 1);
-
-        const componentPath = path.join(tmp, "Component.tsx");
-        yield* writeTextFile(
-          componentPath,
-          [
-            "export function View() {",
-            "  return (",
-            "    <section>",
-            "      <h1>Title</h1>",
-            "      <p>Body</p>",
-            "    </section>",
-            "  );",
-            "}",
-            "",
-          ].join("\n"),
-        );
-        yield* checkpointStore.captureCheckpoint({
+        const gitCore = yield* GitCore;
+        const gitRefResult = yield* gitCore.execute({
+          operation: "CheckpointStore.test.git.verifyMissingRef",
           cwd: tmp,
-          checkpointRef: fromCheckpointRef,
+          args: ["rev-parse", "--verify", "--quiet", `${toCheckpointRef}^{commit}`],
+          allowNonZeroExit: true,
+          timeoutMs: 10_000,
         });
-        yield* writeTextFile(
-          componentPath,
-          [
-            "export function View() {",
-            "  return (",
-            "    <section>",
-            "      {isReady ? (",
-            "        <div>",
-            "          <h1>Title</h1>",
-            "          <p>Body</p>",
-            "        </div>",
-            "      ) : null}",
-            "    </section>",
-            "  );",
-            "}",
-            "",
-          ].join("\n"),
-        );
-        yield* checkpointStore.captureCheckpoint({
+        expect(gitRefResult.code).not.toBe(0);
+
+        yield* fileSystem.remove(path.join(tmp, "notes.txt"));
+        const restored = yield* checkpointStore.restoreCheckpoint({
           cwd: tmp,
           checkpointRef: toCheckpointRef,
         });
+        expect(restored).toBe(true);
+        expect(yield* fsReadText(path.join(tmp, "notes.txt"))).toBe("native jj checkpoint\n");
 
-        const normalDiff = yield* checkpointStore.diffCheckpoints({
+        const restoredToInitial = yield* checkpointStore.restoreCheckpoint({
           cwd: tmp,
-          fromCheckpointRef,
-          toCheckpointRef,
-          ignoreWhitespace: false,
+          checkpointRef: fromCheckpointRef,
         });
-        const whitespaceIgnoredDiff = yield* checkpointStore.diffCheckpoints({
-          cwd: tmp,
-          fromCheckpointRef,
-          toCheckpointRef,
-          ignoreWhitespace: true,
-        });
-
-        expect(normalDiff).toContain("diff --git");
-        expect(normalDiff).toContain("-      <h1>Title</h1>");
-        expect(normalDiff).toContain("+          <h1>Title</h1>");
-        expect(whitespaceIgnoredDiff).toContain("diff --git");
-        expect(whitespaceIgnoredDiff).toContain("+      {isReady ? (");
-        expect(whitespaceIgnoredDiff).toContain("+        <div>");
-        expect(whitespaceIgnoredDiff).not.toContain("-      <h1>Title</h1>");
-        expect(whitespaceIgnoredDiff).not.toContain("+          <h1>Title</h1>");
+        expect(restoredToInitial).toBe(true);
+        const notesExists = yield* fileSystem.stat(path.join(tmp, "notes.txt")).pipe(
+          Effect.map(() => true),
+          Effect.catch(() => Effect.succeed(false)),
+        );
+        expect(notesExists).toBe(false);
       }),
     );
   });

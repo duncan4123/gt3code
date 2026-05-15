@@ -1,14 +1,12 @@
 import {
   type CheckpointRef,
   OrchestrationGetTurnDiffResult,
-  type ThreadId,
+  type OrchestrationGetFullThreadDiffInput,
   type OrchestrationGetFullThreadDiffResult,
+  type ThreadId,
   type OrchestrationGetTurnDiffResult as OrchestrationGetTurnDiffResultType,
 } from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
+import { Effect, Layer, Option, Schema } from "effect";
 
 import { ProjectionSnapshotQuery } from "../../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { CheckpointInvariantError, CheckpointUnavailableError } from "../Errors.ts";
@@ -53,12 +51,7 @@ const make = Effect.gen(function* () {
       });
 
       if (input.fromTurnCount === input.toTurnCount) {
-        const emptyDiff: OrchestrationGetTurnDiffResultType = {
-          threadId: input.threadId,
-          fromTurnCount: input.fromTurnCount,
-          toTurnCount: input.toTurnCount,
-          diff: "",
-        };
+        const emptyDiff = buildTurnDiffResult(input, "");
         if (!isTurnDiffResult(emptyDiff)) {
           return yield* new CheckpointInvariantError({
             operation,
@@ -123,6 +116,36 @@ const make = Effect.gen(function* () {
         });
       }
 
+      const [fromExists, toExists] = yield* Effect.all(
+        [
+          checkpointStore.hasCheckpointRef({
+            cwd: workspaceCwd,
+            checkpointRef: fromCheckpointRef,
+          }),
+          checkpointStore.hasCheckpointRef({
+            cwd: workspaceCwd,
+            checkpointRef: toCheckpointRef,
+          }),
+        ],
+        { concurrency: "unbounded" },
+      );
+
+      if (!fromExists) {
+        return yield* new CheckpointUnavailableError({
+          threadId: input.threadId,
+          turnCount: input.fromTurnCount,
+          detail: `Filesystem checkpoint is unavailable for turn ${input.fromTurnCount}.`,
+        });
+      }
+
+      if (!toExists) {
+        return yield* new CheckpointUnavailableError({
+          threadId: input.threadId,
+          turnCount: input.toTurnCount,
+          detail: `Filesystem checkpoint is unavailable for turn ${input.toTurnCount}.`,
+        });
+      }
+
       const diff = yield* checkpointStore
         .diffCheckpoints({
           cwd: workspaceCwd,
@@ -147,7 +170,7 @@ const make = Effect.gen(function* () {
 
   const getFullThreadDiff: CheckpointDiffQueryShape["getFullThreadDiff"] = Effect.fn(
     "CheckpointDiffQuery.getFullThreadDiff",
-  )(function* (input) {
+  )(function* (input: OrchestrationGetFullThreadDiffInput) {
     const operation = "CheckpointDiffQuery.getFullThreadDiff";
     const ignoreWhitespace = input.ignoreWhitespace ?? true;
     yield* Effect.annotateCurrentSpan({
