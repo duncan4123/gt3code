@@ -1,0 +1,217 @@
+[workspace]
+provider = "codex"
+suspended = true
+install_agent_hooks = ["codex"]
+
+[[rigs]]
+name = "beads_rust"
+prefix = "gb"
+suspended = true
+formulas_dir = "formulas"
+includes = [".gc/system/packs/gastown"]
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = true
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = true
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = true
+
+[[rigs]]
+name = "agentic-flow"
+prefix = "af"
+suspended = true
+formulas_dir = "formulas"
+includes = [".gc/system/packs/gastown"]
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = true
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = true
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = true
+
+[[rigs]]
+name = "t3-jj"
+prefix = "tj"
+suspended = true
+includes = ["packs/flywheel/all", "packs/jj"]
+
+[[rigs.overrides]]
+agent = "planner"
+suspended = true
+
+[[rigs.overrides]]
+agent = "worker"
+suspended = true
+
+[[rigs.overrides]]
+agent = "lander"
+suspended = true
+
+[[rigs.overrides]]
+agent = "sentinel"
+suspended = true
+
+[patches]
+
+[[patches.agent]]
+dir = "beads_rust"
+name = "polecat"
+suspended = false
+provider = "codex"
+append_fragments = ["beads-rust-backend"]
+wake_mode = "resume"
+max_active_sessions = 5
+min_active_sessions = 1
+
+[[patches.agent]]
+dir = "beads_rust"
+name = "refinery"
+suspended = false
+provider = "codex"
+append_fragments = ["beads-rust-backend"]
+
+[[patches.agent]]
+dir = "beads_rust"
+name = "witness"
+suspended = false
+provider = "codex"
+append_fragments = ["beads-rust-backend"]
+
+[[patches.agent]]
+dir = "agentic-flow"
+name = "polecat"
+suspended = false
+provider = "codex"
+append_fragments = ["beads-rust-backend"]
+wake_mode = "resume"
+max_active_sessions = 5
+min_active_sessions = 1
+
+[[patches.agent]]
+dir = "agentic-flow"
+name = "refinery"
+suspended = false
+provider = "codex"
+append_fragments = ["beads-rust-backend"]
+
+[[patches.agent]]
+dir = "agentic-flow"
+name = "witness"
+suspended = false
+provider = "codex"
+append_fragments = ["beads-rust-backend"]
+
+[[patches.agent]]
+dir = "t3-jj"
+name = "planner"
+suspended = false
+provider = "codex"
+append_fragments = [
+  "beads-rust-backend",
+  "cass-search",
+  "cm-memory",
+  "agent-mail-secondary",
+  "ubs-scan",
+]
+wake_mode = "resume"
+max_active_sessions = 1
+min_active_sessions = 0
+
+[[patches.agent]]
+dir = "t3-jj"
+name = "worker"
+suspended = false
+provider = "codex"
+append_fragments = [
+  "beads-rust-backend",
+  "cass-search",
+  "cm-memory",
+  "agent-mail-secondary",
+  "ubs-scan",
+]
+wake_mode = "resume"
+max_active_sessions = 4
+min_active_sessions = 1
+
+[[patches.agent]]
+dir = "t3-jj"
+name = "lander"
+suspended = false
+provider = "codex"
+append_fragments = [
+  "beads-rust-backend",
+  "cass-search",
+  "cm-memory",
+  "agent-mail-secondary",
+  "ubs-scan",
+]
+wake_mode = "resume"
+max_active_sessions = 1
+
+[[patches.agent]]
+dir = "t3-jj"
+name = "sentinel"
+suspended = false
+provider = "codex"
+append_fragments = [
+  "beads-rust-backend",
+  "cass-search",
+  "cm-memory",
+  "agent-mail-secondary",
+  "ubs-scan",
+]
+max_active_sessions = 1
+
+[[patches.agent]]
+dir = ""
+name = "mayor"
+suspended = false
+
+[[patches.named_session]]
+dir = "beads_rust"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
+dir = "agentic-flow"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
+dir = "t3-jj"
+template = "lander"
+mode = "always"
+
+[[patches.named_session]]
+dir = "t3-jj"
+template = "sentinel"
+mode = "on_demand"
+
+[[patches.named_session]]
+dir = "t3-jj"
+template = "planner"
+mode = "always"
+
+[beads]
+provider = "exec:gc-beads-br"
+
+[session]
+provider = "t3bridge"
+
+[daemon]
+formula_v2 = true
+
+[agent_defaults]
+append_fragments = ["cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]

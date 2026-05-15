@@ -1,0 +1,541 @@
+[workspace]
+prefix = "co"
+suspended = false
+global_fragments = ["command-glossary", "operational-awareness"]
+
+[[agent]]
+name = "codex"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "codex"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+[agent.option_defaults]
+model = "gpt-5.5"
+
+[[agent]]
+name = "kimi-for-coding"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "kimi-for-coding"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+[agent.option_defaults]
+agent = "build"
+model = "kimi-for-coding/k2p6"
+
+[[agent]]
+name = "codex"
+dir = "gascity"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "codex"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+[agent.option_defaults]
+model = "gpt-5.5"
+
+[[agent]]
+name = "kimi-for-coding"
+dir = "gascity"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "kimi-for-coding"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+[agent.option_defaults]
+agent = "build"
+model = "kimi-for-coding/k2p6"
+
+[[agent]]
+name = "codex"
+dir = "beads-doltlite"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "codex"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+[agent.option_defaults]
+model = "gpt-5.5"
+
+[[agent]]
+name = "kimi-for-coding"
+dir = "beads-doltlite"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "kimi-for-coding"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+[agent.option_defaults]
+agent = "build"
+model = "kimi-for-coding/k2p6"
+
+[[agent]]
+name = "codex"
+dir = "context-mode"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "codex"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+[agent.option_defaults]
+model = "gpt-5.5"
+
+[[agent]]
+name = "kimi-for-coding"
+dir = "context-mode"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "kimi-for-coding"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+[agent.option_defaults]
+agent = "build"
+model = "kimi-for-coding/k2p6"
+
+[[agent]]
+name = "codex"
+dir = "t3code"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "codex"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+[agent.option_defaults]
+model = "gpt-5.5"
+
+[[agent]]
+name = "kimi-for-coding"
+dir = "t3code"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "kimi-for-coding"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+[agent.option_defaults]
+agent = "build"
+model = "kimi-for-coding/k2p6"
+
+[[agent]]
+name = "codex"
+dir = "test-rig"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "codex"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+[agent.option_defaults]
+model = "gpt-5.5"
+
+[[agent]]
+name = "kimi-for-coding"
+dir = "test-rig"
+suspended = true
+prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
+provider = "kimi-for-coding"
+max_active_sessions = 5
+min_active_sessions = 0
+default_sling_formula = "mol-do-work"
+wake_mode = "fresh"
+[agent.option_defaults]
+agent = "build"
+model = "kimi-for-coding/k2p6"
+
+[[rigs]]
+name = "gascity"
+suspended = true
+includes = ["../../packs/gastown"]
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = true
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = true
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = true
+
+[[rigs]]
+name = "beads-doltlite"
+prefix = "bd"
+suspended = true
+includes = ["../../packs/gastown"]
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = true
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = true
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = true
+
+[[rigs]]
+name = "context-mode"
+prefix = "ccm"
+suspended = true
+includes = ["../../packs/gastown"]
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = true
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = true
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = true
+
+[[rigs]]
+name = "t3code"
+prefix = "t3"
+suspended = true
+includes = ["../../packs/gastown", "packs/jj"]
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = true
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = true
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = true
+
+[[rigs]]
+name = "test-rig"
+prefix = "tr"
+suspended = false
+includes = ["../../packs/gastown", "packs/jj"]
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = true
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = true
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = true
+
+[[rigs.overrides]]
+agent = "planner"
+suspended = false
+
+[[rigs.overrides]]
+agent = "worker"
+suspended = false
+
+[[rigs.overrides]]
+agent = "lander"
+suspended = false
+
+[[rigs.overrides]]
+agent = "sentinel"
+suspended = false
+
+[patches]
+
+[[patches.agent]]
+dir = ""
+name = "mayor"
+suspended = true
+provider = "codex"
+wake_mode = "resume"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = ""
+name = "deacon"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = ""
+name = "boot"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = ""
+name = "dog"
+suspended = true
+provider = "codex"
+[patches.agent.env]
+GC_MODEL = "gpt-5.4-mini"
+[patches.agent.option_defaults]
+model = "gpt-5.4-mini"
+
+[[patches.agent]]
+dir = "gascity"
+name = "refinery"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "gascity"
+name = "witness"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "gascity"
+name = "polecat"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "beads-doltlite"
+name = "polecat"
+suspended = true
+provider = "codex"
+wake_mode = "fresh"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "beads-doltlite"
+name = "refinery"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "beads-doltlite"
+name = "witness"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "context-mode"
+name = "witness"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "context-mode"
+name = "refinery"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "context-mode"
+name = "polecat"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "t3code"
+name = "witness"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "t3code"
+name = "refinery"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "t3code"
+name = "polecat"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "test-rig"
+name = "witness"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "test-rig"
+name = "refinery"
+suspended = true
+provider = "codex"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "test-rig"
+name = "polecat"
+suspended = true
+provider = "codex"
+wake_mode = "resume"
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "test-rig"
+name = "planner"
+work_dir = ".gc/jj/agents/{{.Rig}}/planner"
+suspended = false
+provider = "codex"
+nudge = "Check mail, then create or refine stack-shaped work beads."
+idle_timeout = "1h"
+wake_mode = "fresh"
+max_active_sessions = 1
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "test-rig"
+name = "worker"
+work_dir = ".gc/jj/agents/{{.Rig}}/workers/{{.AgentBase}}"
+suspended = false
+provider = "codex"
+nudge = "Run gc hook; claim one routed work bead, create a JJ workspace, and submit the change."
+idle_timeout = "2h"
+default_sling_formula = "mol-jj-worker-work"
+wake_mode = "fresh"
+max_active_sessions = 4
+min_active_sessions = 1
+[patches.agent.option_defaults]
+model = "gpt-5.5"
+
+[[patches.agent]]
+dir = "test-rig"
+name = "lander"
+work_dir = ".gc/jj/agents/{{.Rig}}/lander"
+suspended = false
+provider = "kimi-for-coding"
+nudge = "Run gc prime, inspect submitted JJ changes, and land ready work serially."
+idle_timeout = "2h"
+wake_mode = "fresh"
+max_active_sessions = 1
+[patches.agent.option_defaults]
+agent = "build"
+model = "kimi-for-coding/k2p6"
+
+[[patches.agent]]
+dir = "test-rig"
+name = "sentinel"
+work_dir = ".gc/jj/agents/{{.Rig}}/sentinel"
+suspended = false
+provider = "kimi-for-coding"
+nudge = "Run gc prime, inspect JJ workspace health, and repair stuck workflow state."
+idle_timeout = "1h"
+wake_mode = "fresh"
+max_active_sessions = 1
+[patches.agent.option_defaults]
+agent = "build"
+model = "kimi-for-coding/k2p6"
+
+[[patches.agent]]
+dir = ""
+name = "gastown.mayor"
+suspended = false
+
+[[patches.named_session]]
+template = "mayor"
+mode = "always"
+
+[[patches.named_session]]
+template = "deacon"
+mode = "always"
+
+[[patches.named_session]]
+template = "boot"
+mode = "always"
+
+[[patches.named_session]]
+dir = "gascity"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
+dir = "beads-doltlite"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
+dir = "context-mode"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
+dir = "t3code"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
+dir = "test-rig"
+template = "refinery"
+mode = "always"
+
+[[patches.named_session]]
+dir = "test-rig"
+template = "planner"
+mode = "always"
+
+[beads]
+provider = "bd"
+backend = "doltlite"
+
+[session]
+provider = "t3bridge"
+
+[daemon]
+formula_v2 = true
