@@ -37,17 +37,6 @@
         "vitest": "catalog:",
       },
     },
-    "apps/marketing": {
-      "name": "@t3tools/marketing",
-      "version": "0.0.0",
-      "dependencies": {
-        "astro": "^6.0.4",
-      },
-      "devDependencies": {
-        "@astrojs/check": "^0.9.7",
-        "typescript": "catalog:",
-      },
-    },
     "apps/server": {
       "name": "t3",
       "version": "0.0.23",
@@ -791,8 +780,6 @@
     "@t3tools/contracts": ["@t3tools/contracts@workspace:packages/contracts"],
 
     "@t3tools/desktop": ["@t3tools/desktop@workspace:apps/desktop"],
-
-    "@t3tools/marketing": ["@t3tools/marketing@workspace:apps/marketing"],
 
     "@t3tools/oxlint-plugin-t3code": ["@t3tools/oxlint-plugin-t3code@workspace:oxlint-plugin-t3code"],
 
