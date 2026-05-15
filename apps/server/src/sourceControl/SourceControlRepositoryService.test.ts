@@ -8,6 +8,7 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import { GitCommandError, type SourceControlProviderError } from "@t3tools/contracts";
 
 import { ServerConfig } from "../config.ts";
+import type { ExecuteGitResult } from "../git/Services/GitCore.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import type * as SourceControlProvider from "./SourceControlProvider.ts";
 import * as SourceControlProviderRegistry from "./SourceControlProviderRegistry.ts";
@@ -41,8 +42,9 @@ function makeProvider(
   };
 }
 
-function processOutput(): GitVcsDriver.ExecuteGitResult {
+function processOutput(): ExecuteGitResult {
   return {
+    code: 0,
     exitCode: ChildProcessSpawner.ExitCode(0),
     stdout: "",
     stderr: "",

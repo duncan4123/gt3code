@@ -2,7 +2,7 @@ import { assert, describe, it, vi } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import * as GitManager from "./GitManager.ts";
+import { GitManager } from "./Services/GitManager.ts";
 import * as GitWorkflowService from "./GitWorkflowService.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
@@ -15,7 +15,7 @@ function makeLayer(input: { readonly detect: VcsDriverRegistry.VcsDriverRegistry
       }),
     ),
     Layer.provide(Layer.mock(GitVcsDriver.GitVcsDriver)({})),
-    Layer.provide(Layer.mock(GitManager.GitManager)({})),
+    Layer.provide(Layer.mock(GitManager)({})),
   );
 }
 
@@ -90,7 +90,7 @@ describe("GitWorkflowService", () => {
       ),
       Layer.provide(Layer.mock(GitVcsDriver.GitVcsDriver)({})),
       Layer.provide(
-        Layer.mock(GitManager.GitManager)({
+        Layer.mock(GitManager)({
           localStatus,
           remoteStatus,
           status,

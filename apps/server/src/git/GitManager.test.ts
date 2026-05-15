@@ -20,7 +20,7 @@ import type {
 } from "@t3tools/contracts";
 
 import { GitCommandError, TextGenerationError } from "@t3tools/contracts";
-import { type GitManagerShape } from "./GitManager.ts";
+import { type GitManagerShape } from "./Services/GitManager.ts";
 import {
   GitHubCliError,
   type GitHubCliShape,
@@ -28,6 +28,7 @@ import {
   GitHubCli,
 } from "../sourceControl/GitHubCli.ts";
 import { type TextGenerationShape, TextGeneration } from "../textGeneration/TextGeneration.ts";
+import type { ExecuteGitResult } from "./Services/GitCore.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as GitHubSourceControlProvider from "../sourceControl/GitHubSourceControlProvider.ts";
@@ -230,7 +231,7 @@ function runGit(
   allowNonZeroExit = false,
 ): Effect.Effect<
   {
-    readonly exitCode: GitVcsDriver.ExecuteGitResult["exitCode"];
+    readonly exitCode: ExecuteGitResult["exitCode"];
     readonly stdout: string;
     readonly stderr: string;
   },
@@ -651,7 +652,11 @@ function makeManager(input?: {
   ghScenario?: FakeGhScenario;
   textGeneration?: Partial<FakeGitTextGeneration>;
   setupScriptRunner?: ProjectSetupScriptRunnerShape;
-}) {
+}): Effect.Effect<
+  { readonly manager: GitManagerShape; readonly ghCalls: ReadonlyArray<string> },
+  never,
+  never
+> {
   const { service: gitHubCli, ghCalls } = createGitHubCliWithFakeGh(input?.ghScenario);
   const textGeneration = createTextGeneration(input?.textGeneration);
   const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
@@ -694,8 +699,19 @@ function makeManager(input?: {
 
   return makeGitManager().pipe(
     Effect.provide(managerLayer),
-    Effect.map((manager) => ({ manager, ghCalls })),
-  );
+    Effect.map(
+      (
+        manager,
+      ): { readonly manager: GitManagerShape; readonly ghCalls: ReadonlyArray<string> } => ({
+        manager,
+        ghCalls,
+      }),
+    ),
+  ) as Effect.Effect<
+    { readonly manager: GitManagerShape; readonly ghCalls: ReadonlyArray<string> },
+    never,
+    never
+  >;
 }
 
 const asThreadId = (threadId: string) => threadId as ThreadId;
@@ -3238,7 +3254,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           progressReporter: {
             publish: (event) =>
               Effect.sync(() => {
-                events.push(event);
+                events.push(event as GitActionProgressEvent);
               }),
           },
         },
@@ -3301,7 +3317,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           progressReporter: {
             publish: (event) =>
               Effect.sync(() => {
-                events.push(event);
+                events.push(event as GitActionProgressEvent);
               }),
           },
         },
@@ -3371,7 +3387,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           progressReporter: {
             publish: (event) =>
               Effect.sync(() => {
-                events.push(event);
+                events.push(event as GitActionProgressEvent);
               }),
           },
         },
