@@ -2,7 +2,16 @@
 
 ## Task Completion Requirements
 
-- All of `bun fmt`, `bun lint`, and `bun typecheck` must pass before considering tasks completed.
+- Run the smallest verification that matches the change. Do not run full repo
+  gates by default.
+- For docs, ledgers, comments, prompt/config text, or other non-runtime edits,
+  run only the relevant formatter or targeted check.
+- For scoped code changes, prefer targeted package/file checks first. Run full
+  `bun fmt`, `bun lint`, and `bun typecheck` only when the change touches shared
+  contracts, build/workspace wiring, cross-package runtime behavior, or when the
+  user explicitly asks for full gates.
+- If a full gate is likely to take a long time, say so before starting it and
+  explain why it is warranted.
 - NEVER run `bun test`. Always use `bun run test` (runs Vitest).
 
 ## Project Snapshot

@@ -18,6 +18,7 @@ function Input({
   nativeInput = false,
   ...props
 }: InputProps) {
+  const { style, ...nativeProps } = props;
   const inputClassName = cn(
     "h-8.5 w-full min-w-0 rounded-[inherit] px-[calc(--spacing(3)-1px)] leading-8.5 outline-none placeholder:text-muted-foreground/72 sm:h-7.5 sm:leading-7.5 [transition:background-color_5000000s_ease-in-out_0s]",
     size === "sm" && "h-7.5 px-[calc(--spacing(2.5)-1px)] leading-7.5 sm:h-6.5 sm:leading-6.5",
@@ -27,31 +28,6 @@ function Input({
     props.type === "file" &&
       "text-muted-foreground file:me-3 file:bg-transparent file:font-medium file:text-foreground file:text-sm",
   );
-  let inputElement: React.ReactElement;
-
-  if (nativeInput) {
-    const { style, onValueChange: _onValueChange, ...nativeInputProps } = props;
-    const nativeStyle = typeof style === "function" ? undefined : style;
-
-    inputElement = (
-      <input
-        className={inputClassName}
-        data-slot="input"
-        size={typeof size === "number" ? size : undefined}
-        style={nativeStyle}
-        {...(nativeInputProps as React.ComponentProps<"input">)}
-      />
-    );
-  } else {
-    inputElement = (
-      <InputPrimitive
-        className={inputClassName}
-        data-slot="input"
-        size={typeof size === "number" ? size : undefined}
-        {...props}
-      />
-    );
-  }
 
   return (
     <span
@@ -65,7 +41,24 @@ function Input({
       data-size={size}
       data-slot="input-control"
     >
-      {inputElement}
+      {nativeInput ? (
+        <input
+          className={inputClassName}
+          data-slot="input"
+          size={typeof size === "number" ? size : undefined}
+          style={typeof style === "function" ? undefined : style}
+          {...(nativeProps as React.InputHTMLAttributes<HTMLInputElement> &
+            React.RefAttributes<HTMLInputElement>)}
+        />
+      ) : (
+        <InputPrimitive
+          className={inputClassName}
+          data-slot="input"
+          size={typeof size === "number" ? size : undefined}
+          style={style}
+          {...nativeProps}
+        />
+      )}
     </span>
   );
 }
