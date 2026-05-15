@@ -1,13 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, describe, expect } from "@effect/vitest";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
+import { Effect, FileSystem, Layer, Path } from "effect";
 
 import { ServerConfig } from "../../config.ts";
-import * as VcsDriverRegistry from "../../vcs/VcsDriverRegistry.ts";
-import * as VcsProcess from "../../vcs/VcsProcess.ts";
+import { VcsCoreFromGitLive } from "../../vcs/Layers/VcsCore.ts";
+import { GitCoreLive } from "../../vcs/GitVcsDriverCore.ts";
 import { WorkspaceEntries } from "../Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "../Services/WorkspaceFileSystem.ts";
 import { WorkspaceEntriesLive } from "./WorkspaceEntries.ts";
@@ -23,7 +20,8 @@ const TestLayer = Layer.empty.pipe(
   Layer.provideMerge(ProjectLayer),
   Layer.provideMerge(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
   Layer.provideMerge(WorkspacePathsLive),
-  Layer.provideMerge(VcsDriverRegistry.layer.pipe(Layer.provide(VcsProcess.layer))),
+  Layer.provideMerge(VcsCoreFromGitLive.pipe(Layer.provideMerge(GitCoreLive))),
+  Layer.provideMerge(GitCoreLive),
   Layer.provide(
     ServerConfig.layerTest(process.cwd(), {
       prefix: "t3-workspace-files-test-",

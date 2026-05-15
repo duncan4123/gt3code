@@ -206,6 +206,42 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
       Effect.catch(() => Effect.succeed(relativePaths)),
     );
 
+  const browse: WorkspaceEntriesShape["browse"] = (input) =>
+    Effect.tryPromise({
+      try: async () => {
+        const partialPath = input.partialPath.trim();
+        const basePath = input.cwd ?? process.cwd();
+        const expanded =
+          partialPath.startsWith("~") && process.env.HOME
+            ? path.join(process.env.HOME, partialPath.slice(1))
+            : partialPath;
+        const absolutePartial = path.isAbsolute(expanded)
+          ? expanded
+          : path.join(basePath, expanded);
+        const parentPath = partialPath.endsWith(path.sep)
+          ? absolutePartial
+          : path.dirname(absolutePartial);
+        const prefix = partialPath.endsWith(path.sep) ? "" : path.basename(absolutePartial);
+        const dirents = await fsPromises.readdir(parentPath, { withFileTypes: true });
+        const entries = dirents
+          .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix))
+          .slice(0, 100)
+          .map((entry) => ({
+            name: entry.name,
+            fullPath: path.join(parentPath, entry.name),
+          }));
+        return { parentPath, entries };
+      },
+      catch: (cause) =>
+        new WorkspaceEntriesBrowseError({
+          cwd: input.cwd,
+          partialPath: input.partialPath,
+          operation: "WorkspaceEntries.browse",
+          detail: processErrorDetail(cause),
+          cause,
+        }),
+    });
+
   const buildWorkspaceIndexFromVcs = Effect.fn("WorkspaceEntries.buildWorkspaceIndexFromVcs")(
     function* (cwd: string) {
       const vcs = yield* vcsRegistry.detect({ cwd }).pipe(Effect.catch(() => Effect.succeed(null)));

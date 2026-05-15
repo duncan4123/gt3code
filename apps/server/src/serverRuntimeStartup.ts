@@ -7,19 +7,21 @@ import {
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
-import * as Data from "effect/Data";
-import * as Deferred from "effect/Deferred";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Queue from "effect/Queue";
-import * as Ref from "effect/Ref";
-import * as Scope from "effect/Scope";
-import * as Context from "effect/Context";
-import * as Console from "effect/Console";
-import * as DateTime from "effect/DateTime";
+import {
+  Data,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Path,
+  Queue,
+  Ref,
+  Scope,
+  Context,
+  Console,
+} from "effect";
 
 import { ServerConfig } from "./config.ts";
 import { Keybindings } from "./keybindings.ts";
@@ -62,12 +64,19 @@ interface QueuedCommand {
   readonly run: Effect.Effect<void, never>;
 }
 
-type CommandReadinessState = "pending" | "ready" | ServerRuntimeStartupError;
+type CommandReadinessState =
+  | "pending"
+  | "ready"
+  | {
+      readonly tag: "failed" | "shutting-down";
+      readonly error: ServerRuntimeStartupError;
+    };
 
 interface CommandGate {
   readonly awaitCommandReady: Effect.Effect<void, ServerRuntimeStartupError>;
   readonly signalCommandReady: Effect.Effect<void>;
   readonly failCommandReady: (error: ServerRuntimeStartupError) => Effect.Effect<void>;
+  readonly beginShutdown: (error: ServerRuntimeStartupError) => Effect.Effect<void>;
   readonly enqueueCommand: <A, E>(
     effect: Effect.Effect<A, E>,
   ) => Effect.Effect<A, E | ServerRuntimeStartupError>;
@@ -88,6 +97,9 @@ export const makeCommandGate = Effect.gen(function* () {
   );
   yield* Effect.forkScoped(commandWorker);
 
+  const failPendingReadiness = (error: ServerRuntimeStartupError) =>
+    Deferred.fail(commandReady, error).pipe(Effect.ignore);
+
   return {
     awaitCommandReady: Deferred.await(commandReady),
     signalCommandReady: Effect.gen(function* () {
@@ -96,8 +108,26 @@ export const makeCommandGate = Effect.gen(function* () {
     }),
     failCommandReady: (error) =>
       Effect.gen(function* () {
-        yield* Ref.set(commandReadinessState, error);
-        yield* Deferred.fail(commandReady, error).pipe(Effect.orDie);
+        yield* Ref.set(commandReadinessState, { tag: "failed", error });
+        yield* failPendingReadiness(error);
+      }),
+    beginShutdown: (error) =>
+      Effect.gen(function* () {
+        const readinessState = yield* Ref.get(commandReadinessState);
+        if (readinessState === "pending") {
+          yield* Ref.set(commandReadinessState, {
+            tag: "shutting-down",
+            error,
+          });
+          yield* failPendingReadiness(error);
+          return;
+        }
+        if (readinessState === "ready") {
+          yield* Ref.set(commandReadinessState, {
+            tag: "shutting-down",
+            error,
+          });
+        }
       }),
     enqueueCommand: <A, E>(effect: Effect.Effect<A, E>) =>
       Effect.gen(function* () {
@@ -106,7 +136,7 @@ export const makeCommandGate = Effect.gen(function* () {
           return yield* effect;
         }
         if (readinessState !== "pending") {
-          return yield* readinessState;
+          return yield* readinessState.error;
         }
 
         const result = yield* Deferred.make<A, E | ServerRuntimeStartupError>();
@@ -187,7 +217,7 @@ export const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
       let nextProjectDefaultModelSelection: ModelSelection;
 
       if (Option.isNone(existingProject)) {
-        const createdAt = DateTime.formatIso(yield* DateTime.now);
+        const createdAt = new Date().toISOString();
         nextProjectId = ProjectId.make(crypto.randomUUID());
         const bootstrapProjectTitle = path.basename(serverConfig.cwd) || "project";
         nextProjectDefaultModelSelection = getAutoBootstrapDefaultModelSelection();
@@ -209,7 +239,7 @@ export const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
       const existingThreadId =
         yield* projectionReadModelQuery.getFirstActiveThreadIdByProjectId(nextProjectId);
       if (Option.isNone(existingThreadId)) {
-        const createdAt = DateTime.formatIso(yield* DateTime.now);
+        const createdAt = new Date().toISOString();
         const createdThreadId = ThreadId.make(crypto.randomUUID());
         yield* orchestrationEngine.dispatch({
           type: "thread.create",
@@ -290,8 +320,28 @@ export const makeServerRuntimeStartup = Effect.gen(function* () {
   const commandGate = yield* makeCommandGate;
   const httpListening = yield* Deferred.make<void>();
   const reactorScope = yield* Scope.make("sequential");
+  const shutdownError = new ServerRuntimeStartupError({
+    message: "Server is shutting down and is not accepting new commands.",
+  });
 
-  yield* Effect.addFinalizer(() => Scope.close(reactorScope, Exit.void));
+  yield* Effect.addFinalizer(() =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("server runtime shutdown: draining orchestration reactors");
+      yield* commandGate.beginShutdown(shutdownError);
+      yield* orchestrationReactor.drain.pipe(
+        Effect.timeout(Duration.seconds(15)),
+        Effect.catchTag("TimeoutError", () =>
+          Effect.logWarning("server runtime shutdown: timed out draining reactors"),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.logWarning("server runtime shutdown: reactor drain failed", {
+            cause,
+          }),
+        ),
+      );
+      yield* Scope.close(reactorScope, Exit.void);
+    }),
+  );
 
   const startup = Effect.gen(function* () {
     yield* Effect.logDebug("startup phase: starting keybindings runtime");
@@ -406,7 +456,9 @@ export const makeServerRuntimeStartup = Effect.gen(function* () {
           message: "Server runtime startup failed before command readiness.",
           cause: startupExit.cause,
         });
-        yield* Effect.logError("server runtime startup failed", { cause: startupExit.cause });
+        yield* Effect.logError("server runtime startup failed", {
+          cause: startupExit.cause,
+        });
         yield* commandGate.failCommandReady(error);
         return;
       }
@@ -422,7 +474,7 @@ export const makeServerRuntimeStartup = Effect.gen(function* () {
           version: 1,
           type: "ready",
           payload: {
-            at: DateTime.formatIso(yield* DateTime.now),
+            at: new Date().toISOString(),
             environment: yield* serverEnvironment.getDescriptor,
           },
         }),

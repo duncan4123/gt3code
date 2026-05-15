@@ -368,6 +368,7 @@ export const resolveServerConfig = (
       staticDir,
       devUrl,
       noBrowser,
+      authToken: undefined,
       startupPresentation,
       desktopBootstrapToken,
       autoBootstrapProjectFromCwd,

@@ -4,31 +4,20 @@ import {
   EventId,
   type ModelSelection,
   type OrchestrationEvent,
-  ProviderDriverKind,
-  type ProjectId,
+  ProviderDriverKind as ProviderKind,
   type OrchestrationSession,
   ThreadId,
   type ProviderSession,
   type RuntimeMode,
   type TurnId,
 } from "@t3tools/contracts";
-import { isTemporaryWorktreeBranch, WORKTREE_BRANCH_PREFIX } from "@t3tools/shared/git";
-import * as Cache from "effect/Cache";
-import * as Cause from "effect/Cause";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Equal from "effect/Equal";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+import { Cache, Cause, Duration, Effect, Equal, Layer, Option, Schema, Stream } from "effect";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { increment, orchestrationEventsProcessedTotal } from "../../observability/Metrics.ts";
-import { ProviderAdapterRequestError } from "../../provider/Errors.ts";
-import type { ProviderServiceError } from "../../provider/Errors.ts";
-import { TextGeneration } from "../../textGeneration/TextGeneration.ts";
+import { ProviderAdapterRequestError, type ProviderServiceError } from "../../provider/Errors.ts";
+import { TextGeneration } from "../../git/Services/TextGeneration.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
@@ -37,10 +26,7 @@ import {
   type ProviderCommandReactorShape,
 } from "../Services/ProviderCommandReactor.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
-import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
-import { GitWorkflowService } from "../../git/GitWorkflowService.ts";
-const isProviderAdapterRequestError = Schema.is(ProviderAdapterRequestError);
-const isProviderDriverKind = Schema.is(ProviderDriverKind);
+import { VcsCore } from "../../vcs/Services/VcsCore.ts";
 
 type ProviderIntentEvent = Extract<
   OrchestrationEvent,
@@ -87,22 +73,9 @@ const serverCommandId = (tag: string): CommandId =>
 const HANDLED_TURN_START_KEY_MAX = 10_000;
 const HANDLED_TURN_START_KEY_TTL = Duration.minutes(30);
 const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
+const WORKTREE_BRANCH_PREFIX = "t3code";
+const TEMP_WORKTREE_BRANCH_PATTERN = new RegExp(`^${WORKTREE_BRANCH_PREFIX}\\/[0-9a-f]{8}$`);
 const DEFAULT_THREAD_TITLE = "New thread";
-
-export function providerErrorLabel(value: string | undefined): string {
-  const normalized = value?.trim();
-  return normalized && normalized.length > 0 ? normalized : "unknown";
-}
-
-export function providerErrorLabelFromInstanceHint(input: {
-  readonly instanceId?: string | undefined;
-  readonly modelSelectionInstanceId?: string | undefined;
-  readonly sessionProvider?: string | undefined;
-}): string {
-  return providerErrorLabel(
-    input.instanceId ?? input.modelSelectionInstanceId ?? input.sessionProvider,
-  );
-}
 
 function canReplaceThreadTitle(currentTitle: string, titleSeed?: string): boolean {
   const trimmedCurrentTitle = currentTitle.trim();
@@ -116,16 +89,9 @@ function canReplaceThreadTitle(currentTitle: string, titleSeed?: string): boolea
     : false;
 }
 
-function findProviderAdapterRequestError(
-  cause: Cause.Cause<ProviderServiceError>,
-): ProviderAdapterRequestError | undefined {
-  const failReason = cause.reasons.find(Cause.isFailReason);
-  return isProviderAdapterRequestError(failReason?.error) ? failReason.error : undefined;
-}
-
 function isUnknownPendingApprovalRequestError(cause: Cause.Cause<ProviderServiceError>): boolean {
-  const error = findProviderAdapterRequestError(cause);
-  if (error) {
+  const error = Cause.squash(cause);
+  if (Schema.is(ProviderAdapterRequestError)(error)) {
     const detail = error.detail.toLowerCase();
     return (
       detail.includes("unknown pending approval request") ||
@@ -140,8 +106,8 @@ function isUnknownPendingApprovalRequestError(cause: Cause.Cause<ProviderService
 }
 
 function isUnknownPendingUserInputRequestError(cause: Cause.Cause<ProviderServiceError>): boolean {
-  const error = findProviderAdapterRequestError(cause);
-  if (error) {
+  const error = Cause.squash(cause);
+  if (Schema.is(ProviderAdapterRequestError)(error)) {
     return error.detail.toLowerCase().includes("unknown pending user-input request");
   }
   return Cause.pretty(cause).toLowerCase().includes("unknown pending user-input request");
@@ -152,6 +118,10 @@ function stalePendingRequestDetail(
   requestId: string,
 ): string {
   return `Stale pending ${requestKind} request: ${requestId}. Provider callback state does not survive app restarts or recovered sessions. Restart the turn to continue.`;
+}
+
+function isTemporaryWorktreeBranch(branch: string): boolean {
+  return TEMP_WORKTREE_BRANCH_PATTERN.test(branch.trim().toLowerCase());
 }
 
 function buildGeneratedWorktreeBranchName(raw: string): string {
@@ -181,8 +151,7 @@ const make = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
   const providerService = yield* ProviderService;
-  const gitWorkflow = yield* GitWorkflowService;
-  const vcsStatusBroadcaster = yield* VcsStatusBroadcaster;
+  const vcs = yield* VcsCore;
   const textGeneration = yield* TextGeneration;
   const serverSettingsService = yield* ServerSettingsService;
   const handledTurnStartKeys = yield* Cache.make<string, true>({
@@ -233,17 +202,6 @@ const make = Effect.gen(function* () {
       createdAt: input.createdAt,
     });
 
-  const formatFailureDetail = (cause: Cause.Cause<unknown>): string => {
-    const failReason = cause.reasons.find(Cause.isFailReason);
-    const providerError = isProviderAdapterRequestError(failReason?.error)
-      ? failReason.error
-      : undefined;
-    if (providerError) {
-      return providerError.detail;
-    }
-    return Cause.pretty(cause);
-  };
-
   const setThreadSession = (input: {
     readonly threadId: ThreadId;
     readonly session: OrchestrationSession;
@@ -257,36 +215,7 @@ const make = Effect.gen(function* () {
       createdAt: input.createdAt,
     });
 
-  const setThreadSessionErrorOnTurnStartFailure = Effect.fnUntraced(function* (input: {
-    readonly threadId: ThreadId;
-    readonly detail: string;
-    readonly createdAt: string;
-  }) {
-    const thread = yield* resolveThread(input.threadId);
-    const session = thread?.session;
-    if (!session) {
-      return;
-    }
-    yield* setThreadSession({
-      threadId: input.threadId,
-      session: {
-        ...session,
-        status: session.status === "stopped" ? "stopped" : "ready",
-        activeTurnId: null,
-        lastError: input.detail,
-        updatedAt: input.createdAt,
-      },
-      createdAt: input.createdAt,
-    });
-  });
-
-  const resolveProject = Effect.fnUntraced(function* (projectId: ProjectId) {
-    return yield* projectionSnapshotQuery
-      .getProjectShellById(projectId)
-      .pipe(Effect.map(Option.getOrUndefined));
-  });
-
-  const resolveThread = Effect.fnUntraced(function* (threadId: ThreadId) {
+  const resolveThread = Effect.fn("resolveThread")(function* (threadId: ThreadId) {
     return yield* projectionSnapshotQuery
       .getThreadDetailById(threadId)
       .pipe(Effect.map(Option.getOrUndefined));
@@ -305,109 +234,37 @@ const make = Effect.gen(function* () {
     }
 
     const desiredRuntimeMode = thread.runtimeMode;
+    const currentProvider: ProviderKind | undefined = Schema.is(ProviderKind)(
+      thread.session?.providerName,
+    )
+      ? thread.session.providerName
+      : undefined;
     const requestedModelSelection = options?.modelSelection;
+    const currentProviderInstanceId = thread.session?.providerInstanceId;
+    const desiredProviderInstanceId =
+      requestedModelSelection?.instanceId ??
+      currentProviderInstanceId ??
+      thread.modelSelection.instanceId;
+    const desiredModelSelection = requestedModelSelection ?? thread.modelSelection;
+    const shellSnapshot = yield* projectionSnapshotQuery.getShellSnapshot();
+    const effectiveCwd = resolveThreadWorkspaceCwd({
+      thread,
+      projects: shellSnapshot.projects,
+    });
+
     const resolveActiveSession = (threadId: ThreadId) =>
       providerService
         .listSessions()
         .pipe(Effect.map((sessions) => sessions.find((session) => session.threadId === threadId)));
 
-    const activeSession = yield* resolveActiveSession(threadId);
-    const activeThreadSession =
-      thread.session !== null && thread.session.status !== "stopped" && activeSession
-        ? thread.session
-        : null;
-    if (
-      activeThreadSession !== null &&
-      activeSession !== undefined &&
-      (activeThreadSession.providerInstanceId === undefined ||
-        activeSession.providerInstanceId === undefined)
-    ) {
-      return yield* new ProviderAdapterRequestError({
-        provider: providerErrorLabel(activeThreadSession.providerName ?? undefined),
-        method: "thread.turn.start",
-        detail: `Thread '${threadId}' has an active provider session without a provider instance id.`,
-      });
-    }
-    const currentInstanceId =
-      activeThreadSession !== null &&
-      activeSession !== undefined &&
-      activeSession.providerInstanceId !== undefined
-        ? activeSession.providerInstanceId
-        : thread.modelSelection.instanceId;
-    const desiredModelSelection = requestedModelSelection ?? thread.modelSelection;
-    const desiredInstanceId = desiredModelSelection.instanceId;
-    const currentInfo = yield* providerService.getInstanceInfo(currentInstanceId).pipe(
-      Effect.mapError(
-        () =>
-          new ProviderAdapterRequestError({
-            provider: providerErrorLabelFromInstanceHint({
-              instanceId: String(currentInstanceId),
-              modelSelectionInstanceId: String(thread.modelSelection.instanceId),
-              sessionProvider: thread.session?.providerName ?? undefined,
-            }),
-            method: "thread.turn.start",
-            detail: `Thread '${threadId}' references unknown provider instance '${currentInstanceId}'. The instance is not configured in this build.`,
-          }),
-      ),
-    );
-    const desiredInfo = yield* providerService.getInstanceInfo(desiredInstanceId).pipe(
-      Effect.mapError(
-        () =>
-          new ProviderAdapterRequestError({
-            provider: providerErrorLabelFromInstanceHint({
-              instanceId: String(desiredModelSelection.instanceId),
-            }),
-            method: "thread.turn.start",
-            detail: `Requested provider instance '${desiredInstanceId}' is not configured in this build.`,
-          }),
-      ),
-    );
-    const desiredDriverKind = desiredInfo.driverKind;
-    if (!isProviderDriverKind(desiredDriverKind)) {
-      return yield* new ProviderAdapterRequestError({
-        provider: providerErrorLabel(String(desiredDriverKind)),
-        method: "thread.turn.start",
-        detail: `Requested provider instance '${desiredInstanceId}' uses unknown provider driver '${desiredDriverKind}'. The driver is not installed in this build.`,
-      });
-    }
-    const preferredProvider: ProviderDriverKind = desiredDriverKind;
-    if (
-      thread.session !== null &&
-      requestedModelSelection !== undefined &&
-      requestedModelSelection.instanceId !== currentInstanceId
-    ) {
-      if (currentInfo.driverKind !== desiredInfo.driverKind) {
-        return yield* new ProviderAdapterRequestError({
-          provider: preferredProvider,
-          method: "thread.turn.start",
-          detail: `Thread '${threadId}' is bound to driver '${currentInfo.driverKind}' and cannot switch to '${desiredInfo.driverKind}'.`,
-        });
-      }
-      if (
-        currentInfo.continuationIdentity.continuationKey !==
-        desiredInfo.continuationIdentity.continuationKey
-      ) {
-        return yield* new ProviderAdapterRequestError({
-          provider: preferredProvider,
-          method: "thread.turn.start",
-          detail: `Thread '${threadId}' cannot switch from instance '${currentInstanceId}' to '${desiredInstanceId}' because their provider resume state is incompatible.`,
-        });
-      }
-    }
-    const project = yield* resolveProject(thread.projectId);
-    const effectiveCwd = resolveThreadWorkspaceCwd({
-      thread,
-      projects: project ? [project] : [],
-    });
-
     const startProviderSession = (input?: {
       readonly resumeCursor?: unknown;
-      readonly provider?: ProviderDriverKind;
+      readonly provider?: ProviderKind;
     }) =>
       providerService.startSession(threadId, {
         threadId,
-        ...(preferredProvider ? { provider: preferredProvider } : {}),
-        providerInstanceId: desiredInstanceId,
+        ...(currentProvider ? { provider: currentProvider } : {}),
+        providerInstanceId: desiredProviderInstanceId,
         ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
         modelSelection: desiredModelSelection,
         ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
@@ -415,79 +272,68 @@ const make = Effect.gen(function* () {
       });
 
     const bindSessionToThread = (session: ProviderSession) =>
-      Effect.gen(function* () {
-        if (session.providerInstanceId === undefined) {
-          return yield* new ProviderAdapterRequestError({
-            provider: providerErrorLabel(session.provider),
-            method: "thread.turn.start",
-            detail: `Provider session '${session.threadId}' started without a provider instance id.`,
-          });
-        }
-        yield* setThreadSession({
+      setThreadSession({
+        threadId,
+        session: {
           threadId,
-          session: {
-            threadId,
-            status: mapProviderSessionStatusToOrchestrationStatus(session.status),
-            providerName: session.provider,
-            providerInstanceId: session.providerInstanceId,
-            runtimeMode: desiredRuntimeMode,
-            // Provider turn ids are not orchestration turn ids.
-            activeTurnId: null,
-            lastError: session.lastError ?? null,
-            updatedAt: session.updatedAt,
-          },
-          createdAt,
-        });
+          status: mapProviderSessionStatusToOrchestrationStatus(session.status),
+          providerName: session.provider,
+          providerInstanceId: session.providerInstanceId,
+          runtimeMode: desiredRuntimeMode,
+          // Provider turn ids are not orchestration turn ids.
+          activeTurnId: null,
+          lastError: session.lastError ?? null,
+          updatedAt: session.updatedAt,
+        },
+        createdAt,
       });
 
     const existingSessionThreadId =
-      thread.session && thread.session.status !== "stopped" && activeSession ? thread.id : null;
+      thread.session && thread.session.status !== "stopped" ? thread.id : null;
     if (existingSessionThreadId) {
       const runtimeModeChanged = thread.runtimeMode !== thread.session?.runtimeMode;
-      const cwdChanged = effectiveCwd !== activeSession?.cwd;
-      const sessionModelSwitch = (yield* providerService.getCapabilities(desiredInstanceId))
-        .sessionModelSwitch;
+      const providerChanged =
+        requestedModelSelection !== undefined &&
+        requestedModelSelection.instanceId !== currentProviderInstanceId;
+      const activeSession = yield* resolveActiveSession(existingSessionThreadId);
+      const sessionModelSwitch =
+        activeSession?.providerInstanceId === undefined
+          ? "in-session"
+          : (yield* providerService.getCapabilities(activeSession.providerInstanceId))
+              .sessionModelSwitch;
       const modelChanged =
         requestedModelSelection !== undefined &&
         requestedModelSelection.model !== activeSession?.model;
-      const instanceChanged =
-        requestedModelSelection !== undefined &&
-        activeSession?.providerInstanceId !== requestedModelSelection.instanceId;
       const shouldRestartForModelChange = modelChanged && sessionModelSwitch === "unsupported";
       const previousModelSelection = threadModelSelections.get(threadId);
       const shouldRestartForModelSelectionChange =
-        preferredProvider === "claudeAgent" &&
+        currentProvider === "claudeAgent" &&
         requestedModelSelection !== undefined &&
         !Equal.equals(previousModelSelection, requestedModelSelection);
 
       if (
         !runtimeModeChanged &&
-        !cwdChanged &&
-        !instanceChanged &&
+        !providerChanged &&
         !shouldRestartForModelChange &&
         !shouldRestartForModelSelectionChange
       ) {
         return existingSessionThreadId;
       }
 
-      const resumeCursor = shouldRestartForModelChange
-        ? undefined
-        : (activeSession?.resumeCursor ?? undefined);
+      const resumeCursor =
+        providerChanged || shouldRestartForModelChange
+          ? undefined
+          : (activeSession?.resumeCursor ?? undefined);
       yield* Effect.logInfo("provider command reactor restarting provider session", {
         threadId,
         existingSessionThreadId,
-        currentProvider: activeSession?.provider,
-        currentInstanceId,
-        desiredInstanceId,
-        desiredProvider: desiredModelSelection.instanceId,
+        currentProvider,
+        desiredProviderInstanceId: desiredProviderInstanceId,
         currentRuntimeMode: thread.session?.runtimeMode,
         desiredRuntimeMode: thread.runtimeMode,
         runtimeModeChanged,
-        previousCwd: activeSession?.cwd,
-        desiredCwd: effectiveCwd,
-        cwdChanged,
+        providerChanged,
         modelChanged,
-        instanceChanged,
         shouldRestartForModelChange,
         shouldRestartForModelSelectionChange,
         hasResumeCursor: resumeCursor !== undefined,
@@ -501,7 +347,6 @@ const make = Effect.gen(function* () {
         restartedSessionThreadId: restartedSession.threadId,
         provider: restartedSession.provider,
         runtimeMode: restartedSession.runtimeMode,
-        cwd: restartedSession.cwd,
       });
       yield* bindSessionToThread(restartedSession);
       return restartedSession.threadId;
@@ -512,7 +357,7 @@ const make = Effect.gen(function* () {
     return startedSession.threadId;
   });
 
-  const buildSendTurnRequestForThread = Effect.fnUntraced(function* (input: {
+  const sendTurnForThread = Effect.fn("sendTurnForThread")(function* (input: {
     readonly threadId: ThreadId;
     readonly messageText: string;
     readonly attachments?: ReadonlyArray<ChatAttachment>;
@@ -522,9 +367,7 @@ const make = Effect.gen(function* () {
   }) {
     const thread = yield* resolveThread(input.threadId);
     if (!thread) {
-      return yield* Effect.die(
-        new Error(`Thread '${input.threadId}' was not found in read model.`),
-      );
+      return;
     }
     yield* ensureSessionForThread(
       input.threadId,
@@ -542,20 +385,14 @@ const make = Effect.gen(function* () {
         Effect.map((sessions) => sessions.find((session) => session.threadId === input.threadId)),
       );
     const sessionModelSwitch =
-      activeSession === undefined
+      activeSession?.providerInstanceId === undefined
         ? "in-session"
-        : activeSession.providerInstanceId === undefined
-          ? yield* new ProviderAdapterRequestError({
-              provider: providerErrorLabel(activeSession.provider),
-              method: "thread.turn.start",
-              detail: `Active provider session '${activeSession.threadId}' is missing a provider instance id.`,
-            })
-          : (yield* providerService.getCapabilities(activeSession.providerInstanceId))
-              .sessionModelSwitch;
+        : (yield* providerService.getCapabilities(activeSession.providerInstanceId))
+            .sessionModelSwitch;
     const requestedModelSelection =
       input.modelSelection ?? threadModelSelections.get(input.threadId) ?? thread.modelSelection;
     const modelForTurn =
-      sessionModelSwitch === "unsupported" && input.modelSelection === undefined
+      sessionModelSwitch === "unsupported"
         ? activeSession?.model !== undefined
           ? {
               ...requestedModelSelection,
@@ -564,13 +401,13 @@ const make = Effect.gen(function* () {
           : requestedModelSelection
         : input.modelSelection;
 
-    return {
+    yield* providerService.sendTurn({
       threadId: input.threadId,
       ...(normalizedInput ? { input: normalizedInput } : {}),
       ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
-    };
+    });
   });
 
   const maybeGenerateAndRenameWorktreeBranchForFirstTurn = Effect.fn(
@@ -607,7 +444,11 @@ const make = Effect.gen(function* () {
       const targetBranch = buildGeneratedWorktreeBranchName(generated.branch);
       if (targetBranch === oldBranch) return;
 
-      const renamed = yield* gitWorkflow.renameBranch({ cwd, oldBranch, newBranch: targetBranch });
+      const renamed = yield* vcs.renameBranch({
+        cwd,
+        oldBranch,
+        newBranch: targetBranch,
+      });
       yield* orchestrationEngine.dispatch({
         type: "thread.meta.update",
         commandId: serverCommandId("worktree-branch-rename"),
@@ -615,7 +456,6 @@ const make = Effect.gen(function* () {
         branch: renamed.branch,
         worktreePath: cwd,
       });
-      yield* vcsStatusBroadcaster.refreshStatus(cwd).pipe(Effect.ignoreCause({ log: true }));
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("provider command reactor failed to generate or rename worktree branch", {
@@ -702,11 +542,11 @@ const make = Effect.gen(function* () {
     const isFirstUserMessageTurn =
       thread.messages.filter((entry) => entry.role === "user").length === 1;
     if (isFirstUserMessageTurn) {
-      const project = yield* resolveProject(thread.projectId);
+      const shellSnapshot = yield* projectionSnapshotQuery.getShellSnapshot();
       const generationCwd =
         resolveThreadWorkspaceCwd({
           thread,
-          projects: project ? [project] : [],
+          projects: shellSnapshot.projects,
         }) ?? process.cwd();
       const generationInput = {
         messageText: message.text,
@@ -730,43 +570,7 @@ const make = Effect.gen(function* () {
       }
     }
 
-    const handleTurnStartFailure = (cause: Cause.Cause<unknown>) => {
-      if (Cause.hasInterruptsOnly(cause)) {
-        return Effect.void;
-      }
-      const detail = formatFailureDetail(cause);
-      return setThreadSessionErrorOnTurnStartFailure({
-        threadId: event.payload.threadId,
-        detail,
-        createdAt: event.payload.createdAt,
-      }).pipe(
-        Effect.flatMap(() =>
-          appendProviderFailureActivity({
-            threadId: event.payload.threadId,
-            kind: "provider.turn.start.failed",
-            summary: "Provider turn start failed",
-            detail,
-            turnId: null,
-            createdAt: event.payload.createdAt,
-          }),
-        ),
-        Effect.asVoid,
-      );
-    };
-
-    const recoverTurnStartFailure = (cause: Cause.Cause<unknown>) =>
-      handleTurnStartFailure(cause).pipe(
-        Effect.catchCause((recoveryCause) =>
-          Effect.logWarning("provider command reactor failed to recover turn start failure", {
-            eventType: event.type,
-            threadId: event.payload.threadId,
-            cause: Cause.pretty(recoveryCause),
-            originalCause: Cause.pretty(cause),
-          }),
-        ),
-      );
-
-    const sendTurnRequest = yield* buildSendTurnRequestForThread({
+    yield* sendTurnForThread({
       threadId: event.payload.threadId,
       messageText: message.text,
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
@@ -776,17 +580,17 @@ const make = Effect.gen(function* () {
       interactionMode: event.payload.interactionMode,
       createdAt: event.payload.createdAt,
     }).pipe(
-      Effect.map(Option.some),
-      Effect.catchCause((cause) => handleTurnStartFailure(cause).pipe(Effect.as(Option.none()))),
+      Effect.catchCause((cause) =>
+        appendProviderFailureActivity({
+          threadId: event.payload.threadId,
+          kind: "provider.turn.start.failed",
+          summary: "Provider turn start failed",
+          detail: Cause.pretty(cause),
+          turnId: null,
+          createdAt: event.payload.createdAt,
+        }),
+      ),
     );
-
-    if (Option.isNone(sendTurnRequest)) {
-      return;
-    }
-
-    yield* providerService
-      .sendTurn(sendTurnRequest.value)
-      .pipe(Effect.catchCause(recoverTurnStartFailure), Effect.forkScoped);
   });
 
   const processTurnInterruptRequested = Effect.fn("processTurnInterruptRequested")(function* (
@@ -840,16 +644,20 @@ const make = Effect.gen(function* () {
       })
       .pipe(
         Effect.catchCause((cause) =>
-          appendProviderFailureActivity({
-            threadId: event.payload.threadId,
-            kind: "provider.approval.respond.failed",
-            summary: "Provider approval response failed",
-            detail: isUnknownPendingApprovalRequestError(cause)
-              ? stalePendingRequestDetail("approval", event.payload.requestId)
-              : Cause.pretty(cause),
-            turnId: null,
-            createdAt: event.payload.createdAt,
-            requestId: event.payload.requestId,
+          Effect.gen(function* () {
+            yield* appendProviderFailureActivity({
+              threadId: event.payload.threadId,
+              kind: "provider.approval.respond.failed",
+              summary: "Provider approval response failed",
+              detail: isUnknownPendingApprovalRequestError(cause)
+                ? stalePendingRequestDetail("approval", event.payload.requestId)
+                : Cause.pretty(cause),
+              turnId: null,
+              createdAt: event.payload.createdAt,
+              requestId: event.payload.requestId,
+            });
+
+            if (!isUnknownPendingApprovalRequestError(cause)) return;
           }),
         ),
       );

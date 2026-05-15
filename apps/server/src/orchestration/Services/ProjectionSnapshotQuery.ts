@@ -12,15 +12,16 @@ import type {
   OrchestrationProject,
   OrchestrationProjectShell,
   OrchestrationReadModel,
+  OrchestrationSearchThreadMessagesResult,
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadShell,
   ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
-import * as Context from "effect/Context";
-import type * as Option from "effect/Option";
-import type * as Effect from "effect/Effect";
+import { Context } from "effect";
+import type { Option } from "effect";
+import type { Effect } from "effect";
 
 import type { ProjectionRepositoryError } from "../../persistence/Errors.ts";
 
@@ -48,6 +49,11 @@ export interface ProjectionFullThreadDiffContext {
   readonly worktreePath: string | null;
   readonly latestCheckpointTurnCount: number;
   readonly toCheckpointRef: CheckpointRef | null;
+}
+
+export interface ProjectionGcThreadBinding {
+  readonly threadId: ThreadId;
+  readonly projectId: ProjectId;
 }
 
 /**
@@ -78,17 +84,6 @@ export interface ProjectionSnapshotQueryShape {
    * lightweight navigation state without hydrating every thread body.
    */
   readonly getShellSnapshot: () => Effect.Effect<
-    OrchestrationShellSnapshot,
-    ProjectionRepositoryError
-  >;
-
-  /**
-   * Read archived thread shell summaries for the archive page.
-   *
-   * This query is separate from the main shell snapshot so archived threads
-   * are never bootstrapped into normal navigation state.
-   */
-  readonly getArchivedShellSnapshot: () => Effect.Effect<
     OrchestrationShellSnapshot,
     ProjectionRepositoryError
   >;
@@ -157,6 +152,18 @@ export interface ProjectionSnapshotQueryShape {
   readonly getThreadDetailById: (
     threadId: ThreadId,
   ) => Effect.Effect<Option.Option<OrchestrationThread>, ProjectionRepositoryError>;
+
+  /**
+   * Read the newest active thread binding for a GC session name.
+   */
+  readonly getActiveThreadBindingByGcSessionName?: (
+    sessionName: string,
+  ) => Effect.Effect<Option.Option<ProjectionGcThreadBinding>, ProjectionRepositoryError>;
+
+  readonly searchThreadMessages?: (
+    query: string,
+    limit: number,
+  ) => Effect.Effect<OrchestrationSearchThreadMessagesResult, ProjectionRepositoryError>;
 }
 
 /**

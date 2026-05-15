@@ -10,6 +10,7 @@ import { createModelSelection } from "@t3tools/shared/model";
 import { expect } from "vitest";
 
 import { ServerConfig } from "../config.ts";
+import { ServerSettingsService } from "../serverSettings.ts";
 import { type TextGenerationShape } from "./TextGeneration.ts";
 import { sanitizeThreadTitle } from "./TextGenerationUtils.ts";
 import { makeClaudeTextGeneration } from "./ClaudeTextGeneration.ts";
@@ -17,7 +18,10 @@ const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
 const ClaudeTextGenerationTestLayer = ServerConfig.layerTest(process.cwd(), {
   prefix: "t3code-claude-text-generation-test-",
-}).pipe(Layer.provideMerge(NodeServices.layer));
+}).pipe(
+  Layer.provideMerge(ServerSettingsService.layerTest()),
+  Layer.provideMerge(NodeServices.layer),
+);
 
 function makeFakeClaudeBinary(dir: string) {
   return Effect.gen(function* () {

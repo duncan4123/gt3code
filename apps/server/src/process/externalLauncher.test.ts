@@ -252,7 +252,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const lineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "cursor" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "cursor",
+        },
         "darwin",
         { PATH: "" },
       );
@@ -262,7 +265,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const traeLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "trae" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "trae",
+        },
         "darwin",
       );
       assert.deepEqual(traeLineAndColumn, {
@@ -271,7 +277,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const kiroLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "kiro" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "kiro",
+        },
         "darwin",
         { PATH: "" },
       );
@@ -281,7 +290,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const vscodeLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "vscode" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "vscode",
+        },
         "darwin",
         { PATH: "" },
       );
@@ -291,7 +303,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const vscodeInsidersLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "vscode-insiders" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "vscode-insiders",
+        },
         "darwin",
       );
       assert.deepEqual(vscodeInsidersLineAndColumn, {
@@ -300,7 +315,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const vscodiumLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "vscodium" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "vscodium",
+        },
         "darwin",
       );
       assert.deepEqual(vscodiumLineAndColumn, {
@@ -309,7 +327,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const zedLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "zed" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "zed",
+        },
         "darwin",
         { PATH: "" },
       );
@@ -338,7 +359,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const ideaLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "idea" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "idea",
+        },
         "darwin",
       );
       assert.deepEqual(ideaLineAndColumn, {
@@ -347,7 +371,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const aquaLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "aqua" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "aqua",
+        },
         "darwin",
       );
       assert.deepEqual(aquaLineAndColumn, {
@@ -356,7 +383,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const clionLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "clion" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "clion",
+        },
         "darwin",
       );
       assert.deepEqual(clionLineAndColumn, {
@@ -365,7 +395,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const datagripLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "datagrip" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "datagrip",
+        },
         "darwin",
       );
       assert.deepEqual(datagripLineAndColumn, {
@@ -374,7 +407,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const dataspellLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "dataspell" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "dataspell",
+        },
         "darwin",
       );
       assert.deepEqual(dataspellLineAndColumn, {
@@ -383,7 +419,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const golandLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "goland" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "goland",
+        },
         "darwin",
       );
       assert.deepEqual(golandLineAndColumn, {
@@ -392,7 +431,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const phpstormLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "phpstorm" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "phpstorm",
+        },
         "darwin",
       );
       assert.deepEqual(phpstormLineAndColumn, {
@@ -401,7 +443,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const pycharmLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "pycharm" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "pycharm",
+        },
         "darwin",
       );
       assert.deepEqual(pycharmLineAndColumn, {
@@ -410,7 +455,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const riderLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "rider" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "rider",
+        },
         "darwin",
       );
       assert.deepEqual(riderLineAndColumn, {
@@ -419,7 +467,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const rubymineLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "rubymine" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "rubymine",
+        },
         "darwin",
       );
       assert.deepEqual(rubymineLineAndColumn, {
@@ -428,7 +479,10 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
       });
 
       const rustroverLineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "rustrover" },
+        {
+          cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5",
+          editor: "rustrover",
+        },
         "darwin",
       );
       assert.deepEqual(rustroverLineAndColumn, {
@@ -451,7 +505,9 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-external-launcher-test-" });
+      const dir = yield* fs.makeTempDirectoryScoped({
+        prefix: "t3-external-launcher-test-",
+      });
       yield* fs.writeFileString(path.join(dir, "zeditor"), "#!/bin/sh\nexit 0\n");
       yield* fs.chmod(path.join(dir, "zeditor"), 0o755);
 
@@ -664,7 +720,9 @@ it.layer(NodeServices.layer)("isCommandAvailable", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-external-launcher-test-" });
+      const dir = yield* fs.makeTempDirectoryScoped({
+        prefix: "t3-external-launcher-test-",
+      });
       yield* fs.writeFileString(path.join(dir, "code.CMD"), "@echo off\r\n");
       const env = {
         PATH: dir,
@@ -679,14 +737,22 @@ it.layer(NodeServices.layer)("isCommandAvailable", (it) => {
       PATH: "",
       PATHEXT: ".COM;.EXE;.BAT;.CMD",
     } satisfies NodeJS.ProcessEnv;
-    assert.equal(isCommandAvailable("definitely-not-installed", { platform: "win32", env }), false);
+    assert.equal(
+      isCommandAvailable("definitely-not-installed", {
+        platform: "win32",
+        env,
+      }),
+      false,
+    );
   });
 
   it.effect("does not treat bare files without executable extension as available on win32", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-external-launcher-test-" });
+      const dir = yield* fs.makeTempDirectoryScoped({
+        prefix: "t3-external-launcher-test-",
+      });
       yield* fs.writeFileString(path.join(dir, "npm"), "echo nope\r\n");
       const env = {
         PATH: dir,
@@ -700,7 +766,9 @@ it.layer(NodeServices.layer)("isCommandAvailable", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-external-launcher-test-" });
+      const dir = yield* fs.makeTempDirectoryScoped({
+        prefix: "t3-external-launcher-test-",
+      });
       yield* fs.writeFileString(path.join(dir, "my.tool.CMD"), "@echo off\r\n");
       const env = {
         PATH: dir,
@@ -714,8 +782,12 @@ it.layer(NodeServices.layer)("isCommandAvailable", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const firstDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-external-launcher-test-" });
-      const secondDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-external-launcher-test-" });
+      const firstDir = yield* fs.makeTempDirectoryScoped({
+        prefix: "t3-external-launcher-test-",
+      });
+      const secondDir = yield* fs.makeTempDirectoryScoped({
+        prefix: "t3-external-launcher-test-",
+      });
       yield* fs.writeFileString(path.join(firstDir, "code.CMD"), "@echo off\r\n");
       yield* fs.writeFileString(path.join(secondDir, "code.CMD"), "MZ");
       const env = {

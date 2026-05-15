@@ -12,6 +12,7 @@ import { expect } from "vitest";
 import { CodexSettings, ProviderInstanceId, TextGenerationError } from "@t3tools/contracts";
 
 import { ServerConfig } from "../config.ts";
+import { ServerSettingsService } from "../serverSettings.ts";
 import { type TextGenerationShape } from "./TextGeneration.ts";
 import { makeCodexTextGeneration } from "./CodexTextGeneration.ts";
 const decodeCodexSettings = Schema.decodeSync(CodexSettings);
@@ -23,7 +24,10 @@ const DEFAULT_TEST_MODEL_SELECTION = createModelSelection(
 
 const CodexTextGenerationTestLayer = ServerConfig.layerTest(process.cwd(), {
   prefix: "t3code-codex-text-generation-test-",
-}).pipe(Layer.provideMerge(NodeServices.layer));
+}).pipe(
+  Layer.provideMerge(ServerSettingsService.layerTest()),
+  Layer.provideMerge(NodeServices.layer),
+);
 
 function makeFakeCodexBinary(
   dir: string,

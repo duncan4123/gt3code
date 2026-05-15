@@ -10,10 +10,13 @@
  *
  * @module OrchestrationEngineService
  */
-import type { OrchestrationCommand, OrchestrationEvent } from "@t3tools/contracts";
-import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
-import type * as Stream from "effect/Stream";
+import type {
+  OrchestrationCommand,
+  OrchestrationEvent,
+  OrchestrationReadModel,
+} from "@t3tools/contracts";
+import { Context } from "effect";
+import type { Effect, Stream } from "effect";
 
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import type { OrchestrationEventStoreError } from "../../persistence/Errors.ts";
@@ -44,6 +47,11 @@ export interface OrchestrationEngineShape {
   readonly dispatch: (
     command: OrchestrationCommand,
   ) => Effect.Effect<{ sequence: number }, OrchestrationDispatchError, never>;
+
+  /**
+   * Read the current in-memory command read model.
+   */
+  readonly getReadModel: () => Effect.Effect<OrchestrationReadModel, never, never>;
 
   /**
    * Stream persisted domain events in dispatch order.

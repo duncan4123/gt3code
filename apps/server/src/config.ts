@@ -67,6 +67,7 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly staticDir: string | undefined;
   readonly devUrl: URL | undefined;
   readonly noBrowser: boolean;
+  readonly authToken: string | undefined;
   readonly startupPresentation: StartupPresentation;
   readonly desktopBootstrapToken: string | undefined;
   readonly autoBootstrapProjectFromCwd: boolean;
@@ -174,6 +175,7 @@ export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShap
           staticDir: undefined,
           devUrl,
           noBrowser: false,
+          authToken: undefined,
           startupPresentation: "browser",
         } satisfies ServerConfigShape;
       }),
