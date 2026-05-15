@@ -240,7 +240,7 @@ export function BranchToolbarBranchSelector({
     envMode: effectiveEnvMode,
     activeWorktreePath,
     activeThreadBranch,
-    currentGitBranch,
+    currentBranch: currentGitBranch,
   });
   const branchNames = useMemo(() => refs.map((refName) => refName.name), [refs]);
   const branchByName = useMemo(

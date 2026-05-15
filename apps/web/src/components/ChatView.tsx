@@ -335,23 +335,26 @@ function formatOutgoingPrompt(params: {
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
 
-type ChatViewProps =
-  | {
-      environmentId: EnvironmentId;
-      threadId: ThreadId;
-      onDiffPanelOpen?: () => void;
-      reserveTitleBarControlInset?: boolean;
-      routeKind: "server";
-      draftId?: never;
-    }
-  | {
-      environmentId: EnvironmentId;
-      threadId: ThreadId;
-      onDiffPanelOpen?: () => void;
-      reserveTitleBarControlInset?: boolean;
-      routeKind: "draft";
-      draftId: DraftId;
-    };
+type ChatViewCommonProps = {
+  environmentId: EnvironmentId;
+  threadId: ThreadId;
+  onDiffPanelOpen?: () => void;
+  reserveTitleBarControlInset?: boolean;
+  gcOpen?: boolean;
+  onToggleGc?: () => void;
+};
+
+type ChatViewProps = ChatViewCommonProps &
+  (
+    | {
+        routeKind: "server";
+        draftId?: never;
+      }
+    | {
+        routeKind: "draft";
+        draftId: DraftId;
+      }
+  );
 
 interface TerminalLaunchContext {
   threadId: ThreadId;
@@ -611,6 +614,8 @@ export default function ChatView(props: ChatViewProps) {
     routeKind,
     onDiffPanelOpen,
     reserveTitleBarControlInset = true,
+    gcOpen = false,
+    onToggleGc,
   } = props;
   const draftId = routeKind === "draft" ? props.draftId : null;
   const routeThreadRef = useMemo(
@@ -1660,6 +1665,7 @@ export default function ChatView(props: ChatViewProps) {
       : (storeServerTerminalLaunchContext ?? null);
   // Default true while loading to avoid toolbar flicker.
   const isGitRepo = gitStatusQuery.data?.isRepo ?? true;
+  const vcsKind = gitStatusQuery.data?.kind ?? null;
   const terminalShortcutLabelOptions = useMemo(
     () => ({
       context: {
@@ -3517,7 +3523,8 @@ export default function ChatView(props: ChatViewProps) {
           {...(routeKind === "draft" && draftId ? { draftId } : {})}
           activeThreadTitle={activeThread.title}
           activeProjectName={activeProject?.name}
-          isGitRepo={isGitRepo}
+          isVcsRepo={isGitRepo}
+          vcsKind={vcsKind}
           openInCwd={gitCwd}
           activeProjectScripts={activeProject?.scripts}
           preferredScriptId={
@@ -3531,12 +3538,15 @@ export default function ChatView(props: ChatViewProps) {
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
           diffOpen={diffOpen}
+          gcOpen={gcOpen}
+          gcAvailable={onToggleGc !== undefined}
           onRunProjectScript={runProjectScript}
           onAddProjectScript={saveProjectScript}
           onUpdateProjectScript={updateProjectScript}
           onDeleteProjectScript={deleteProjectScript}
           onToggleTerminal={toggleTerminalVisibility}
           onToggleDiff={onToggleDiff}
+          onToggleGc={onToggleGc ?? (() => undefined)}
         />
       </header>
 

@@ -43,9 +43,17 @@ const archivedThreadSnapshotsAtom = Atom.family((environmentKey: string) => {
           if (!api) {
             return null;
           }
+          const getArchivedShellSnapshot = (
+            api.orchestration as typeof api.orchestration & {
+              getArchivedShellSnapshot?: () => Promise<OrchestrationShellSnapshot>;
+            }
+          ).getArchivedShellSnapshot;
+          if (!getArchivedShellSnapshot) {
+            return null;
+          }
           return {
             environmentId,
-            snapshot: await api.orchestration.getArchivedShellSnapshot(),
+            snapshot: await getArchivedShellSnapshot(),
           };
         }),
       );
