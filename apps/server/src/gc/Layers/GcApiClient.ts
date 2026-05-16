@@ -1262,18 +1262,22 @@ const makeGcApiClient = Effect.gen(function* () {
       return cachedCityName;
     }
 
-    const cityPathName = cityPath ? path.basename(cityPath).trim() : "";
-    if (cityPathName) {
-      cachedCityName = cityPathName;
-      return cachedCityName;
-    }
-
     const cities = await fetchJson<unknown>("/v0/cities");
     cachedCityName = resolveGcCityNameFromSupervisorCities({
       raw: cities,
       cityPath,
       preferredName: workspaceName ?? null,
     });
+    if (cachedCityName) {
+      return cachedCityName;
+    }
+
+    const cityPathName = cityPath ? path.basename(cityPath).trim() : "";
+    if (cityPathName) {
+      cachedCityName = cityPathName;
+      return cachedCityName;
+    }
+
     return cachedCityName;
   };
 
