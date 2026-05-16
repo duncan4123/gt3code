@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
+    "plugins": [],
     "types": ["node", "bun"],
     "lib": ["ESNext", "esnext.disposable"]
   },

@@ -2,6 +2,18 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "namespaceImportPackages": ["@effect/platform-node", "effect"],
+        "diagnosticSeverity": {
+          "importFromBarrel": "off",
+          "nodeBuiltinImport": "off",
+          "globalConsole": "off",
+          "globalDate": "off"
+        }
+      }
+    ],
     "types": ["node"],
     "lib": ["ESNext", "esnext.disposable"]
   },

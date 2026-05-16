@@ -8,6 +8,7 @@
     "node_modules",
     "bun.lock",
     "*.tsbuildinfo",
+    "packages/doltlite/source",
     "**/routeTree.gen.ts",
     "apps/web/public/mockServiceWorker.js",
     "apps/web/src/lib/vendor/qrcodegen.ts",
