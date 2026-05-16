@@ -48,6 +48,28 @@ We are not accepting contributions yet.
 
 Observability guide: [docs/observability.md](./docs/observability.md)
 
+## Fork maintenance
+
+This repository is maintained as an independent fork of upstream T3 Code. Our
+canonical product history is `main@origin`; upstream `pingdotgg/t3code` is an
+input source that we periodically integrate.
+
+Jujutsu repo configuration should follow this policy:
+
+```bash
+jj config set --repo git.fetch '["upstream", "origin"]'
+jj config set --repo git.push origin
+jj bookmark track main --remote=origin
+jj bookmark untrack main --remote=upstream
+jj config set --repo 'revset-aliases."trunk()"' main@origin
+```
+
+Do not treat upstream `main` as our trunk. When bringing in upstream changes,
+start from our product branch, create a rescue bookmark, integrate upstream in a
+separate workspace/change, resolve conflicts there, and validate before moving
+our product bookmark forward. This keeps Gas City, bundled config, VCS/JJ, and
+runtime integration work from being reduced to a partial replay stack.
+
 ## If you REALLY want to contribute still.... read this first
 
 Before local development, prepare the environment and install dependencies:
