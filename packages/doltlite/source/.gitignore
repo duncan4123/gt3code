@@ -1,0 +1,10 @@
+build/
+build-fuzz/
+
+# Gas Town (added by gt)
+.beads/
+.runtime/
+.claude/
+.logs/
+__pycache__/
+state.json
