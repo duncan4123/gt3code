@@ -25,6 +25,7 @@ export interface VcsProcessInput {
   readonly timeoutMs?: number;
   readonly maxOutputBytes?: number;
   readonly appendTruncationMarker?: boolean;
+  readonly truncateOutputAtMaxBytes?: boolean;
 }
 
 export interface VcsProcessOutput {

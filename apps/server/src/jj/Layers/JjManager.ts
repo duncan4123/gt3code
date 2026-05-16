@@ -21,7 +21,7 @@ import {
   type GitRunStackedActionOptions,
 } from "../../git/Services/GitManager.ts";
 import { GitHubCli, GitHubCliError } from "../../git/Services/GitHubCli.ts";
-import { TextGeneration } from "../../git/Services/TextGeneration.ts";
+import { TextGeneration } from "../../textGeneration/TextGeneration.ts";
 import { ProjectSetupScriptRunner } from "../../project/Services/ProjectSetupScriptRunner.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { JjCore } from "../Services/JjCore.ts";

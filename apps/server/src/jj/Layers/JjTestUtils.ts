@@ -1,15 +1,20 @@
 import path from "node:path";
 
-import { Data, Effect, FileSystem, PlatformError, Scope } from "effect";
+import { Effect, FileSystem, PlatformError, Scope } from "effect";
 
 import { GitCommandError } from "@t3tools/contracts";
-import { type ProcessRunResult, runProcess } from "../../processRunner.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { JjCore } from "../Services/JjCore.ts";
 
-class JjTestProcessError extends Data.TaggedError("JjTestProcessError")<{
-  readonly cause: unknown;
-}> {}
+class JjTestProcessError extends Error {
+  readonly _tag = "JjTestProcessError";
+  override readonly cause: unknown;
+
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.cause = cause;
+  }
+}
 
 export function makeTempDir(
   prefix: string,
@@ -55,22 +60,36 @@ export function runJj(
   cwd: string,
   args: readonly string[],
   allowNonZeroExit = false,
-): Effect.Effect<ProcessRunResult, JjTestProcessError> {
-  return Effect.tryPromise({
-    try: () =>
-      runProcess("jj", args, {
+): Effect.Effect<
+  { readonly code: number; readonly stdout: string; readonly stderr: string },
+  JjTestProcessError,
+  JjCore
+> {
+  return Effect.gen(function* () {
+    const jjCore = yield* JjCore;
+    return yield* jjCore
+      .execute({
+        operation: "JjTestUtils.runJj",
         cwd,
-        timeoutMs: 30_000,
+        args,
         allowNonZeroExit,
-      }),
-    catch: (cause) => new JjTestProcessError({ cause }),
+        timeoutMs: 30_000,
+      })
+      .pipe(
+        Effect.map((result) => ({
+          code: result.code,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        })),
+        Effect.mapError((cause) => new JjTestProcessError(cause)),
+      );
   });
 }
 
 export function runJjStdout(
   cwd: string,
   args: readonly string[],
-): Effect.Effect<string, JjTestProcessError> {
+): Effect.Effect<string, JjTestProcessError, JjCore> {
   return runJj(cwd, args).pipe(Effect.map((result) => result.stdout.trim()));
 }
 
@@ -146,7 +165,7 @@ export function addRemoteAndPush(
   remoteName: string,
   remoteDir: string,
   bookmark = "main",
-): Effect.Effect<void, Error> {
+): Effect.Effect<void, JjTestProcessError, JjCore> {
   return Effect.gen(function* () {
     yield* runJj(cwd, ["git", "remote", "add", remoteName, remoteDir]);
     // Fetch so jj sees the (empty) remote state, then track + push.
