@@ -7,7 +7,7 @@
  *
  * Source of truth: gascity/internal/runtime/t3bridge/provider.go
  */
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { OrchestrationThreadShell } from "./orchestration.ts";
@@ -198,6 +198,7 @@ export const GcConfigAgent = Schema.Struct({
   name: Schema.String,
   dir: Schema.optional(Schema.String),
   provider: Schema.optional(Schema.String),
+  session_template: Schema.optional(Schema.String),
   is_pool: Schema.optional(Schema.Boolean),
   min_active_sessions: Schema.optional(Schema.Number),
   max_active_sessions: Schema.optional(Schema.Number),
@@ -215,6 +216,14 @@ export const GcConfigRig = Schema.Struct({
   suspended: Schema.Boolean,
 });
 export type GcConfigRig = typeof GcConfigRig.Type;
+
+export const GcLifecycleStatus = Schema.Struct({
+  supervisorRunning: Schema.Boolean,
+  controllerRunning: Schema.Boolean,
+  supervisorPort: Schema.optional(Schema.Number),
+  supervisorUrl: Schema.optional(Schema.String),
+});
+export type GcLifecycleStatus = typeof GcLifecycleStatus.Type;
 
 export const GcConfigProvider = Schema.Struct({
   display_name: Schema.optional(Schema.String),

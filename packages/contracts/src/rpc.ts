@@ -1,8 +1,8 @@
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
-import { OpenError, OpenInEditorInput } from "./editor.ts";
+import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import { AuthAccessStreamEvent } from "./auth.ts";
 import {
   FilesystemBrowseInput,
@@ -11,28 +11,28 @@ import {
 } from "./filesystem.ts";
 import {
   GitActionProgressEvent,
-  GitCheckoutInput,
-  GitCheckoutResult,
+  VcsSwitchRefInput,
+  VcsSwitchRefResult,
   GitCommandError,
-  GitCreateBranchInput,
-  GitCreateBranchResult,
-  GitCreateWorktreeInput,
-  GitCreateWorktreeResult,
-  GitInitInput,
-  GitListBranchesInput,
-  GitListBranchesResult,
+  VcsCreateRefInput,
+  VcsCreateRefResult,
+  VcsCreateWorktreeInput,
+  VcsCreateWorktreeResult,
+  VcsInitInput,
+  VcsListRefsInput,
+  VcsListRefsResult,
   GitManagerServiceError,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
-  GitPullInput,
+  VcsPullInput,
   GitPullRequestRefInput,
-  GitPullResult,
-  GitRemoveWorktreeInput,
+  VcsPullResult,
+  VcsRemoveWorktreeInput,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
-  GitStatusInput,
-  GitStatusResult,
-  GitStatusStreamEvent,
+  VcsStatusInput,
+  VcsStatusResult,
+  VcsStatusStreamEvent,
 } from "./git.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
@@ -47,8 +47,8 @@ import {
   OrchestrationReplayEventsError,
   OrchestrationReplayEventsInput,
   OrchestrationRpcSchemas,
-  OrchestrationSearchThreadMessagesError,
 } from "./orchestration.ts";
+import { ProviderInstanceId } from "./providerInstance.ts";
 import {
   ProjectSearchEntriesError,
   ProjectSearchEntriesInput,
@@ -71,12 +71,33 @@ import {
 import {
   ServerConfigStreamEvent,
   ServerConfig,
+  ServerProviderUpdateError,
+  ServerProviderUpdateInput,
   ServerLifecycleStreamEvent,
+  ServerRemoveKeybindingInput,
+  ServerRemoveKeybindingResult,
   ServerProviderUpdatedPayload,
+  ServerTraceDiagnosticsResult,
+  ServerProcessDiagnosticsResult,
+  ServerProcessResourceHistoryInput,
+  ServerProcessResourceHistoryResult,
+  ServerSignalProcessInput,
+  ServerSignalProcessResult,
   ServerUpsertKeybindingInput,
   ServerUpsertKeybindingResult,
 } from "./server.ts";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
+import {
+  SourceControlCloneRepositoryInput,
+  SourceControlCloneRepositoryResult,
+  SourceControlDiscoveryResult,
+  SourceControlPublishRepositoryInput,
+  SourceControlPublishRepositoryResult,
+  SourceControlRepositoryError,
+  SourceControlRepositoryInfo,
+  SourceControlRepositoryLookupInput,
+} from "./sourceControl.ts";
+import { VcsError } from "./vcs.ts";
 import {
   GcConfigResult,
   GcFindThreadBindingError,
@@ -95,14 +116,14 @@ import {
   GcSetAgentMinActiveSessionsInput,
   GcSetAgentSessionModeError,
   GcSetAgentSessionModeInput,
-  GcSetAgentSuspendedInput,
   GcSetAgentSuspendedError,
+  GcSetAgentSuspendedInput,
   GcSetAgentWakeModeError,
   GcSetAgentWakeModeInput,
   GcSetCitySuspendedError,
   GcSetCitySuspendedInput,
-  GcSetRigSuspendedInput,
   GcSetRigSuspendedError,
+  GcSetRigSuspendedInput,
   GcStopSessionError,
   GcStopSessionInput,
   GcSubmitSessionError,
@@ -125,16 +146,18 @@ export const WS_METHODS = {
   // Filesystem methods
   filesystemBrowse: "filesystem.browse",
 
-  // Git methods
-  gitPull: "git.pull",
-  gitRefreshStatus: "git.refreshStatus",
+  // VCS methods
+  vcsPull: "vcs.pull",
+  vcsRefreshStatus: "vcs.refreshStatus",
+  vcsListRefs: "vcs.listRefs",
+  vcsCreateWorktree: "vcs.createWorktree",
+  vcsRemoveWorktree: "vcs.removeWorktree",
+  vcsCreateRef: "vcs.createRef",
+  vcsSwitchRef: "vcs.switchRef",
+  vcsInit: "vcs.init",
+
+  // Git workflow methods
   gitRunStackedAction: "git.runStackedAction",
-  gitListBranches: "git.listBranches",
-  gitCreateWorktree: "git.createWorktree",
-  gitRemoveWorktree: "git.removeWorktree",
-  gitCreateBranch: "git.createBranch",
-  gitCheckout: "git.checkout",
-  gitInit: "git.init",
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestThread: "git.preparePullRequestThread",
 
@@ -149,9 +172,21 @@ export const WS_METHODS = {
   // Server meta
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
+  serverUpdateProvider: "server.updateProvider",
   serverUpsertKeybinding: "server.upsertKeybinding",
+  serverRemoveKeybinding: "server.removeKeybinding",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
+  serverDiscoverSourceControl: "server.discoverSourceControl",
+  serverGetTraceDiagnostics: "server.getTraceDiagnostics",
+  serverGetProcessDiagnostics: "server.getProcessDiagnostics",
+  serverGetProcessResourceHistory: "server.getProcessResourceHistory",
+  serverSignalProcess: "server.signalProcess",
+
+  // Source control methods
+  sourceControlLookupRepository: "sourceControl.lookupRepository",
+  sourceControlCloneRepository: "sourceControl.cloneRepository",
+  sourceControlPublishRepository: "sourceControl.publishRepository",
 
   // Gas City
   gcGetConfig: "gc.getConfig",
@@ -169,7 +204,7 @@ export const WS_METHODS = {
   gcSetRigSuspended: "gc.setRigSuspended",
 
   // Streaming subscriptions
-  subscribeGitStatus: "subscribeGitStatus",
+  subscribeVcsStatus: "subscribeVcsStatus",
   subscribeTerminalEvents: "subscribeTerminalEvents",
   subscribeServerConfig: "subscribeServerConfig",
   subscribeServerLifecycle: "subscribeServerLifecycle",
@@ -182,6 +217,12 @@ export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybi
   error: KeybindingsConfigError,
 });
 
+export const WsServerRemoveKeybindingRpc = Rpc.make(WS_METHODS.serverRemoveKeybinding, {
+  payload: ServerRemoveKeybindingInput,
+  success: ServerRemoveKeybindingResult,
+  error: KeybindingsConfigError,
+});
+
 export const WsServerGetConfigRpc = Rpc.make(WS_METHODS.serverGetConfig, {
   payload: Schema.Struct({}),
   success: ServerConfig,
@@ -189,8 +230,22 @@ export const WsServerGetConfigRpc = Rpc.make(WS_METHODS.serverGetConfig, {
 });
 
 export const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProviders, {
-  payload: Schema.Struct({}),
+  payload: Schema.Struct({
+    /**
+     * When supplied, only refresh this specific provider instance. When
+     * omitted, refresh all configured instances — the legacy `refresh()`
+     * behaviour retained for transports that still dispatch untargeted
+     * refreshes.
+     */
+    instanceId: Schema.optional(ProviderInstanceId),
+  }),
   success: ServerProviderUpdatedPayload,
+});
+
+export const WsServerUpdateProviderRpc = Rpc.make(WS_METHODS.serverUpdateProvider, {
+  payload: ServerProviderUpdateInput,
+  success: ServerProviderUpdatedPayload,
+  error: ServerProviderUpdateError,
 });
 
 export const WsServerGetSettingsRpc = Rpc.make(WS_METHODS.serverGetSettings, {
@@ -203,6 +258,136 @@ export const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSetting
   payload: Schema.Struct({ patch: ServerSettingsPatch }),
   success: ServerSettings,
   error: ServerSettingsError,
+});
+
+export const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
+  payload: Schema.Struct({}),
+  success: SourceControlDiscoveryResult,
+});
+
+export const WsServerGetTraceDiagnosticsRpc = Rpc.make(WS_METHODS.serverGetTraceDiagnostics, {
+  payload: Schema.Struct({}),
+  success: ServerTraceDiagnosticsResult,
+});
+
+export const WsServerGetProcessDiagnosticsRpc = Rpc.make(WS_METHODS.serverGetProcessDiagnostics, {
+  payload: Schema.Struct({}),
+  success: ServerProcessDiagnosticsResult,
+});
+
+export const WsServerGetProcessResourceHistoryRpc = Rpc.make(
+  WS_METHODS.serverGetProcessResourceHistory,
+  {
+    payload: ServerProcessResourceHistoryInput,
+    success: ServerProcessResourceHistoryResult,
+  },
+);
+
+export const WsServerSignalProcessRpc = Rpc.make(WS_METHODS.serverSignalProcess, {
+  payload: ServerSignalProcessInput,
+  success: ServerSignalProcessResult,
+});
+
+export const WsSourceControlLookupRepositoryRpc = Rpc.make(
+  WS_METHODS.sourceControlLookupRepository,
+  {
+    payload: SourceControlRepositoryLookupInput,
+    success: SourceControlRepositoryInfo,
+    error: SourceControlRepositoryError,
+  },
+);
+
+export const WsSourceControlCloneRepositoryRpc = Rpc.make(WS_METHODS.sourceControlCloneRepository, {
+  payload: SourceControlCloneRepositoryInput,
+  success: SourceControlCloneRepositoryResult,
+  error: SourceControlRepositoryError,
+});
+
+export const WsSourceControlPublishRepositoryRpc = Rpc.make(
+  WS_METHODS.sourceControlPublishRepository,
+  {
+    payload: SourceControlPublishRepositoryInput,
+    success: SourceControlPublishRepositoryResult,
+    error: SourceControlRepositoryError,
+  },
+);
+
+export const WsGcGetConfigRpc = Rpc.make(WS_METHODS.gcGetConfig, {
+  payload: GcGetConfigInput,
+  success: GcConfigResult,
+  error: GcGetConfigError,
+});
+
+export const WsGcFindThreadBindingRpc = Rpc.make(WS_METHODS.gcFindThreadBinding, {
+  payload: GcFindThreadBindingInput,
+  success: GcFindThreadBindingResult,
+  error: GcFindThreadBindingError,
+});
+
+export const WsGcGetThreadContextRpc = Rpc.make(WS_METHODS.gcGetThreadContext, {
+  payload: GcGetThreadContextInput,
+  success: GcThreadContextResult,
+  error: GcGetThreadContextError,
+});
+
+export const WsGcSubmitSessionRpc = Rpc.make(WS_METHODS.gcSubmitSession, {
+  payload: GcSubmitSessionInput,
+  success: GcSubmitSessionResult,
+  error: GcSubmitSessionError,
+});
+
+export const WsGcStopSessionRpc = Rpc.make(WS_METHODS.gcStopSession, {
+  payload: GcStopSessionInput,
+  success: GcSessionActionResult,
+  error: GcStopSessionError,
+});
+
+export const WsGcRespondToPendingRpc = Rpc.make(WS_METHODS.gcRespondToPending, {
+  payload: GcRespondToPendingInput,
+  success: GcSessionActionResult,
+  error: GcRespondToPendingError,
+});
+
+export const WsGcSetAgentSuspendedRpc = Rpc.make(WS_METHODS.gcSetAgentSuspended, {
+  payload: GcSetAgentSuspendedInput,
+  success: GcSessionActionResult,
+  error: GcSetAgentSuspendedError,
+});
+
+export const WsGcSetAgentMaxActiveSessionsRpc = Rpc.make(WS_METHODS.gcSetAgentMaxActiveSessions, {
+  payload: GcSetAgentMaxActiveSessionsInput,
+  success: GcSessionActionResult,
+  error: GcSetAgentMaxActiveSessionsError,
+});
+
+export const WsGcSetAgentMinActiveSessionsRpc = Rpc.make(WS_METHODS.gcSetAgentMinActiveSessions, {
+  payload: GcSetAgentMinActiveSessionsInput,
+  success: GcSessionActionResult,
+  error: GcSetAgentMinActiveSessionsError,
+});
+
+export const WsGcSetAgentWakeModeRpc = Rpc.make(WS_METHODS.gcSetAgentWakeMode, {
+  payload: GcSetAgentWakeModeInput,
+  success: GcSessionActionResult,
+  error: GcSetAgentWakeModeError,
+});
+
+export const WsGcSetAgentSessionModeRpc = Rpc.make(WS_METHODS.gcSetAgentSessionMode, {
+  payload: GcSetAgentSessionModeInput,
+  success: GcSessionActionResult,
+  error: GcSetAgentSessionModeError,
+});
+
+export const WsGcSetCitySuspendedRpc = Rpc.make(WS_METHODS.gcSetCitySuspended, {
+  payload: GcSetCitySuspendedInput,
+  success: GcSessionActionResult,
+  error: GcSetCitySuspendedError,
+});
+
+export const WsGcSetRigSuspendedRpc = Rpc.make(WS_METHODS.gcSetRigSuspended, {
+  payload: GcSetRigSuspendedInput,
+  success: GcSessionActionResult,
+  error: GcSetRigSuspendedError,
 });
 
 export const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntries, {
@@ -218,8 +403,8 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
-  payload: OpenInEditorInput,
-  error: OpenError,
+  payload: LaunchEditorInput,
+  error: ExternalLauncherError,
 });
 
 export const WsFilesystemBrowseRpc = Rpc.make(WS_METHODS.filesystemBrowse, {
@@ -228,22 +413,22 @@ export const WsFilesystemBrowseRpc = Rpc.make(WS_METHODS.filesystemBrowse, {
   error: FilesystemBrowseError,
 });
 
-export const WsSubscribeGitStatusRpc = Rpc.make(WS_METHODS.subscribeGitStatus, {
-  payload: GitStatusInput,
-  success: GitStatusStreamEvent,
+export const WsSubscribeVcsStatusRpc = Rpc.make(WS_METHODS.subscribeVcsStatus, {
+  payload: VcsStatusInput,
+  success: VcsStatusStreamEvent,
   error: GitManagerServiceError,
   stream: true,
 });
 
-export const WsGitPullRpc = Rpc.make(WS_METHODS.gitPull, {
-  payload: GitPullInput,
-  success: GitPullResult,
+export const WsVcsPullRpc = Rpc.make(WS_METHODS.vcsPull, {
+  payload: VcsPullInput,
+  success: VcsPullResult,
   error: GitCommandError,
 });
 
-export const WsGitRefreshStatusRpc = Rpc.make(WS_METHODS.gitRefreshStatus, {
-  payload: GitStatusInput,
-  success: GitStatusResult,
+export const WsVcsRefreshStatusRpc = Rpc.make(WS_METHODS.vcsRefreshStatus, {
+  payload: VcsStatusInput,
+  success: VcsStatusResult,
   error: GitManagerServiceError,
 });
 
@@ -266,38 +451,38 @@ export const WsGitPreparePullRequestThreadRpc = Rpc.make(WS_METHODS.gitPreparePu
   error: GitManagerServiceError,
 });
 
-export const WsGitListBranchesRpc = Rpc.make(WS_METHODS.gitListBranches, {
-  payload: GitListBranchesInput,
-  success: GitListBranchesResult,
+export const WsVcsListRefsRpc = Rpc.make(WS_METHODS.vcsListRefs, {
+  payload: VcsListRefsInput,
+  success: VcsListRefsResult,
   error: GitCommandError,
 });
 
-export const WsGitCreateWorktreeRpc = Rpc.make(WS_METHODS.gitCreateWorktree, {
-  payload: GitCreateWorktreeInput,
-  success: GitCreateWorktreeResult,
+export const WsVcsCreateWorktreeRpc = Rpc.make(WS_METHODS.vcsCreateWorktree, {
+  payload: VcsCreateWorktreeInput,
+  success: VcsCreateWorktreeResult,
   error: GitCommandError,
 });
 
-export const WsGitRemoveWorktreeRpc = Rpc.make(WS_METHODS.gitRemoveWorktree, {
-  payload: GitRemoveWorktreeInput,
+export const WsVcsRemoveWorktreeRpc = Rpc.make(WS_METHODS.vcsRemoveWorktree, {
+  payload: VcsRemoveWorktreeInput,
   error: GitCommandError,
 });
 
-export const WsGitCreateBranchRpc = Rpc.make(WS_METHODS.gitCreateBranch, {
-  payload: GitCreateBranchInput,
-  success: GitCreateBranchResult,
+export const WsVcsCreateRefRpc = Rpc.make(WS_METHODS.vcsCreateRef, {
+  payload: VcsCreateRefInput,
+  success: VcsCreateRefResult,
   error: GitCommandError,
 });
 
-export const WsGitCheckoutRpc = Rpc.make(WS_METHODS.gitCheckout, {
-  payload: GitCheckoutInput,
-  success: GitCheckoutResult,
+export const WsVcsSwitchRefRpc = Rpc.make(WS_METHODS.vcsSwitchRef, {
+  payload: VcsSwitchRefInput,
+  success: VcsSwitchRefResult,
   error: GitCommandError,
 });
 
-export const WsGitInitRpc = Rpc.make(WS_METHODS.gitInit, {
-  payload: GitInitInput,
-  error: GitCommandError,
+export const WsVcsInitRpc = Rpc.make(WS_METHODS.vcsInit, {
+  payload: VcsInitInput,
+  error: VcsError,
 });
 
 export const WsTerminalOpenRpc = Rpc.make(WS_METHODS.terminalOpen, {
@@ -341,12 +526,6 @@ export const WsOrchestrationDispatchCommandRpc = Rpc.make(
   },
 );
 
-export const WsOrchestrationGetSnapshotRpc = Rpc.make(ORCHESTRATION_WS_METHODS.getSnapshot, {
-  payload: OrchestrationRpcSchemas.getSnapshot.input,
-  success: OrchestrationRpcSchemas.getSnapshot.output,
-  error: OrchestrationGetSnapshotError,
-});
-
 export const WsOrchestrationGetTurnDiffRpc = Rpc.make(ORCHESTRATION_WS_METHODS.getTurnDiff, {
   payload: OrchestrationGetTurnDiffInput,
   success: OrchestrationRpcSchemas.getTurnDiff.output,
@@ -368,12 +547,12 @@ export const WsOrchestrationReplayEventsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.
   error: OrchestrationReplayEventsError,
 });
 
-export const WsOrchestrationSearchThreadMessagesRpc = Rpc.make(
-  ORCHESTRATION_WS_METHODS.searchThreadMessages,
+export const WsOrchestrationGetArchivedShellSnapshotRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot,
   {
-    payload: OrchestrationRpcSchemas.searchThreadMessages.input,
-    success: OrchestrationRpcSchemas.searchThreadMessages.output,
-    error: OrchestrationSearchThreadMessagesError,
+    payload: OrchestrationRpcSchemas.getArchivedShellSnapshot.input,
+    success: OrchestrationRpcSchemas.getArchivedShellSnapshot.output,
+    error: OrchestrationGetSnapshotError,
   },
 );
 
@@ -413,84 +592,6 @@ export const WsSubscribeServerLifecycleRpc = Rpc.make(WS_METHODS.subscribeServer
   stream: true,
 });
 
-export const WsGcGetThreadContextRpc = Rpc.make(WS_METHODS.gcGetThreadContext, {
-  payload: GcGetThreadContextInput,
-  success: GcThreadContextResult,
-  error: GcGetThreadContextError,
-});
-
-export const WsGcGetConfigRpc = Rpc.make(WS_METHODS.gcGetConfig, {
-  payload: GcGetConfigInput,
-  success: GcConfigResult,
-  error: GcGetConfigError,
-});
-
-export const WsGcFindThreadBindingRpc = Rpc.make(WS_METHODS.gcFindThreadBinding, {
-  payload: GcFindThreadBindingInput,
-  success: GcFindThreadBindingResult,
-  error: GcFindThreadBindingError,
-});
-
-export const WsGcSubmitSessionRpc = Rpc.make(WS_METHODS.gcSubmitSession, {
-  payload: GcSubmitSessionInput,
-  success: GcSubmitSessionResult,
-  error: GcSubmitSessionError,
-});
-
-export const WsGcStopSessionRpc = Rpc.make(WS_METHODS.gcStopSession, {
-  payload: GcStopSessionInput,
-  success: GcSessionActionResult,
-  error: GcStopSessionError,
-});
-
-export const WsGcRespondToPendingRpc = Rpc.make(WS_METHODS.gcRespondToPending, {
-  payload: GcRespondToPendingInput,
-  success: GcSessionActionResult,
-  error: GcRespondToPendingError,
-});
-
-export const WsGcSetAgentSuspendedRpc = Rpc.make(WS_METHODS.gcSetAgentSuspended, {
-  payload: GcSetAgentSuspendedInput,
-  success: GcConfigResult,
-  error: GcSetAgentSuspendedError,
-});
-
-export const WsGcSetAgentMaxActiveSessionsRpc = Rpc.make(WS_METHODS.gcSetAgentMaxActiveSessions, {
-  payload: GcSetAgentMaxActiveSessionsInput,
-  success: GcConfigResult,
-  error: GcSetAgentMaxActiveSessionsError,
-});
-
-export const WsGcSetAgentMinActiveSessionsRpc = Rpc.make(WS_METHODS.gcSetAgentMinActiveSessions, {
-  payload: GcSetAgentMinActiveSessionsInput,
-  success: GcConfigResult,
-  error: GcSetAgentMinActiveSessionsError,
-});
-
-export const WsGcSetAgentWakeModeRpc = Rpc.make(WS_METHODS.gcSetAgentWakeMode, {
-  payload: GcSetAgentWakeModeInput,
-  success: GcConfigResult,
-  error: GcSetAgentWakeModeError,
-});
-
-export const WsGcSetAgentSessionModeRpc = Rpc.make(WS_METHODS.gcSetAgentSessionMode, {
-  payload: GcSetAgentSessionModeInput,
-  success: GcConfigResult,
-  error: GcSetAgentSessionModeError,
-});
-
-export const WsGcSetRigSuspendedRpc = Rpc.make(WS_METHODS.gcSetRigSuspended, {
-  payload: GcSetRigSuspendedInput,
-  success: GcConfigResult,
-  error: GcSetRigSuspendedError,
-});
-
-export const WsGcSetCitySuspendedRpc = Rpc.make(WS_METHODS.gcSetCitySuspended, {
-  payload: GcSetCitySuspendedInput,
-  success: GcConfigResult,
-  error: GcSetCitySuspendedError,
-});
-
 export const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess, {
   payload: Schema.Struct({}),
   success: AuthAccessStreamEvent,
@@ -500,43 +601,19 @@ export const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess,
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
+  WsServerUpdateProviderRpc,
   WsServerUpsertKeybindingRpc,
+  WsServerRemoveKeybindingRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
-  WsProjectsSearchEntriesRpc,
-  WsProjectsWriteFileRpc,
-  WsShellOpenInEditorRpc,
-  WsFilesystemBrowseRpc,
-  WsSubscribeGitStatusRpc,
-  WsGitPullRpc,
-  WsGitRefreshStatusRpc,
-  WsGitRunStackedActionRpc,
-  WsGitResolvePullRequestRpc,
-  WsGitPreparePullRequestThreadRpc,
-  WsGitListBranchesRpc,
-  WsGitCreateWorktreeRpc,
-  WsGitRemoveWorktreeRpc,
-  WsGitCreateBranchRpc,
-  WsGitCheckoutRpc,
-  WsGitInitRpc,
-  WsTerminalOpenRpc,
-  WsTerminalWriteRpc,
-  WsTerminalResizeRpc,
-  WsTerminalClearRpc,
-  WsTerminalRestartRpc,
-  WsTerminalCloseRpc,
-  WsSubscribeTerminalEventsRpc,
-  WsSubscribeServerConfigRpc,
-  WsSubscribeServerLifecycleRpc,
-  WsSubscribeAuthAccessRpc,
-  WsOrchestrationDispatchCommandRpc,
-  WsOrchestrationGetSnapshotRpc,
-  WsOrchestrationGetTurnDiffRpc,
-  WsOrchestrationGetFullThreadDiffRpc,
-  WsOrchestrationReplayEventsRpc,
-  WsOrchestrationSearchThreadMessagesRpc,
-  WsOrchestrationSubscribeShellRpc,
-  WsOrchestrationSubscribeThreadRpc,
+  WsServerDiscoverSourceControlRpc,
+  WsServerGetTraceDiagnosticsRpc,
+  WsServerGetProcessDiagnosticsRpc,
+  WsServerGetProcessResourceHistoryRpc,
+  WsServerSignalProcessRpc,
+  WsSourceControlLookupRepositoryRpc,
+  WsSourceControlCloneRepositoryRpc,
+  WsSourceControlPublishRepositoryRpc,
   WsGcGetConfigRpc,
   WsGcFindThreadBindingRpc,
   WsGcGetThreadContextRpc,
@@ -550,4 +627,37 @@ export const WsRpcGroup = RpcGroup.make(
   WsGcSetAgentSessionModeRpc,
   WsGcSetCitySuspendedRpc,
   WsGcSetRigSuspendedRpc,
+  WsProjectsSearchEntriesRpc,
+  WsProjectsWriteFileRpc,
+  WsShellOpenInEditorRpc,
+  WsFilesystemBrowseRpc,
+  WsSubscribeVcsStatusRpc,
+  WsVcsPullRpc,
+  WsVcsRefreshStatusRpc,
+  WsGitRunStackedActionRpc,
+  WsGitResolvePullRequestRpc,
+  WsGitPreparePullRequestThreadRpc,
+  WsVcsListRefsRpc,
+  WsVcsCreateWorktreeRpc,
+  WsVcsRemoveWorktreeRpc,
+  WsVcsCreateRefRpc,
+  WsVcsSwitchRefRpc,
+  WsVcsInitRpc,
+  WsTerminalOpenRpc,
+  WsTerminalWriteRpc,
+  WsTerminalResizeRpc,
+  WsTerminalClearRpc,
+  WsTerminalRestartRpc,
+  WsTerminalCloseRpc,
+  WsSubscribeTerminalEventsRpc,
+  WsSubscribeServerConfigRpc,
+  WsSubscribeServerLifecycleRpc,
+  WsSubscribeAuthAccessRpc,
+  WsOrchestrationDispatchCommandRpc,
+  WsOrchestrationGetTurnDiffRpc,
+  WsOrchestrationGetFullThreadDiffRpc,
+  WsOrchestrationReplayEventsRpc,
+  WsOrchestrationGetArchivedShellSnapshotRpc,
+  WsOrchestrationSubscribeShellRpc,
+  WsOrchestrationSubscribeThreadRpc,
 );
