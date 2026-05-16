@@ -1,0 +1,29 @@
+{
+  "name": "@t3tools/beads-doltlite",
+  "version": "0.0.0-alpha.1",
+  "private": true,
+  "files": [
+    "bin",
+    "source",
+    "src",
+    "scripts"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "doltlite": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}
