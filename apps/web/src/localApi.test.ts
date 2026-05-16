@@ -299,6 +299,7 @@ const baseServerConfig: ServerConfig = {
 };
 
 const baseGitStatus: VcsStatusResult = {
+  kind: "git",
   isRepo: true,
   hasPrimaryRemote: true,
   isDefaultRef: false,
@@ -612,6 +613,7 @@ describe("wsApi", () => {
         "environment-local:/tmp/project": "separate" as const,
       },
       sidebarProjectSortOrder: "manual" as const,
+      sidebarGcThreadGroupingMode: "agent" as const,
       sidebarThreadSortOrder: "created_at" as const,
       sidebarThreadPreviewCount: 6,
       timestampFormat: "24-hour" as const,
@@ -675,6 +677,7 @@ describe("wsApi", () => {
         "environment-local:/tmp/project": "separate" as const,
       },
       sidebarProjectSortOrder: "manual" as const,
+      sidebarGcThreadGroupingMode: "agent" as const,
       sidebarThreadSortOrder: "created_at" as const,
       sidebarThreadPreviewCount: 6,
       timestampFormat: "24-hour" as const,

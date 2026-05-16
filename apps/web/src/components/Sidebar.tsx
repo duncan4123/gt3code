@@ -41,6 +41,8 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   type DesktopUpdateState,
   type GcFindThreadBindingResult,
+  ProviderDriverKind,
+  ProviderInstanceId,
   ProjectId,
   type GcConfigResult,
   type ScopedThreadRef,
@@ -408,7 +410,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     },
   });
   const pr = resolveThreadPr(thread.branch, gitStatus.data);
-  const prStatus = prStatusIndicator(pr);
+  const prStatus = prStatusIndicator(pr, gitStatus.data?.sourceControlProvider);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isConfirmingArchive = confirmingArchiveThreadKey === threadKey && !isThreadRunning;
   const threadMetaClassName = isConfirmingArchive
@@ -761,6 +763,7 @@ interface SidebarProjectThreadListProps {
       id: string;
       label: string;
       qualifiedName: string;
+      isExplicitlySuspended: boolean;
       isSuspended: boolean;
       isPool: boolean;
       maxActiveSessions?: number;
@@ -785,6 +788,7 @@ interface SidebarProjectThreadListProps {
   gcAgentActionStateByAgent: ReadonlyMap<string, GcAgentActionState>;
   gcRigActionStateByRig: ReadonlyMap<string, "resume" | "suspend">;
   gcCityActionState: "resume" | "suspend" | null;
+  sidebarGcThreadGroupingMode: "agent" | "convoy";
   appSettingsConfirmThreadArchive: boolean;
   renamingThreadKey: string | null;
   renamingTitle: string;
@@ -873,6 +877,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     gcAgentActionStateByAgent,
     gcRigActionStateByRig,
     gcCityActionState,
+    sidebarGcThreadGroupingMode,
     appSettingsConfirmThreadArchive,
     renamingThreadKey,
     renamingTitle,
@@ -931,10 +936,14 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
           gcAgentActionStateByAgent={gcAgentActionStateByAgent}
           gcRigActionStateByRig={gcRigActionStateByRig}
           gcCityActionState={gcCityActionState}
+          gcThreadGroupingMode={sidebarGcThreadGroupingMode}
           onToggleCitySuspended={onToggleGcCitySuspended}
           onToggleRigSuspended={onToggleGcRigSuspended}
           onToggleAgentSuspended={onToggleGcAgentSuspended}
+          onAdjustAgentMinActiveSessions={() => undefined}
           onAdjustAgentMaxActiveSessions={onAdjustGcAgentMaxActiveSessions}
+          onWakeAgentSession={() => undefined}
+          onToggleAgentWakeMode={() => undefined}
           onToggleAgentSessionMode={onToggleGcAgentSessionMode}
           renderThreadRows={(threadIds, indentClassName) =>
             threadIds.flatMap((threadId) => {
@@ -1142,6 +1151,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   );
   const appSettingsConfirmThreadArchive = useSettings<boolean>(
     (settings) => settings.confirmThreadArchive,
+  );
+  const sidebarGcThreadGroupingMode = useSettings(
+    (settings) => settings.sidebarGcThreadGroupingMode,
   );
   const defaultThreadEnvMode = useSettings<ThreadEnvMode>(
     (settings) => settings.defaultThreadEnvMode,
@@ -1402,6 +1414,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           id: agentGroup.id,
           label: agentGroup.label,
           qualifiedName: agentGroup.qualifiedName,
+          isExplicitlySuspended: agentGroup.isSuspended,
           isSuspended: agentGroup.isSuspended,
           isPool: agentGroup.isPool,
           ...(typeof agentGroup.maxActiveSessions === "number"
@@ -2305,6 +2318,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         gcAgentActionStateByAgent={gcAgentActionStateByAgent}
         gcRigActionStateByRig={gcRigActionStateByRig}
         gcCityActionState={gcCityActionState}
+        sidebarGcThreadGroupingMode={sidebarGcThreadGroupingMode}
         appSettingsConfirmThreadArchive={appSettingsConfirmThreadArchive}
         renamingThreadKey={renamingThreadKey}
         renamingTitle={renamingTitle}
@@ -3270,8 +3284,8 @@ export default function Sidebar() {
           title: rig.name,
           workspaceRoot: rig.path,
           defaultModelSelection: {
-            provider: "codex",
-            model: DEFAULT_MODEL_BY_PROVIDER.codex,
+            instanceId: ProviderInstanceId.make("codex"),
+            model: DEFAULT_MODEL_BY_PROVIDER[ProviderDriverKind.make("codex")] ?? "gpt-5.4-mini",
           },
           createdAt: new Date().toISOString(),
         })
@@ -3505,7 +3519,8 @@ export default function Sidebar() {
       setGcAgentActionState(agent, suspended ? { kind: "suspend" } : { kind: "resume" });
 
       try {
-        const nextConfig = await api.gc.setAgentSuspended({ agent, suspended });
+        await api.gc.setAgentSuspended({ agent, suspended });
+        const nextConfig = await api.gc.getConfig({});
         setGcConfig(nextConfig);
         if (!suspended && !agentGroup.isPool && agentGroup.namedSessionMode === "always") {
           toastManager.update(toastId, {
@@ -3621,7 +3636,8 @@ export default function Sidebar() {
       setGcAgentActionState(agent, { kind: "session-mode", targetMode: mode });
 
       try {
-        const nextConfig = await api.gc.setAgentSessionMode({ agent, mode });
+        await api.gc.setAgentSessionMode({ agent, mode });
+        const nextConfig = await api.gc.getConfig({});
         setGcConfig(nextConfig);
         const updatedAgent = nextConfig.agents.find((entry) => {
           const qualifiedName = entry.dir ? `${entry.dir}/${entry.name}` : entry.name;
@@ -3736,10 +3752,11 @@ export default function Sidebar() {
       setGcAgentActionState(agent, { kind: "pool-size", maxActiveSessions });
 
       try {
-        const nextConfig = await api.gc.setAgentMaxActiveSessions({
+        await api.gc.setAgentMaxActiveSessions({
           agent,
           maxActiveSessions,
         });
+        const nextConfig = await api.gc.getConfig({});
         setGcConfig(nextConfig);
         toastManager.update(toastId, {
           type: "success",
@@ -3824,7 +3841,8 @@ export default function Sidebar() {
       setGcRigActionState(rig, suspended ? "suspend" : "resume");
 
       try {
-        const nextConfig = await api.gc.setRigSuspended({ rig, suspended });
+        await api.gc.setRigSuspended({ rig, suspended });
+        const nextConfig = await api.gc.getConfig({});
         setGcConfig(nextConfig);
         const autoStartAgents = filterAutoStartAgents(affectedAgents);
         if (!suspended && autoStartAgents.length > 0) {
@@ -3917,7 +3935,8 @@ export default function Sidebar() {
       setGcCityActionState(suspended ? "suspend" : "resume");
 
       try {
-        const nextConfig = await api.gc.setCitySuspended({ suspended });
+        await api.gc.setCitySuspended({ suspended });
+        const nextConfig = await api.gc.getConfig({});
         setGcConfig(nextConfig);
         const autoStartAgents = filterAutoStartAgents(affectedAgents);
         if (!suspended && autoStartAgents.length > 0) {

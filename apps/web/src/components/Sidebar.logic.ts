@@ -1,4 +1,10 @@
 import * as React from "react";
+import {
+  groupThreadsByRigAndAgent,
+  type GcConfigResult,
+  type GcConfigRig,
+  type VirtualRigGroup,
+} from "@t3tools/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import {
   getThreadSortTimestamp,
@@ -19,6 +25,7 @@ export type SidebarNewThreadEnvMode = "local" | "worktree";
 type SidebarProject = {
   id: string;
   name: string;
+  cwd: string;
   createdAt?: string | undefined;
   updatedAt?: string | undefined;
 };
@@ -32,7 +39,9 @@ export interface ThreadStatusPill {
     | "Completed"
     | "Pending Approval"
     | "Awaiting Input"
-    | "Plan Ready";
+    | "Plan Ready"
+    | "Drained"
+    | "Stopped";
   colorClass: string;
   dotClass: string;
   pulse: boolean;
@@ -45,7 +54,50 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
   Connecting: 3,
   "Plan Ready": 2,
   Completed: 1,
+  Drained: 0,
+  Stopped: 0,
 };
+
+export { parseGcMeta as getGcMetadata } from "@t3tools/contracts";
+
+export function normalizeWorkspacePath(path: string): string {
+  return path.trim().replace(/\/+$/, "");
+}
+
+export function countGcAgents(
+  threads: ReadonlyArray<{ projectId: string; customMetadata?: Record<string, string> }>,
+  projectId: string,
+): number {
+  return threads.filter(
+    (thread) => thread.projectId === projectId && thread.customMetadata?.["gc.agent"],
+  ).length;
+}
+
+export function resolveMissingGcRigProjects<TProject extends Pick<SidebarProject, "cwd">>(input: {
+  projects: readonly TProject[];
+  gcConfig: GcConfigResult | null;
+  pendingCwds?: ReadonlySet<string>;
+}): GcConfigRig[] {
+  if (!input.gcConfig) {
+    return [];
+  }
+
+  const existingCwds = new Set(
+    input.projects
+      .map((project) => normalizeWorkspacePath(project.cwd))
+      .filter((cwd) => cwd.length > 0),
+  );
+  const pendingCwds = input.pendingCwds ?? new Set<string>();
+
+  return input.gcConfig.rigs.filter((rig) => {
+    const normalizedRigPath = normalizeWorkspacePath(rig.path);
+    return (
+      normalizedRigPath.length > 0 &&
+      !existingCwds.has(normalizedRigPath) &&
+      !pendingCwds.has(normalizedRigPath)
+    );
+  });
+}
 
 type ThreadStatusInput = Pick<
   SidebarThreadSummary,
@@ -456,6 +508,53 @@ export function getVisibleThreadsForProject<T extends Pick<Thread, "id">>(input:
     hasHiddenThreads: true,
     hiddenThreads: threads.filter((thread) => !visibleThreadIds.has(thread.id)),
     visibleThreads: threads.filter((thread) => visibleThreadIds.has(thread.id)),
+  };
+}
+
+export function partitionProjectThreadsForSidebar<
+  T extends Pick<Thread, "id" | "title"> & {
+    customMetadata?: Record<string, string> | undefined;
+  },
+>(input: {
+  threads: readonly T[];
+  activeThreadId: T["id"] | undefined;
+  isThreadListExpanded: boolean;
+  previewLimit: number;
+  gcConfig?: GcConfigResult | null;
+  includeGcFolders?: boolean;
+  projectCwd?: string | null;
+  projectName?: string | null;
+  projectMembers?: ReadonlyArray<{
+    cwd?: string | null;
+    name?: string | null;
+  }>;
+}): {
+  rigGroups: VirtualRigGroup<T>[];
+  visibleStandaloneThreads: T[];
+  hiddenStandaloneThreads: T[];
+  hasHiddenStandaloneThreads: boolean;
+} {
+  const includeGcFolders = input.includeGcFolders ?? true;
+  const { rigGroups, standaloneThreads } = includeGcFolders
+    ? groupThreadsByRigAndAgent<T>([...input.threads], {
+        config: input.gcConfig,
+        projectCwd: input.projectCwd,
+        projectName: input.projectName,
+        projectMembers: input.projectMembers,
+      })
+    : { rigGroups: [], standaloneThreads: [...input.threads] };
+  const standaloneVisibility = getVisibleThreadsForProject({
+    threads: standaloneThreads,
+    activeThreadId: input.activeThreadId,
+    isThreadListExpanded: input.isThreadListExpanded,
+    previewLimit: input.previewLimit,
+  });
+
+  return {
+    rigGroups,
+    visibleStandaloneThreads: standaloneVisibility.visibleThreads,
+    hiddenStandaloneThreads: standaloneVisibility.hiddenThreads,
+    hasHiddenStandaloneThreads: standaloneVisibility.hasHiddenThreads,
   };
 }
 
