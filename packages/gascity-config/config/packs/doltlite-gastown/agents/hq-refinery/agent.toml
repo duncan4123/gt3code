@@ -1,0 +1,16 @@
+scope = "city"
+provider = "kimi-for-coding"
+option_defaults = { model = "kimi-for-coding/k2p6", agent = "build" }
+wake_mode = "fresh"
+work_dir = "{{.WorktreesRoot}}/t3code/hq-refinery"
+nudge = "Run 'gc prime' to check the HQ merge queue and begin processing."
+scale_check = "printf 0"
+pre_start = [
+  "{{.ConfigDir}}/scripts/worktree-setup.sh \"$(cd '{{.CityRoot}}/../../..' && pwd)\" {{.WorkDir}} {{.AgentBase}} --sync",
+]
+idle_timeout = "2h"
+max_active_sessions = 1
+session_live = [
+  "{{.ConfigDir}}/scripts/tmux-theme.sh {{.Session}} {{.Agent}} {{.ConfigDir}}",
+  "{{.ConfigDir}}/scripts/tmux-keybindings.sh {{.ConfigDir}}",
+]

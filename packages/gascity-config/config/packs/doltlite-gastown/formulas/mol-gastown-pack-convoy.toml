@@ -1,0 +1,321 @@
+description = """
+Create a valid Gastown pack convoy for the selected rig.
+
+This formula is for coordinators creating implementation convoys for Gastown
+pack work. It encodes the real Gastown workflow so convoys do not accidentally
+invent a parallel merge system.
+
+## Required mental model
+
+Gastown has two worktree layers:
+
+1. Runtime/agent worktree
+   - Created before session start by `packs/gastown/scripts/worktree-setup.sh`
+   - Polecat path: `.gc/worktrees/<rig>/polecats/<agent>`
+   - Refinery path: `.gc/worktrees/<rig>/refinery`
+   - Runtime branch shape: `gc-<agent>-<hash>`
+
+2. Formula/bead worktree
+   - Created by `mol-polecat-work` during `workspace-setup`
+   - Recorded as `metadata.work_dir`
+   - Work branch recorded as `metadata.branch`
+   - Default branch shape: `polecat/<issue>`
+
+Polecats must not edit the shared rig root directly. They start in the
+runtime worktree, then the formula may move them into a bead-scoped worktree.
+
+## Merge model
+
+Child work beads flow directly:
+
+  pool -> polecat -> refinery -> closed
+
+There are no per-child MR beads. A polecat pushes its branch, sets
+`metadata.target`, assigns the same bead to `<rig>/gastown.refinery`, sets
+metadata key `gc.routed_to=<rig>/gastown.refinery`, then exits. Refinery merges or
+publishes a PR based on the work bead metadata.
+
+For integration-branch convoys, child beads target the parent convoy's
+integration branch. After child beads close, audit the integration branch,
+then publish the final PR through refinery by assigning the parent convoy
+bead with `metadata.branch`, `metadata.target`, and `metadata.merge_strategy`.
+"""
+formula = "mol-gastown-pack-convoy"
+version = 1
+
+[vars]
+[vars.convoy_title]
+description = "Convoy title, e.g. t3code-provider-pack-pr"
+required = true
+
+[vars.rig]
+description = "Rig that owns the work. Pass this explicitly or inherit it from the sling --rig value."
+required = true
+
+[vars.integration_branch]
+description = "Integration branch for child work, e.g. integration/t3code-provider-pack-pr"
+required = true
+
+[vars.target_branch]
+description = "Final upstream/base branch for the integration PR"
+default = "main"
+
+[vars.pack_name]
+description = "Example/shareable pack name to create or update"
+default = "t3-gastown"
+
+[vars.pack_source]
+description = "Current pack/config context to audit before creating the example pack"
+default = "city.toml, .gc/site.toml, packs/gastown"
+
+[[steps]]
+id = "audit-gastown-workflow"
+title = "Audit the current Gastown workflow before creating beads"
+description = """
+Read the current workflow sources. Do not rely on memory.
+
+Required files:
+```bash
+sed -n '1,260p' packs/gastown/scripts/worktree-setup.sh
+sed -n '1,260p' packs/gastown/agents/polecat/prompt.template.md
+sed -n '1,340p' packs/gastown/agents/refinery/prompt.template.md
+sed -n '1,230p' packs/gastown/formulas/mol-polecat-work.toml
+sed -n '1,470p' packs/gastown/formulas/mol-refinery-patrol.toml
+sed -n '1,120p' .gc/system/packs/bd/template-fragments/bead-worktree.template.md
+```
+
+Write short notes for:
+- runtime worktree path and branch naming
+- bead worktree path and branch metadata
+- polecat handoff fields: `branch`, `target`, metadata key `gc.routed_to`
+- refinery behavior for `direct` and `mr/pr`
+- any inconsistencies, especially `worktree` vs `work_dir`
+
+**Exit criteria:** You can explain the current pack workflow without inventing
+new metadata keys or new MR beads.
+"""
+
+[[steps]]
+id = "create-owned-convoy"
+title = "Create the owned convoy and set the integration target"
+needs = ["audit-gastown-workflow"]
+description = """
+Create the convoy in the owning rig and set its integration branch target.
+
+Important: `gc convoy create --rig <rig>` without children creates a city-store
+convoy. To create a rig-store convoy, first create an anchor child in the rig
+store, then create the convoy around that child. Use GC commands for routing
+and convoy operations. Use `gc --rig "{{rig}}" bd ...` only for the lower-level
+bead fields that do not yet have a dedicated GC wrapper.
+
+```bash
+CONTRACT=$(cat <<'EOF' | gc sling "{{rig}}/gastown.convoymaster" --stdin \
+  --rig "{{rig}}" \
+  --no-convoy \
+  --no-formula \
+  --force | awk '/^Created / {print $2}'
+Define {{rig}} Gastown pack convoy contract
+Document the exact worktree, branch, target, and refinery handoff contract for {{convoy_title}}.
+EOF
+)
+
+CONVOY=$(gc convoy create "{{convoy_title}}" "$CONTRACT" \
+  --owned \
+  --owner "{{rig}}/gastown.convoymaster" \
+  --notify "{{rig}}/gastown.convoymaster" \
+  --merge mr \
+  --target "{{integration_branch}}" | awk '/^Created convoy/ {print $3}')
+
+gc convoy target "$CONVOY" "{{integration_branch}}" --rig "{{rig}}"
+
+gc --rig "{{rig}}" bd update "$CONVOY" \
+  --add-label "rig:{{rig}}" \
+  --set-metadata rig="{{rig}}" \
+  --set-metadata target="{{integration_branch}}" \
+  --set-metadata integration_branch="{{integration_branch}}" \
+  --set-metadata merge_model="child work beads: polecat -> refinery -> integration branch; parent convoy: refinery publishes final PR"
+```
+
+If the convoy already exists, reuse it and update the same metadata instead
+of creating a duplicate.
+
+**Exit criteria:** `gc convoy status "$CONVOY" --rig "{{rig}}"` shows the
+expected owner, notify target, merge mode, and integration target.
+"""
+
+[[steps]]
+id = "create-contract-bead"
+title = "Create the workflow contract bead"
+needs = ["create-owned-convoy"]
+description = """
+Complete the anchor/contract bead created in the previous step. It documents
+the exact pack workflow for all workers.
+
+The contract bead MUST say:
+- there are two worktree layers
+- runtime worktrees come from `worktree-setup.sh` before session start
+- formula worktrees are recorded as `metadata.work_dir`
+- child beads inherit `{{integration_branch}}` through convoy target metadata
+- polecats must not edit the shared rig root
+- polecats must not create separate MR beads
+- polecats must not wait after implementation; they push, route to refinery,
+  `gc runtime drain-ack`, and exit
+- refinery must not infer branch names; missing `metadata.branch` is a reject
+  or escalation
+
+Update it with:
+```bash
+gc --rig "{{rig}}" bd update "$CONTRACT" \
+  --type task \
+  --priority 1 \
+  --set-labels "rig:{{rig}},role:convoymaster,workflow:worktree-contract" \
+  --metadata '{"rig":"{{rig}}","role":"convoymaster","integration_branch":"{{integration_branch}}"}'
+```
+
+**Exit criteria:** This bead is a dependency of every polecat work bead.
+"""
+
+[[steps]]
+id = "create-polecat-work-beads"
+title = "Create real polecat work beads"
+needs = ["create-contract-bead"]
+description = """
+Create only real implementation/audit beads. Do not create MR beads for child
+branches. Each polecat bead must be suitable for `mol-polecat-work`.
+
+Required child bead categories:
+
+1. Pack/example implementation
+   - audit `{{pack_source}}`
+   - create or update an example/shareable pack for `{{pack_name}}`
+   - if no example-pack directory exists, create `examples/packs/{{pack_name}}`
+     and document the convention
+   - include `pack.toml`, any scripts/formulas/prompts/docs needed, and a
+     sample city import snippet
+
+2. Prompt/script/formula consistency
+   - audit polecat/refinery prompts, `worktree-setup.sh`,
+     `mol-polecat-work`, `mol-refinery-patrol`, and bead recovery fragments
+   - resolve or document `worktree` vs `work_dir`
+   - ensure docs do not imply canonical rig-root editing
+
+3. Verification
+   - define and run the clean PR gate set
+   - classify failures as introduced, pre-existing, environmental, or skipped
+   - create linked beads for pre-existing failures
+
+For every polecat bead:
+```bash
+gc --rig "{{rig}}" bd create "<title>" \
+  --parent "$CONVOY" \
+  --type task \
+  --priority 1 \
+  --labels "rig:{{rig}},role:polecat,workflow:worktree" \
+  --metadata '{"rig":"{{rig}}","role":"polecat","integration_branch":"{{integration_branch}}","worktree_required":true}'
+```
+
+Do NOT pre-set `metadata.branch` unless the branch already exists. Let
+`mol-polecat-work` create and record it.
+
+Acceptance criteria for every polecat bead:
+- changed-file audit
+- exact checks run
+- failure classification
+- clean git status
+- branch pushed
+- `metadata.target={{integration_branch}}`
+- assigned to `{{rig}}/gastown.refinery`
+- metadata key `gc.routed_to={{rig}}/gastown.refinery`
+
+**Exit criteria:** Ready work starts with the setup/contract bead; polecat
+beads are blocked until the contract is complete.
+"""
+
+[[steps]]
+id = "create-integration-audit-bead"
+title = "Create the integration-branch audit bead"
+needs = ["create-polecat-work-beads"]
+description = """
+Create a convoymaster audit bead that depends on all polecat work beads.
+
+This bead does NOT merge polecat branches. The refinery merges each child bead
+when that child is pushed and routed to refinery.
+
+The audit bead verifies:
+- every child work bead is closed by refinery
+- every child has `metadata.branch` and `metadata.target`
+- refinery recorded `merge_result`, `merged_target`, `merged_sha`, `pr_url`,
+  or an equivalent note
+- `{{integration_branch}}` exists on origin and contains expected work
+- no `{{rig}}/gastown.refinery` queue item is stuck for this convoy
+- no raw manual merge bypassed refinery
+
+If something is missing, reopen the relevant child bead or create a follow-up
+bead. Do not manually merge.
+
+**Exit criteria:** Integration branch is ready for final PR publication.
+"""
+
+[[steps]]
+id = "create-pr-handoff-bead"
+title = "Create the final PR handoff bead"
+needs = ["create-integration-audit-bead"]
+description = """
+Create the final PR handoff bead after the integration audit.
+
+Preferred path: assign the parent convoy bead itself to refinery as the final
+work item:
+```bash
+gc --rig "{{rig}}" bd update "$CONVOY" \
+  --set-metadata branch="{{integration_branch}}" \
+  --set-metadata target="{{target_branch}}" \
+  --set-metadata merge_strategy=mr \
+  --assignee="{{rig}}/gastown.refinery" \
+  --set-metadata gc.routed_to="{{rig}}/gastown.refinery"
+```
+
+If the current pack cannot safely publish a PR from the parent convoy bead,
+create a child handoff bead documenting the gap, then use a minimal manual
+`gh pr create` fallback while preserving the same metadata and audit trail.
+
+The PR body must summarize:
+- pack/example changes
+- prompt/script/formula consistency changes
+- worktree/refinery workflow
+- verification matrix
+- known follow-up beads
+
+**Exit criteria:** PR URL/number is written to bead or convoy metadata, and
+the convoy has a durable audit trail for how the PR was created.
+"""
+
+[[steps]]
+id = "verify-convoy"
+title = "Verify and hand off the convoy"
+needs = ["create-pr-handoff-bead"]
+description = """
+Run a final structural check.
+
+```bash
+gc convoy status "$CONVOY" --rig "{{rig}}"
+gc --rig "{{rig}}" bd show "$CONVOY" --json | jq '.[0].metadata'
+gc --rig "{{rig}}" bd ready --json | jq '.[] | select(.id | startswith($ENV.CONVOY))'
+```
+
+Check:
+- convoy has `target={{integration_branch}}`
+- only setup/contract work is ready first
+- polecat beads have no preseeded branch unless a real branch exists
+- dependency chain is contract -> polecat work -> integration audit -> PR handoff
+- labels and metadata use documented fields only
+
+Commit bead DB changes:
+```bash
+gc --rig "{{rig}}" bd dolt commit -m "Create {{rig}} Gastown pack convoy {{convoy_title}}"
+```
+
+If a Dolt remote exists, push it. If no remote exists, record that explicitly.
+
+**Exit criteria:** A future convoymaster/polecat/refinery can run the convoy
+without needing verbal context from the creator.
+"""

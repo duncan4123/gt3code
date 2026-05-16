@@ -1,0 +1,92 @@
+[pack]
+name = "gc"
+schema = 2
+
+[imports.gastown]
+source = "../../packs/gastown"
+
+[providers.codex]
+base = "builtin:codex"
+command = "codex"
+ready_delay_ms = 0
+options_schema_merge = "by_key"
+
+[providers.codex.env]
+GC_MODEL = "gpt-5.5"
+
+[[providers.codex.options_schema]]
+key = "model"
+label = "Model"
+type = "select"
+
+[[providers.codex.options_schema.choices]]
+value = ""
+label = "Default"
+
+[[providers.codex.options_schema.choices]]
+value = "gpt-5.5"
+label = "GPT-5.5"
+flag_args = ["--model", "gpt-5.5"]
+
+[[providers.codex.options_schema.choices]]
+value = "gpt-5.4"
+label = "GPT-5.4"
+flag_args = ["--model", "gpt-5.4"]
+
+[[providers.codex.options_schema.choices]]
+value = "gpt-5.4-mini"
+label = "GPT-5.4 Mini"
+flag_args = ["--model", "gpt-5.4-mini"]
+
+[[providers.codex.options_schema.choices]]
+value = "o4-mini"
+label = "o4-mini"
+flag_args = ["--model", "o4-mini"]
+
+[[providers.codex.options_schema.choices]]
+value = "o3"
+label = "o3"
+flag_args = ["--model", "o3"]
+
+[providers.kimi-for-coding]
+base = "builtin:opencode"
+supports_acp = false
+
+[providers.kimi-for-coding.env]
+GC_PROVIDER = "opencode"
+GC_MODEL = "kimi-for-coding/k2p6"
+GC_OPENCODE_AGENT = "build"
+
+[agent_defaults]
+model = "gpt-5.5"
+
+[patches]
+
+[[patches.agent]]
+dir = ""
+name = "deacon"
+suspended = true
+provider = "codex"
+
+[[patches.agent]]
+dir = ""
+name = "boot"
+suspended = true
+provider = "codex"
+
+[[patches.agent]]
+dir = ""
+name = "dog"
+suspended = true
+provider = "codex"
+env = { GC_MODEL = "gpt-5.4-mini" }
+
+[[patches.agent]]
+dir = ""
+name = "mayor"
+suspended = true
+provider = "codex"
+
+[[patches.named_session]]
+template = "mayor"
+mode = "always"

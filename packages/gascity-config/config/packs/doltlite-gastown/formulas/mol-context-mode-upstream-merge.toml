@@ -1,0 +1,308 @@
+description = """
+Context-mode upstream merge formula with fork-feature preservation gates.
+
+Use this formula for every merge, rebase, or rollout that brings upstream
+context-mode code into the fork. The goal is not just "merge cleanly"; the goal
+is to stay current with upstream while proving that every fork-owned feature is
+still present and working after source refactors, bundle rebuilds, and live MCP
+startup.
+
+This formula treats fork features as first-class product requirements. A merge
+is not complete until the agent has:
+
+1. Enumerated upstream changes since the previous sync.
+2. Enumerated every fork-only feature from the ledger and side branches.
+3. Audited every MCP tool in source, bundle, and live schema.
+4. Smoke-validated fork features against a fresh named database.
+5. Recorded dropped, renamed, intentionally retired, or newly added tools.
+6. Rejected the merge if any fork feature disappeared without an explicit
+   replacement and durable audit note.
+
+Never rely on conflict resolution alone. Refactors can delete behavior without
+conflicting. The audit gates below exist to catch exactly that class of loss.
+"""
+formula = "mol-context-mode-upstream-merge"
+version = 1
+
+[vars]
+[vars.issue]
+description = "The merge/audit bead driving this upstream sync"
+required = true
+
+[vars.upstream_ref]
+description = "Upstream branch or ref to merge from"
+default = "upstream/main"
+
+[vars.target_branch]
+description = "Fork branch that must preserve all fork features"
+default = "main"
+
+[vars.feature_ledger]
+description = "Durable fork feature ledger to maintain during the merge"
+default = "docs/fork-feature-ledger.md"
+
+[vars.audit_report]
+description = "Per-merge audit report path"
+default = "docs/context-mode-upstream-merge-audit.md"
+
+[vars.live_start_command]
+description = "Command used to start the live MCP server for schema inspection"
+default = "/usr/bin/node start.mjs"
+
+[vars.run_tests]
+description = "Whether this merge is allowed to run configured project tests"
+default = "false"
+
+[vars.test_command]
+description = "Optional test command. Run only when run_tests is true."
+default = ""
+
+[[steps]]
+id = "prime-and-load"
+title = "Prime context and read assignment"
+description = """
+Restore Gas City context and load the merge bead.
+
+```bash
+gc prime
+bd prime
+bd show {{issue}}
+bd show {{issue}} --json | jq '.metadata'
+```
+
+Confirm the bead names the upstream sync target. If metadata overrides
+`upstream_ref`, `target_branch`, `feature_ledger`, or `audit_report`, use the
+bead metadata as source of truth.
+
+Exit criteria: you know the target branch, upstream ref, prior sync point, and
+where the audit report will be written.
+"""
+
+[[steps]]
+id = "snapshot-before"
+title = "Capture pre-merge source, bundle, and live tool inventory"
+needs = ["prime-and-load"]
+description = """
+Before touching the merge, capture the current fork state.
+
+Required inventory:
+- Current commit and branch.
+- `git remote -v`.
+- All local and remote branches carrying fork patches.
+- Full MCP tool list from source.
+- Full MCP tool list from `server.bundle.mjs`.
+- Full live MCP tool schema from `{{live_start_command}}`.
+
+Write the inventory to `{{audit_report}}`. Do not keep it only in pane output.
+
+Minimum commands:
+```bash
+git status --short --branch
+git fetch --prune --all
+git log --left-right --cherry-pick --oneline {{upstream_ref}}...{{target_branch}}
+```
+
+For context-mode specifically, extract tool names and input schemas from both
+`src/server.ts` and `server.bundle.mjs`. The live schema must be collected by
+starting the same entrypoint users run, because a correct source file does not
+prove the shipped bundle is correct.
+
+Exit criteria: pre-merge inventory is written and includes source, bundle, and
+live MCP schema.
+"""
+
+[[steps]]
+id = "build-feature-ledger"
+title = "Build or update the fork feature ledger"
+needs = ["snapshot-before"]
+description = """
+Create or update `{{feature_ledger}}` before merging upstream code.
+
+The ledger must list every fork-owned feature, including features that live on
+side branches and features not yet on `{{target_branch}}`.
+
+Each entry must include:
+- Feature name.
+- User-visible tools, commands, flags, environment variables, files, or APIs.
+- First known introduction commit.
+- Latest known good commit or branch.
+- Expected source files and bundle markers.
+- Required live MCP schema fields.
+- Required smoke checks.
+- Status: `on-main`, `side-branch-only`, `retired-explicitly`, or `missing`.
+
+For context-mode, the ledger must include at least:
+- Named database lifecycle tools such as `list_databases` and `delete_database`.
+- Named `database` parameters on core tools including `ctx_index`, `ctx_search`,
+  `ctx_fetch_and_index`, and `ctx_batch_execute`.
+- Peer discovery tools such as `list_peers` and `search_peers` if they exist on
+  any fork branch.
+- Doltlite runtime, docs, dashboard, GC integration, and safety features owned
+  by the fork.
+
+Exit criteria: the ledger exists, has commit evidence, and identifies which
+features are not currently on the target branch before the merge begins.
+"""
+
+[[steps]]
+id = "audit-upstream-delta"
+title = "Audit upstream changes before integrating"
+needs = ["build-feature-ledger"]
+description = """
+Read upstream changes since the previous sync and classify their impact.
+
+For every upstream commit touching MCP tools, storage, search, indexing,
+bundles, CLI entrypoints, package layout, or runtime startup, record:
+- Commit hash and subject.
+- Files changed.
+- Whether it overlaps a fork feature.
+- Whether it is a refactor, behavior change, bug fix, or generated bundle
+  update.
+- Expected conflict or silent-regression risk.
+
+Silent-regression risk is mandatory for refactors. A refactor that moves tool
+registration can drop fork schema fields without a git conflict.
+
+Exit criteria: `{{audit_report}}` contains an upstream delta section with
+overlap notes for every relevant upstream change.
+"""
+
+[[steps]]
+id = "merge-with-feature-map"
+title = "Merge or rebase upstream while mapping fork features"
+needs = ["audit-upstream-delta"]
+description = """
+Perform the upstream integration only after the feature ledger and upstream
+delta audit exist.
+
+During conflict resolution, do not choose either side wholesale for files that
+register tools, route stores, build bundles, or define storage behavior. For
+each conflict, map fork requirements from `{{feature_ledger}}` onto the new
+upstream structure.
+
+After resolving conflicts, scan for non-conflicting drops:
+```bash
+git diff --name-status ORIG_HEAD..HEAD
+git diff ORIG_HEAD..HEAD -- src server.bundle.mjs package.json bin scripts docs
+```
+
+If an upstream refactor moves a tool, reapply fork behavior at the new layer
+instead of restoring obsolete structure.
+
+Exit criteria: upstream code is integrated locally and every fork feature has a
+source-level mapping note in `{{audit_report}}`.
+"""
+
+[[steps]]
+id = "audit-every-tool"
+title = "Compare every MCP tool across source, bundle, and live schema"
+needs = ["merge-with-feature-map"]
+description = """
+Produce a complete tool matrix after the merge.
+
+For every tool found in source, bundle, or live MCP schema, record:
+- Tool name.
+- Present in `src/server.ts`: yes/no.
+- Present in `server.bundle.mjs`: yes/no.
+- Present in live MCP schema from `{{live_start_command}}`: yes/no.
+- Input schema fields in source and live schema.
+- Whether the tool is upstream-owned, fork-owned, or shared.
+- Whether the merge added, removed, renamed, or changed it.
+
+Hard gate:
+- No fork-owned tool may disappear from source, bundle, or live schema unless
+  the ledger marks it `retired-explicitly` with a reason.
+- No fork-owned schema field may disappear silently.
+- If source and bundle disagree, rebuild or patch the bundle before proceeding.
+- If bundle and live schema disagree, debug the live entrypoint before
+  proceeding.
+
+Exit criteria: `{{audit_report}}` contains a complete per-tool matrix and every
+fork-owned tool has source, bundle, and live status.
+"""
+
+[[steps]]
+id = "fresh-named-db-smoke"
+title = "Smoke-check fork features against a fresh named database"
+needs = ["audit-every-tool"]
+description = """
+Validate behavior, not just schemas.
+
+Create a fresh unique named database for this merge run. Use it to smoke-check
+database isolation and every fork feature that depends on storage.
+
+Required named database checks:
+- `list_databases` shows the database after creation.
+- `ctx_index(database=...)` writes only to that database.
+- `ctx_search(database=...)` finds the indexed needle.
+- Default `ctx_search` does not find the named database needle.
+- `ctx_fetch_and_index(database=...)` accepts the database parameter when web
+  checks are in scope.
+- `ctx_batch_execute(database=...)` indexes command output into the named
+  database and query results find it.
+- `delete_database` removes the database.
+
+Required peer checks when peer tools are on the ledger:
+- `list_peers` exists in live schema if status is `on-main`.
+- `search_peers` exists in live schema if status is `on-main`.
+- If peer tools are `side-branch-only`, the audit must say they are still not
+  on target and must not call the merge complete.
+
+Record exact command names, database name, needles, and pass/fail results in
+`{{audit_report}}`.
+
+Exit criteria: every fork feature smoke check passes, or the merge is marked
+failed with concrete missing behavior.
+"""
+
+[[steps]]
+id = "optional-quality-checks"
+title = "Run configured checks only when allowed"
+needs = ["fresh-named-db-smoke"]
+description = """
+Respect the rig's testing policy.
+
+If `run_tests` is not `"true"`, do not run tests, builds, compiles, or package
+wide checks. State in `{{audit_report}}` that tests were skipped by policy.
+
+If `run_tests` is `"true"` and `test_command` is non-empty, run:
+```bash
+{{test_command}}
+```
+
+Record pass/fail and relevant failures. Do not hide failures behind a successful
+tool smoke check; both matter.
+
+Exit criteria: policy-compliant quality check status is recorded.
+"""
+
+[[steps]]
+id = "block-or-land"
+title = "Block, repair, or land the merge"
+needs = ["optional-quality-checks"]
+description = """
+Decide based on evidence.
+
+Block the merge if any of these are true:
+- A fork-owned feature is missing from source, bundle, or live schema.
+- A fork-owned schema field is missing.
+- A fresh named database smoke check fails.
+- A side-branch-only feature was expected to land but is still absent.
+- The audit report lacks commit evidence for a feature decision.
+- Source, bundle, and live schema disagree.
+
+If blocked:
+1. Repair the missing feature in the current branch, or revert the merge.
+2. Update `{{feature_ledger}}` and `{{audit_report}}` with the cause and fix.
+3. Re-run the affected audit steps.
+
+If clean:
+1. Commit the merge and audit artifacts.
+2. Push the branch.
+3. Update the work bead with the audit report path, upstream ref, target branch,
+   final commit, and tool matrix status.
+
+Exit criteria: the merge is either landed with durable evidence or explicitly
+blocked with a repair path. Never finish with an unaudited "looks good".
+"""
+

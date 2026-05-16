@@ -1,0 +1,209 @@
+description = """
+Rig-local upstream sync formula.
+
+Use this inside the rig that owns the repo/package work. HQ may start this
+formula, but the work itself follows the normal Gastown pack workflow:
+
+1. Build a rig-local fork-feature preservation/replay ledger.
+2. Create or update an integration convoy/coordinator bead.
+3. Split concrete implementation work into polecat work beads.
+4. Polecats implement on feature branches and push.
+5. Refinery merges polecat branches into the rig integration branch.
+6. The rig reports audited output for HQ to copy/port into T3 packages.
+
+This formula must not invent a parallel merge path. Polecats do not merge their
+own work. HQ does not merge rig child branches. The refinery owns the rig
+integration branch.
+"""
+formula = "mol-rig-upstream-sync"
+version = 1
+
+[vars]
+[vars.rig]
+description = "Owning rig alias"
+required = true
+
+[vars.upstream_ref]
+description = "Upstream ref this rig compares against"
+required = true
+
+[vars.target_branch]
+description = "Rig release/base branch that must preserve fork features"
+required = true
+
+[vars.rig_integration_branch]
+description = "Rig integration branch where refinery merges polecat branches"
+required = true
+
+[vars.t3code_integration_branch]
+description = "T3Code integration branch that will consume this rig output"
+required = true
+
+[vars.package_destination]
+description = "T3 package path or paths that receive final output, if any"
+default = ""
+
+[vars.audit_output]
+description = "Rig-local audit output path or bead metadata key"
+default = "metadata.rig_sync_audit"
+
+[[steps]]
+id = "load-rig-context"
+title = "Load rig repo and workflow context"
+description = """
+Prime the rig context and verify this formula is running in the correct rig.
+
+```bash
+gc prime
+bd prime
+git status --short --branch
+git remote -v
+git rev-parse HEAD
+git fetch --prune --all
+```
+
+Read the local Gastown workflow before creating work:
+```bash
+sed -n '1,230p' packs/gastown/formulas/mol-polecat-work.toml
+sed -n '1,470p' packs/gastown/formulas/mol-refinery-patrol.toml
+sed -n '1,170p' packs/gastown/formulas/mol-gastown-pack-convoy.toml
+```
+
+Exit criteria:
+- rig path, branch, HEAD, remotes, and dirty state are recorded
+- `{{rig_integration_branch}}` is the declared refinery merge target
+- no work starts on `{{target_branch}}` unless it is explicitly also the
+  integration branch
+"""
+
+[[steps]]
+id = "build-rig-feature-ledger"
+title = "List fork features to preserve or replay"
+needs = ["load-rig-context"]
+description = """
+Create the rig-local preservation/replay ledger before creating polecat work.
+
+The ledger must contain one row per current fork feature:
+- Feature name
+- Owning files/config/env/API/UI
+- Current branch/commit where it exists
+- Upstream status
+- Preserve decision: `already-upstream`, `keep-fork`, `replay-on-upstream`,
+  `synthesize`, or `retire-with-migration`
+- Replay patch/commit range, if any
+- Polecat work bead needed, if any
+- Smoke check
+- Package export path, if any
+
+Hard gates:
+- No current fork feature may be omitted because it is inconvenient to replay.
+- No feature may be retired without a migration note and smoke/test update.
+- Features needing code changes must become polecat work beads.
+
+Exit criteria:
+- rig-local feature ledger exists
+- every feature has a preserve decision
+- every replay/synthesize item is mapped to planned polecat work
+"""
+
+[[steps]]
+id = "create-integration-convoy"
+title = "Create or update rig integration convoy"
+needs = ["build-rig-feature-ledger"]
+description = """
+Create or update the rig-owned convoy/coordinator bead for this sync.
+
+Use the normal Gastown integration-branch model:
+- child work beads target `{{rig_integration_branch}}`
+- polecats push branches and route their original beads to refinery
+- refinery merges child branches into `{{rig_integration_branch}}`
+- the parent/coordinator records the final rig output for HQ
+
+If a convoy already exists for this sync, reuse it. Do not create duplicate
+coordination beads for the same rig/ref pair.
+
+Exit criteria:
+- convoy/coordinator bead exists in `{{rig}}`
+- convoy target is `{{rig_integration_branch}}`
+- coordinator metadata records `upstream_ref`, `target_branch`,
+  `rig_integration_branch`, `t3code_integration_branch`, and
+  `package_destination`
+"""
+
+[[steps]]
+id = "create-polecat-work"
+title = "Create polecat work beads for replay/synthesis"
+needs = ["create-integration-convoy"]
+description = """
+Create concrete implementation work for every ledger row whose preserve
+decision requires code/config changes.
+
+Each work bead must:
+- use `mol-polecat-work` or a rig-approved extension
+- be assigned/routed to a polecat pool or named polecat
+- inherit `metadata.target={{rig_integration_branch}}`
+- name the feature ledger row it implements
+- state the exact files/config/env/API/UI it may touch
+- state the smoke check that must pass before routing to refinery
+
+Do not create MR beads. The polecat's original work bead is routed to refinery
+after the branch is pushed.
+
+Exit criteria:
+- all replay/synthesize ledger rows have polecat work beads
+- each work bead targets `{{rig_integration_branch}}`
+- no package destination is updated yet
+"""
+
+[[steps]]
+id = "wait-for-refinery"
+title = "Wait for refinery to merge child branches"
+needs = ["create-polecat-work"]
+description = """
+Track child work until refinery has merged or explicitly rejected every
+required polecat branch.
+
+Required checks:
+```bash
+git fetch --prune origin
+git log --oneline --decorate {{target_branch}}..{{rig_integration_branch}}
+bd list --metadata-field target={{rig_integration_branch}} --json
+```
+
+If refinery rejects a branch, keep the work in the rig workflow: the same bead
+returns to polecat with `metadata.rejection_reason`. Do not manually merge
+around refinery.
+
+Exit criteria:
+- every required child bead is closed or explicitly deferred
+- refinery metadata records merge results
+- `{{rig_integration_branch}}` contains the accepted child work
+"""
+
+[[steps]]
+id = "audit-rig-output"
+title = "Audit integration branch and report to HQ"
+needs = ["wait-for-refinery"]
+description = """
+Audit the final rig integration branch and write the output HQ will consume.
+
+The rig output must include:
+- rig feature ledger with final statuses
+- rig integration branch and HEAD
+- target branch and upstream ref
+- list of child polecat branches merged by refinery
+- dirty state
+- smoke results
+- package update instructions for `{{package_destination}}`
+- any blocked/deferred features
+
+Hard gates:
+- HQ may not consume this rig unless the output includes the branch/HEAD and
+  child merge evidence.
+- Package update instructions must trace to `{{rig_integration_branch}}`, not
+  to an unmerged polecat branch.
+
+Exit criteria:
+- rig audit output is attached or written
+- HQ has enough evidence to update T3 packages from this rig output
+"""

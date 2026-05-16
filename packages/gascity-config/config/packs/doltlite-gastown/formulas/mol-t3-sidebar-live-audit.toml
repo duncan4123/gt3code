@@ -1,0 +1,355 @@
+description = """
+Live audit formula for the T3Code Gas City sidebar.
+
+This formula creates a tight feedback loop for testing the sidebar exactly as a
+user would: click controls in the browser, verify the runtime TOML changed,
+verify `gc` resolves the same state, verify sessions/threads are created or
+resumed when expected, then commit the evidence into context-mode.
+
+This is intentionally audit-heavy. The goal is to prove:
+- every configured workspace and rig agent that should appear in the sidebar
+  does appear
+- every displayed control reflects live GC config, not stale API state
+- every control mutates the correct runtime config path
+- no sidebar action rewrites or damages unrelated config
+- sessions/threads are created, resumed, stopped, or left unmaterialized
+  according to named-session mode, wake mode, suspension, and pool settings
+
+Update this formula when a better probe, command, selector, or failure mode is
+discovered. Do not keep side notes outside this formula or the audit doc.
+"""
+formula = "mol-t3-sidebar-live-audit"
+version = 1
+
+[vars]
+[vars.t3_url]
+description = "T3 web URL to test"
+default = "http://localhost:5733/"
+
+[vars.runtime_city]
+description = "Bundled T3Code GC city path"
+default = "packages/gascity-config/config"
+
+[vars.context_db]
+description = "Named context-mode database for audit snapshots"
+default = "gc-t3code"
+
+[vars.context_branch]
+description = "Context-mode branch. Keep one branch per git branch."
+default = "ship"
+
+[vars.audit_rig]
+description = "Rig to audit deeply; leave empty to audit every configured rig"
+default = ""
+
+[[steps]]
+id = "establish-audit-ledger"
+title = "Establish the context-mode audit ledger"
+description = """
+Use context-mode for every command that can produce large output. The active
+context-mode database is `{{context_db}}`; the branch must match the current git
+branch, normally `{{context_branch}}`.
+
+Required ledger setup:
+1. Confirm the git branch:
+   `git branch --show-current`
+2. In context-mode, checkout or create branch `{{context_branch}}`.
+3. Capture a baseline batch:
+   - `git status --short`
+   - `git rev-parse HEAD`
+   - `bun gascity:path`
+   - `sha256sum {{runtime_city}}/city.toml {{runtime_city}}/.gc/site.toml`
+   - `bun gc -- status`
+   - `bun gc -- config show`
+   - `bun gc -- session list`
+4. Commit the indexed baseline:
+   `ctx_commit(database="{{context_db}}", message="Sidebar live audit baseline <git-branch>")`
+
+Interpretation rule:
+- `bun gc -- status` reports GC reconciler/materialization state.
+- `bun gc -- session list` plus `t3bridge: IsRunning(...)` reports T3-backed
+  thread/session readiness.
+- For T3 bridge agents, a session can be `active`/`ready` in T3 while the
+  status overview still prints the agent process row as `stopped`. Treat that
+  as a bridge/status-model distinction, not automatically as a failure.
+
+Rule: after each sidebar control family, run `ctx_diff(database="{{context_db}}")`
+and `ctx_commit(...)` with a message naming the control and expected mutation.
+This is the proof trail. If the UI claims a value changed but the context-mode
+snapshot does not show the config/session change, the audit fails.
+
+Exit criteria:
+- context-mode branch equals the git branch
+- baseline snapshot is committed
+- current runtime city path is known and written into the audit notes
+"""
+
+[[steps]]
+id = "derive-expected-sidebar-inventory"
+title = "Derive expected workspace and rig agents"
+needs = ["establish-audit-ledger"]
+description = """
+Never hardcode the expected sidebar agents. Derive them from live resolved GC
+config, then compare against raw runtime TOML and pack sources.
+
+Capture:
+```bash
+bun gc -- config show
+sed -n '1,220p' {{runtime_city}}/city.toml
+find {{runtime_city}}/packs -path '*/agents/*/agent.toml' -maxdepth 7 -type f -print
+```
+
+Build the expected inventory:
+- workspace group: agents with no `dir`
+- rig groups: every `[[rigs]]` block in resolved config
+- rig agents: agents where `dir == <rig>`
+- skip implicit provider lanes if the sidebar intentionally hides them
+- include builtins such as `control-dispatcher` when resolved config exposes
+  them as agents
+- for each agent record:
+  `qualifiedName`, `dir`, `name`, `suspended`, `is_pool`,
+  `min_active_sessions`, `max_active_sessions`, `wake_mode`,
+  `named_session_mode`, `provider`, `option_defaults.model`, `work_dir`
+
+Expected control mapping:
+- `named_session_mode = "always"` -> sidebar label `auto`
+- `named_session_mode = "on_demand"` -> sidebar label `demand`
+- `wake_mode = "fresh"` -> wake control should offer or show fresh semantics
+- `wake_mode = "resume"` -> wake control should offer or show resume semantics
+- `is_pool = true` + min/max -> pool size controls visible
+- `suspended = true` -> resume/play control visible
+- `suspended = false` -> suspend/pause control visible
+
+Exit criteria:
+- a complete expected inventory exists in the context-mode snapshot
+- every item has an expected sidebar label/control set
+- any ambiguous provider lane or builtin is explicitly classified
+"""
+
+[[steps]]
+id = "open-sidebar-like-a-user"
+title = "Open T3 and inspect the sidebar as a user"
+needs = ["derive-expected-sidebar-inventory"]
+description = """
+Use agent-browser for the user-facing loop. First discover the installed
+command surface:
+```bash
+agent-browser --help
+agent-browser session list
+```
+Some installations support `agent-browser skills get agent-browser`; if the
+command is absent, use the installed CLI help output as the source of truth.
+
+Browser preflight is mandatory before auditing sidebar contents:
+```bash
+agent-browser close --all
+agent-browser --session sidebar-audit open {{t3_url}}
+agent-browser --session sidebar-audit wait 5000
+agent-browser --session sidebar-audit get url
+agent-browser --session sidebar-audit eval 'JSON.stringify({url:location.href,title:document.title,bodyText:document.body.innerText.slice(0,500),rootHtmlLength:document.getElementById("root")?.innerHTML.length ?? -1,scriptCount:document.scripts.length})'
+agent-browser --session sidebar-audit snapshot
+agent-browser --session sidebar-audit screenshot /tmp/t3-sidebar-audit-baseline.png
+```
+
+Do not continue if:
+- `get url` is `about:blank`
+- the root element is missing
+- root HTML length remains `0` after wait
+- `snapshot` is empty
+- screenshot is blank
+
+If this happens, capture `agent-browser network requests`, `agent-browser
+errors`, and `agent-browser console`, then fix the browser/session setup before
+testing sidebar controls. An empty snapshot is a failed preflight, not a
+passing sidebar inventory.
+
+Open `{{t3_url}}`, wait for auth/bootstrap, then inspect the sidebar with
+accessibility snapshots and screenshots. Expand the relevant workspace and rig
+groups. Do not rely on memory or server logs for the UI state.
+
+For each expected group:
+- workspace group exists
+- every expected workspace agent row exists
+- every expected rig row exists
+- every expected rig agent row exists
+- pool agents expose pool controls
+- non-pool agents expose session-mode controls
+- displayed labels match resolved GC config (`auto` vs `demand`, suspended,
+  pool size, ready/bound/on-demand/no-session)
+
+Capture evidence:
+- browser screenshot of expanded sidebar
+- accessibility/tree text for all GC folders
+- context-mode batch containing the matching `gc config show` subset
+
+Failure rules:
+- If CLI says `on_demand` but UI says `auto`, fail as stale/incorrect
+  `named_session_mode`.
+- If CLI has an agent and UI omits it, fail as inventory/grouping.
+- If UI shows a thread-only ghost for a rig not in config, fail as stale
+  metadata unless clearly marked unconfigured.
+
+Exit criteria:
+- visual/sidebar inventory matches expected inventory
+- all mismatches have exact CLI config lines and screenshot evidence
+"""
+
+[[steps]]
+id = "test-config-controls-round-trip"
+title = "Test controls that mutate config and restore them"
+needs = ["open-sidebar-like-a-user"]
+description = """
+For every visible control, test one mutation and then restore the original
+value. After each click, verify three layers:
+1. Browser label/state changed.
+2. Runtime TOML changed only in the expected block.
+3. `bun gc -- config show` resolves the same value.
+
+Control families:
+- agent suspend/resume
+- rig suspend/resume
+- city suspend/resume only if safe for the test window
+- session mode `auto` <-> `demand`
+- wake mode `fresh` <-> `resume`
+- pool max increment/decrement
+- pool min increment/decrement, if present
+- supervisor start/stop button
+- controller start/stop button
+
+Evidence batch after each control:
+```bash
+sha256sum {{runtime_city}}/city.toml {{runtime_city}}/.gc/site.toml
+bun gc -- config show
+bun gc -- status
+bun gc -- session list
+git diff -- scripts/gascity-runner.ts apps/server/src/gc/Layers/GcApiClient.ts packages/contracts/src/gc.ts apps/web/src/components/SidebarGcFolders.tsx apps/web/src/components/sidebar/gcSidebarControls.ts
+```
+
+TOML expectations:
+- city-level agents mutate `[[patches.agent]]`
+- rig pack agents mutate `[[rigs.overrides]]` or the upstream-supported
+  equivalent for that GC version
+- named session mode mutates `[[patches.named_session]]`
+- pool size changes mutate the specific agent patch/override only
+- `site.toml` must not be rewritten except by explicit site operations
+- `bun gascity:config`, `bun gascity:start`, and `bun gascity:dry-run` must not
+  overwrite user-added rigs
+
+After restore, prove the hash/config returns to the baseline or explain every
+intentional difference.
+
+Exit criteria:
+- each control round-trips
+- no unrelated config blocks change
+- context-mode has one commit per control family
+"""
+
+[[steps]]
+id = "test-session-lifecycle-controls"
+title = "Test session/thread lifecycle behavior"
+needs = ["test-config-controls-round-trip"]
+description = """
+Only run lifecycle tests on safe agents or a temporary test rig. Avoid burning
+tokens on production work agents unless the audit explicitly requires it.
+
+For `always` agents:
+- set mode to `auto`
+- ensure not suspended
+- wait for supervisor/controller reconcile
+- verify `gc status` shows `awake` or creating
+- verify `gc session list` has an active row
+- verify T3 sidebar shows the associated thread row as bound/ready
+
+For `on_demand` agents:
+- set mode to `demand`
+- ensure not suspended
+- verify `gc status` shows `reserved-unmaterialized (on_demand)` until woken
+- use the appropriate user path to start/wake the agent
+- verify session/thread appears
+- restore demand mode and stop/suspend if required
+
+For wake mode:
+- `fresh` should create/reset as fresh according to GC semantics
+- `resume` should reuse existing session binding where possible
+- verify by comparing `gc session list`, thread IDs, and T3 thread rows before
+  and after wake
+
+For pool agents:
+- adjust max/min
+- verify desired pool slots in `gc status`
+- verify individual pool rows/threads appear only when materialized
+- restore pool size
+
+Exit criteria:
+- every lifecycle expectation is proven by GC CLI plus sidebar evidence
+- thread creation/resume behavior is recorded with session IDs/thread IDs
+- no unexpected provider sessions are left running after restore
+"""
+
+[[steps]]
+id = "stress-refresh-and-staleness"
+title = "Stress sidebar refresh and stale data paths"
+needs = ["test-session-lifecycle-controls"]
+description = """
+This step checks the failure mode that caused prior wrong sidebar labels.
+
+Scenarios:
+1. Change config through the sidebar, then verify UI refresh.
+2. Change config through `bun gc -- ...`, then force sidebar refresh/reload and
+   verify UI catches up.
+3. Stop/restart controller while supervisor remains running; verify sidebar
+   shows controller/supervisor state accurately.
+4. Run `bun gascity:config`, `bun gascity:start --dry-run`, and `bun gc -- status`;
+   verify none overwrite runtime `city.toml`.
+5. Compare GC API config against CLI-expanded config. CLI-expanded live config
+   wins when API is stale.
+
+Known bug classes to catch:
+- `named_session_mode` missing from server merge -> demand displayed as auto
+- CLI-only rig dropped when GC API response is stale
+- routine runner command overwrites user-added rig
+- sidebar shows old thread metadata as if it were configured TOML
+- suspended pack agents not shown because no thread exists yet
+
+Exit criteria:
+- each stale-data scenario has a before/after snapshot
+- if a stale path is found, create or update a code fix and add a regression test
+"""
+
+[[steps]]
+id = "write-audit-report-and-followups"
+title = "Write report, file follow-up beads, and commit"
+needs = ["stress-refresh-and-staleness"]
+description = """
+Write the audit report to a file, not chat. Include:
+- git branch and commit
+- context-mode database and branch
+- runtime city path
+- tested URL
+- expected inventory
+- observed sidebar inventory
+- control matrix with pass/fail
+- config hash before/after each control family
+- session/thread IDs created or resumed
+- failures with screenshots and exact CLI evidence
+- code/config fixes made
+- follow-up beads for anything not fixed
+
+Required final checks:
+```bash
+bun test apps/server/src/gc/Layers/GcApiClient.patch.test.ts
+bun test packages/contracts/src/gc.test.ts
+git status --short
+```
+
+Context-mode finalization:
+- index the report into `{{context_db}}`
+- commit with message `Complete T3 sidebar live audit <git-branch>`
+- if code changed, make normal git commits grouped by area
+
+Exit criteria:
+- report file exists
+- context-mode branch has baseline, control-family, and final commits
+- every failed check has either a fix or a follow-up bead
+- runtime config is restored to the intended final state
+"""

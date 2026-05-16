@@ -1,0 +1,16 @@
+.gc/
+.beads/
+.git/
+cities/*/rigs/*
+!cities/gastown/rigs/
+!cities/gastown/rigs/test-rig/
+!cities/gastown/rigs/test-rig/.gitkeep
+audit/
+*.prof
+*.out
+~
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
