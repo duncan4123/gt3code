@@ -169,6 +169,8 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
       typeof agent.is_pool === "boolean" && agent.is_pool
         ? undefined
         : (namedSessionMode ?? derivedNamedSessionMode ?? "always");
+    const wakeMode: "resume" | "fresh" | undefined =
+      agent.wake_mode === "resume" || agent.wake_mode === "fresh" ? agent.wake_mode : undefined;
     return [
       {
         name: agent.name,
@@ -184,6 +186,7 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
         ...(typeof agent.max_active_sessions === "number"
           ? { max_active_sessions: agent.max_active_sessions }
           : {}),
+        ...(wakeMode ? { wake_mode: wakeMode } : {}),
         ...(typeof agent.scope === "string" ? { scope: agent.scope } : {}),
         suspended: Boolean(agent.suspended),
         ...(effectiveNamedSessionMode ? { named_session_mode: effectiveNamedSessionMode } : {}),
@@ -372,6 +375,47 @@ function updateCachedAgentMaxActiveSessions(
               : {}),
           }
         : agent,
+    ),
+  };
+}
+
+function updateCachedAgentMinActiveSessions(
+  config: GcConfigResult | null,
+  name: string,
+  minActiveSessions: number,
+): GcConfigResult | null {
+  if (!config) {
+    return null;
+  }
+  return {
+    ...config,
+    agents: config.agents.map((agent) =>
+      resolveAgentConfigKey(agent) === name
+        ? {
+            ...agent,
+            min_active_sessions: minActiveSessions,
+            ...(typeof agent.max_active_sessions === "number" &&
+            agent.max_active_sessions < minActiveSessions
+              ? { max_active_sessions: minActiveSessions }
+              : {}),
+          }
+        : agent,
+    ),
+  };
+}
+
+function updateCachedAgentWakeMode(
+  config: GcConfigResult | null,
+  name: string,
+  wakeMode: "resume" | "fresh",
+): GcConfigResult | null {
+  if (!config) {
+    return null;
+  }
+  return {
+    ...config,
+    agents: config.agents.map((agent) =>
+      resolveAgentConfigKey(agent) === name ? { ...agent, wake_mode: wakeMode } : agent,
     ),
   };
 }
@@ -875,7 +919,11 @@ function replaceOrInsertNumberLine(
 function updateAgentPatchInCityToml(
   cityTomlContent: string,
   identity: { readonly dir: string; readonly template: string },
-  patch: { readonly maxActiveSessions: number },
+  patch: {
+    readonly maxActiveSessions?: number;
+    readonly minActiveSessions?: number;
+    readonly wakeMode?: "resume" | "fresh";
+  },
 ): string {
   const lines = cityTomlContent.split("\n");
 
@@ -893,13 +941,27 @@ function updateAgentPatchInCityToml(
       blockEnd += 1;
     }
     if ((foundDir ?? "") === identity.dir && foundName === identity.template) {
-      replaceOrInsertNumberLine(
-        lines,
-        index + 1,
-        blockEnd,
-        "max_active_sessions",
-        patch.maxActiveSessions,
-      );
+      if (patch.maxActiveSessions !== undefined) {
+        replaceOrInsertNumberLine(
+          lines,
+          index + 1,
+          blockEnd,
+          "max_active_sessions",
+          patch.maxActiveSessions,
+        );
+      }
+      if (patch.minActiveSessions !== undefined) {
+        replaceOrInsertNumberLine(
+          lines,
+          index + 1,
+          blockEnd,
+          "min_active_sessions",
+          patch.minActiveSessions,
+        );
+      }
+      if (patch.wakeMode !== undefined) {
+        replaceOrInsertQuotedLine(lines, index + 1, blockEnd, "wake_mode", patch.wakeMode);
+      }
       return lines.join("\n");
     }
     index = blockEnd - 1;
@@ -911,10 +973,33 @@ function updateAgentPatchInCityToml(
     "[[patches.agent]]",
     ...(identity.dir ? [`dir = "${identity.dir}"`] : []),
     `name = "${identity.template}"`,
-    `max_active_sessions = ${patch.maxActiveSessions}`,
+    ...(patch.maxActiveSessions !== undefined
+      ? [`max_active_sessions = ${patch.maxActiveSessions}`]
+      : []),
+    ...(patch.minActiveSessions !== undefined
+      ? [`min_active_sessions = ${patch.minActiveSessions}`]
+      : []),
+    ...(patch.wakeMode !== undefined ? [`wake_mode = "${patch.wakeMode}"`] : []),
   ];
   lines.push(...blockLines);
   return lines.join("\n");
+}
+
+function replaceOrInsertQuotedLine(
+  lines: string[],
+  start: number,
+  end: number,
+  key: "wake_mode",
+  value: string,
+): void {
+  const nextLine = `${key} = "${value}"`;
+  for (let index = start; index < end; index += 1) {
+    if (lines[index]?.trim().startsWith(`${key} =`)) {
+      lines[index] = nextLine;
+      return;
+    }
+  }
+  lines.splice(end, 0, nextLine);
 }
 
 function writeAgentMaxActiveSessionsToCityToml(
@@ -925,6 +1010,30 @@ function writeAgentMaxActiveSessionsToCityToml(
   const cityTomlPath = path.join(cityPath, "city.toml");
   const nextContent = updateAgentPatchInCityToml(readFileSync(cityTomlPath, "utf8"), identity, {
     maxActiveSessions,
+  });
+  writeFileSync(cityTomlPath, nextContent, "utf8");
+}
+
+function writeAgentMinActiveSessionsToCityToml(
+  cityPath: string,
+  identity: { readonly dir: string; readonly template: string },
+  minActiveSessions: number,
+): void {
+  const cityTomlPath = path.join(cityPath, "city.toml");
+  const nextContent = updateAgentPatchInCityToml(readFileSync(cityTomlPath, "utf8"), identity, {
+    minActiveSessions,
+  });
+  writeFileSync(cityTomlPath, nextContent, "utf8");
+}
+
+function writeAgentWakeModeToCityToml(
+  cityPath: string,
+  identity: { readonly dir: string; readonly template: string },
+  wakeMode: "resume" | "fresh",
+): void {
+  const cityTomlPath = path.join(cityPath, "city.toml");
+  const nextContent = updateAgentPatchInCityToml(readFileSync(cityTomlPath, "utf8"), identity, {
+    wakeMode,
   });
   writeFileSync(cityTomlPath, nextContent, "utf8");
 }
@@ -957,6 +1066,7 @@ function mergeCliExpandedConfig(
         ...(typeof expandedAgent.max_active_sessions === "number"
           ? { max_active_sessions: expandedAgent.max_active_sessions }
           : {}),
+        ...(expandedAgent.wake_mode ? { wake_mode: expandedAgent.wake_mode } : {}),
       };
     }),
   };
@@ -1540,6 +1650,75 @@ const makeGcApiClient = Effect.gen(function* () {
       ),
     );
 
+  const setAgentMinActiveSessions: GcApiClientShape["setAgentMinActiveSessions"] = (
+    name,
+    minActiveSessions,
+  ) =>
+    Effect.promise(async () =>
+      runLoggedGcMutation(
+        "agent-min-active-sessions",
+        sanitizeKey(name),
+        { minActiveSessions },
+        async () => {
+          const normalizedName = sanitizeKey(name);
+          if (!Number.isInteger(minActiveSessions)) {
+            throw new Error("GC minimum active sessions must be an integer");
+          }
+          if (minActiveSessions < 0) {
+            throw new Error("GC minimum active sessions must be greater than or equal to 0");
+          }
+          if (!isPoolAgent(lastKnownConfig, normalizedName)) {
+            throw new Error(
+              `min-active control for non-pool agent ${normalizedName} is not supported`,
+            );
+          }
+          if (!cityPath) {
+            throw new Error("GC city path unavailable for min-active mutation");
+          }
+          const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+          if (!identity) {
+            throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
+          }
+          logGcWarning("routing min-active mutation via city.toml", {
+            baseUrl,
+            cityPath,
+            agent: normalizedName,
+            minActiveSessions,
+          });
+          writeAgentMinActiveSessionsToCityToml(cityPath, identity, minActiveSessions);
+          lastKnownConfig = updateCachedAgentMinActiveSessions(
+            lastKnownConfig,
+            normalizedName,
+            minActiveSessions,
+          );
+          return { result: undefined, path: "city.toml" };
+        },
+      ),
+    );
+
+  const setAgentWakeMode: GcApiClientShape["setAgentWakeMode"] = (name, wakeMode) =>
+    Effect.promise(async () =>
+      runLoggedGcMutation("agent-wake-mode", sanitizeKey(name), { wakeMode }, async () => {
+        const normalizedName = sanitizeKey(name);
+        if (!cityPath) {
+          throw new Error("GC city path unavailable for wake-mode mutation");
+        }
+        const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
+        if (!identity) {
+          throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
+        }
+        logGcWarning("routing wake-mode mutation via city.toml", {
+          baseUrl,
+          cityPath,
+          agent: normalizedName,
+          wakeMode,
+        });
+        writeAgentWakeModeToCityToml(cityPath, identity, wakeMode);
+        lastKnownConfig = updateCachedAgentWakeMode(lastKnownConfig, normalizedName, wakeMode);
+        return { result: undefined, path: "city.toml" };
+      }),
+    );
+
   const setAgentSessionMode: GcApiClientShape["setAgentSessionMode"] = (name, mode) =>
     Effect.promise(async () =>
       runLoggedGcMutation("agent-session-mode", sanitizeKey(name), { mode }, async () => {
@@ -1665,6 +1844,8 @@ const makeGcApiClient = Effect.gen(function* () {
     respondToPending,
     setAgentSuspended,
     setAgentMaxActiveSessions,
+    setAgentMinActiveSessions,
+    setAgentWakeMode,
     setAgentSessionMode,
     setCitySuspended,
     setRigSuspended,

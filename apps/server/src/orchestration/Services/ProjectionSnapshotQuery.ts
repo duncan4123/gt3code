@@ -12,7 +12,6 @@ import type {
   OrchestrationProject,
   OrchestrationProjectShell,
   OrchestrationReadModel,
-  OrchestrationSearchThreadMessagesResult,
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadShell,
@@ -160,10 +159,10 @@ export interface ProjectionSnapshotQueryShape {
     sessionName: string,
   ) => Effect.Effect<Option.Option<ProjectionGcThreadBinding>, ProjectionRepositoryError>;
 
-  readonly searchThreadMessages?: (
-    query: string,
-    limit: number,
-  ) => Effect.Effect<OrchestrationSearchThreadMessagesResult, ProjectionRepositoryError>;
+  readonly getArchivedShellSnapshot?: () => Effect.Effect<
+    OrchestrationShellSnapshot,
+    ProjectionRepositoryError
+  >;
 }
 
 /**

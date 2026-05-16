@@ -20,7 +20,7 @@ import {
   type RankedSearchResult,
 } from "@t3tools/shared/searchRanking";
 
-import { VcsDriverRegistry } from "../../vcs/VcsDriverRegistry.ts";
+import { VcsCore } from "../../vcs/Services/VcsCore.ts";
 import {
   WorkspaceEntries,
   WorkspaceEntriesBrowseError,
@@ -181,75 +181,24 @@ const resolveBrowseTarget = (
 
 export const makeWorkspaceEntries = Effect.gen(function* () {
   const path = yield* Path.Path;
-  const vcsRegistry = yield* VcsDriverRegistry;
+  const vcsCore = yield* VcsCore;
   const workspacePaths = yield* WorkspacePaths;
 
   const isInsideVcsWorkTree = (cwd: string): Effect.Effect<boolean> =>
-    vcsRegistry.detect({ cwd }).pipe(
-      Effect.map((handle) => handle !== null),
-      Effect.catch(() => Effect.succeed(false)),
-    );
+    vcsCore.isInsideWorkTree(cwd).pipe(Effect.catch(() => Effect.succeed(false)));
 
   const filterVcsIgnoredPaths = (
     cwd: string,
     relativePaths: string[],
   ): Effect.Effect<string[], never> =>
-    vcsRegistry.detect({ cwd }).pipe(
-      Effect.flatMap((handle) =>
-        handle
-          ? handle.driver.filterIgnoredPaths(cwd, relativePaths).pipe(
-              Effect.map((paths) => [...paths]),
-              Effect.catch(() => Effect.succeed(relativePaths)),
-            )
-          : Effect.succeed(relativePaths),
-      ),
+    vcsCore.filterIgnoredPaths(cwd, relativePaths).pipe(
+      Effect.map((paths) => [...paths]),
       Effect.catch(() => Effect.succeed(relativePaths)),
     );
 
-  const browse: WorkspaceEntriesShape["browse"] = (input) =>
-    Effect.tryPromise({
-      try: async () => {
-        const partialPath = input.partialPath.trim();
-        const basePath = input.cwd ?? process.cwd();
-        const expanded =
-          partialPath.startsWith("~") && process.env.HOME
-            ? path.join(process.env.HOME, partialPath.slice(1))
-            : partialPath;
-        const absolutePartial = path.isAbsolute(expanded)
-          ? expanded
-          : path.join(basePath, expanded);
-        const parentPath = partialPath.endsWith(path.sep)
-          ? absolutePartial
-          : path.dirname(absolutePartial);
-        const prefix = partialPath.endsWith(path.sep) ? "" : path.basename(absolutePartial);
-        const dirents = await fsPromises.readdir(parentPath, { withFileTypes: true });
-        const entries = dirents
-          .filter((entry) => entry.isDirectory() && entry.name.startsWith(prefix))
-          .slice(0, 100)
-          .map((entry) => ({
-            name: entry.name,
-            fullPath: path.join(parentPath, entry.name),
-          }));
-        return { parentPath, entries };
-      },
-      catch: (cause) =>
-        new WorkspaceEntriesBrowseError({
-          cwd: input.cwd,
-          partialPath: input.partialPath,
-          operation: "WorkspaceEntries.browse",
-          detail: processErrorDetail(cause),
-          cause,
-        }),
-    });
-
   const buildWorkspaceIndexFromVcs = Effect.fn("WorkspaceEntries.buildWorkspaceIndexFromVcs")(
     function* (cwd: string) {
-      const vcs = yield* vcsRegistry.detect({ cwd }).pipe(Effect.catch(() => Effect.succeed(null)));
-      if (!vcs) {
-        return null;
-      }
-
-      const listedFiles = yield* vcs.driver
+      const listedFiles = yield* vcsCore
         .listWorkspaceFiles(cwd)
         .pipe(Effect.catch(() => Effect.succeed(null)));
 
@@ -260,10 +209,7 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
       const listedPaths = [...listedFiles.paths]
         .map((entry) => toPosixPath(entry))
         .filter((entry) => entry.length > 0 && !isPathInIgnoredDirectory(entry));
-      const filePaths = yield* vcs.driver.filterIgnoredPaths(cwd, listedPaths).pipe(
-        Effect.map((paths) => [...paths]),
-        Effect.catch(() => filterVcsIgnoredPaths(cwd, listedPaths)),
-      );
+      const filePaths = yield* filterVcsIgnoredPaths(cwd, listedPaths);
 
       const directorySet = new Set<string>();
       for (const filePath of filePaths) {

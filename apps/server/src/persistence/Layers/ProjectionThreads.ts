@@ -47,6 +47,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           pending_approval_count,
           pending_user_input_count,
           has_actionable_proposed_plan,
+          custom_metadata,
           deleted_at
         )
         VALUES (
@@ -66,6 +67,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${row.pendingApprovalCount},
           ${row.pendingUserInputCount},
           ${row.hasActionableProposedPlan},
+          ${row.customMetadata},
           ${row.deletedAt}
         )
         ON CONFLICT (thread_id)
@@ -85,6 +87,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           pending_approval_count = excluded.pending_approval_count,
           pending_user_input_count = excluded.pending_user_input_count,
           has_actionable_proposed_plan = excluded.has_actionable_proposed_plan,
+          custom_metadata = excluded.custom_metadata,
           deleted_at = excluded.deleted_at
       `,
   });
@@ -111,6 +114,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
+          custom_metadata AS "customMetadata",
           deleted_at AS "deletedAt"
         FROM projection_threads
         WHERE thread_id = ${threadId}
@@ -139,6 +143,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
+          custom_metadata AS "customMetadata",
           deleted_at AS "deletedAt"
         FROM projection_threads
         WHERE project_id = ${projectId}

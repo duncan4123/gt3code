@@ -584,6 +584,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             pendingApprovalCount: 0,
             pendingUserInputCount: 0,
             hasActionableProposedPlan: 0,
+            customMetadata: "{}",
             deletedAt: null,
           });
           return;
@@ -625,6 +626,14 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           if (Option.isNone(existingRow)) {
             return;
           }
+          let customMetadata = existingRow.value.customMetadata;
+          if (event.payload.customMetadata !== undefined) {
+            const existingMetadata = JSON.parse(existingRow.value.customMetadata || "{}");
+            customMetadata = JSON.stringify({
+              ...existingMetadata,
+              ...event.payload.customMetadata,
+            });
+          }
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
@@ -635,6 +644,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...(event.payload.worktreePath !== undefined
               ? { worktreePath: event.payload.worktreePath }
               : {}),
+            customMetadata,
             updatedAt: event.payload.updatedAt,
           });
           return;

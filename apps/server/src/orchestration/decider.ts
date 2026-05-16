@@ -218,6 +218,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           interactionMode: command.interactionMode,
           branch: command.branch,
           worktreePath: command.worktreePath,
+          ...(command.customMetadata !== undefined
+            ? { customMetadata: command.customMetadata }
+            : {}),
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
         },
@@ -314,6 +317,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
             : {}),
           ...(command.branch !== undefined ? { branch: command.branch } : {}),
           ...(command.worktreePath !== undefined ? { worktreePath: command.worktreePath } : {}),
+          ...(command.customMetadata !== undefined
+            ? { customMetadata: command.customMetadata }
+            : {}),
           updatedAt: occurredAt,
         },
       };

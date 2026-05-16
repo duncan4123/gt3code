@@ -1,9 +1,8 @@
-import { Cause, Effect, Layer, Option, Queue, Ref, Schema, Stream } from "effect";
+import { Cause, Effect, Layer, Option, Queue, Schema, Stream } from "effect";
 import {
   CommandId,
   EventId,
   FilesystemBrowseError,
-  GcAddRigError,
   GcFindThreadBindingError,
   GcGetConfigError,
   GcGetThreadContextError,
@@ -14,21 +13,15 @@ import {
   GcSetAgentSuspendedError,
   GcSetAgentWakeModeError,
   GcSetCitySuspendedError,
-  GcSetControllerRunningError,
   GcSetRigSuspendedError,
-  GcSetSupervisorRunningError,
-  GcStartError,
   GcStopSessionError,
   GcSubmitSessionError,
-  GcWakeSessionError,
   type OrchestrationCommand,
   type GitActionProgressEvent,
   OrchestrationDispatchCommandError,
-  type OrchestrationEvent,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetSnapshotError,
   OrchestrationGetTurnDiffError,
-  OrchestrationSearchThreadMessagesError,
   ORCHESTRATION_WS_METHODS,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
@@ -77,6 +70,9 @@ import { VcsManager } from "./vcs/Services/VcsManager.ts";
 import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { ServerEnvironment } from "./environment/Services/ServerEnvironment.ts";
 import { ServerAuth } from "./auth/Services/ServerAuth.ts";
+import { TraceDiagnostics } from "./diagnostics/TraceDiagnostics.ts";
+import { ProcessDiagnostics } from "./diagnostics/ProcessDiagnostics.ts";
+import { ProcessResourceMonitor } from "./diagnostics/ProcessResourceMonitor.ts";
 
 const WsRpcLayer = WsRpcGroup.toLayer(
   Effect.gen(function* () {
@@ -99,6 +95,9 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     const projectSetupScriptRunner = yield* ProjectSetupScriptRunner;
     const serverEnvironment = yield* ServerEnvironment;
     const serverAuth = yield* ServerAuth;
+    const traceDiagnostics = yield* TraceDiagnostics;
+    const processDiagnostics = yield* ProcessDiagnostics;
+    const processResourceMonitor = yield* ProcessResourceMonitor;
     const providerMaintenanceRunner = yield* ProviderMaintenanceRunner;
     const sourceControlDiscovery = yield* SourceControlDiscovery;
     const sourceControlRepositoryService = yield* SourceControlRepositoryService;
@@ -116,7 +115,9 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           Option.match(threadOption, {
             onNone: () => Effect.fail(new Error(`No active thread found for ${threadId}.`)),
             onSome: (thread) => {
-              const sessionName = parseGcMeta(thread.customMetadata).sessionName;
+              const sessionName = parseGcMeta(
+                (thread as { readonly customMetadata?: Record<string, string> }).customMetadata,
+              ).sessionName;
               return sessionName
                 ? Effect.succeed(sessionName)
                 : Effect.fail(new Error(`Thread ${threadId} is not bound to a GC session.`));
@@ -409,20 +410,6 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     });
 
     return WsRpcGroup.of({
-      [ORCHESTRATION_WS_METHODS.getSnapshot]: (_input) =>
-        observeRpcEffect(
-          ORCHESTRATION_WS_METHODS.getSnapshot,
-          projectionSnapshotQuery.getSnapshot().pipe(
-            Effect.mapError(
-              (cause) =>
-                new OrchestrationGetSnapshotError({
-                  message: "Failed to load orchestration snapshot",
-                  cause,
-                }),
-            ),
-          ),
-          { "rpc.aggregate": "orchestration" },
-        ),
       [ORCHESTRATION_WS_METHODS.dispatchCommand]: (command) =>
         observeRpcEffect(
           ORCHESTRATION_WS_METHODS.dispatchCommand,
@@ -496,6 +483,23 @@ const WsRpcLayer = WsRpcGroup.toLayer(
               (cause) =>
                 new OrchestrationReplayEventsError({
                   message: "Failed to replay orchestration events",
+                  cause,
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "orchestration" },
+        ),
+      [ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot]: (_input) =>
+        observeRpcEffect(
+          ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot,
+          (
+            projectionSnapshotQuery.getArchivedShellSnapshot ??
+            projectionSnapshotQuery.getShellSnapshot
+          )().pipe(
+            Effect.mapError(
+              (cause) =>
+                new OrchestrationGetSnapshotError({
+                  message: "Failed to load orchestration shell snapshot",
                   cause,
                 }),
             ),
@@ -590,22 +594,6 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           }),
           { "rpc.aggregate": "orchestration" },
         ),
-      [ORCHESTRATION_WS_METHODS.searchThreadMessages]: (input) =>
-        observeRpcEffect(
-          ORCHESTRATION_WS_METHODS.searchThreadMessages,
-          projectionSnapshotQuery.searchThreadMessages
-            ? projectionSnapshotQuery.searchThreadMessages(input.query, input.limit).pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new OrchestrationSearchThreadMessagesError({
-                      message: "Failed to search thread messages",
-                      cause,
-                    }),
-                ),
-              )
-            : Effect.succeed({ results: [] }),
-          { "rpc.aggregate": "orchestration" },
-        ),
       [WS_METHODS.serverGetConfig]: (_input) =>
         observeRpcEffect(WS_METHODS.serverGetConfig, loadServerConfig, {
           "rpc.aggregate": "server",
@@ -655,6 +643,29 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         }),
       [WS_METHODS.serverUpdateSettings]: ({ patch }) =>
         observeRpcEffect(WS_METHODS.serverUpdateSettings, serverSettings.updateSettings(patch), {
+          "rpc.aggregate": "server",
+        }),
+      [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>
+        observeRpcEffect(
+          WS_METHODS.serverGetTraceDiagnostics,
+          traceDiagnostics.read({
+            traceFilePath: config.serverTracePath,
+            maxFiles: 5,
+          }),
+          { "rpc.aggregate": "server" },
+        ),
+      [WS_METHODS.serverGetProcessDiagnostics]: (_input) =>
+        observeRpcEffect(WS_METHODS.serverGetProcessDiagnostics, processDiagnostics.read, {
+          "rpc.aggregate": "server",
+        }),
+      [WS_METHODS.serverGetProcessResourceHistory]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.serverGetProcessResourceHistory,
+          processResourceMonitor.readHistory(input),
+          { "rpc.aggregate": "server" },
+        ),
+      [WS_METHODS.serverSignalProcess]: (input) =>
+        observeRpcEffect(WS_METHODS.serverSignalProcess, processDiagnostics.signal(input), {
           "rpc.aggregate": "server",
         }),
       [WS_METHODS.serverDiscoverSourceControl]: (_input) =>
@@ -901,68 +912,6 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           ),
           { "rpc.aggregate": "gc" },
         ),
-      [WS_METHODS.gcStart]: (_input) =>
-        observeRpcEffect(
-          WS_METHODS.gcStart,
-          gcApiClient.start.pipe(
-            Effect.flatMap(() => gcApiClient.getConfig()),
-            Effect.flatMap((config) =>
-              config
-                ? Effect.succeed(config)
-                : Effect.fail(new GcStartError({ message: "Gas City config is unavailable." })),
-            ),
-            Effect.mapError((cause) =>
-              Schema.is(GcStartError)(cause)
-                ? cause
-                : new GcStartError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcSetSupervisorRunning]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcSetSupervisorRunning,
-          gcApiClient.setSupervisorRunning(input.running, input.city).pipe(
-            Effect.flatMap(() => gcApiClient.getConfig()),
-            Effect.flatMap((config) =>
-              config
-                ? Effect.succeed(config)
-                : Effect.fail(
-                    new GcSetSupervisorRunningError({
-                      message: "Gas City config is unavailable.",
-                    }),
-                  ),
-            ),
-            Effect.mapError((cause) =>
-              Schema.is(GcSetSupervisorRunningError)(cause)
-                ? cause
-                : new GcSetSupervisorRunningError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcSetControllerRunning]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcSetControllerRunning,
-          gcApiClient.setControllerRunning(input.running, input.city).pipe(
-            Effect.flatMap(() => gcApiClient.getConfig()),
-            Effect.flatMap((config) =>
-              config
-                ? Effect.succeed(config)
-                : Effect.fail(
-                    new GcSetControllerRunningError({
-                      message: "Gas City config is unavailable.",
-                    }),
-                  ),
-            ),
-            Effect.mapError((cause) =>
-              Schema.is(GcSetControllerRunningError)(cause)
-                ? cause
-                : new GcSetControllerRunningError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
       [WS_METHODS.gcFindThreadBinding]: (input) =>
         observeRpcEffect(
           WS_METHODS.gcFindThreadBinding,
@@ -997,7 +946,11 @@ const WsRpcLayer = WsRpcGroup.toLayer(
                       message: `No active thread found for ${input.threadId}.`,
                     }),
                   ),
-                onSome: (thread) => gcContextProvider.getThreadContext(thread.customMetadata ?? {}),
+                onSome: (thread) =>
+                  gcContextProvider.getThreadContext(
+                    (thread as { readonly customMetadata?: Record<string, string> })
+                      .customMetadata ?? {},
+                  ),
               }),
             ),
             Effect.mapError((cause) =>
@@ -1030,18 +983,6 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           ),
           { "rpc.aggregate": "gc" },
         ),
-      [WS_METHODS.gcWakeSession]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcWakeSession,
-          gcApiClient
-            .wakeSession(input.sessionName)
-            .pipe(
-              Effect.mapError(
-                (cause) => new GcWakeSessionError({ message: messageFromUnknown(cause) }),
-              ),
-            ),
-          { "rpc.aggregate": "gc" },
-        ),
       [WS_METHODS.gcRespondToPending]: (input) =>
         observeRpcEffect(
           WS_METHODS.gcRespondToPending,
@@ -1064,16 +1005,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(
           WS_METHODS.gcSetAgentSuspended,
           gcApiClient.setAgentSuspended(input.agent, input.suspended).pipe(
-            Effect.flatMap(() => gcApiClient.getConfig()),
-            Effect.flatMap((config) =>
-              config
-                ? Effect.succeed(config)
-                : Effect.fail(
-                    new GcSetAgentSuspendedError({
-                      message: "Gas City config is unavailable.",
-                    }),
-                  ),
-            ),
+            Effect.as({
+              id: input.agent,
+              status: input.suspended ? "suspended" : "running",
+            }),
             Effect.mapError((cause) =>
               Schema.is(GcSetAgentSuspendedError)(cause)
                 ? cause
@@ -1086,16 +1021,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(
           WS_METHODS.gcSetAgentMaxActiveSessions,
           gcApiClient.setAgentMaxActiveSessions(input.agent, input.maxActiveSessions).pipe(
-            Effect.flatMap(() => gcApiClient.getConfig()),
-            Effect.flatMap((config) =>
-              config
-                ? Effect.succeed(config)
-                : Effect.fail(
-                    new GcSetAgentMaxActiveSessionsError({
-                      message: "Gas City config is unavailable.",
-                    }),
-                  ),
-            ),
+            Effect.as({ id: input.agent, status: "updated" }),
             Effect.mapError((cause) =>
               Schema.is(GcSetAgentMaxActiveSessionsError)(cause)
                 ? cause
@@ -1108,16 +1034,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(
           WS_METHODS.gcSetAgentMinActiveSessions,
           gcApiClient.setAgentMinActiveSessions(input.agent, input.minActiveSessions).pipe(
-            Effect.flatMap(() => gcApiClient.getConfig()),
-            Effect.flatMap((config) =>
-              config
-                ? Effect.succeed(config)
-                : Effect.fail(
-                    new GcSetAgentMinActiveSessionsError({
-                      message: "Gas City config is unavailable.",
-                    }),
-                  ),
-            ),
+            Effect.as({ id: input.agent, status: "updated" }),
             Effect.mapError((cause) =>
               Schema.is(GcSetAgentMinActiveSessionsError)(cause)
                 ? cause
@@ -1130,16 +1047,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(
           WS_METHODS.gcSetAgentWakeMode,
           gcApiClient.setAgentWakeMode(input.agent, input.wakeMode).pipe(
-            Effect.flatMap(() => gcApiClient.getConfig()),
-            Effect.flatMap((config) =>
-              config
-                ? Effect.succeed(config)
-                : Effect.fail(
-                    new GcSetAgentWakeModeError({
-                      message: "Gas City config is unavailable.",
-                    }),
-                  ),
-            ),
+            Effect.as({ id: input.agent, status: "updated" }),
             Effect.mapError((cause) =>
               Schema.is(GcSetAgentWakeModeError)(cause)
                 ? cause
@@ -1152,16 +1060,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(
           WS_METHODS.gcSetAgentSessionMode,
           gcApiClient.setAgentSessionMode(input.agent, input.mode).pipe(
-            Effect.flatMap(() => gcApiClient.getConfig()),
-            Effect.flatMap((config) =>
-              config
-                ? Effect.succeed(config)
-                : Effect.fail(
-                    new GcSetAgentSessionModeError({
-                      message: "Gas City config is unavailable.",
-                    }),
-                  ),
-            ),
+            Effect.as({ id: input.agent, status: "updated" }),
             Effect.mapError((cause) =>
               Schema.is(GcSetAgentSessionModeError)(cause)
                 ? cause
@@ -1174,16 +1073,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(
           WS_METHODS.gcSetCitySuspended,
           gcApiClient.setCitySuspended(input.suspended).pipe(
-            Effect.flatMap(() => gcApiClient.getConfig()),
-            Effect.flatMap((config) =>
-              config
-                ? Effect.succeed(config)
-                : Effect.fail(
-                    new GcSetCitySuspendedError({
-                      message: "Gas City config is unavailable.",
-                    }),
-                  ),
-            ),
+            Effect.as({
+              id: "city",
+              status: input.suspended ? "suspended" : "running",
+            }),
             Effect.mapError((cause) =>
               Schema.is(GcSetCitySuspendedError)(cause)
                 ? cause
@@ -1196,51 +1089,16 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(
           WS_METHODS.gcSetRigSuspended,
           gcApiClient.setRigSuspended(input.rig, input.suspended).pipe(
-            Effect.flatMap(() => gcApiClient.getConfig()),
-            Effect.flatMap((config) =>
-              config
-                ? Effect.succeed(config)
-                : Effect.fail(
-                    new GcSetRigSuspendedError({
-                      message: "Gas City config is unavailable.",
-                    }),
-                  ),
-            ),
+            Effect.as({
+              id: input.rig,
+              status: input.suspended ? "suspended" : "running",
+            }),
             Effect.mapError((cause) =>
               Schema.is(GcSetRigSuspendedError)(cause)
                 ? cause
                 : new GcSetRigSuspendedError({ message: messageFromUnknown(cause) }),
             ),
           ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcAddRig]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcAddRig,
-          gcApiClient
-            .addRig({
-              path: input.path,
-              ...(input.name !== undefined ? { name: input.name } : {}),
-              ...(input.startSuspended !== undefined
-                ? { startSuspended: input.startSuspended }
-                : {}),
-              ...(input.includeGastown !== undefined
-                ? { includeGastown: input.includeGastown }
-                : {}),
-            })
-            .pipe(
-              Effect.flatMap(() => gcApiClient.getConfig()),
-              Effect.flatMap((config) =>
-                config
-                  ? Effect.succeed(config)
-                  : Effect.fail(new GcAddRigError({ message: "Gas City config is unavailable." })),
-              ),
-              Effect.mapError((cause) =>
-                Schema.is(GcAddRigError)(cause)
-                  ? cause
-                  : new GcAddRigError({ message: messageFromUnknown(cause) }),
-              ),
-            ),
           { "rpc.aggregate": "gc" },
         ),
       [WS_METHODS.terminalOpen]: (input) =>

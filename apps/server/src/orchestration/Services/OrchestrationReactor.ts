@@ -21,6 +21,8 @@ export interface OrchestrationReactorShape {
    * finalized on shutdown.
    */
   readonly start: () => Effect.Effect<void, never, Scope.Scope>;
+
+  readonly drain: Effect.Effect<void>;
 }
 
 /**

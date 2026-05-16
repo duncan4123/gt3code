@@ -12,6 +12,8 @@ import * as Layer from "effect/Layer";
 import { CheckpointStore, type CheckpointStoreShape } from "../Services/CheckpointStore.ts";
 import { VcsUnsupportedOperationError } from "@t3tools/contracts";
 import { VcsDriverRegistry } from "../../vcs/VcsDriverRegistry.ts";
+import * as VcsDriverRegistryLive from "../../vcs/VcsDriverRegistry.ts";
+import * as VcsProcess from "../../vcs/VcsProcess.ts";
 import type { VcsCheckpointOps } from "../../vcs/VcsDriver.ts";
 
 const makeCheckpointStore = Effect.gen(function* () {
@@ -86,4 +88,7 @@ const makeCheckpointStore = Effect.gen(function* () {
   } satisfies CheckpointStoreShape;
 });
 
-export const CheckpointStoreLive = Layer.effect(CheckpointStore, makeCheckpointStore);
+export const CheckpointStoreLive = Layer.effect(CheckpointStore, makeCheckpointStore).pipe(
+  Layer.provide(VcsDriverRegistryLive.layer),
+  Layer.provideMerge(VcsProcess.layer),
+);

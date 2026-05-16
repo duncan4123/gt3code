@@ -24,6 +24,8 @@ export function compactMetricAttributes(
   );
 }
 
+export const compactTraceAttributes = compactMetricAttributes;
+
 export function outcomeFromExit(exit: Exit.Exit<unknown, unknown>): ObservabilityOutcome {
   if (Exit.isSuccess(exit)) {
     return "success";

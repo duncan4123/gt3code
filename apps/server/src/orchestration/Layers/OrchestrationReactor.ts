@@ -23,8 +23,19 @@ export const makeOrchestrationReactor = Effect.gen(function* () {
     yield* threadDeletionReactor.start();
   });
 
+  const drain = Effect.all(
+    [
+      providerRuntimeIngestion.drain,
+      providerCommandReactor.drain,
+      checkpointReactor.drain,
+      threadDeletionReactor.drain,
+    ],
+    { discard: true },
+  );
+
   return {
     start,
+    drain,
   } satisfies OrchestrationReactorShape;
 });
 

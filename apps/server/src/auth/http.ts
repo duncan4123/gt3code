@@ -141,6 +141,8 @@ export const authWebSocketTokenRouteLayer = HttpRouter.add(
   }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
 );
 
+export const authBridgeWebSocketTokenRouteLayer = authWebSocketTokenRouteLayer;
+
 export const authPairingCredentialRouteLayer = HttpRouter.add(
   "POST",
   "/api/auth/pairing-token",

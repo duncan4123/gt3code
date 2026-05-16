@@ -1867,33 +1867,6 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       );
     });
 
-  const searchThreadMessages: ProjectionSnapshotQueryShape["searchThreadMessages"] = (
-    query,
-    limit,
-  ) => {
-    const normalizedQuery = normalizeFtsSearchQuery(query);
-    if (normalizedQuery === null) {
-      return Effect.succeed({ results: [] });
-    }
-    return searchThreadMessageRows({
-      query: normalizedQuery,
-      limit: Math.max(0, limit),
-    }).pipe(
-      Effect.map((rows) => ({
-        results: rows.map((row) => ({
-          threadId: row.threadId,
-          snippet: buildSearchSnippet(row.text, normalizedQuery),
-        })),
-      })),
-      Effect.mapError(
-        toPersistenceSqlOrDecodeError(
-          "ProjectionSnapshotQuery.searchThreadMessages:query",
-          "ProjectionSnapshotQuery.searchThreadMessages:decode",
-        ),
-      ),
-    );
-  };
-
   return {
     getCommandReadModel,
     getSnapshot,
@@ -1908,7 +1881,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getThreadShellById,
     getActiveThreadBindingByGcSessionName,
     getThreadDetailById,
-    searchThreadMessages,
+    getArchivedShellSnapshot: getShellSnapshot,
   } satisfies ProjectionSnapshotQueryShape;
 });
 

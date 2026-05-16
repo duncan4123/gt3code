@@ -90,6 +90,9 @@ import { layer as VcsProvisioningLive } from "./vcs/VcsProvisioningService.ts";
 import { ServerEnvironmentLive } from "./environment/Layers/ServerEnvironment.ts";
 import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
+import { layer as TraceDiagnosticsLive } from "./diagnostics/TraceDiagnostics.ts";
+import { layer as ProcessDiagnosticsLive } from "./diagnostics/ProcessDiagnostics.ts";
+import { layer as ProcessResourceMonitorLive } from "./diagnostics/ProcessResourceMonitor.ts";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -157,8 +160,12 @@ const OrchestrationProjectionPipelineLayerLive = OrchestrationProjectionPipeline
   Layer.provide(OrchestrationEventStoreLive),
 );
 
+const OrchestrationProjectionSnapshotQueryLayerLive = OrchestrationProjectionSnapshotQueryLive.pipe(
+  Layer.provideMerge(RepositoryIdentityResolverLive),
+);
+
 const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
-  OrchestrationProjectionSnapshotQueryLive,
+  OrchestrationProjectionSnapshotQueryLayerLive,
   OrchestrationEventInfrastructureLayerLive,
   OrchestrationProjectionPipelineLayerLive,
 );
@@ -169,7 +176,9 @@ const OrchestrationLayerLive = Layer.mergeAll(
 );
 
 const CheckpointingLayerLive = Layer.empty.pipe(
-  Layer.provideMerge(CheckpointDiffQueryLive),
+  Layer.provideMerge(
+    CheckpointDiffQueryLive.pipe(Layer.provideMerge(OrchestrationProjectionSnapshotQueryLayerLive)),
+  ),
   Layer.provideMerge(CheckpointStoreLive),
 );
 
@@ -177,36 +186,71 @@ const ProviderSessionDirectoryLayerLive = ProviderSessionDirectoryLive.pipe(
   Layer.provide(ProviderSessionRuntimeRepositoryLive),
 );
 
-const ProviderLayerLive = ProviderServiceLive.pipe(
-  Layer.provide(ProviderAdapterRegistryLive),
-  Layer.provideMerge(ProviderSessionDirectoryLayerLive),
+const ProviderInstanceRegistryLayerLive = ProviderInstanceRegistryHydrationLive.pipe(
+  Layer.provide(ProviderEventLoggersLive),
+  Layer.provide(OpenCodeRuntimeLive),
+  Layer.provide(ServerSettingsLive),
+);
+
+const ProviderAdapterRegistryLayerLive = ProviderAdapterRegistryLive.pipe(
+  Layer.provideMerge(ProviderInstanceRegistryLayerLive),
+);
+
+const ProviderServiceLayerLive = ProviderServiceLive.pipe(
+  Layer.provide(ProviderAdapterRegistryLayerLive),
+  Layer.provide(ProviderSessionDirectoryLayerLive),
+  Layer.provide(ProviderEventLoggersLive),
+  Layer.provide(AnalyticsServiceLayerLive),
 );
 
 const ProviderRegistryLayerLive = ProviderRegistryLive.pipe(
-  Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
-  Layer.provideMerge(ProviderEventLoggersLive),
-  Layer.provideMerge(OpenCodeRuntimeLive),
+  Layer.provideMerge(ProviderInstanceRegistryLayerLive),
 );
 
-const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
-  Layer.provideMerge(ProviderLayerLive),
-  Layer.provideMerge(OrchestrationLayerLive),
+const TextGenerationLayerLive = RoutingTextGenerationLive.pipe(
+  Layer.provideMerge(ProviderInstanceRegistryLayerLive),
 );
 
 const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
+
+const ProviderServiceRuntimeLayerLive = Layer.empty.pipe(
+  Layer.provideMerge(ProviderServiceLayerLive),
+);
+
+const ProviderSessionReaperLayerLive = ProviderSessionReaperLive.pipe(
+  Layer.provideMerge(
+    OrchestrationProjectionSnapshotQueryLayerLive.pipe(Layer.provideMerge(PersistenceLayerLive)),
+  ),
+  Layer.provideMerge(ProviderServiceLayerLive.pipe(Layer.provideMerge(PersistenceLayerLive))),
+  Layer.provideMerge(
+    ProviderSessionDirectoryLayerLive.pipe(Layer.provideMerge(PersistenceLayerLive)),
+  ),
+);
+
+const ProviderRuntimeLayerLive = ProviderServiceRuntimeLayerLive;
 
 const AuthLayerLive = ServerAuthLive.pipe(
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provide(ServerSecretStoreLive),
 );
 
+const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(PtyAdapterLive));
+
+const ProjectSetupScriptRunnerLayerLive = ProjectSetupScriptRunnerLive.pipe(
+  Layer.provideMerge(
+    OrchestrationProjectionSnapshotQueryLayerLive.pipe(Layer.provideMerge(PersistenceLayerLive)),
+  ),
+  Layer.provideMerge(TerminalLayerLive),
+  Layer.provideMerge(ServerSettingsLive),
+);
+
 const GitBackendLayerLive = Layer.empty.pipe(
   Layer.provideMerge(
     GitManagerLive.pipe(
-      Layer.provideMerge(ProjectSetupScriptRunnerLive),
+      Layer.provideMerge(ProjectSetupScriptRunnerLayerLive),
       Layer.provideMerge(GitCoreLive),
       Layer.provideMerge(GitHubCliLive),
-      Layer.provideMerge(RoutingTextGenerationLive),
+      Layer.provideMerge(TextGenerationLayerLive),
     ),
   ),
   Layer.provideMerge(GitCoreLive),
@@ -215,18 +259,38 @@ const GitBackendLayerLive = Layer.empty.pipe(
 const JjBackendLayerLive = Layer.empty.pipe(
   Layer.provideMerge(
     JjManagerLive.pipe(
-      Layer.provideMerge(ProjectSetupScriptRunnerLive),
+      Layer.provideMerge(ProjectSetupScriptRunnerLayerLive),
       Layer.provideMerge(JjCoreLive.pipe(Layer.provideMerge(GitCoreLive))),
       Layer.provideMerge(GitHubCliLive),
-      Layer.provideMerge(RoutingTextGenerationLive),
+      Layer.provideMerge(TextGenerationLayerLive),
     ),
   ),
   Layer.provideMerge(JjCoreLive.pipe(Layer.provideMerge(GitCoreLive))),
 );
 
 const VcsLayerLive = Layer.empty.pipe(
-  Layer.provideMerge(VcsDriverRegistryLive),
-  Layer.provideMerge(VcsProvisioningLive),
+  Layer.provideMerge(VcsDriverRegistryLive.pipe(Layer.provideMerge(VcsProcessLive))),
+  Layer.provideMerge(
+    VcsProvisioningLive.pipe(
+      Layer.provideMerge(VcsDriverRegistryLive),
+      Layer.provideMerge(VcsProcessLive),
+    ),
+  ),
+  Layer.provideMerge(
+    VcsCoreLive.pipe(
+      Layer.provideMerge(JjBackendLayerLive),
+      Layer.provideMerge(GitBackendLayerLive),
+    ),
+  ),
+  Layer.provideMerge(
+    VcsManagerLive.pipe(
+      Layer.provideMerge(JjBackendLayerLive),
+      Layer.provideMerge(GitBackendLayerLive),
+    ),
+  ),
+);
+
+const VcsRoutingLayerLive = Layer.empty.pipe(
   Layer.provideMerge(
     VcsCoreLive.pipe(
       Layer.provideMerge(JjBackendLayerLive),
@@ -243,7 +307,7 @@ const VcsLayerLive = Layer.empty.pipe(
 
 const BitbucketApiLayerLive = BitbucketApiLive.pipe(
   Layer.provideMerge(GitVcsDriverLive),
-  Layer.provideMerge(VcsDriverRegistryLive),
+  Layer.provideMerge(VcsDriverRegistryLive.pipe(Layer.provideMerge(VcsProcessLive))),
 );
 
 const SourceControlProviderRegistryLayerLive = SourceControlProviderRegistryLive.pipe(
@@ -251,7 +315,7 @@ const SourceControlProviderRegistryLayerLive = SourceControlProviderRegistryLive
   Layer.provideMerge(GitLabCliLive),
   Layer.provideMerge(AzureDevOpsCliLive),
   Layer.provideMerge(BitbucketApiLayerLive),
-  Layer.provideMerge(VcsDriverRegistryLive),
+  Layer.provideMerge(VcsDriverRegistryLive.pipe(Layer.provideMerge(VcsProcessLive))),
   Layer.provideMerge(VcsProcessLive),
 );
 
@@ -261,10 +325,13 @@ const SourceControlLayerLive = Layer.empty.pipe(
   Layer.provideMerge(GitLabCliLive),
   Layer.provideMerge(AzureDevOpsCliLive),
   Layer.provideMerge(BitbucketApiLayerLive),
-  Layer.provideMerge(VcsDriverRegistryLive),
+  Layer.provideMerge(VcsDriverRegistryLive.pipe(Layer.provideMerge(VcsProcessLive))),
   Layer.provideMerge(SourceControlProviderRegistryLayerLive),
   Layer.provideMerge(
-    SourceControlDiscoveryLive.pipe(Layer.provideMerge(SourceControlProviderRegistryLayerLive)),
+    SourceControlDiscoveryLive.pipe(
+      Layer.provideMerge(SourceControlProviderRegistryLayerLive),
+      Layer.provideMerge(VcsDriverRegistryLive),
+    ),
   ),
   Layer.provideMerge(
     SourceControlRepositoryServiceLive.pipe(
@@ -273,8 +340,6 @@ const SourceControlLayerLive = Layer.empty.pipe(
     ),
   ),
 );
-
-const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(PtyAdapterLive));
 
 const WorkspaceLayerLive = Layer.mergeAll(
   WorkspacePathsLive,
@@ -285,7 +350,43 @@ const WorkspaceLayerLive = Layer.mergeAll(
   ),
 );
 
-const RuntimeCoreDependenciesBaseLive = ReactorLayerLive.pipe(
+const RuntimeReactorLayerLive = Layer.empty.pipe(
+  Layer.provideMerge(OrchestrationReactorLive),
+  Layer.provideMerge(
+    ProviderRuntimeIngestionLive.pipe(
+      Layer.provideMerge(OrchestrationLayerLive),
+      Layer.provideMerge(ProviderServiceRuntimeLayerLive),
+    ),
+  ),
+  Layer.provideMerge(
+    ProviderCommandReactorLive.pipe(
+      Layer.provideMerge(OrchestrationLayerLive),
+      Layer.provideMerge(OrchestrationProjectionSnapshotQueryLayerLive),
+      Layer.provideMerge(ProviderServiceRuntimeLayerLive),
+      Layer.provideMerge(VcsLayerLive),
+      Layer.provideMerge(TextGenerationLayerLive),
+      Layer.provideMerge(ServerSettingsLive),
+    ),
+  ),
+  Layer.provideMerge(
+    CheckpointReactorLive.pipe(
+      Layer.provideMerge(OrchestrationLayerLive),
+      Layer.provideMerge(ProviderServiceRuntimeLayerLive),
+      Layer.provideMerge(CheckpointingLayerLive),
+      Layer.provideMerge(RuntimeReceiptBusLive),
+      Layer.provideMerge(WorkspaceLayerLive.pipe(Layer.provideMerge(VcsRoutingLayerLive))),
+    ),
+  ),
+  Layer.provideMerge(
+    ThreadDeletionReactorLive.pipe(
+      Layer.provideMerge(OrchestrationLayerLive),
+      Layer.provideMerge(ProviderServiceRuntimeLayerLive),
+    ),
+  ),
+  Layer.provideMerge(RuntimeReceiptBusLive),
+);
+
+const RuntimeCoreDependenciesBaseLive = RuntimeReactorLayerLive.pipe(
   // Core Services
   Layer.provideMerge(CheckpointingLayerLive),
   Layer.provideMerge(GitBackendLayerLive),
@@ -297,9 +398,6 @@ const RuntimeCoreDependenciesBaseLive = ReactorLayerLive.pipe(
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provideMerge(KeybindingsLive),
   Layer.provideMerge(ProviderRegistryLayerLive),
-  Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
-  Layer.provideMerge(ProviderEventLoggersLive),
-  Layer.provideMerge(OpenCodeRuntimeLive),
   Layer.provideMerge(ServerSettingsLive),
 );
 
@@ -313,7 +411,7 @@ const RuntimeCoreDependenciesLive = RuntimeCoreDependenciesBaseLive.pipe(
       Layer.provideMerge(GcApiClientLive.pipe(Layer.provideMerge(ServerSettingsLive))),
     ),
   ),
-  Layer.provideMerge(WorkspaceLayerLive),
+  Layer.provideMerge(WorkspaceLayerLive.pipe(Layer.provideMerge(VcsRoutingLayerLive))),
   Layer.provideMerge(ProjectFaviconResolverLive),
   Layer.provideMerge(RepositoryIdentityResolverLive),
   Layer.provideMerge(AuthLayerLive),
@@ -328,11 +426,22 @@ const RuntimeDependenciesLive = RuntimeCoreDependenciesLive.pipe(
   Layer.provideMerge(ServerLifecycleEventsLive),
   Layer.provideMerge(VcsProcessLive),
   Layer.provideMerge(ServerEnvironmentLive),
+  Layer.provideMerge(TraceDiagnosticsLive),
+  Layer.provideMerge(ProcessDiagnosticsLive),
+  Layer.provideMerge(ProcessResourceMonitorLive),
 );
 
 const RuntimeServicesLive = Layer.merge(
   RuntimeDependenciesLive,
-  ServerRuntimeStartupLive.pipe(Layer.provideMerge(RuntimeDependenciesLive)),
+  ServerRuntimeStartupLive.pipe(
+    Layer.provideMerge(RuntimeDependenciesLive),
+    Layer.provideMerge(
+      OrchestrationProjectionSnapshotQueryLayerLive.pipe(Layer.provideMerge(PersistenceLayerLive)),
+    ),
+    Layer.provideMerge(ProviderRuntimeLayerLive.pipe(Layer.provideMerge(PersistenceLayerLive))),
+    Layer.provideMerge(ProviderSessionReaperLayerLive),
+    Layer.provideMerge(AnalyticsServiceLayerLive),
+  ),
 );
 
 export const makeRoutesLayer = Layer.mergeAll(
@@ -354,8 +463,10 @@ export const makeRoutesLayer = Layer.mergeAll(
   projectFaviconRouteLayer,
   serverEnvironmentRouteLayer,
   staticAndDevRouteLayer,
-  websocketRpcRouteLayer.pipe(Layer.provide(RuntimeServicesLive)),
+  websocketRpcRouteLayer,
 ).pipe(Layer.provide(browserApiCorsLayer));
+
+const makeRuntimeRoutesLayer = makeRoutesLayer.pipe(Layer.provide(RuntimeServicesLive));
 
 export const makeServerLayer = Layer.unwrap(
   Effect.gen(function* () {
@@ -372,7 +483,7 @@ export const makeServerLayer = Layer.unwrap(
     );
 
     const serverApplicationLayer = Layer.mergeAll(
-      HttpRouter.serve(makeRoutesLayer, {
+      HttpRouter.serve(makeRuntimeRoutesLayer, {
         disableLogger: !config.logWebSocketEvents,
       }),
       httpListeningLayer,

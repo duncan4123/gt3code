@@ -9,14 +9,12 @@ import {
   KeybindingRule,
   MessageId,
   ExternalLauncherError,
-  type OrchestrationThreadShell,
   type AuthSessionState,
   type ServerAuthDescriptor,
   type ExecutionEnvironmentDescriptor,
   AuthSessionId,
   TerminalNotRunningError,
   type OrchestrationCommand,
-  type OrchestrationEvent,
   ORCHESTRATION_WS_METHODS,
   ProjectId,
   ProviderInstanceId,
@@ -86,6 +84,7 @@ import {
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver.ts";
 import {
   ProjectSetupScriptRunner,
+  ProjectSetupScriptRunnerError,
   type ProjectSetupScriptRunnerShape,
 } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { VcsCore } from "./vcs/Services/VcsCore.ts";
@@ -93,6 +92,33 @@ import { VcsManager } from "./vcs/Services/VcsManager.ts";
 import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries.ts";
 import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem.ts";
 import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
+import {
+  ProviderMaintenanceRunner,
+  type ProviderMaintenanceRunnerShape,
+} from "./provider/providerMaintenanceRunner.ts";
+import { TraceDiagnostics, type TraceDiagnosticsShape } from "./diagnostics/TraceDiagnostics.ts";
+import {
+  ProcessDiagnostics,
+  type ProcessDiagnosticsShape,
+} from "./diagnostics/ProcessDiagnostics.ts";
+import {
+  ProcessResourceMonitor,
+  type ProcessResourceMonitorShape,
+} from "./diagnostics/ProcessResourceMonitor.ts";
+import {
+  SourceControlDiscovery,
+  type SourceControlDiscoveryShape,
+} from "./sourceControl/SourceControlDiscovery.ts";
+import {
+  SourceControlRepositoryService,
+  type SourceControlRepositoryServiceShape,
+} from "./sourceControl/SourceControlRepositoryService.ts";
+import { GcApiClient, type GcApiClientShape } from "./gc/Services/GcApiClient.ts";
+import { GcContextProvider, type GcContextProviderShape } from "./gc/Services/GcContextProvider.ts";
+import {
+  VcsProvisioningService,
+  type VcsProvisioningServiceShape,
+} from "./vcs/VcsProvisioningService.ts";
 
 const defaultProjectId = ProjectId.make("project-default");
 const defaultThreadId = ThreadId.make("thread-default");
@@ -158,10 +184,18 @@ const makeDefaultOrchestrationReadModel = () => {
 
 const workspaceAndProjectServicesLayer = Layer.mergeAll(
   WorkspacePathsLive,
-  WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive)),
+  WorkspaceEntriesLive.pipe(
+    Layer.provide(WorkspacePathsLive),
+    Layer.provide(Layer.mock(VcsCore)({})),
+  ),
   WorkspaceFileSystemLive.pipe(
     Layer.provide(WorkspacePathsLive),
-    Layer.provide(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
+    Layer.provide(
+      WorkspaceEntriesLive.pipe(
+        Layer.provide(WorkspacePathsLive),
+        Layer.provide(Layer.mock(VcsCore)({})),
+      ),
+    ),
   ),
   ProjectFaviconResolverLive,
 );
@@ -293,6 +327,15 @@ const buildAppUnderTest = (options?: {
     serverAuth?: Partial<ServerAuthShape>;
     sessionCredentialService?: Partial<SessionCredentialServiceShape>;
     serverEnvironment?: Partial<ServerEnvironmentShape>;
+    providerMaintenanceRunner?: Partial<ProviderMaintenanceRunnerShape>;
+    traceDiagnostics?: Partial<TraceDiagnosticsShape>;
+    processDiagnostics?: Partial<ProcessDiagnosticsShape>;
+    processResourceMonitor?: Partial<ProcessResourceMonitorShape>;
+    sourceControlDiscovery?: Partial<SourceControlDiscoveryShape>;
+    sourceControlRepositoryService?: Partial<SourceControlRepositoryServiceShape>;
+    gcApiClient?: Partial<GcApiClientShape>;
+    gcContextProvider?: Partial<GcContextProviderShape>;
+    vcsProvisioning?: Partial<VcsProvisioningServiceShape>;
   };
 }) =>
   Effect.gen(function* () {
@@ -334,126 +377,164 @@ const buildAppUnderTest = (options?: {
     };
     const layerConfig = Layer.succeed(ServerConfig, config);
 
-    const routeLayer = HttpRouter.serve(makeRoutesLayer, {
+    const routeBaseLayer = HttpRouter.serve(makeRoutesLayer, {
       disableListenLog: true,
       disableLogger: true,
-    }).pipe(
-      Layer.provide(
-        Layer.mock(Keybindings)({
-          streamChanges: Stream.empty,
-          ...options?.layers?.keybindings,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(ProviderRegistry)({
-          getProviders: Effect.succeed([]),
-          refresh: () => Effect.succeed([]),
-          streamChanges: Stream.empty,
-          ...options?.layers?.providerRegistry,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(ServerSettingsService)({
-          start: Effect.void,
-          ready: Effect.void,
-          getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
-          updateSettings: () => Effect.succeed(DEFAULT_SERVER_SETTINGS),
-          streamChanges: Stream.empty,
-          ...options?.layers?.serverSettings,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(ExternalLauncher.ExternalLauncher)({
-          ...options?.layers?.externalLauncher,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(GitCore)({
-          ...options?.layers?.gitCore,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(VcsCore)({
-          ...options?.layers?.gitCore,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(GitManager)({
-          ...options?.layers?.gitManager,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(VcsManager)({
-          ...options?.layers?.gitManager,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(ProjectSetupScriptRunner)({
-          runForThread: () => Effect.succeed({ status: "no-script" as const }),
-          ...options?.layers?.projectSetupScriptRunner,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(TerminalManager)({
-          ...options?.layers?.terminalManager,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(OrchestrationEngineService)({
-          getReadModel: () => Effect.succeed(makeDefaultOrchestrationReadModel()),
-          readEvents: () => Stream.empty,
-          dispatch: () => Effect.succeed({ sequence: 0 }),
-          streamDomainEvents: Stream.empty,
-          ...options?.layers?.orchestrationEngine,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(ProjectionSnapshotQuery)({
-          getSnapshot: () => Effect.succeed(makeDefaultOrchestrationReadModel()),
-          ...options?.layers?.projectionSnapshotQuery,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(CheckpointDiffQuery)({
-          getTurnDiff: () =>
-            Effect.succeed({
-              threadId: defaultThreadId,
-              fromTurnCount: 0,
-              toTurnCount: 0,
-              diff: "",
-            }),
-          getFullThreadDiff: () =>
-            Effect.succeed({
-              threadId: defaultThreadId,
-              fromTurnCount: 0,
-              toTurnCount: 0,
-              diff: "",
-            }),
-          ...options?.layers?.checkpointDiffQuery,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(BrowserTraceCollector)({
-          record: () => Effect.void,
-          ...options?.layers?.browserTraceCollector,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(ServerLifecycleEvents)({
-          publish: (event) => Effect.succeed({ ...(event as any), sequence: 1 }),
-          snapshot: Effect.succeed({ sequence: 0, events: [] }),
-          stream: Stream.empty,
-          ...options?.layers?.serverLifecycleEvents,
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(ServerRuntimeStartup)({
-          awaitCommandReady: Effect.void,
-          markHttpListening: Effect.void,
-          enqueueCommand: (effect) => effect,
-          ...options?.layers?.serverRuntimeStartup,
-        }),
-      ),
+    });
+
+    const routeCoreMocks = Layer.mergeAll(
+      Layer.mock(Keybindings)({
+        streamChanges: Stream.empty,
+        ...options?.layers?.keybindings,
+      }),
+      Layer.mock(ProviderRegistry)({
+        getProviders: Effect.succeed([]),
+        refresh: () => Effect.succeed([]),
+        streamChanges: Stream.empty,
+        ...options?.layers?.providerRegistry,
+      }),
+      Layer.mock(ServerSettingsService)({
+        start: Effect.void,
+        ready: Effect.void,
+        getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+        updateSettings: () => Effect.succeed(DEFAULT_SERVER_SETTINGS),
+        streamChanges: Stream.empty,
+        ...options?.layers?.serverSettings,
+      }),
+      Layer.mock(ExternalLauncher.ExternalLauncher)({
+        ...options?.layers?.externalLauncher,
+      }),
+      Layer.mock(GitCore)({
+        ...options?.layers?.gitCore,
+      }),
+      Layer.mock(VcsCore)({
+        ...options?.layers?.gitCore,
+      }),
+      Layer.mock(GitManager)({
+        ...options?.layers?.gitManager,
+      }),
+      Layer.mock(VcsManager)({
+        ...options?.layers?.gitManager,
+      }),
+      Layer.mock(VcsProvisioningService)({
+        initRepository: () => Effect.void,
+        ...options?.layers?.vcsProvisioning,
+      }),
+      Layer.mock(ProjectSetupScriptRunner)({
+        runForThread: () => Effect.succeed({ status: "no-script" as const }),
+        ...options?.layers?.projectSetupScriptRunner,
+      }),
+      Layer.mock(TerminalManager)({
+        ...options?.layers?.terminalManager,
+      }),
+      Layer.mock(OrchestrationEngineService)({
+        getReadModel: () => Effect.succeed(makeDefaultOrchestrationReadModel()),
+        readEvents: () => Stream.empty,
+        dispatch: () => Effect.succeed({ sequence: 0 }),
+        streamDomainEvents: Stream.empty,
+        ...options?.layers?.orchestrationEngine,
+      }),
+      Layer.mock(ProjectionSnapshotQuery)({
+        getSnapshot: () => Effect.succeed(makeDefaultOrchestrationReadModel()),
+        ...options?.layers?.projectionSnapshotQuery,
+      }),
+      Layer.mock(CheckpointDiffQuery)({
+        getTurnDiff: () =>
+          Effect.succeed({
+            threadId: defaultThreadId,
+            fromTurnCount: 0,
+            toTurnCount: 0,
+            diff: "",
+          }),
+        getFullThreadDiff: () =>
+          Effect.succeed({
+            threadId: defaultThreadId,
+            fromTurnCount: 0,
+            toTurnCount: 0,
+            diff: "",
+          }),
+        ...options?.layers?.checkpointDiffQuery,
+      }),
+      Layer.mock(BrowserTraceCollector)({
+        record: () => Effect.void,
+        ...options?.layers?.browserTraceCollector,
+      }),
+      Layer.mock(ServerLifecycleEvents)({
+        publish: (event) => Effect.succeed({ ...(event as any), sequence: 1 }),
+        snapshot: Effect.succeed({ sequence: 0, events: [] }),
+        stream: Stream.empty,
+        ...options?.layers?.serverLifecycleEvents,
+      }),
+      Layer.mock(ServerRuntimeStartup)({
+        awaitCommandReady: Effect.void,
+        markHttpListening: Effect.void,
+        enqueueCommand: (effect) => effect,
+        ...options?.layers?.serverRuntimeStartup,
+      }),
+    );
+
+    const routeExtraMocks = Layer.mergeAll(
+      Layer.mock(ProviderMaintenanceRunner)({
+        updateProvider: () => Effect.succeed({} as any),
+        ...options?.layers?.providerMaintenanceRunner,
+      }),
+      Layer.mock(TraceDiagnostics)({
+        read: () => Effect.succeed({} as any),
+        ...options?.layers?.traceDiagnostics,
+      }),
+      Layer.mock(ProcessDiagnostics)({
+        read: Effect.succeed({} as any),
+        signal: () => Effect.succeed({} as any),
+        ...options?.layers?.processDiagnostics,
+      }),
+      Layer.mock(ProcessResourceMonitor)({
+        readHistory: () => Effect.succeed({} as any),
+        ...options?.layers?.processResourceMonitor,
+      }),
+      Layer.mock(SourceControlDiscovery)({
+        discover: Effect.succeed({} as any),
+        ...options?.layers?.sourceControlDiscovery,
+      }),
+      Layer.mock(SourceControlRepositoryService)({
+        lookupRepository: () => Effect.die("unexpected source control lookup"),
+        cloneRepository: () => Effect.die("unexpected source control clone"),
+        publishRepository: () => Effect.die("unexpected source control publish"),
+        ...options?.layers?.sourceControlRepositoryService,
+      }),
+      Layer.mock(GcApiClient)({
+        getBead: () => Effect.succeed(null),
+        getConvoy: () => Effect.succeed(null),
+        getFormula: () => Effect.succeed(null),
+        getConfig: () => Effect.succeed(null),
+        submitSession: () => Effect.die("unexpected gc submit"),
+        stopSession: () => Effect.die("unexpected gc stop"),
+        respondToPending: () => Effect.die("unexpected gc respond"),
+        setAgentSuspended: () => Effect.void,
+        setAgentMaxActiveSessions: () => Effect.void,
+        setAgentMinActiveSessions: () => Effect.void,
+        setAgentWakeMode: () => Effect.void,
+        setAgentSessionMode: () => Effect.void,
+        setCitySuspended: () => Effect.void,
+        setRigSuspended: () => Effect.void,
+        streamEvents: Stream.empty,
+        isAvailable: Effect.succeed(false),
+        ...options?.layers?.gcApiClient,
+      }),
+      Layer.mock(GcContextProvider)({
+        getThreadContext: () =>
+          Effect.succeed({
+            bead: null,
+            convoy: null,
+            formula: null,
+          }),
+        isAvailable: Effect.succeed(false),
+        ...options?.layers?.gcContextProvider,
+      }),
+    );
+
+    const routeLayer = routeBaseLayer.pipe(
+      Layer.provide(routeCoreMocks),
+      Layer.provide(routeExtraMocks),
     );
 
     const appLayer = routeLayer.pipe(
@@ -1686,6 +1767,10 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             updatedAt: now,
             archivedAt: null,
             latestTurn: null,
+            latestUserMessageAt: null,
+            hasPendingApprovals: false,
+            hasPendingUserInput: false,
+            hasActionableProposedPlan: false,
             messages: [],
             session: null,
             activities: [],
@@ -1700,6 +1785,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         layers: {
           projectionSnapshotQuery: {
             getSnapshot: () => Effect.succeed(snapshot),
+            getArchivedShellSnapshot: () => Effect.succeed(snapshot),
           },
           orchestrationEngine: {
             dispatch: () => Effect.succeed({ sequence: 7 }),
@@ -1726,7 +1812,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       const wsUrl = yield* getWsServerUrl("/ws");
       const snapshotResult = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) => client[ORCHESTRATION_WS_METHODS.getSnapshot]({})),
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot]({}),
+        ),
       );
       assert.equal(snapshotResult.snapshotSequence, 1);
 
@@ -1947,7 +2035,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       );
       const runForThread = vi.fn(
         (_: Parameters<ProjectSetupScriptRunnerShape["runForThread"]>[0]) =>
-          Effect.fail(new Error("pty unavailable")),
+          Effect.fail(new ProjectSetupScriptRunnerError({ message: "pty unavailable" })),
       );
 
       yield* buildAppUnderTest({
@@ -2224,10 +2312,10 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       yield* buildAppUnderTest({
         layers: {
           projectionSnapshotQuery: {
-            getSnapshot: () =>
+            getArchivedShellSnapshot: () =>
               Effect.fail(
                 new PersistenceSqlError({
-                  operation: "ProjectionSnapshotQuery.getSnapshot",
+                  operation: "ProjectionSnapshotQuery.getArchivedShellSnapshot",
                   detail: "projection unavailable",
                 }),
               ),
@@ -2237,14 +2325,14 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       const wsUrl = yield* getWsServerUrl("/ws");
       const result = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) => client[ORCHESTRATION_WS_METHODS.getSnapshot]({})).pipe(
-          Effect.result,
-        ),
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot]({}),
+        ).pipe(Effect.result),
       );
 
       assertTrue(result._tag === "Failure");
       assertTrue(result.failure._tag === "OrchestrationGetSnapshotError");
-      assertInclude(result.failure.message, "Failed to load orchestration snapshot");
+      assertInclude(result.failure.message, "Failed to load orchestration shell snapshot");
     }).pipe(Effect.provide(TestHttpLayer)),
   );
 

@@ -554,7 +554,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         [ThreadId.make("thread-active")],
       );
 
-      const archivedShellSnapshot = yield* snapshotQuery.getArchivedShellSnapshot();
+      const archivedShellSnapshot = yield* snapshotQuery.getArchivedShellSnapshot!();
       assert.deepEqual(
         archivedShellSnapshot.threads.map((thread) => thread.id),
         [ThreadId.make("thread-archived")],
