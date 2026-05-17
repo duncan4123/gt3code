@@ -142,6 +142,11 @@ export function initJjRepo(
     // Git backend needs author/committer identity.
     yield* runGit(cwd, ["config", "user.email", "test@example.com"]);
     yield* runGit(cwd, ["config", "user.name", "Test User"]);
+    yield* runJj(cwd, ["config", "set", "--repo", "user.email", "test@example.com"]).pipe(
+      Effect.asVoid,
+    );
+    yield* runJj(cwd, ["config", "set", "--repo", "user.name", "Test User"]).pipe(Effect.asVoid);
+    yield* runJj(cwd, ["metaedit", "--update-author"]).pipe(Effect.asVoid);
 
     // Seed the repo with a committed README using jj-native commands.
     yield* writeTextFile(path.join(cwd, "README.md"), "hello\n");

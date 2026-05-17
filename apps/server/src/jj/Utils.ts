@@ -297,7 +297,9 @@ export const resolveJjRepoDir = (cwd: string) =>
             if (repoPointerStats.isFile()) {
               const repoDir = (await fsPromises.readFile(repoPointerPath, "utf8")).trim();
               if (repoDir.length > 0) {
-                return repoDir;
+                return path.isAbsolute(repoDir)
+                  ? repoDir
+                  : path.resolve(path.dirname(repoPointerPath), repoDir);
               }
             }
           } catch {

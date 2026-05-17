@@ -3,10 +3,7 @@ import {
   type VcsDiscoveryItem,
   type VcsDriverKind,
 } from "@t3tools/contracts";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
+import { Context, Effect, Layer, Option } from "effect";
 
 import { ServerConfig } from "../config.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
@@ -52,7 +49,7 @@ const VCS_PROBES: ReadonlyArray<VcsProbe> = [
     label: "Jujutsu",
     executable: "jj",
     versionArgs: ["--version"],
-    implemented: false,
+    implemented: true,
     installHint: "Install Jujutsu with `brew install jj` or from https://github.com/jj-vcs/jj.",
   },
 ];
@@ -100,7 +97,7 @@ export const layer = Layer.effect(
           cwd: config.cwd,
           timeoutMs: 5_000,
           maxOutputBytes: 8_000,
-          appendTruncationMarker: true,
+          truncateOutputAtMaxBytes: true,
         })
         .pipe(
           Effect.map(

@@ -197,6 +197,7 @@ const gitCommand = (
     readonly allowNonZeroExit?: boolean;
     readonly timeoutMs?: number;
     readonly maxOutputBytes?: number;
+    readonly appendTruncationMarker?: boolean;
     readonly truncateOutputAtMaxBytes?: boolean;
   },
 ) =>
@@ -212,6 +213,9 @@ const gitCommand = (
       : {}),
     ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
     ...(options?.maxOutputBytes !== undefined ? { maxOutputBytes: options.maxOutputBytes } : {}),
+    ...(options?.appendTruncationMarker !== undefined
+      ? { appendTruncationMarker: options.appendTruncationMarker }
+      : {}),
     ...(options?.truncateOutputAtMaxBytes !== undefined
       ? { truncateOutputAtMaxBytes: options.truncateOutputAtMaxBytes }
       : {}),
@@ -248,6 +252,9 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
       ...(input.allowNonZeroExit !== undefined ? { allowNonZeroExit: input.allowNonZeroExit } : {}),
       ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
       ...(input.maxOutputBytes !== undefined ? { maxOutputBytes: input.maxOutputBytes } : {}),
+      ...(input.appendTruncationMarker !== undefined
+        ? { appendTruncationMarker: input.appendTruncationMarker }
+        : {}),
       ...(input.truncateOutputAtMaxBytes !== undefined
         ? { truncateOutputAtMaxBytes: input.truncateOutputAtMaxBytes }
         : {}),

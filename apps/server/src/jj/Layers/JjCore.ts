@@ -791,6 +791,15 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
       );
 
     const args = [...input.args];
+    const toRunJjCommandOptions = () => ({
+      ...(input.allowNonZeroExit !== undefined ? { allowNonZeroExit: input.allowNonZeroExit } : {}),
+      ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+      ...(input.maxOutputBytes !== undefined ? { maxOutputBytes: input.maxOutputBytes } : {}),
+      ...(input.truncateOutputAtMaxBytes !== undefined
+        ? { truncateOutputAtMaxBytes: input.truncateOutputAtMaxBytes }
+        : {}),
+      ...(input.env !== undefined ? { env: input.env } : {}),
+    });
     const toResult = (result: {
       readonly code?: number;
       readonly stdout?: string;
@@ -862,6 +871,31 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
           ? { truncateOutputAtMaxBytes: input.truncateOutputAtMaxBytes }
           : {}),
         ...(input.env !== undefined ? { env: input.env } : {}),
+      });
+      return toResult(result);
+    }
+
+    if (
+      [
+        "bookmark",
+        "config",
+        "describe",
+        "file",
+        "git",
+        "log",
+        "metaedit",
+        "new",
+        "op",
+        "root",
+        "status",
+        "util",
+      ].includes(args[0] ?? "")
+    ) {
+      const result = yield* runJjCommand({
+        operation: input.operation,
+        cwd: input.cwd,
+        args,
+        ...toRunJjCommandOptions(),
       });
       return toResult(result);
     }

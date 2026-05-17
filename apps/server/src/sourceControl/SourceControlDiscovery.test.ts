@@ -1,8 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
+import { Effect, Layer, Option } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { VcsProcessSpawnError } from "@t3tools/contracts";
 
@@ -115,7 +113,7 @@ Logged in to github.com account juliusmarminge (keyring)
       })),
       [
         { kind: "git", implemented: true, status: "available" },
-        { kind: "jj", implemented: false, status: "missing" },
+        { kind: "jj", implemented: true, status: "missing" },
       ],
     );
     assert.deepStrictEqual(
