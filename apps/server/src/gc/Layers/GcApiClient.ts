@@ -13,6 +13,7 @@ import { Effect, Layer, Stream, PubSub, Config, Option } from "effect";
 import type {
   GcConfigAgent,
   GcConfigResult,
+  GcLifecycleStatus,
   GcSessionActionResult,
   GcSubmitSessionResult,
 } from "@t3tools/contracts";
@@ -174,10 +175,19 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
     return [
       {
         name: agent.name,
+        ...(typeof agent.description === "string" ? { description: agent.description } : {}),
         ...(typeof agent.dir === "string" ? { dir: agent.dir } : {}),
         ...(typeof agent.provider === "string" ? { provider: agent.provider } : {}),
         ...(typeof agent.session_template === "string"
           ? { session_template: agent.session_template }
+          : {}),
+        ...(typeof agent.work_dir === "string" ? { work_dir: agent.work_dir } : {}),
+        ...(typeof agent.prompt_template === "string"
+          ? { prompt_template: agent.prompt_template }
+          : {}),
+        ...(typeof agent.start_command === "string" ? { start_command: agent.start_command } : {}),
+        ...(typeof agent.default_sling_formula === "string"
+          ? { default_sling_formula: agent.default_sling_formula }
           : {}),
         ...(typeof agent.is_pool === "boolean" ? { is_pool: agent.is_pool } : {}),
         ...(typeof agent.min_active_sessions === "number"
@@ -295,6 +305,7 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
   return {
     workspace: {
       name: workspaceName,
+      path: cityPath,
       ...(typeof workspaceRaw.provider === "string" ? { provider: workspaceRaw.provider } : {}),
       suspended: Boolean(workspaceRaw.suspended),
       ...(typeof workspaceRaw.session_template === "string"
@@ -305,6 +316,119 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
     rigs,
     ...(providers ? { providers } : {}),
     ...(patches ? { patches } : {}),
+  };
+}
+
+interface GcSupervisorCity {
+  readonly name: string;
+  readonly path: string;
+  readonly running: boolean;
+}
+
+function normalizeSupervisorCities(raw: unknown): readonly GcSupervisorCity[] {
+  const candidate =
+    raw &&
+    typeof raw === "object" &&
+    !Array.isArray(raw) &&
+    "body" in raw &&
+    (raw as { body?: unknown }).body !== undefined
+      ? (raw as { body: unknown }).body
+      : raw &&
+          typeof raw === "object" &&
+          !Array.isArray(raw) &&
+          "Body" in raw &&
+          (raw as { Body?: unknown }).Body !== undefined
+        ? (raw as { Body: unknown }).Body
+        : raw;
+  const items =
+    candidate &&
+    typeof candidate === "object" &&
+    !Array.isArray(candidate) &&
+    Array.isArray((candidate as { items?: unknown }).items)
+      ? (candidate as { items: unknown[] }).items
+      : [];
+
+  return items.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return [];
+    }
+    const record = item as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    const cityPath = typeof record.path === "string" ? record.path.trim() : "";
+    if (!name || !cityPath) {
+      return [];
+    }
+    return [{ name, path: cityPath, running: Boolean(record.running) }];
+  });
+}
+
+function prefixGcConfigForCity(config: GcConfigResult, city: GcSupervisorCity): GcConfigResult {
+  const cityRigNames = new Set(config.rigs.map((rig) => rig.name));
+  return {
+    ...config,
+    workspace: {
+      ...config.workspace,
+      name: city.name,
+      path: city.path,
+    },
+    rigs: [
+      {
+        name: city.name,
+        path: city.path,
+        suspended: config.workspace.suspended,
+        ...(config.lifecycle ? { lifecycle: config.lifecycle } : {}),
+      },
+      ...config.rigs.map((rig) => ({
+        ...rig,
+        name: `${city.name}/${rig.name}`,
+      })),
+    ],
+    agents: config.agents.map((agent) => {
+      const dir =
+        typeof agent.dir === "string" && agent.dir.trim().length > 0 ? agent.dir.trim() : "";
+      const cityDir = dir ? `${city.name}/${dir}` : city.name;
+      const name = agent.name.includes("/")
+        ? (agent.name.split("/").at(-1) ?? agent.name)
+        : agent.name;
+      return {
+        ...agent,
+        name,
+        dir: cityDir,
+        scope: agent.scope ?? (cityRigNames.has(dir) ? "rig" : "city"),
+      };
+    }),
+  };
+}
+
+function mergeMultiCityConfig(configs: readonly GcConfigResult[]): GcConfigResult | null {
+  if (configs.length === 0) {
+    return null;
+  }
+  const firstLifecycle = configs.find((config) => config.lifecycle)?.lifecycle;
+  return {
+    workspace: {
+      name: "cities",
+      path: path.dirname(configs[0]?.workspace.path ?? ""),
+      suspended: configs.every((config) => config.workspace.suspended),
+    },
+    rigs: configs.flatMap((config) => config.rigs),
+    agents: configs.flatMap((config) => config.agents),
+    ...(configs[0]?.providers ? { providers: configs[0].providers } : {}),
+    lifecycle: {
+      supervisorRunning: configs.some((config) => config.lifecycle?.supervisorRunning),
+      controllerRunning: configs.some((config) => config.lifecycle?.controllerRunning),
+      ...(typeof firstLifecycle?.supervisorPort === "number"
+        ? { supervisorPort: firstLifecycle.supervisorPort }
+        : {}),
+      ...(firstLifecycle?.supervisorUrl ? { supervisorUrl: firstLifecycle.supervisorUrl } : {}),
+    },
+  };
+}
+
+function withLifecycleStatus(config: GcConfigResult, lifecycle: GcLifecycleStatus): GcConfigResult {
+  return {
+    ...config,
+    lifecycle,
   };
 }
 
@@ -1296,6 +1420,11 @@ const makeGcApiClient = Effect.gen(function* () {
   ): string =>
     cityName && useCityScopedRoutes ? buildGcCityPath(cityName, cityScopedPath) : legacyPath;
 
+  const fetchSupervisorCities = async (): Promise<readonly GcSupervisorCity[]> => {
+    const raw = await fetchJson<unknown>("/v0/cities");
+    return normalizeSupervisorCities(raw);
+  };
+
   const postJson = async <T>(path: string, body?: unknown): Promise<T> => {
     const response = await fetch(`${baseUrl}${path}`, {
       method: "POST",
@@ -1469,6 +1598,57 @@ const makeGcApiClient = Effect.gen(function* () {
           }
           return normalizeGcConfig(Bun.TOML.parse(cli.stdout), cityPath);
         };
+
+        const supervisorCities = await fetchSupervisorCities().catch(() => []);
+        if (supervisorCities.length > 1) {
+          const cityConfigs = await Promise.all(
+            supervisorCities.map(async (city) => {
+              const remote = await fetchJson<GcConfigResult>(
+                buildGcCityPath(city.name, "/config"),
+              ).catch((error: unknown) => {
+                logGcWarning("gc city config api fetch failed", {
+                  baseUrl,
+                  cityName: city.name,
+                  cityPath: city.path,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+                return null;
+              });
+              let normalizedConfig = remote ? normalizeGcConfig(remote, city.path) : null;
+              if (!normalizedConfig && typeof Bun !== "undefined") {
+                const cli = runGcCli(city.path, ["config", "show"]);
+                if (cli.exitCode === 0) {
+                  normalizedConfig = normalizeGcConfig(Bun.TOML.parse(cli.stdout), city.path);
+                } else {
+                  logGcWarning("gc city config cli fallback failed", {
+                    cityName: city.name,
+                    cityPath: city.path,
+                    exitCode: cli.exitCode,
+                    stderr: cli.stderr,
+                  });
+                }
+              }
+              if (!normalizedConfig) {
+                return null;
+              }
+              return prefixGcConfigForCity(
+                withLifecycleStatus(normalizedConfig, {
+                  supervisorRunning: true,
+                  controllerRunning: city.running,
+                }),
+                city,
+              );
+            }),
+          );
+          const merged = mergeMultiCityConfig(
+            cityConfigs.filter((config): config is GcConfigResult => Boolean(config)),
+          );
+          if (merged) {
+            lastKnownConfig = merged;
+            cachedCityName = null;
+            return merged;
+          }
+        }
 
         const cityName = await resolveGcCityName();
         const remote = await fetchJson<GcConfigResult>(

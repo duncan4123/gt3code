@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
+import * as Schema from "effect/Schema";
 
-import { groupThreadsByRigAndAgent, parseGcMeta } from "./gc.ts";
+import { GcThreadContextResult, groupThreadsByRigAndAgent, parseGcMeta } from "./gc.ts";
 
 describe("parseGcMeta", () => {
   it("decodes serialized GC session env metadata", () => {
     expect(
       parseGcMeta({
         "gc.agent": "t3code/polecat",
+        "gc.rigPath": "/data/projects/t3code",
+        "gc.startupWorkDir": "/data/projects/t3code/worktrees/gc-123",
         "gc.sessionEnv": JSON.stringify({
           GC_AGENT: "t3code/polecat",
           GC_SESSION_NAME: "t3code--polecat",
@@ -17,6 +20,8 @@ describe("parseGcMeta", () => {
     ).toMatchObject({
       isGcManaged: true,
       sessionName: "t3code--polecat",
+      rigPath: "/data/projects/t3code",
+      startupWorkDir: "/data/projects/t3code/worktrees/gc-123",
       sessionEnv: {
         GC_AGENT: "t3code/polecat",
         GC_SESSION_NAME: "t3code--polecat",
@@ -38,6 +43,31 @@ describe("parseGcMeta", () => {
     ).toBe("explicit-session");
   });
 
+  it("parses richer bead metadata for sidebar cards", () => {
+    expect(
+      parseGcMeta({
+        "gc.agent": "t3code/polecat",
+        "gc.bead": "t3-123",
+        "gc.beadTitle": "Restore GC sidebar",
+        "gc.beadStatus": "in_progress",
+        "gc.beadType": "task",
+        "gc.beadPriority": "1",
+        "gc.beadAssignee": "t3code/polecat",
+        "gc.beadLabels": "gc:merge,sidebar",
+        "gc.beadDescription": "Bring back the hover card.",
+      }),
+    ).toMatchObject({
+      bead: "t3-123",
+      beadTitle: "Restore GC sidebar",
+      beadStatus: "in_progress",
+      beadType: "task",
+      beadPriority: "1",
+      beadAssignee: "t3code/polecat",
+      beadLabels: "gc:merge,sidebar",
+      beadDescription: "Bring back the hover card.",
+    });
+  });
+
   it("ignores invalid serialized GC session env metadata", () => {
     expect(
       parseGcMeta({
@@ -45,6 +75,38 @@ describe("parseGcMeta", () => {
         "gc.sessionEnv": "{invalid-json",
       }).sessionEnv,
     ).toBeUndefined();
+  });
+});
+
+describe("GcThreadContextResult", () => {
+  it("preserves bead ref and metadata needed for GC hook display", () => {
+    const decoded = Schema.decodeUnknownSync(GcThreadContextResult)({
+      bead: {
+        id: "gc-123",
+        title: "Hooked bead",
+        description: "Current work",
+        status: "in_progress",
+        priority: 1,
+        issueType: "task",
+        ref: "mol-polecat-work",
+        metadata: {
+          branch: "polecat/gc-123",
+          target: "integration/gc-sa2y",
+          work_dir: "/data/projects/t3code/worktrees/gc-123",
+          molecule_id: "gc-123.1",
+        },
+        createdAt: "2026-04-24T00:00:00.000Z",
+        updatedAt: "2026-04-24T00:00:00.000Z",
+      },
+      convoy: null,
+      formula: null,
+    });
+
+    expect(decoded.bead?.ref).toBe("mol-polecat-work");
+    expect(decoded.bead?.metadata?.branch).toBe("polecat/gc-123");
+    expect(decoded.bead?.metadata?.target).toBe("integration/gc-sa2y");
+    expect(decoded.bead?.metadata?.work_dir).toBe("/data/projects/t3code/worktrees/gc-123");
+    expect(decoded.bead?.metadata?.molecule_id).toBe("gc-123.1");
   });
 });
 
@@ -167,6 +229,45 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(rigGroups[0]?.agentGroups[1]?.threads).toEqual([]);
     expect(rigGroups[0]?.agentGroups[1]?.isPool).toBe(true);
     expect(rigGroups[0]?.agentGroups[1]?.isSuspended).toBe(true);
+    expect(rigGroups[0]?.agentGroups[1]?.isExplicitlySuspended).toBe(true);
+  });
+
+  it("keeps explicit agent suspension separate from inherited rig suspension", () => {
+    const { rigGroups } = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "city",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "test-rig",
+            path: "/data/projects/test-rig",
+            suspended: true,
+          },
+        ],
+        agents: [
+          {
+            name: "refinery",
+            dir: "test-rig",
+            suspended: false,
+          },
+          {
+            name: "witness",
+            dir: "test-rig",
+            suspended: true,
+          },
+        ],
+      },
+      projectCwd: "/data/projects/test-rig",
+    });
+
+    expect(rigGroups[0]?.isSuspended).toBe(true);
+    expect(rigGroups[0]?.agentGroups.map((group) => group.isSuspended)).toEqual([true, true]);
+    expect(rigGroups[0]?.agentGroups.map((group) => group.isExplicitlySuspended)).toEqual([
+      false,
+      true,
+    ]);
   });
 
   it("includes configured agent folders when a rig has no threads at all", () => {
@@ -238,6 +339,186 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(rigGroups[0]?.agentGroups.map((group) => group.isSuspended)).toEqual([true, false]);
   });
 
+  it("includes configured city-scoped agents under a threadless city project", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "t3code",
+          suspended: false,
+        },
+        rigs: [],
+        agents: [
+          {
+            name: "gastown.boot",
+            suspended: false,
+            scope: "city",
+            named_session_mode: "always",
+          },
+          {
+            name: "gastown.dog",
+            suspended: false,
+            scope: "city",
+            min_active_sessions: 0,
+            max_active_sessions: 3,
+          },
+          {
+            name: "codex",
+            provider: "codex",
+            prompt_template: ".gc/system/packs/core/assets/prompts/pool-worker.md",
+            default_sling_formula: "mol-do-work",
+            suspended: false,
+          },
+        ],
+      },
+      projectName: "city",
+      projectCwd: "/home/ubuntu/.local/state/t3code/gascity/current/city",
+    });
+
+    expect(standaloneThreads).toEqual([]);
+    expect(rigGroups).toHaveLength(1);
+    expect(rigGroups[0]).toMatchObject({
+      id: "t3code",
+      label: "CITY",
+      kind: "workspace",
+      isConfigured: true,
+    });
+    expect(rigGroups[0]?.agentGroups.map((group) => group.qualifiedName)).toEqual([
+      "gastown.boot",
+      "gastown.dog",
+    ]);
+    expect(rigGroups[0]?.agentGroups[0]).toMatchObject({
+      label: "boot",
+      namedSessionMode: "always",
+    });
+    expect(rigGroups[0]?.agentGroups[1]).toMatchObject({
+      label: "dog",
+      minActiveSessions: 0,
+      maxActiveSessions: 3,
+    });
+  });
+
+  it("does not show implicit provider lanes as agent folders", () => {
+    const { rigGroups } = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "gc",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "t3code",
+            path: "/data/projects/t3code",
+            suspended: false,
+          },
+        ],
+        agents: [
+          {
+            name: "codex",
+            provider: "codex",
+            prompt_template: ".gc/system/packs/core/assets/prompts/pool-worker.md",
+            default_sling_formula: "mol-do-work",
+            suspended: false,
+          },
+          {
+            name: "codex",
+            dir: "t3code",
+            provider: "codex",
+            prompt_template: ".gc/system/packs/core/assets/prompts/pool-worker.md",
+            default_sling_formula: "mol-do-work",
+            suspended: false,
+          },
+          {
+            name: "control-dispatcher",
+            dir: "t3code",
+            description: "Built-in deterministic graph.v2 workflow control worker",
+            start_command: "gc convoy control --serve",
+            max_active_sessions: 1,
+            suspended: false,
+          },
+        ],
+      },
+      projectCwd: "/data/projects/t3code",
+    });
+
+    expect(rigGroups).toHaveLength(1);
+    expect(rigGroups[0]?.agentGroups.map((group) => group.qualifiedName)).toEqual([
+      "t3code/control-dispatcher",
+    ]);
+    expect(rigGroups[0]?.agentGroups[0]).toMatchObject({
+      description: "Built-in deterministic graph.v2 workflow control worker",
+      startCommand: "gc convoy control --serve",
+      maxActiveSessions: 1,
+    });
+  });
+
+  it("backfills configured city agents into metadata-created workspace folders", () => {
+    const { rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          customMetadata: {
+            "gc.agent": "gastown__mayor",
+            "gc.groupKind": "workspace",
+            "gc.groupId": "city",
+            "gc.groupLabel": "CITY",
+            "gc.agentQualified": "gastown.mayor",
+            "gc.agentLabel": "mayor",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "t3code",
+            suspended: false,
+          },
+          rigs: [],
+          agents: [
+            {
+              name: "gastown.dog",
+              provider: "codex",
+              min_active_sessions: 0,
+              max_active_sessions: 3,
+              wake_mode: "fresh",
+              suspended: false,
+            },
+            {
+              name: "gastown.mayor",
+              provider: "codex",
+              named_session_mode: "always",
+              suspended: false,
+            },
+            {
+              name: "codex",
+              provider: "codex",
+              prompt_template: ".gc/system/packs/core/assets/prompts/pool-worker.md",
+              default_sling_formula: "mol-do-work",
+              suspended: false,
+            },
+          ],
+        },
+        projectName: "city",
+      },
+    );
+
+    expect(rigGroups).toHaveLength(1);
+    expect(rigGroups[0]).toMatchObject({
+      id: "t3code",
+      label: "CITY",
+      kind: "workspace",
+    });
+    expect(rigGroups[0]?.agentGroups.map((group) => group.qualifiedName)).toEqual([
+      "gastown.dog",
+      "gastown.mayor",
+    ]);
+    expect(rigGroups[0]?.agentGroups[0]).toMatchObject({
+      label: "dog",
+      isPool: false,
+      minActiveSessions: 0,
+      maxActiveSessions: 3,
+    });
+  });
+
   it("prefers canonical stamped group metadata over project heuristics", () => {
     const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
       [
@@ -283,6 +564,289 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(rigGroups[0]?.label).toBe("GC");
     expect(rigGroups[0]?.agentGroups[0]?.label).toBe("boot");
     expect(rigGroups[1]?.agentGroups[0]?.qualifiedName).toBe("t3code/gastown.crew");
+  });
+
+  it("treats merged multicity root dirs as city folders without a synthetic cities group", () => {
+    const { rigGroups } = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "Cities",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "Cities",
+            path: "/cities",
+            suspended: false,
+          },
+          {
+            name: "gastown",
+            path: "/cities/gastown",
+            suspended: false,
+          },
+          {
+            name: "gastown/t3code",
+            path: "/data/projects/t3code",
+            suspended: false,
+          },
+          {
+            name: "gascity-br",
+            path: "/cities/gascity-br",
+            suspended: false,
+            lifecycle: {
+              supervisorRunning: true,
+              controllerRunning: true,
+              supervisorPort: 41341,
+            },
+          },
+          {
+            name: "gascity-br/beads_rust",
+            path: "/data/projects/beads_rust",
+            suspended: false,
+          },
+        ],
+        agents: [
+          {
+            name: "mayor",
+            dir: "gastown",
+            suspended: false,
+          },
+          {
+            name: "refinery",
+            dir: "gastown/t3code",
+            suspended: false,
+          },
+          {
+            name: "mayor",
+            dir: "gascity-br",
+            suspended: false,
+          },
+          {
+            name: "polecat",
+            dir: "gascity-br/beads_rust",
+            suspended: false,
+          },
+        ],
+      },
+    });
+
+    expect(rigGroups.map((group) => group.id)).toEqual([
+      "gascity-br",
+      "gascity-br/beads_rust",
+      "gastown",
+      "gastown/t3code",
+    ]);
+    expect(rigGroups.find((group) => group.id === "gascity-br")).toMatchObject({
+      kind: "workspace",
+      lifecycle: {
+        supervisorRunning: true,
+        controllerRunning: true,
+        supervisorPort: 41341,
+      },
+      agentGroups: [{ qualifiedName: "gascity-br/mayor" }],
+    });
+    expect(rigGroups.find((group) => group.id === "gascity-br/beads_rust")).toMatchObject({
+      kind: "rig",
+      agentGroups: [{ qualifiedName: "gascity-br/beads_rust/polecat" }],
+    });
+    expect(rigGroups.some((group) => group.id.toLowerCase() === "cities")).toBe(false);
+
+    const projectScopedResult = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "cities",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "gastown",
+            path: "/repo/packages/gascity-config/config/cities/gastown",
+            suspended: false,
+          },
+          {
+            name: "gastown/t3code",
+            path: "/repo",
+            suspended: false,
+          },
+          {
+            name: "gastown/beads-doltlite",
+            path: "/repo/packages/beads-doltlite",
+            suspended: false,
+          },
+        ],
+        agents: [
+          {
+            name: "mayor",
+            dir: "gastown",
+            suspended: false,
+          },
+          {
+            name: "refinery",
+            dir: "gastown/t3code",
+            suspended: false,
+          },
+          {
+            name: "polecat",
+            dir: "gastown/beads-doltlite",
+            suspended: false,
+          },
+        ],
+      },
+      projectCwd: "/repo",
+      projectName: "t3code",
+    });
+
+    expect(projectScopedResult.rigGroups.map((group) => group.id)).toEqual(["gastown/t3code"]);
+    expect(projectScopedResult.rigGroups.some((group) => group.id === "gastown")).toBe(false);
+
+    const cityDisplayResult = groupThreadsByRigAndAgent([], {
+      config: {
+        workspace: {
+          name: "Cities",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "gastown",
+            path: "/cities/gastown",
+            suspended: true,
+          },
+          {
+            name: "gascity-br",
+            path: "/cities/gascity-br",
+            suspended: false,
+          },
+        ],
+        agents: [],
+      },
+    });
+
+    expect(cityDisplayResult.rigGroups.map((group) => group.id)).toEqual(["gascity-br", "gastown"]);
+    expect(cityDisplayResult.rigGroups.some((group) => group.id.toLowerCase() === "cities")).toBe(
+      false,
+    );
+  });
+
+  it("keeps project-owned multicity rig folders even when ownership comes from thread metadata", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-worker",
+          customMetadata: {
+            "gc.agent": "t3-jj/worker",
+            "gc.agentQualified": "t3-jj/worker",
+            "gc.city": "gascity-br",
+            "gc.rig": "t3-jj",
+            "gc.groupKind": "rig",
+            "gc.groupId": "t3-jj",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "cities",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "gascity-br",
+              path: "/repo/packages/gascity-config/config/cities/gascity-br",
+              suspended: false,
+            },
+            {
+              name: "gascity-br/t3-jj",
+              path: "/repo/packages/gascity-config/config/cities/gascity-br/rigs/t3code",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "worker",
+              dir: "gascity-br/t3-jj",
+              suspended: false,
+              min_active_sessions: 1,
+              max_active_sessions: 4,
+              wake_mode: "fresh",
+            },
+          ],
+        },
+        projectCwd: "/repo",
+        projectName: "t3code",
+      },
+    );
+
+    expect(standaloneThreads).toEqual([]);
+    expect(rigGroups.map((group) => group.id)).toEqual(["gascity-br/t3-jj"]);
+    expect(rigGroups[0]).toMatchObject({
+      kind: "rig",
+      agentGroups: [
+        {
+          qualifiedName: "gascity-br/t3-jj/worker",
+          minActiveSessions: 1,
+          maxActiveSessions: 4,
+          wakeMode: "fresh",
+          threads: [{ id: "thread-worker" }],
+        },
+      ],
+    });
+  });
+
+  it("normalizes stale multicity rig metadata under the configured city rig", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          customMetadata: {
+            "gc.agent": "beads_rust/control-dispatcher",
+            "gc.city": "gascity-br",
+            "gc.rig": "beads_rust",
+            "gc.groupKind": "rig",
+            "gc.groupId": "beads_rust",
+            "gc.agentQualified": "beads_rust/control-dispatcher",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "cities",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "gascity-br",
+              path: "/cities/gascity-br",
+              suspended: false,
+            },
+            {
+              name: "gascity-br/beads_rust",
+              path: "/repo/packages/gascity-config/config/cities/gascity-br/rigs/beads_rust",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "control-dispatcher",
+              dir: "gascity-br/beads_rust",
+              suspended: false,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(standaloneThreads).toEqual([]);
+    expect(rigGroups.some((group) => group.id === "beads_rust")).toBe(false);
+    expect(rigGroups.find((group) => group.id === "gascity-br/beads_rust")).toMatchObject({
+      kind: "rig",
+      agentGroups: [
+        {
+          qualifiedName: "gascity-br/beads_rust/control-dispatcher",
+          threads: [{ id: "thread-1" }],
+        },
+      ],
+    });
   });
 
   it("seeds configured agent folders from grouped project members", () => {
@@ -347,6 +911,80 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(cityResult.rigGroups.map((group) => group.id)).toEqual(["gc"]);
     expect(cityResult.rigGroups[0]?.agentGroups[0]).toMatchObject({
       qualifiedName: "deacon",
+      namedSessionMode: "on_demand",
+    });
+  });
+
+  it("seeds configured agent folders only under the matching rig project", () => {
+    const config = {
+      workspace: {
+        name: "gc",
+        suspended: false,
+      },
+      rigs: [
+        {
+          name: "t3code",
+          path: "/data/projects/t3code",
+          suspended: false,
+        },
+        {
+          name: "beads-doltlite",
+          path: "/data/projects/t3code/packages/beads-doltlite",
+          suspended: false,
+        },
+      ],
+      agents: [
+        {
+          name: "gastown.crew",
+          dir: "t3code",
+          suspended: false,
+          is_pool: true,
+          min_active_sessions: 1,
+          max_active_sessions: 3,
+        },
+        {
+          name: "polecat",
+          dir: "beads-doltlite",
+          suspended: false,
+          named_session_mode: "on_demand",
+        },
+      ],
+    } as const;
+
+    const packageProjectResult = groupThreadsByRigAndAgent([], {
+      config,
+      projectCwd: "/data/projects/t3code/packages/gascity",
+      projectName: "gascity",
+    });
+
+    expect(packageProjectResult.rigGroups).toEqual([]);
+
+    const repositoryProjectResult = groupThreadsByRigAndAgent([], {
+      config,
+      projectCwd: "/data/projects/t3code",
+      projectName: "t3code",
+    });
+
+    expect(repositoryProjectResult.rigGroups.map((group) => group.id)).toEqual(["t3code"]);
+    expect(
+      repositoryProjectResult.rigGroups.find((group) => group.id === "t3code")?.agentGroups[0],
+    ).toMatchObject({
+      qualifiedName: "t3code/gastown.crew",
+      minActiveSessions: 1,
+      maxActiveSessions: 3,
+    });
+
+    const beadsProjectResult = groupThreadsByRigAndAgent([], {
+      config,
+      projectCwd: "/data/projects/t3code/packages/beads-doltlite",
+      projectName: "beads-doltlite",
+    });
+
+    expect(beadsProjectResult.rigGroups.map((group) => group.id)).toEqual(["beads-doltlite"]);
+    expect(
+      beadsProjectResult.rigGroups.find((group) => group.id === "beads-doltlite")?.agentGroups[0],
+    ).toMatchObject({
+      qualifiedName: "beads-doltlite/polecat",
       namedSessionMode: "on_demand",
     });
   });
