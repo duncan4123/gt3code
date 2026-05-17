@@ -1,6 +1,8 @@
 interface RawCityLike {
   readonly name?: unknown;
   readonly path?: unknown;
+  readonly running?: unknown;
+  readonly status?: unknown;
 }
 
 interface RawCitiesEnvelope {
@@ -42,16 +44,35 @@ export function resolveGcCityNameFromSupervisorCities(input: {
     const matchingPath = cities.find(
       (city) => typeof city.path === "string" && city.path.trim() === input.cityPath,
     );
+    if (
+      matchingPath?.running === true &&
+      typeof matchingPath.name === "string" &&
+      matchingPath.name.trim().length > 0
+    ) {
+      return matchingPath.name.trim();
+    }
+  }
+
+  const runningCities = cities.filter((city) => city.running === true);
+  if (runningCities.length === 1) {
+    const runningCity = runningCities[0];
+    if (typeof runningCity?.name === "string" && runningCity.name.trim().length > 0) {
+      return runningCity.name.trim();
+    }
+  }
+
+  if (input.cityPath) {
+    const matchingPath = cities.find(
+      (city) => typeof city.path === "string" && city.path.trim() === input.cityPath,
+    );
     if (typeof matchingPath?.name === "string" && matchingPath.name.trim().length > 0) {
       return matchingPath.name.trim();
     }
   }
 
-  if (cities.length === 1) {
-    const only = cities[0];
-    if (typeof only?.name === "string" && only.name.trim().length > 0) {
-      return only.name.trim();
-    }
+  if (cities.length === 1 && typeof cities[0]?.name === "string") {
+    const onlyName = cities[0].name.trim();
+    if (onlyName.length > 0) return onlyName;
   }
 
   return null;

@@ -19,6 +19,29 @@ describe("GC API paths", () => {
     ).toBe("gascity");
   });
 
+  it("prefers the only running city when the configured city is registered but stopped", () => {
+    expect(
+      resolveGcCityNameFromSupervisorCities({
+        raw: {
+          items: [
+            {
+              name: "gascity-br",
+              path: "/repo/packages/gascity-config/config/cities/gascity-br",
+              running: false,
+              status: "suspended",
+            },
+            {
+              name: "gastown",
+              path: "/repo/packages/gascity-config/config/cities/gastown",
+              running: true,
+            },
+          ],
+        },
+        cityPath: "/repo/packages/gascity-config/config/cities/gascity-br",
+      }),
+    ).toBe("gastown");
+  });
+
   it("builds scoped city paths from the resolved city name", () => {
     expect(buildGcCityPath("gascity", "/config")).toBe("/v0/city/gascity/config");
   });
