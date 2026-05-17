@@ -84,33 +84,6 @@ model = "kimi-for-coding/k2p6"
 
 [[agent]]
 name = "codex"
-dir = "context-mode"
-suspended = true
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "codex"
-max_active_sessions = 5
-min_active_sessions = 0
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-[agent.option_defaults]
-model = "gpt-5.5"
-
-[[agent]]
-name = "kimi-for-coding"
-dir = "context-mode"
-suspended = true
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "kimi-for-coding"
-max_active_sessions = 5
-min_active_sessions = 0
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-[agent.option_defaults]
-agent = "build"
-model = "kimi-for-coding/k2p6"
-
-[[agent]]
-name = "codex"
 dir = "t3code"
 suspended = true
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
@@ -183,24 +156,6 @@ suspended = true
 [[rigs]]
 name = "beads-doltlite"
 prefix = "bd"
-suspended = true
-includes = ["../../packs/gastown"]
-
-[[rigs.overrides]]
-agent = "polecat"
-suspended = true
-
-[[rigs.overrides]]
-agent = "refinery"
-suspended = true
-
-[[rigs.overrides]]
-agent = "witness"
-suspended = true
-
-[[rigs]]
-name = "context-mode"
-prefix = "ccm"
 suspended = true
 includes = ["../../packs/gastown"]
 
@@ -371,30 +326,6 @@ provider = "codex"
 model = "gpt-5.5"
 
 [[patches.agent]]
-dir = "context-mode"
-name = "witness"
-suspended = true
-provider = "codex"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "context-mode"
-name = "refinery"
-suspended = true
-provider = "codex"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "context-mode"
-name = "polecat"
-suspended = true
-provider = "codex"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
 dir = "t3code"
 name = "witness"
 suspended = true
@@ -523,11 +454,6 @@ mode = "always"
 
 [[patches.named_session]]
 dir = "beads-doltlite"
-template = "refinery"
-mode = "always"
-
-[[patches.named_session]]
-dir = "context-mode"
 template = "refinery"
 mode = "always"
 

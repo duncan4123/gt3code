@@ -33,27 +33,6 @@ const defaultT3Home = join(repoRoot, ".t3-dev");
 const defaultRuntimeRoot = join(defaultT3Home, "gascity");
 const defaultCityRoot = getBundledGascityConfigLayout("gascity-br").rootDir;
 const configuredCitiesRoot = dirname(defaultCityRoot);
-const defaultRigBindings = [
-  { name: "gascity", path: join(repoRoot, "packages", "gascity") },
-  {
-    name: "beads-doltlite",
-    path: join(repoRoot, "packages", "beads-doltlite"),
-  },
-  { name: "context-mode", path: join(repoRoot, "packages", "context-mode") },
-  { name: "t3code", path: repoRoot },
-  { name: "test-rig", path: join(defaultCityRoot, "rigs", "test-rig") },
-] as const;
-const gascityBrRigBindings = [
-  {
-    name: "beads_rust",
-    path: join(defaultCityRoot, "..", "gascity-br", "rigs", "beads_rust"),
-  },
-  {
-    name: "t3-jj",
-    path: join(defaultCityRoot, "..", "gascity-br", "rigs", "t3code"),
-  },
-] as const;
-
 const command = process.argv[2] ?? "help";
 const passthroughArgs = process.argv.slice(3);
 
@@ -91,7 +70,11 @@ async function main(): Promise<void> {
     }
     case "status": {
       const runtime = ensureRuntimeInstalled();
-      runGc(runtime, ["status", ...passthroughArgs]);
+      const statusArgs = await resolveCityCommandArgs("status", passthroughArgs, {
+        prompt: false,
+        showControllerStatus: false,
+      });
+      runGc(runtime, statusArgs);
       return;
     }
     case "start": {
@@ -133,7 +116,7 @@ main().catch((error: unknown) => {
 });
 
 async function resolveCityCommandArgs(
-  commandName: "start" | "stop",
+  commandName: "start" | "status" | "stop",
   args: ReadonlyArray<string>,
   options: {
     readonly prompt: boolean;
@@ -160,7 +143,7 @@ async function resolveCityCommandArgs(
 }
 
 async function promptForCityPath(options: {
-  readonly action: "start" | "stop";
+  readonly action: "start" | "status" | "stop";
   readonly runtime?: RuntimePaths;
   readonly showControllerStatus: boolean;
 }): Promise<string> {
@@ -208,7 +191,7 @@ async function promptForCityPath(options: {
 }
 
 function extractCitySelection(
-  commandName: "start" | "stop",
+  commandName: "start" | "status" | "stop",
   args: ReadonlyArray<string>,
 ): { readonly cityPath: string | null; readonly args: ReadonlyArray<string> } {
   let cityPath: string | null = null;
@@ -256,7 +239,7 @@ function configuredCityOptions(): ReadonlyArray<{
       path: join(configuredCitiesRoot, entry.name),
     }))
     .filter((city) => existsSync(join(city.path, "city.toml")))
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .toSorted((left, right) => left.name.localeCompare(right.name));
 }
 
 function readCityControllerStatuses(
@@ -511,24 +494,12 @@ function prepareActiveCity(
     readonly initializeStores: boolean;
   },
 ): void {
-  writeDefaultSiteToml(cityDir);
   if (usesDoltliteBeadsBackend(cityDir)) {
     writeDefaultBeadsConfig(cityDir, "t3", "hq");
     if (options.initializeStores) {
       if (!options.bdBinaryPath)
         throw new Error("bd binary path is required to initialize beads stores");
       initializeDoltliteBeadsStore(options.bdBinaryPath, cityDir, "t3");
-    }
-    for (const binding of defaultRigBindings) {
-      if (existsSync(binding.path)) {
-        const issuePrefix = beadsPrefixForRig(binding.name);
-        writeDefaultBeadsConfig(binding.path, issuePrefix, issuePrefix);
-        if (options.initializeStores) {
-          if (!options.bdBinaryPath)
-            throw new Error("bd binary path is required to initialize beads stores");
-          initializeDoltliteBeadsStore(options.bdBinaryPath, binding.path, issuePrefix);
-        }
-      }
     }
   }
 }
@@ -600,83 +571,6 @@ function withoutDoltliteInitServerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv
     }
   }
   return next;
-}
-
-function writeDefaultSiteToml(cityDir: string): void {
-  const gcDir = join(cityDir, ".gc");
-  const siteTomlPath = join(gcDir, "site.toml");
-  mkdirSync(gcDir, { recursive: true });
-  let content = existsSync(siteTomlPath)
-    ? readFileSync(siteTomlPath, "utf8")
-    : "# T3Code packaged city keeps machine-local rig path bindings here.\n";
-  for (const binding of rigBindingsForCity(cityDir)) {
-    if (!existsSync(binding.path)) {
-      continue;
-    }
-    content = replaceOrAppendRigBinding(content, binding);
-  }
-  writeFileSync(siteTomlPath, content);
-}
-
-function rigBindingsForCity(
-  cityDir: string,
-): ReadonlyArray<{ readonly name: string; readonly path: string }> {
-  if (resolve(cityDir) === resolve(join(defaultCityRoot, "..", "gascity-br"))) {
-    return gascityBrRigBindings;
-  }
-  return defaultRigBindings;
-}
-
-function replaceOrAppendRigBinding(
-  content: string,
-  binding: { readonly name: string; readonly path: string },
-): string {
-  const lines = content.split("\n");
-  for (let index = 0; index < lines.length; index += 1) {
-    if (lines[index]?.trim() !== "[[rig]]") continue;
-    let blockEnd = index + 1;
-    let foundName = false;
-    let pathLineIndex = -1;
-    while (blockEnd < lines.length && lines[blockEnd]?.trim() !== "[[rig]]") {
-      const trimmed = lines[blockEnd]?.trim() ?? "";
-      if (trimmed === `name = "${binding.name}"`) {
-        foundName = true;
-      }
-      if (trimmed.startsWith("path =")) {
-        pathLineIndex = blockEnd;
-      }
-      blockEnd += 1;
-    }
-    if (!foundName) {
-      index = blockEnd - 1;
-      continue;
-    }
-    const pathLine = `path = "${binding.path}"`;
-    if (pathLineIndex >= 0) {
-      lines[pathLineIndex] = pathLine;
-    } else {
-      lines.splice(blockEnd, 0, pathLine);
-    }
-    return lines.join("\n");
-  }
-  return `${content.replace(/\s*$/, "")}\n\n[[rig]]\nname = "${binding.name}"\npath = "${binding.path}"\n`;
-}
-
-function beadsPrefixForRig(name: string): string {
-  switch (name) {
-    case "gascity":
-      return "ga";
-    case "beads-doltlite":
-      return "bd";
-    case "context-mode":
-      return "ccm";
-    case "t3code":
-      return "t3";
-    case "test-rig":
-      return "tr";
-    default:
-      return "gc";
-  }
 }
 
 function writeDefaultBeadsConfig(cityDir: string, issuePrefix: string, doltDatabase: string): void {
