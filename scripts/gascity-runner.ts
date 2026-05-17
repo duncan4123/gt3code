@@ -60,7 +60,11 @@ async function main(): Promise<void> {
     }
     case "dry-run": {
       const runtime = ensureRuntimeInstalled();
-      runGc(runtime, ["start", "--dry-run", ...passthroughArgs]);
+      const startArgs = await resolveCityCommandArgs("start", passthroughArgs, {
+        prompt: false,
+        showControllerStatus: false,
+      });
+      runGc(runtime, addStartFlag(startArgs, "--dry-run"));
       return;
     }
     case "gc": {
@@ -332,13 +336,25 @@ function normalizeCityArgs(args: ReadonlyArray<string>): ReadonlyArray<string> {
   return normalized;
 }
 
+function addStartFlag(args: ReadonlyArray<string>, flag: string): string[] {
+  const next = [...args];
+  const startIndex = next.indexOf("start");
+  if (startIndex === -1) {
+    return ["start", flag, ...next];
+  }
+  if (!next.includes(flag)) {
+    next.splice(startIndex + 1, 0, flag);
+  }
+  return next;
+}
+
 function installRuntime(options: { readonly overwriteConfig: boolean }): RuntimePaths {
   if (options.overwriteConfig) {
     console.warn(
       "gascity:install no longer overwrites config; packages/gascity-config/config is the active city.",
     );
   }
-  const rootDir = process.env.T3CODE_GASCITY_HOME ?? defaultRuntimeRoot;
+  const rootDir = process.env.T3CODE_GASCITY_HOME ?? process.env.GC_HOME ?? defaultRuntimeRoot;
   const gcBinarySource = process.env.GASCITY_BINARY ?? findBuiltGcBinaryPath();
   const bdBinarySource = process.env.BD_BINARY ?? findBuiltBdBinaryPath();
   const doltliteLibrarySource = process.env.DOLTLITE_LIBRARY ?? findBuiltDoltliteLibraryPath();
@@ -376,6 +392,7 @@ function installRuntime(options: { readonly overwriteConfig: boolean }): Runtime
       initializeStores: false,
     });
   }
+  ensureBundledCitySiteBindings();
   return {
     rootDir,
     cityDir: runtime.cityDir,
@@ -409,6 +426,7 @@ function ensureRuntimeInstalled(): RuntimePaths {
     ensureRuntimeCommandLinks(runtime);
     ensureRuntimeDoltliteLibraryLinks(runtime);
     prepareActiveCity(runtime.cityDir, { initializeStores: false });
+    ensureBundledCitySiteBindings();
     return runtime;
   }
   return installRuntime({ overwriteConfig: false });
@@ -459,7 +477,7 @@ function sha256File(filePath: string): string {
 }
 
 function getRuntimePaths(): RuntimePaths {
-  const rootDir = process.env.T3CODE_GASCITY_HOME ?? defaultRuntimeRoot;
+  const rootDir = process.env.T3CODE_GASCITY_HOME ?? process.env.GC_HOME ?? defaultRuntimeRoot;
   const configuredCity = process.env.GC_CITY_PATH ?? process.env.GC_CITY;
   return {
     rootDir,
@@ -485,6 +503,86 @@ function getRuntimePaths(): RuntimePaths {
       process.env.T3CODE_WORKTREES_DIR ??
       join(process.env.T3CODE_HOME?.trim() || defaultT3Home, "worktrees"),
   };
+}
+
+function ensureBundledCitySiteBindings(): void {
+  for (const city of configuredCityOptions()) {
+    prepareActiveCity(city.path, {
+      initializeStores: false,
+    });
+    writeBundledCitySiteBinding(city.path);
+  }
+}
+
+function writeBundledCitySiteBinding(cityPath: string): void {
+  const rigNames = readCityRigNames(cityPath);
+  const rigEntries = rigNames
+    .map((name) => ({ name, path: bundledRigPath(cityPath, name) }))
+    .filter((entry): entry is { readonly name: string; readonly path: string } => entry.path !== null);
+  const siteDir = join(cityPath, ".gc");
+  mkdirSync(siteDir, { recursive: true });
+  const workspaceName = registrationNameForCity(cityPath);
+  const workspacePrefix = readWorkspacePrefix(cityPath) ?? defaultWorkspacePrefix(cityPath);
+  const header = [
+    `workspace_name = ${JSON.stringify(workspaceName)}`,
+    ...(workspacePrefix ? [`workspace_prefix = ${JSON.stringify(workspacePrefix)}`] : []),
+  ];
+  const rigBlocks = rigEntries.map(
+    (entry) => `[[rig]]\nname = ${JSON.stringify(entry.name)}\npath = ${JSON.stringify(entry.path)}`,
+  );
+  writeFileSync(join(siteDir, "site.toml"), `${[...header, ...rigBlocks].join("\n\n")}\n`);
+}
+
+function readCityRigNames(cityPath: string): string[] {
+  const content = readFileSync(join(cityPath, "city.toml"), "utf8");
+  const names: string[] = [];
+  for (const match of content.matchAll(/(?:^|\n)\[\[rigs\]\]([\s\S]*?)(?=\n\[\[|\n\[|$)/g)) {
+    const name = /^\s*name\s*=\s*"([^"]+)"\s*$/m.exec(match[1] ?? "")?.[1];
+    if (name) {
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+function bundledRigPath(cityPath: string, rigName: string): string | null {
+  const cityName = basename(resolve(cityPath));
+  const known: Record<string, Record<string, string>> = {
+    "gascity-br": {
+      "agentic-flow": join(cityPath, "rigs", "agentic-flow"),
+      beads_rust: join(cityPath, "rigs", "beads_rust"),
+      "t3-jj": join(cityPath, "rigs", "t3code"),
+    },
+    gastown: {
+      "beads-doltlite": join(repoRoot, "packages", "beads-doltlite"),
+      gascity: join(repoRoot, "packages", "gascity"),
+      t3code: repoRoot,
+      "test-rig": join(cityPath, "rigs", "test-rig"),
+    },
+  };
+  const mapped = known[cityName]?.[rigName];
+  if (mapped) {
+    return mapped;
+  }
+  const cityRig = join(cityPath, "rigs", rigName);
+  if (existsSync(cityRig)) {
+    return cityRig;
+  }
+  const packageRig = join(repoRoot, "packages", rigName);
+  if (existsSync(packageRig)) {
+    return packageRig;
+  }
+  return null;
+}
+
+function readWorkspacePrefix(cityPath: string): string | null {
+  const content = readFileSync(join(cityPath, "city.toml"), "utf8");
+  const workspaceMatch = /(?:^|\n)\[workspace\]([\s\S]*?)(?:\n\[|$)/.exec(content);
+  return /^\s*prefix\s*=\s*"([^"]+)"\s*$/m.exec(workspaceMatch?.[1] ?? "")?.[1] ?? null;
+}
+
+function defaultWorkspacePrefix(cityPath: string): string | null {
+  return basename(resolve(cityPath)) === "gascity-br" ? "gh" : null;
 }
 
 function prepareActiveCity(
@@ -772,6 +870,7 @@ function runStart(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
 }
 
 function runtimeEnv(runtime: RuntimePaths, gcApiUrl = resolveGcApiUrl(runtime)): NodeJS.ProcessEnv {
+  const t3WsUrl = resolveT3WsUrl();
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     GC_HOME: runtime.rootDir,
@@ -782,9 +881,19 @@ function runtimeEnv(runtime: RuntimePaths, gcApiUrl = resolveGcApiUrl(runtime)):
     T3CODE_WORKTREES_DIR: runtime.worktreesDir,
     GC_WORKTREES_DIR: runtime.worktreesDir,
     GC_API_URL: gcApiUrl,
+    ...(t3WsUrl ? { T3_WS_URL: t3WsUrl } : {}),
   };
   prepareRuntimeEnv(env, dirname(runtime.gcBinaryPath));
   return env;
+}
+
+function resolveT3WsUrl(): string | null {
+  const explicit = process.env.T3_WS_URL?.trim() || process.env.VITE_WS_URL?.trim();
+  if (explicit) {
+    return explicit.endsWith("/ws") ? explicit : `${explicit.replace(/\/$/, "")}/ws`;
+  }
+  const port = process.env.T3CODE_PORT?.trim() || "13773";
+  return `ws://127.0.0.1:${port}/ws`;
 }
 
 function cityWorkspaceIsSuspended(cityPath: string): boolean {

@@ -17,15 +17,16 @@ if (typeof Bun !== "undefined" && process.env.T3_AUDIT_NODE_REEXEC !== "1") {
 }
 
 function loadSqliteDatabase() {
+  const repoRoot = path.resolve(__dirname, "..");
   const candidates = [
     "better-sqlite3",
     (() => {
       try {
         return require.resolve("better-sqlite3", {
           paths: [
-            "/data/projects/t3code/packages/doltlite",
-            "/data/projects/t3code/apps/server",
-            "/data/projects/t3code",
+            path.join(repoRoot, "packages", "doltlite"),
+            path.join(repoRoot, "apps", "server"),
+            repoRoot,
           ],
         });
       } catch {
@@ -198,7 +199,15 @@ function main() {
     throw new Error(`Projection DB not found at ${dbPath}`);
   }
 
-  const sessionListResult = tryRunJson("/home/ubuntu/go/bin/gc", ["session", "list", "--json"]);
+  const repoRoot = path.resolve(__dirname, "..");
+  const gcBinary =
+    process.env.GC_BIN ||
+    path.join(
+      process.env.T3CODE_GASCITY_HOME || process.env.GC_HOME || path.join(repoRoot, ".t3-dev", "gascity"),
+      "bin",
+      process.platform === "win32" ? "gc.exe" : "gc",
+    );
+  const sessionListResult = tryRunJson(gcBinary, ["session", "list", "--json"]);
   const sessions =
     sessionListResult.ok && Array.isArray(sessionListResult.value) ? sessionListResult.value : [];
 

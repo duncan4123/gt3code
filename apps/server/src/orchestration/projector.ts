@@ -268,6 +268,9 @@ export function projectEvent(
             activities: [],
             checkpoints: [],
             session: null,
+            ...(payload.customMetadata !== undefined
+              ? { customMetadata: payload.customMetadata }
+              : {}),
           },
           event.type,
           "thread",
@@ -325,6 +328,9 @@ export function projectEvent(
               : {}),
             ...(payload.branch !== undefined ? { branch: payload.branch } : {}),
             ...(payload.worktreePath !== undefined ? { worktreePath: payload.worktreePath } : {}),
+            ...(payload.customMetadata !== undefined
+              ? { customMetadata: payload.customMetadata }
+              : {}),
             updatedAt: payload.updatedAt,
           }),
         })),

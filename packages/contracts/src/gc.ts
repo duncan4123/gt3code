@@ -896,6 +896,18 @@ export function groupThreadsByRigAndAgent<
 
   for (const thread of threads) {
     const meta = parseGcMeta(thread.customMetadata);
+    const threadCity = normalizeMetadataValue(meta.city);
+    if (
+      options?.config &&
+      workspaceName &&
+      workspaceName.toLowerCase() !== "cities" &&
+      threadCity &&
+      threadCity.localeCompare(workspaceName, undefined, { sensitivity: "accent" }) !== 0
+    ) {
+      standaloneThreads.push(thread);
+      continue;
+    }
+
     const rig = normalizeMetadataValue(meta.rig);
     const agent = normalizeMetadataValue(meta.agent);
     const resolvedCity = normalizeMetadataValue(meta.city);

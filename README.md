@@ -87,12 +87,24 @@ Local development uses checkout-local runtime state by default:
 - T3 Code data: `./.t3-dev`
 - Gas City supervisor/runtime: `./.t3-dev/gascity`
 - Gas City worktrees: `./.t3-dev/worktrees`
-- Bundled city config: `./packages/gascity-config/config/cities/gascity-br`
+- Bundled city config: `./packages/gascity-config/config/cities/*`
 
 This is intentional. A clean install, a second checkout, or a JJ workspace must
 not reuse a supervisor registry from another T3 Code installation. Reusing a
 machine-global `GC_HOME` can make `gc start` fail with a city-name collision, or
 make the app talk to a city registered from a different checkout.
+
+All bundled Gas City paths should be derived from the T3 Code install root. The
+app must not read `~/.gc`, `/home/.../go/bin/gc`, another checkout's `.t3-dev`,
+or a machine-global supervisor registry. `bun gc ...` and the T3 server set
+`GC_HOME`, `T3CODE_GASCITY_HOME`, `GC_BIN`, `BD_BIN`, and worktree paths to the
+install-local runtime.
+
+Design question: packaged desktop/user installs should likely use an
+app-relative runtime directory rather than the development `./.t3-dev` path. The
+invariant is the same either way: the runtime root belongs to that T3 Code
+installation and is not shared with other T3 Code or standalone Gas City installs
+on the machine.
 
 For a clean dev setup:
 

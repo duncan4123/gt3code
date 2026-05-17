@@ -2,8 +2,10 @@ import { WsRpcGroup } from "@t3tools/contracts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import * as RpcSchema from "effect/unstable/rpc/RpcSchema";
 import * as Socket from "effect/unstable/socket/Socket";
 
 import {
@@ -63,6 +65,37 @@ type RpcClientFactory = typeof makeWsRpcProtocolClient;
 export type WsRpcProtocolClient =
   RpcClientFactory extends Effect.Effect<infer Client, any, any> ? Client : never;
 export type WsRpcProtocolSocketUrlProvider = string | (() => Promise<string>);
+
+const wsRpcStreamRequestTags: ReadonlySet<string> = new Set(
+  Array.from(WsRpcGroup.requests.entries())
+    .filter(([, request]) => Option.isSome(RpcSchema.getStreamSchemas(request.successSchema)))
+    .map(([tag]) => tag),
+);
+
+interface TrackedRpcRequest {
+  readonly tag: string;
+  readonly stream: boolean;
+  readonly chunkCount: number;
+}
+
+function asWireMessage(value: unknown):
+  | {
+      readonly _tag: string;
+      readonly id?: unknown;
+      readonly requestId?: unknown;
+      readonly tag?: unknown;
+    }
+  | null {
+  if (typeof value !== "object" || value === null || !("_tag" in value)) {
+    return null;
+  }
+  return value as {
+    readonly _tag: string;
+    readonly id?: unknown;
+    readonly requestId?: unknown;
+    readonly tag?: unknown;
+  };
+}
 
 function formatSocketErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -219,6 +252,7 @@ export function createWsRpcProtocolLayer(
   const retryPolicy = Schedule.addDelay(Schedule.recurs(WS_RECONNECT_MAX_RETRIES), (retryCount) =>
     Effect.succeed(Duration.millis(getWsReconnectDelayMsForRetry(retryCount) ?? 0)),
   );
+  const trackedRequests = new Map<string, TrackedRpcRequest>();
   const protocolLayer = Layer.effect(
     RpcClient.Protocol,
     Effect.map(
@@ -228,8 +262,61 @@ export function createWsRpcProtocolLayer(
       }),
       (protocol) => ({
         ...protocol,
+        send: (...args: Parameters<typeof protocol.send>) => {
+          const [, request] = args;
+          const message = asWireMessage(request);
+          if (message?._tag === "Request") {
+            const id = String(message.id);
+            const tag = typeof message.tag === "string" ? message.tag : "";
+            const stream = wsRpcStreamRequestTags.has(tag);
+            trackedRequests.set(id, { tag, stream, chunkCount: 0 });
+            if (lifecycle.isActive()) {
+              handlers?.onRequestStart?.({ id, tag, stream });
+              trackRpcRequestSent(id, tag);
+            }
+          } else if (message?._tag === "Interrupt") {
+            const id = String(message.requestId);
+            const tracked = trackedRequests.get(id);
+            trackedRequests.delete(id);
+            if (lifecycle.isActive()) {
+              handlers?.onRequestInterrupt?.({
+                id,
+                ...(tracked?.tag === undefined ? {} : { tag: tracked.tag }),
+              });
+              acknowledgeRpcRequest(id);
+            }
+          }
+          return protocol.send(...args);
+        },
         run: (clientId, writeResponse) =>
           protocol.run(clientId, (response) => {
+            const message = asWireMessage(response);
+            if (message?._tag === "Chunk") {
+              const id = String(message.requestId);
+              const tracked = trackedRequests.get(id);
+              if (tracked && lifecycle.isActive()) {
+                const chunkCount = tracked.chunkCount + 1;
+                trackedRequests.set(id, { ...tracked, chunkCount });
+                handlers?.onRequestChunk?.({
+                  id,
+                  tag: tracked.tag,
+                  chunkCount,
+                });
+                acknowledgeRpcRequest(id);
+              }
+            } else if (message?._tag === "Exit") {
+              const id = String(message.requestId);
+              const tracked = trackedRequests.get(id);
+              trackedRequests.delete(id);
+              if (tracked && lifecycle.isActive()) {
+                handlers?.onRequestExit?.({
+                  id,
+                  tag: tracked.tag,
+                  stream: tracked.stream,
+                });
+                acknowledgeRpcRequest(id);
+              }
+            }
             if (response._tag === "ClientProtocolError" || response._tag === "Defect") {
               clearAllTrackedRpcRequests();
             }
@@ -237,58 +324,6 @@ export function createWsRpcProtocolLayer(
           }),
       }),
     ),
-  );
-  const requestHooksLayer = Layer.succeed(
-    RpcClient.RequestHooks,
-    RpcClient.RequestHooks.of({
-      onRequestStart: (info) =>
-        Effect.sync(() => {
-          if (!lifecycle.isActive()) {
-            return;
-          }
-          handlers?.onRequestStart?.({
-            id: String(info.id),
-            tag: info.tag,
-            stream: info.stream,
-          });
-          trackRpcRequestSent(String(info.id), info.tag);
-        }),
-      onRequestChunk: (info) =>
-        Effect.sync(() => {
-          if (!lifecycle.isActive()) {
-            return;
-          }
-          handlers?.onRequestChunk?.({
-            id: String(info.id),
-            tag: info.tag,
-            chunkCount: info.chunkCount,
-          });
-          acknowledgeRpcRequest(String(info.id));
-        }),
-      onRequestExit: (info) =>
-        Effect.sync(() => {
-          if (!lifecycle.isActive()) {
-            return;
-          }
-          handlers?.onRequestExit?.({
-            id: String(info.id),
-            tag: info.tag,
-            stream: info.stream,
-          });
-          acknowledgeRpcRequest(String(info.id));
-        }),
-      onRequestInterrupt: (info) =>
-        Effect.sync(() => {
-          if (!lifecycle.isActive()) {
-            return;
-          }
-          handlers?.onRequestInterrupt?.({
-            id: String(info.id),
-            ...(info.tag === undefined ? {} : { tag: info.tag }),
-          });
-          acknowledgeRpcRequest(String(info.id));
-        }),
-    }),
   );
   const connectionHooksLayer = Layer.succeed(
     RpcClient.ConnectionHooks,
@@ -322,7 +357,6 @@ export function createWsRpcProtocolLayer(
     protocolLayer.pipe(
       Layer.provide(Layer.mergeAll(socketLayer, RpcSerialization.layerJson, connectionHooksLayer)),
     ),
-    requestHooksLayer,
     connectionHooksLayer,
   );
 }

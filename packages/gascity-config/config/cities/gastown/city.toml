@@ -58,7 +58,7 @@ model = "kimi-for-coding/k2p6"
 [[agent]]
 name = "codex"
 dir = "beads-doltlite"
-suspended = true
+suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "codex"
 max_active_sessions = 5
@@ -151,12 +151,12 @@ suspended = true
 
 [[rigs.overrides]]
 agent = "witness"
-suspended = true
+suspended = false
 
 [[rigs]]
 name = "beads-doltlite"
 prefix = "bd"
-suspended = true
+suspended = false
 includes = ["../../packs/gastown"]
 
 [[rigs.overrides]]
@@ -321,7 +321,7 @@ model = "gpt-5.5"
 [[patches.agent]]
 dir = "beads-doltlite"
 name = "witness"
-suspended = true
+suspended = false
 provider = "codex"
 [patches.agent.option_defaults]
 model = "gpt-5.5"

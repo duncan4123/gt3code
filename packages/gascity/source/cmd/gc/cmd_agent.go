@@ -634,8 +634,8 @@ func doAgentResume(fs fsys.FS, cityPath, name string, stdout, stderr io.Writer) 
 //   - Convention-discovered (agents/<name>/): write agent.toml, and
 //     strip any legacy [[patches.agent]] suspended override that would
 //     otherwise shadow the new value.
-//   - Pack-declared [[agent]] (city.toml or pack.toml): tell the user
-//     to use [[patches]].
+//   - Pack-declared [[agent]]: write a city-local [[patches.agent]]
+//     suspended override.
 func doAgentSuspendOrResume(fs fsys.FS, cityPath, name string, suspended bool, stdout, stderr io.Writer) int {
 	verb, past := "suspend", "Suspended"
 	if !suspended {
@@ -704,6 +704,16 @@ func doAgentSuspendOrResume(fs fsys.FS, cityPath, name string, suspended bool, s
 		fmt.Fprintf(stdout, "%s agent '%s'\n", past, name) //nolint:errcheck // best-effort stdout
 		return 0
 	}
-	fmt.Fprintf(stderr, "gc agent %s: agent %q is defined by a pack — use [[patches]] to override\n", verb, name) //nolint:errcheck // best-effort stderr
-	return 1
+	if err := configedit.AddOrUpdateAgentPatch(cfg, resolved.QualifiedName(), func(p *config.AgentPatch) {
+		p.Suspended = &suspended
+	}); err != nil {
+		fmt.Fprintf(stderr, "gc agent %s: %v\n", verb, err) //nolint:errcheck // best-effort stderr
+		return 1
+	}
+	if err := writeCityConfigForEditFS(fs, tomlPath, cfg); err != nil {
+		fmt.Fprintf(stderr, "gc agent %s: %v\n", verb, err) //nolint:errcheck // best-effort stderr
+		return 1
+	}
+	fmt.Fprintf(stdout, "%s agent '%s'\n", past, name) //nolint:errcheck // best-effort stdout
+	return 0
 }

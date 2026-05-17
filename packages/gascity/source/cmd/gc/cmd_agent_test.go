@@ -103,39 +103,43 @@ func TestDoAgentSuspendInlinePreservesConfig(t *testing.T) {
 	}
 }
 
-func TestDoAgentSuspendPackDerivedError(t *testing.T) {
+func TestDoAgentSuspendPackDerivedWritesPatch(t *testing.T) {
 	fs := packConfigWithFragment(t)
 
 	var stdout, stderr bytes.Buffer
 	code := doAgentSuspend(&fs, "/city", "myrig/pack-worker", &stdout, &stderr)
-	if code != 1 {
-		t.Fatalf("code = %d, want 1 for pack-derived agent", code)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr: %s", code, stderr.String())
 	}
-	errMsg := stderr.String()
-	if !strings.Contains(errMsg, "defined by a pack") {
-		t.Errorf("stderr should mention pack: %s", errMsg)
+	data := string(fs.Files["/city/city.toml"])
+	if !strings.Contains(data, "packs/mypack/agents.toml") {
+		t.Errorf("city.toml should preserve include directive:\n%s", data)
 	}
-	if !strings.Contains(errMsg, "[[patches]]") {
-		t.Errorf("stderr should mention patches: %s", errMsg)
+	if !strings.Contains(data, "[[patches.agent]]") {
+		t.Errorf("city.toml should contain agent patch:\n%s", data)
 	}
-	// Config must NOT have been modified.
-	assertConfigPreserved(t, &fs, "/city/city.toml")
+	if !strings.Contains(data, `dir = "myrig"`) || !strings.Contains(data, `name = "pack-worker"`) {
+		t.Errorf("city.toml should patch qualified pack agent:\n%s", data)
+	}
+	if !strings.Contains(data, "suspended = true") {
+		t.Errorf("city.toml should contain suspended override:\n%s", data)
+	}
 }
 
-func TestDoAgentResumePackDerivedError(t *testing.T) {
+func TestDoAgentResumePackDerivedWritesPatch(t *testing.T) {
 	fs := packConfigWithFragment(t)
 
 	var stdout, stderr bytes.Buffer
 	code := doAgentResume(&fs, "/city", "myrig/pack-worker", &stdout, &stderr)
-	if code != 1 {
-		t.Fatalf("code = %d, want 1 for pack-derived agent", code)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr: %s", code, stderr.String())
 	}
-	errMsg := stderr.String()
-	if !strings.Contains(errMsg, "defined by a pack") {
-		t.Errorf("stderr should mention pack: %s", errMsg)
+	data := string(fs.Files["/city/city.toml"])
+	if !strings.Contains(data, "[[patches.agent]]") {
+		t.Errorf("city.toml should contain agent patch:\n%s", data)
 	}
-	if !strings.Contains(errMsg, "[[patches]]") {
-		t.Errorf("stderr should mention patches: %s", errMsg)
+	if !strings.Contains(data, "suspended = false") {
+		t.Errorf("city.toml should contain resumed override:\n%s", data)
 	}
 }
 

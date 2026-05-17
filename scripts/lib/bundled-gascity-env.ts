@@ -86,7 +86,10 @@ export function createBundledGascityProcessEnv({
   return Effect.gen(function* () {
     const path = yield* Path.Path;
     const resolvedBaseDir = yield* resolveBaseDir(t3Home ?? baseEnv.T3CODE_HOME);
-    const gascityHome = baseEnv.T3CODE_GASCITY_HOME?.trim() || DEFAULT_T3CODE_GASCITY_HOME;
+    const gascityHome =
+      baseEnv.T3CODE_GASCITY_HOME?.trim() ||
+      baseEnv.GC_HOME?.trim() ||
+      DEFAULT_T3CODE_GASCITY_HOME;
     const worktreesDir =
       baseEnv.T3CODE_WORKTREES_DIR?.trim() || path.join(resolvedBaseDir, "worktrees");
     const cityPath = baseEnv.GC_CITY_PATH ?? baseEnv.GC_CITY ?? DEFAULT_GC_CITY_PATH;
@@ -101,6 +104,7 @@ export function createBundledGascityProcessEnv({
       ...env,
       T3CODE_HOME: resolvedBaseDir,
       T3CODE_GASCITY_HOME: gascityHome,
+      GC_HOME: gascityHome,
       T3CODE_WORKTREES_DIR: worktreesDir,
       GC_WORKTREES_DIR: baseEnv.GC_WORKTREES_DIR?.trim() || worktreesDir,
       GC_API_URL: resolveGcApiUrl(baseEnv, gascityHome, path),

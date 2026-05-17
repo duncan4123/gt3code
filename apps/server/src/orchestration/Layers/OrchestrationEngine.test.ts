@@ -356,6 +356,64 @@ describe("OrchestrationEngine", () => {
     await system.dispose();
   });
 
+  it("archives Gas City managed threads through orchestration commands", async () => {
+    const system = await createOrchestrationSystem();
+    const { engine } = system;
+    const createdAt = now();
+
+    await system.run(
+      engine.dispatch({
+        type: "project.create",
+        commandId: CommandId.make("cmd-project-gc-archive-create"),
+        projectId: asProjectId("project-gc-archive"),
+        title: "Project GC Archive",
+        workspaceRoot: "/tmp/project-gc-archive",
+        defaultModelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5-codex",
+        },
+        createdAt,
+      }),
+    );
+    await system.run(
+      engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("cmd-thread-gc-archive-create"),
+        threadId: ThreadId.make("thread-gc-archive"),
+        projectId: asProjectId("project-gc-archive"),
+        title: "Do not archive me",
+        modelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5-codex",
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "full-access",
+        branch: null,
+        worktreePath: null,
+        customMetadata: {
+          "gc.agent": "t3code/worker",
+          "gc.provider": "t3bridge",
+        },
+        createdAt,
+      }),
+    );
+
+    await system.run(
+      engine.dispatch({
+        type: "thread.archive",
+        commandId: CommandId.make("cmd-thread-gc-archive"),
+        threadId: ThreadId.make("thread-gc-archive"),
+      }),
+    );
+
+    expect(
+      (await system.readModel()).threads.find((thread) => thread.id === "thread-gc-archive")
+        ?.archivedAt,
+    ).not.toBeNull();
+
+    await system.dispose();
+  });
+
   it("replays append-only events from sequence", async () => {
     const system = await createOrchestrationSystem();
     const { engine } = system;

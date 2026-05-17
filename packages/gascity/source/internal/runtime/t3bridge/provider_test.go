@@ -621,6 +621,89 @@ func TestStart_ReusedThreadDoesNotInjectStartupTurns(t *testing.T) {
 	}
 }
 
+func TestStart_RecreateStopsExistingThreadWithoutArchiving(t *testing.T) {
+	workDir := t.TempDir()
+	server := newT3BridgeTestServer(t, map[string]interface{}{
+		"projects": []interface{}{
+			map[string]interface{}{
+				"id":            "project-1",
+				"workspaceRoot": workDir,
+			},
+		},
+		"threads": []interface{}{
+			map[string]interface{}{
+				"id":        "thread-old",
+				"projectId": "project-1",
+				"title":     "mayor · mayor",
+				"customMetadata": map[string]interface{}{
+					"gc.agent":           "mayor",
+					"gc.sessionName":     "mayor",
+					"gc.startupTemplate": "mayor",
+					"gc.startupWorkDir":  workDir,
+					"gc.runtimeProvider": "codex",
+					"gc.startupModel":    "gpt-5.4",
+					"gc.state":           "active",
+				},
+				"session": map[string]interface{}{
+					"status": "ready",
+				},
+			},
+		},
+	})
+	defer server.Close()
+	t.Setenv("T3_BEARER_TOKEN", "test-bearer")
+	t.Setenv("T3_WS_URL", server.wsURL())
+
+	p := &Provider{
+		watchers:     make(map[string]context.CancelFunc),
+		recentStarts: make(map[string]time.Time),
+	}
+	cfg := runtime.Config{
+		WorkDir: workDir,
+		Command: "codex",
+		Env: map[string]string{
+			"GC_CITY_PATH":    "/tmp/gc",
+			"GC_ALIAS":        "mayor",
+			"GC_AGENT":        "mayor",
+			"GC_SESSION_NAME": "mayor",
+			"GC_TEMPLATE":     "mayor",
+			"GC_PROVIDER":     "codex",
+			"GC_MODEL":        "gpt-5.5",
+		},
+	}
+
+	if err := p.Start(context.Background(), "mayor", cfg); err != nil {
+		t.Fatalf("Start(recreate): %v", err)
+	}
+
+	for _, typ := range server.commandTypes() {
+		if typ == "thread.archive" {
+			t.Fatalf("t3bridge must not archive threads during recreate: commands=%v", server.commandTypes())
+		}
+	}
+	updates := server.commandPayloadsByType("thread.meta.update")
+	foundStopped := false
+	for _, update := range updates {
+		command := unwrapCommandPayload(update)
+		if command["threadId"] != "thread-old" {
+			continue
+		}
+		meta, _ := command["customMetadata"].(map[string]interface{})
+		if meta["gc.state"] == "archived" {
+			t.Fatalf("old thread marked archived: %#v", command)
+		}
+		if meta["gc.state"] == "stopped" {
+			foundStopped = true
+		}
+	}
+	if !foundStopped {
+		t.Fatalf("missing stopped metadata update for old thread: %#v", updates)
+	}
+	if creates := server.commandPayloadsByType("thread.create"); len(creates) != 1 {
+		t.Fatalf("thread.create count = %d, want 1: %#v", len(creates), creates)
+	}
+}
+
 func TestBuildThreadEnv_DropsStartupEnvelope(t *testing.T) {
 	env := buildThreadEnv(map[string]string{
 		"GC_STARTUP_ENVELOPE":      `{"runtime":{"provider":"claudeAgent","model":"claude-sonnet-4-6"}}`,

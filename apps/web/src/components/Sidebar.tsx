@@ -166,14 +166,18 @@ import {
 } from "./Sidebar.logic";
 import { sortThreads } from "../lib/threadSort";
 import { SidebarGcFolders } from "../gc/SidebarGcFolders";
-import { splitGcRigProjectSnapshots } from "../gc/sidebarGcProjectSnapshots";
+import {
+  filterGcOwnedProjectSnapshots,
+  splitGcRigProjectSnapshots,
+} from "../gc/sidebarGcProjectSnapshots";
 import { useGcRigProjects } from "../gc/useGcRigProjects";
 import {
   resolveGcAgentRuntimeState,
   type GcAgentActionState,
   waitForGcAgentBinding,
 } from "../gc/sidebar/gcSidebarControls";
-import { GcSidebarGlobalSection, toSidebarGcRigGroups } from "../gc/GcSidebarGlobalSection";
+import { GcSidebarGlobalSection } from "../gc/GcSidebarGlobalSection";
+import { toSidebarGcRigGroups } from "../gc/toSidebarGcRigGroups";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { CommandDialogTrigger } from "./ui/command";
@@ -2845,7 +2849,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     },
     [updateSettings],
   );
-
   return (
     <SidebarContent className="gap-0">
       <SidebarGroup className="px-2 pt-2 pb-1">
@@ -2894,7 +2897,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           </Alert>
         </SidebarGroup>
       ) : null}
-      {gcSection}
       <SidebarGroup className="px-2 py-2">
         <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
@@ -2927,6 +2929,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
             </Tooltip>
           </div>
         </div>
+
+        {gcSection}
 
         {isManualProjectSorting ? (
           <DndContext
@@ -3308,6 +3312,28 @@ export default function Sidebar() {
     () => new Map(sidebarProjects.map((project) => [project.projectKey, project] as const)),
     [sidebarProjects],
   );
+  const normalSidebarProjects = useMemo(
+    () =>
+      filterGcOwnedProjectSnapshots({
+        snapshots: sidebarProjects,
+        gcConfig,
+        primaryEnvironmentId,
+      }),
+    [gcConfig, primaryEnvironmentId, sidebarProjects],
+  );
+  const normalSidebarProjectByKey = useMemo(
+    () => new Map(normalSidebarProjects.map((project) => [project.projectKey, project] as const)),
+    [normalSidebarProjects],
+  );
+  const normalProjectLogicalKeyByPhysicalKey = useMemo(() => {
+    const mapping = new Map<string, string>();
+    for (const project of normalSidebarProjects) {
+      for (const member of project.memberProjects) {
+        mapping.set(member.physicalProjectKey, project.projectKey);
+      }
+    }
+    return mapping;
+  }, [normalSidebarProjects]);
   const sidebarThreadByKey = useMemo(
     () =>
       new Map(
@@ -3355,7 +3381,10 @@ export default function Sidebar() {
         projectPhysicalKeyByScopedRef.get(
           scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
         ) ?? scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
-      const logicalKey = physicalToLogicalKey.get(physicalKey) ?? physicalKey;
+      const logicalKey = normalProjectLogicalKeyByPhysicalKey.get(physicalKey);
+      if (!logicalKey) {
+        continue;
+      }
       const existing = next.get(logicalKey);
       if (existing) {
         existing.push(thread);
@@ -3364,7 +3393,7 @@ export default function Sidebar() {
       }
     }
     return next;
-  }, [sidebarThreads, physicalToLogicalKey, projectPhysicalKeyByScopedRef]);
+  }, [normalProjectLogicalKeyByPhysicalKey, projectPhysicalKeyByScopedRef, sidebarThreads]);
   const getCurrentSidebarShortcutContext = useCallback(
     () => ({
       terminalFocus: isTerminalFocused(),
@@ -4013,34 +4042,37 @@ export default function Sidebar() {
     [sidebarThreads],
   );
   const sortedProjects = useMemo(() => {
-    const sortableProjects = sidebarProjects.map((project) => ({
+    const sortableProjects = normalSidebarProjects.map((project) => ({
       ...project,
       id: project.projectKey,
     }));
-    const sortableThreads = visibleThreads.map((thread) => {
-      const physicalKey =
-        projectPhysicalKeyByScopedRef.get(
-          scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
-        ) ?? scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
-      return {
-        ...thread,
-        projectId: (physicalToLogicalKey.get(physicalKey) ?? physicalKey) as ProjectId,
-      };
-    });
+    const sortableThreads = visibleThreads
+      .map((thread) => {
+        const physicalKey =
+          projectPhysicalKeyByScopedRef.get(
+            scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+          ) ?? scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
+        const logicalProjectKey = normalProjectLogicalKeyByPhysicalKey.get(physicalKey);
+        return {
+          ...thread,
+          projectId: (logicalProjectKey ?? physicalKey) as ProjectId,
+        };
+      })
+      .filter((thread) => normalSidebarProjectByKey.has(thread.projectId));
     return sortProjectsForSidebar(
       sortableProjects,
       sortableThreads,
       sidebarProjectSortOrder,
     ).flatMap((project) => {
-      const resolvedProject = sidebarProjectByKey.get(project.id);
+      const resolvedProject = normalSidebarProjectByKey.get(project.id);
       return resolvedProject ? [resolvedProject] : [];
     });
   }, [
+    normalProjectLogicalKeyByPhysicalKey,
+    normalSidebarProjectByKey,
+    normalSidebarProjects,
     sidebarProjectSortOrder,
-    physicalToLogicalKey,
     projectPhysicalKeyByScopedRef,
-    sidebarProjectByKey,
-    sidebarProjects,
     visibleThreads,
   ]);
   const isManualProjectSorting = sidebarProjectSortOrder === "manual";

@@ -229,7 +229,16 @@ func resolveT3ServerDir() string {
 	if v := os.Getenv("T3_SERVER_DIR"); strings.TrimSpace(v) != "" {
 		return strings.TrimSpace(v)
 	}
-	return "/data/projects/t3code/apps/server"
+	if v := os.Getenv("T3CODE_HOME"); strings.TrimSpace(v) != "" {
+		return filepath.Join(strings.TrimSpace(v), "apps", "server")
+	}
+	if v := os.Getenv("T3_HOME"); strings.TrimSpace(v) != "" {
+		return filepath.Join(strings.TrimSpace(v), "apps", "server")
+	}
+	if v := os.Getenv("T3_BASE_DIR"); strings.TrimSpace(v) != "" {
+		return filepath.Join(strings.TrimSpace(v), "apps", "server")
+	}
+	return filepath.Join(resolveT3BaseDir(), "apps", "server")
 }
 
 func resolveT3BaseDir() string {
@@ -680,6 +689,9 @@ func snapshotThreadBySessionName(snapshot map[string]interface{}, name string) m
 		if deletedAt, ok := thread["deletedAt"]; ok && deletedAt != nil {
 			continue
 		}
+		if archivedAt, ok := thread["archivedAt"]; ok && archivedAt != nil {
+			continue
+		}
 		meta := threadCustomMetadata(thread)
 		if SessionNameFromMetadata(meta) != name {
 			continue
@@ -1103,14 +1115,6 @@ func (p *Provider) dispatchThreadCreate(
 		command["customMetadata"] = customMetadata
 	}
 	return p.rpcDispatchCommand(command)
-}
-
-func (p *Provider) dispatchThreadArchive(threadID string) error {
-	return p.rpcDispatchCommand(map[string]interface{}{
-		"type":      "thread.archive",
-		"commandId": p.nextCommandID("t3bridge-archive"),
-		"threadId":  threadID,
-	})
 }
 
 func (p *Provider) dispatchThreadSessionStop(threadID string) error {
@@ -2061,7 +2065,8 @@ func (p *Provider) ListRunning(prefix string) ([]string, error) {
 		if name == "" {
 			continue
 		}
-		if meta["gc.state"] == "archived" {
+		switch meta["gc.state"] {
+		case "archived", "drained", "stopped":
 			continue
 		}
 		if prefix != "" && !strings.HasPrefix(name, prefix) {
@@ -2256,9 +2261,8 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 		default:
 			fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) discard existing thread=%s decision=%s\n", name, existingBinding.ThreadID, reuse.Decision) //nolint:errcheck
 			if existingBinding.ThreadID != "" {
-				_ = p.dispatchThreadMeta(existingBinding.ThreadID, map[string]interface{}{"gc.state": "archived"})
+				_ = p.dispatchThreadMeta(existingBinding.ThreadID, map[string]interface{}{"gc.state": "stopped"})
 				_ = p.dispatchThreadSessionStop(existingBinding.ThreadID)
-				_ = p.dispatchThreadArchive(existingBinding.ThreadID)
 			}
 		}
 	}
@@ -2387,7 +2391,7 @@ func (p *Provider) Stop(name string) error {
 	_ = p.dispatchThreadSessionStop(binding.ThreadID)
 
 	if drained == "1" {
-		_ = p.dispatchThreadMeta(binding.ThreadID, map[string]interface{}{"gc.state": "archived"})
+		_ = p.dispatchThreadMeta(binding.ThreadID, map[string]interface{}{"gc.state": "drained"})
 		p.removeWorktreeForThread(thread)
 	}
 	p.clearRecentStart(name)

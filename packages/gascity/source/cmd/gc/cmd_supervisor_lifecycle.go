@@ -661,13 +661,13 @@ func buildSupervisorServiceData() (*supervisorServiceData, error) {
 		xdgRuntimeDir = ""
 	}
 	return &supervisorServiceData{
-		GCPath:          gcPath,
-		LogPath:         supervisorLogPath(),
-		GCHome:          home,
-		XDGRuntimeDir:   xdgRuntimeDir,
-		LaunchdLabel:    supervisorLaunchdLabel(),
-		SafeName:        sanitizeServiceName(filepath.Base(home)),
-		Path:            searchpath.ExpandPath(homeDir, goruntime.GOOS, os.Getenv("PATH")),
+		GCPath:        gcPath,
+		LogPath:       supervisorLogPath(),
+		GCHome:        home,
+		XDGRuntimeDir: xdgRuntimeDir,
+		LaunchdLabel:  supervisorLaunchdLabel(),
+		SafeName:      sanitizeServiceName(filepath.Base(home)),
+		Path:          searchpath.ExpandPath(homeDir, goruntime.GOOS, os.Getenv("PATH")),
 		// The machine-wide supervisor reads its city registry and must not be
 		// pinned to whichever city happened to invoke `gc start`.
 		GCCityPath:      "",
@@ -704,6 +704,11 @@ var supervisorServiceEnvKeys = map[string]bool{
 	"LC_CTYPE":                                 true,
 	"LOGNAME":                                  true,
 	"SHELL":                                    true,
+	"T3_BASE_DIR":                              true,
+	"T3_HOME":                                  true,
+	"T3_SERVER_DIR":                            true,
+	"T3_WS_URL":                                true,
+	"T3CODE_HOME":                              true,
 	"USER":                                     true,
 	"XDG_CONFIG_HOME":                          true,
 	"XDG_STATE_HOME":                           true,

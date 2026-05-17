@@ -27,6 +27,7 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
 
       assert.equal(env.T3CODE_HOME, expectedHome);
       assert.equal(env.T3CODE_GASCITY_HOME, DEFAULT_T3CODE_GASCITY_HOME);
+      assert.equal(env.GC_HOME, DEFAULT_T3CODE_GASCITY_HOME);
       assert.equal(env.T3CODE_WORKTREES_DIR, expectedWorktreesDir);
       assert.equal(env.GC_WORKTREES_DIR, expectedWorktreesDir);
       assert.equal(DEFAULT_GC_CITY_PATH, getBundledGascityConfigLayout("gascity-br").rootDir);
@@ -80,6 +81,7 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
 
       assert.equal(env.T3CODE_HOME, "/tmp/base-home");
       assert.equal(env.T3CODE_GASCITY_HOME, "/tmp/gc-home");
+      assert.equal(env.GC_HOME, "/tmp/gc-home");
       assert.equal(env.T3CODE_WORKTREES_DIR, "/tmp/worktrees");
       assert.equal(env.GC_WORKTREES_DIR, "/tmp/gc-worktrees");
       assert.equal(env.GC_API_URL, "http://127.0.0.1:9999");
@@ -142,6 +144,20 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.equal(env.BEADS_DOLT_SHARED_SERVER, undefined);
       assert.equal(env.GC_BEADS_BACKEND, undefined);
       assert.equal(env.BEADS_BACKEND, undefined);
+    }),
+  );
+
+  it.effect("uses GC_HOME as the bundled Gas City home when T3CODE_GASCITY_HOME is unset", () =>
+    Effect.gen(function* () {
+      const env = yield* createBundledGascityProcessEnv({
+        baseEnv: {
+          GC_HOME: "/tmp/internal-gc-home",
+        },
+        t3Home: undefined,
+      });
+
+      assert.equal(env.T3CODE_GASCITY_HOME, "/tmp/internal-gc-home");
+      assert.equal(env.GC_HOME, "/tmp/internal-gc-home");
     }),
   );
 });

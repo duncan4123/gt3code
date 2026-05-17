@@ -354,6 +354,7 @@ export const OrchestrationThread = Schema.Struct({
   activities: Schema.Array(OrchestrationThreadActivity),
   checkpoints: Schema.Array(OrchestrationCheckpointSummary),
   session: Schema.NullOr(OrchestrationSession),
+  customMetadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 export type OrchestrationThread = typeof OrchestrationThread.Type;
 
