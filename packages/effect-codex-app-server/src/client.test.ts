@@ -84,6 +84,12 @@ it.layer(NodeServices.layer)("effect-codex-app-server client", (it) => {
         assert.equal(skills.data.length, 1);
         assert.equal(skills.data[0]?.cwd, process.cwd());
 
+        const thread = yield* client.request("thread/start", {
+          cwd: process.cwd(),
+        });
+        assert.equal(thread.thread.id, "thread-without-session-id");
+        assert.equal(thread.thread.sessionId, "thread-without-session-id");
+
         return {
           account,
           skills,

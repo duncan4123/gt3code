@@ -20,6 +20,30 @@ export const JsonRpcResponseEnvelope = Schema.Struct({
   error: Schema.optional(JsonRpcError),
 });
 
+const normalizeThreadPayload = (raw: unknown): unknown => {
+  if (typeof raw !== "object" || raw === null || !("thread" in raw)) {
+    return raw;
+  }
+
+  const payload = raw as { readonly thread?: unknown };
+  if (typeof payload.thread !== "object" || payload.thread === null) {
+    return raw;
+  }
+
+  const thread = payload.thread as { readonly id?: unknown; readonly sessionId?: unknown };
+  if (thread.sessionId !== undefined || typeof thread.id !== "string") {
+    return raw;
+  }
+
+  return {
+    ...payload,
+    thread: {
+      ...thread,
+      sessionId: thread.id,
+    },
+  };
+};
+
 export const decodeOptionalPayload = <A, I>(
   method: string,
   schema: Schema.Codec<A, I> | undefined,
@@ -34,7 +58,7 @@ export const decodeOptionalPayload = <A, I>(
     );
   }
 
-  return Schema.decodeUnknownEffect(schema)(raw).pipe(
+  return Schema.decodeUnknownEffect(schema)(normalizeThreadPayload(raw)).pipe(
     Effect.mapError((error) =>
       CodexError.CodexAppServerRequestError.invalidParams(
         `Invalid ${method} payload: ${formatSchemaIssue(error.issue)}`,
