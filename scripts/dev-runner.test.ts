@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
+import { getBundledGascityConfigLayout } from "@t3tools/gascity-config";
 
 import {
   checkPortAvailabilityOnHosts,
@@ -64,6 +65,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         });
 
         assert.equal(env.T3CODE_HOME, path.resolve(import.meta.dirname, "..", ".t3-dev"));
+        assert.equal(env.GC_CITY_PATH, getBundledGascityConfigLayout("gascity-br").rootDir);
       }),
     );
 

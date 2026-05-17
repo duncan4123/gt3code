@@ -28,8 +28,8 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.equal(env.T3CODE_GASCITY_HOME, runtimeHome);
       assert.equal(env.T3CODE_WORKTREES_DIR, expectedWorktreesDir);
       assert.equal(env.GC_WORKTREES_DIR, expectedWorktreesDir);
-      assert.equal(DEFAULT_GC_CITY_PATH, "");
-      assert.equal(env.GC_CITY_PATH, undefined);
+      assert.equal(DEFAULT_GC_CITY_PATH, getBundledGascityConfigLayout("gascity-br").rootDir);
+      assert.equal(env.GC_CITY_PATH, DEFAULT_GC_CITY_PATH);
       assert.equal(env.GC_API_URL, "http://127.0.0.1:8372");
       assert.equal(env.GC_BEADS_BACKEND, undefined);
       assert.equal(env.BEADS_BACKEND, undefined);
@@ -99,6 +99,7 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       });
 
       assert.equal(env.GC_CITY_PATH, cityPath);
+      assert.equal(env.GC_CITY_PATH, DEFAULT_GC_CITY_PATH);
       assert.equal(env.GC_BEADS_BACKEND, undefined);
       assert.equal(env.BEADS_BACKEND, undefined);
     }),
