@@ -268,6 +268,7 @@ export const GcConfigRig = Schema.Struct({
   path: Schema.String,
   prefix: Schema.optional(Schema.String),
   suspended: Schema.Boolean,
+  isRepository: Schema.optional(Schema.Boolean),
   lifecycle: Schema.optional(GcLifecycleStatus),
 });
 export type GcConfigRig = typeof GcConfigRig.Type;
@@ -546,14 +547,6 @@ function gcAgentVirtualMetadata(
     ...(agent.start_command ? { startCommand: agent.start_command } : {}),
     ...(agent.default_sling_formula ? { defaultSlingFormula: agent.default_sling_formula } : {}),
   };
-}
-
-function isImplicitProviderLane(agent: GcConfigAgent): boolean {
-  return (
-    agent.name === agent.provider &&
-    agent.prompt_template === ".gc/system/packs/core/assets/prompts/pool-worker.md" &&
-    typeof agent.default_sling_formula === "string"
-  );
 }
 
 function findConfiguredAgent(
@@ -858,9 +851,6 @@ export function groupThreadsByRigAndAgent<
     }
 
     for (const agent of options?.config?.agents ?? []) {
-      if (isImplicitProviderLane(agent)) {
-        continue;
-      }
       const rigName = normalizeMetadataValue(agent.dir);
       if (!rigName || !relevantRigNames.has(rigName)) {
         continue;
@@ -897,9 +887,6 @@ export function groupThreadsByRigAndAgent<
     const cityGroup = rigGroupsById.get(cityScopedRigGroupId);
     if (cityGroup) {
       for (const agent of options?.config?.agents ?? []) {
-        if (isImplicitProviderLane(agent)) {
-          continue;
-        }
         const rigName = normalizeMetadataValue(agent.dir);
         if (rigName) continue;
         addConfiguredAgentGroup(cityGroup, agent);
@@ -1094,9 +1081,6 @@ export function groupThreadsByRigAndAgent<
         cityGroup.lifecycle = options.config.lifecycle;
       }
       for (const agent of options.config.agents) {
-        if (isImplicitProviderLane(agent)) {
-          continue;
-        }
         if (normalizeMetadataValue(agent.dir)) {
           continue;
         }

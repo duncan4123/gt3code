@@ -1,10 +1,13 @@
-import type { SessionRecord } from "../api";
+import type { DashboardSchema, SessionRecord } from "../api";
 import { api, cityScope } from "../api";
 import { byId, clear, el } from "../util/dom";
 import { calculateActivity, formatTimestamp, statusBadgeClass, truncate } from "../util/legacy";
 import { connectAgentOutput, type AgentOutputMessage, type SSEHandle } from "../sse";
 import { popPause, pushPause, showToast } from "../ui";
 import { logDebug } from "../logger";
+
+type AgentRecord = DashboardSchema["AgentResponse"];
+type ConfigAgentRecord = DashboardSchema["ConfigAgentResponse"];
 
 let logHandle: SSEHandle | null = null;
 let logSessionID = "";
@@ -32,13 +35,27 @@ export async function renderCrew(): Promise<void> {
   crewEmpty.style.display = "none";
   clear(crewBody);
 
-  const { data, error } = await api.GET("/v0/city/{cityName}/sessions", {
-    params: { path: { cityName: city }, query: { state: "active", peek: true } },
-  });
+  const [sessionsResult, agentsResult] = await Promise.all([
+    api.GET("/v0/city/{cityName}/sessions", {
+      params: { path: { cityName: city }, query: { state: "active", peek: true } },
+    }),
+    api.GET("/v0/city/{cityName}/config", {
+      params: { path: { cityName: city } },
+    }),
+  ]);
+  const { data, error } = sessionsResult;
+  const agents = (agentsResult.data?.agents ?? []).map(configAgentToAgentRecord);
+  if (agentsResult.error) {
+    renderSimpleEmpty(riggedBody, "Failed to load rigged agents");
+    renderSimpleEmpty(pooledBody, "Failed to load pooled agents");
+  }
+  if (!agentsResult.error) {
+    renderRiggedAgents(agents);
+    renderPooledAgents(agents);
+  }
+
   if (error || !data?.items) {
     crewLoading.textContent = "Failed to load crew";
-    renderSimpleEmpty(riggedBody, "No rigged agents");
-    renderSimpleEmpty(pooledBody, "No pooled agents");
     return;
   }
 
@@ -105,12 +122,9 @@ export async function renderCrew(): Promise<void> {
   if (crew.length > 0) {
     crewTable.style.display = "table";
   } else {
-    setCrewEmptyMessage("No crew configured");
+    setCrewEmptyMessage(agents.length > 0 ? "No active crew sessions" : "No crew configured");
     crewEmpty.style.display = "block";
   }
-
-  renderRiggedAgents(sessions, beadTitles);
-  renderPooledAgents(sessions);
 }
 
 export function resetCrewNoCity(): void {
@@ -146,6 +160,24 @@ function classifyCrewState(session: SessionRecord, hasPending: boolean): string 
   return "idle";
 }
 
+function configAgentToAgentRecord(agent: ConfigAgentRecord): AgentRecord {
+  const rig = typeof agent.dir === "string" && agent.dir.trim() ? agent.dir.trim() : undefined;
+  return {
+    available: !agent.suspended,
+    name: agent.name,
+    ...(agent.is_pool ? { pool: agentBaseName(agent.name) } : {}),
+    ...(typeof agent.provider === "string" ? { provider: agent.provider } : {}),
+    ...(rig ? { rig } : {}),
+    running: false,
+    state: agent.suspended ? "suspended" : "stopped",
+    suspended: agent.suspended,
+  };
+}
+
+function agentBaseName(name: string): string {
+  return name.includes("/") ? (name.split("/").at(-1) ?? name) : name;
+}
+
 function attachButton(template: string): HTMLElement {
   const btn = el("button", { class: "attach-btn", type: "button" }, ["📎 Attach"]);
   btn.addEventListener("click", async () => {
@@ -172,14 +204,14 @@ function logButton(sessionID: string, label: string): HTMLElement {
   return btn;
 }
 
-// renderRiggedAgents lists sessions attached to a specific rig. Grouping
-// is purely by the API's `rig` + `pool` fields — no role names hardcoded.
-function renderRiggedAgents(sessions: SessionRecord[], beadTitles: Map<string, string>): void {
+// renderRiggedAgents lists configured agents attached to a specific rig.
+// Grouping is purely by the API's `rig` + `pool` fields — no role names hardcoded.
+function renderRiggedAgents(agents: AgentRecord[]): void {
   const body = byId("rigged-body");
   const count = byId("rigged-count");
   if (!body || !count) return;
 
-  const rows = sessions.filter((session) => session.rig && session.pool);
+  const rows = agents.filter((agent) => agent.rig);
   count.textContent = String(rows.length);
   if (rows.length === 0) {
     renderSimpleEmpty(body, "No rigged agents");
@@ -187,28 +219,16 @@ function renderRiggedAgents(sessions: SessionRecord[], beadTitles: Map<string, s
   }
 
   const tbody = el("tbody");
-  rows.forEach((session) => {
-    const activity = calculateActivity(session.last_active);
-    const workStatus = !session.active_bead
-      ? "Idle"
-      : activity.colorClass === "red"
-        ? "Stuck"
-        : activity.colorClass === "yellow"
-          ? "Stale"
-          : "Working";
+  rows.forEach((agent) => {
+    const activity = calculateActivity(agent.session?.last_activity);
+    const state = agentStateLabel(agent);
     tbody.append(
-      el("tr", { class: `rigged-${workStatus.toLowerCase()}` }, [
-        el("td", {}, [logButton(session.id, session.template)]),
-        el("td", {}, [el("span", { class: "badge badge-muted" }, [session.pool ?? "pool"])]),
-        el("td", {}, [session.rig ?? "city"]),
-        el("td", { class: "rigged-issue" }, [
-          session.active_bead
-            ? `${session.active_bead} ${beadTitles.get(session.active_bead) ?? ""}`.trim()
-            : "—",
-        ]),
-        el("td", {}, [
-          el("span", { class: `badge ${statusBadgeClass(workStatus)}` }, [workStatus]),
-        ]),
+      el("tr", { class: `rigged-${state.toLowerCase()}` }, [
+        el("td", {}, [agentLabel(agent)]),
+        el("td", {}, [el("span", { class: "badge badge-muted" }, [agent.pool ?? "pool"])]),
+        el("td", {}, [agent.rig ?? "city"]),
+        el("td", { class: "rigged-issue" }, [agent.active_bead || "—"]),
+        el("td", {}, [el("span", { class: `badge ${statusBadgeClass(state)}` }, [state])]),
         el("td", { class: `activity-${activity.colorClass}` }, [
           el("span", { class: "activity-dot" }),
           ` ${activity.display}`,
@@ -235,14 +255,14 @@ function renderRiggedAgents(sessions: SessionRecord[], beadTitles: Map<string, s
   );
 }
 
-// renderPooledAgents lists sessions that belong to a pool but are not
+// renderPooledAgents lists configured agents that belong to a pool but are not
 // bound to a specific rig (floating workers). Grouping is by API fields
 // only — no role names hardcoded.
-function renderPooledAgents(sessions: SessionRecord[]): void {
+function renderPooledAgents(agents: AgentRecord[]): void {
   const body = byId("pooled-body");
   const count = byId("pooled-count");
   if (!body || !count) return;
-  const rows = sessions.filter((session) => !session.rig && session.pool);
+  const rows = agents.filter((agent) => !agent.rig && agent.pool);
   count.textContent = String(rows.length);
   if (rows.length === 0) {
     renderSimpleEmpty(body, "No pooled agents");
@@ -250,17 +270,14 @@ function renderPooledAgents(sessions: SessionRecord[]): void {
   }
 
   const tbody = el("tbody");
-  rows.forEach((session) => {
+  rows.forEach((agent) => {
+    const state = agentStateLabel(agent);
     tbody.append(
       el("tr", {}, [
-        el("td", {}, [session.template]),
-        el("td", {}, [
-          el("span", { class: `badge ${session.active_bead ? "badge-yellow" : "badge-green"}` }, [
-            session.active_bead ? "Working" : "Idle",
-          ]),
-        ]),
-        el("td", { class: "status-hint" }, [truncate(session.last_output, 80) || "—"]),
-        el("td", {}, [formatTimestamp(session.last_active)]),
+        el("td", {}, [agentLabel(agent)]),
+        el("td", {}, [el("span", { class: `badge ${statusBadgeClass(state)}` }, [state])]),
+        el("td", { class: "status-hint" }, [truncate(agent.last_output, 80) || "—"]),
+        el("td", {}, [formatTimestamp(agent.session?.last_activity)]),
       ]),
     );
   });
@@ -279,6 +296,18 @@ function renderPooledAgents(sessions: SessionRecord[]): void {
       tbody,
     ]),
   );
+}
+
+function agentLabel(agent: AgentRecord): string {
+  return agent.display_name || agent.name;
+}
+
+function agentStateLabel(agent: AgentRecord): string {
+  if (agent.suspended) return "Suspended";
+  if (!agent.available) return "Unavailable";
+  if (agent.active_bead) return "Working";
+  if (agent.running) return "Idle";
+  return "Stopped";
 }
 
 function renderSimpleEmpty(container: HTMLElement, message: string): void {

@@ -5,7 +5,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react
 import ChatView from "../components/ChatView";
 import { threadHasStarted } from "../components/ChatView.logic";
 import { DiffWorkerPoolProvider } from "../components/DiffWorkerPoolProvider";
-import GcPanel from "../components/GcPanel";
+import GcPanel from "../gc/GcPanel";
 import {
   DiffPanelHeaderSkeleton,
   DiffPanelLoadingState,

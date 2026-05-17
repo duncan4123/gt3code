@@ -71,7 +71,7 @@ model = "gpt-5.5"
 [[agent]]
 name = "kimi-for-coding"
 dir = "beads-doltlite"
-suspended = true
+suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "kimi-for-coding"
 max_active_sessions = 5
@@ -165,7 +165,7 @@ suspended = true
 
 [[rigs.overrides]]
 agent = "refinery"
-suspended = true
+suspended = false
 
 [[rigs.overrides]]
 agent = "witness"
@@ -262,9 +262,10 @@ model = "gpt-5.5"
 dir = ""
 name = "boot"
 suspended = true
-provider = "codex"
+provider = "kimi-for-coding"
 [patches.agent.option_defaults]
-model = "gpt-5.5"
+agent = "build"
+model = "kimi-for-coding/k2p6"
 
 [[patches.agent]]
 dir = ""
@@ -312,7 +313,7 @@ model = "gpt-5.5"
 [[patches.agent]]
 dir = "beads-doltlite"
 name = "refinery"
-suspended = true
+suspended = false
 provider = "codex"
 [patches.agent.option_defaults]
 model = "gpt-5.5"
@@ -329,17 +330,19 @@ model = "gpt-5.5"
 dir = "t3code"
 name = "witness"
 suspended = true
-provider = "codex"
+provider = "kimi-for-coding"
 [patches.agent.option_defaults]
-model = "gpt-5.5"
+agent = "build"
+model = "kimi-for-coding/k2p6"
 
 [[patches.agent]]
 dir = "t3code"
 name = "refinery"
 suspended = true
-provider = "codex"
+provider = "kimi-for-coding"
 [patches.agent.option_defaults]
-model = "gpt-5.5"
+agent = "build"
+model = "kimi-for-coding/k2p6"
 
 [[patches.agent]]
 dir = "t3code"

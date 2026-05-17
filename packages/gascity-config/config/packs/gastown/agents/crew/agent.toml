@@ -1,0 +1,11 @@
+scope = "rig"
+provider = "codex"
+option_defaults = { model = "gpt-5.5" }
+wake_mode = "fresh"
+work_dir = ".gc/worktrees/{{.Rig}}/crew/{{.AgentBase}}"
+nudge = "Check mail and hook status, then act accordingly."
+pre_start = [
+  "{{.ConfigDir}}/assets/scripts/worktree-setup.sh {{.RigRoot}} {{.WorkDir}} {{.AgentBase}} --sync",
+]
+idle_timeout = "2h"
+max_active_sessions = 1

@@ -3,19 +3,6 @@ import {
   CommandId,
   EventId,
   FilesystemBrowseError,
-  GcFindThreadBindingError,
-  GcGetConfigError,
-  GcGetThreadContextError,
-  GcRespondToPendingError,
-  GcSetAgentMaxActiveSessionsError,
-  GcSetAgentMinActiveSessionsError,
-  GcSetAgentSessionModeError,
-  GcSetAgentSuspendedError,
-  GcSetAgentWakeModeError,
-  GcSetCitySuspendedError,
-  GcSetRigSuspendedError,
-  GcStopSessionError,
-  GcSubmitSessionError,
   type OrchestrationCommand,
   type GitActionProgressEvent,
   OrchestrationDispatchCommandError,
@@ -26,7 +13,6 @@ import {
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   OrchestrationReplayEventsError,
-  parseGcMeta,
   ServerProviderUpdateError,
   SourceControlRepositoryError,
   ThreadId,
@@ -55,6 +41,7 @@ import { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
 import { ProviderMaintenanceRunner } from "./provider/providerMaintenanceRunner.ts";
 import { GcApiClient } from "./gc/Services/GcApiClient.ts";
 import { GcContextProvider } from "./gc/Services/GcContextProvider.ts";
+import { makeGcRpcHandlers } from "./gc/rpcHandlers.ts";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents.ts";
 import { ServerRuntimeStartup } from "./serverRuntimeStartup.ts";
 import { redactServerSettingsForClient, ServerSettingsService } from "./serverSettings.ts";
@@ -108,23 +95,6 @@ const WsRpcLayer = WsRpcGroup.toLayer(
 
     const messageFromUnknown = (cause: unknown): string =>
       cause instanceof Error ? cause.message : String(cause);
-
-    const gcThreadSessionName = (threadId: ThreadId) =>
-      projectionSnapshotQuery.getThreadShellById(threadId).pipe(
-        Effect.flatMap((threadOption) =>
-          Option.match(threadOption, {
-            onNone: () => Effect.fail(new Error(`No active thread found for ${threadId}.`)),
-            onSome: (thread) => {
-              const sessionName = parseGcMeta(
-                (thread as { readonly customMetadata?: Record<string, string> }).customMetadata,
-              ).sessionName;
-              return sessionName
-                ? Effect.succeed(sessionName)
-                : Effect.fail(new Error(`Thread ${threadId} is not bound to a GC session.`));
-            },
-          }),
-        ),
-      );
 
     const appendSetupScriptActivity = (input: {
       readonly threadId: ThreadId;
@@ -483,6 +453,20 @@ const WsRpcLayer = WsRpcGroup.toLayer(
               (cause) =>
                 new OrchestrationReplayEventsError({
                   message: "Failed to replay orchestration events",
+                  cause,
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "orchestration" },
+        ),
+      [ORCHESTRATION_WS_METHODS.getSnapshot]: (_input) =>
+        observeRpcEffect(
+          ORCHESTRATION_WS_METHODS.getSnapshot,
+          projectionSnapshotQuery.getShellSnapshot().pipe(
+            Effect.mapError(
+              (cause) =>
+                new OrchestrationGetSnapshotError({
+                  message: "Failed to load orchestration shell snapshot",
                   cause,
                 }),
             ),
@@ -895,212 +879,11 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(WS_METHODS.vcsInit, vcsProvisioning.initRepository(input), {
           "rpc.aggregate": "git",
         }),
-      [WS_METHODS.gcGetConfig]: (_input) =>
-        observeRpcEffect(
-          WS_METHODS.gcGetConfig,
-          gcApiClient.getConfig().pipe(
-            Effect.flatMap((config) =>
-              config
-                ? Effect.succeed(config)
-                : Effect.fail(new GcGetConfigError({ message: "Gas City config is unavailable." })),
-            ),
-            Effect.mapError((cause) =>
-              Schema.is(GcGetConfigError)(cause)
-                ? cause
-                : new GcGetConfigError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcFindThreadBinding]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcFindThreadBinding,
-          (projectionSnapshotQuery.getActiveThreadBindingByGcSessionName
-            ? projectionSnapshotQuery.getActiveThreadBindingByGcSessionName(input.sessionName)
-            : Effect.succeed(Option.none())
-          ).pipe(
-            Effect.map((binding) =>
-              Option.match(binding, {
-                onNone: () => null,
-                onSome: (value) => ({ ...value, sessionName: input.sessionName }),
-              }),
-            ),
-            Effect.mapError(
-              (cause) =>
-                new GcFindThreadBindingError({
-                  message: `Failed to find GC thread binding: ${messageFromUnknown(cause)}`,
-                }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcGetThreadContext]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcGetThreadContext,
-          projectionSnapshotQuery.getThreadShellById(input.threadId as ThreadId).pipe(
-            Effect.flatMap((threadOption) =>
-              Option.match(threadOption, {
-                onNone: () =>
-                  Effect.fail(
-                    new GcGetThreadContextError({
-                      message: `No active thread found for ${input.threadId}.`,
-                    }),
-                  ),
-                onSome: (thread) =>
-                  gcContextProvider.getThreadContext(
-                    (thread as { readonly customMetadata?: Record<string, string> })
-                      .customMetadata ?? {},
-                  ),
-              }),
-            ),
-            Effect.mapError((cause) =>
-              Schema.is(GcGetThreadContextError)(cause)
-                ? cause
-                : new GcGetThreadContextError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcSubmitSession]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcSubmitSession,
-          gcThreadSessionName(input.threadId).pipe(
-            Effect.flatMap((sessionName) => gcApiClient.submitSession(sessionName, input.message)),
-            Effect.mapError(
-              (cause) => new GcSubmitSessionError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcStopSession]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcStopSession,
-          gcThreadSessionName(input.threadId).pipe(
-            Effect.flatMap((sessionName) => gcApiClient.stopSession(sessionName)),
-            Effect.mapError(
-              (cause) => new GcStopSessionError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcRespondToPending]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcRespondToPending,
-          gcThreadSessionName(input.threadId).pipe(
-            Effect.flatMap((sessionName) =>
-              gcApiClient.respondToPending(sessionName, {
-                action: input.action,
-                ...(input.requestId ? { requestId: input.requestId } : {}),
-                ...(input.text ? { text: input.text } : {}),
-                ...(input.metadata ? { metadata: input.metadata } : {}),
-              }),
-            ),
-            Effect.mapError(
-              (cause) => new GcRespondToPendingError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcSetAgentSuspended]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcSetAgentSuspended,
-          gcApiClient.setAgentSuspended(input.agent, input.suspended).pipe(
-            Effect.as({
-              id: input.agent,
-              status: input.suspended ? "suspended" : "running",
-            }),
-            Effect.mapError((cause) =>
-              Schema.is(GcSetAgentSuspendedError)(cause)
-                ? cause
-                : new GcSetAgentSuspendedError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcSetAgentMaxActiveSessions]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcSetAgentMaxActiveSessions,
-          gcApiClient.setAgentMaxActiveSessions(input.agent, input.maxActiveSessions).pipe(
-            Effect.as({ id: input.agent, status: "updated" }),
-            Effect.mapError((cause) =>
-              Schema.is(GcSetAgentMaxActiveSessionsError)(cause)
-                ? cause
-                : new GcSetAgentMaxActiveSessionsError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcSetAgentMinActiveSessions]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcSetAgentMinActiveSessions,
-          gcApiClient.setAgentMinActiveSessions(input.agent, input.minActiveSessions).pipe(
-            Effect.as({ id: input.agent, status: "updated" }),
-            Effect.mapError((cause) =>
-              Schema.is(GcSetAgentMinActiveSessionsError)(cause)
-                ? cause
-                : new GcSetAgentMinActiveSessionsError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcSetAgentWakeMode]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcSetAgentWakeMode,
-          gcApiClient.setAgentWakeMode(input.agent, input.wakeMode).pipe(
-            Effect.as({ id: input.agent, status: "updated" }),
-            Effect.mapError((cause) =>
-              Schema.is(GcSetAgentWakeModeError)(cause)
-                ? cause
-                : new GcSetAgentWakeModeError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcSetAgentSessionMode]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcSetAgentSessionMode,
-          gcApiClient.setAgentSessionMode(input.agent, input.mode).pipe(
-            Effect.as({ id: input.agent, status: "updated" }),
-            Effect.mapError((cause) =>
-              Schema.is(GcSetAgentSessionModeError)(cause)
-                ? cause
-                : new GcSetAgentSessionModeError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcSetCitySuspended]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcSetCitySuspended,
-          gcApiClient.setCitySuspended(input.suspended).pipe(
-            Effect.as({
-              id: "city",
-              status: input.suspended ? "suspended" : "running",
-            }),
-            Effect.mapError((cause) =>
-              Schema.is(GcSetCitySuspendedError)(cause)
-                ? cause
-                : new GcSetCitySuspendedError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
-      [WS_METHODS.gcSetRigSuspended]: (input) =>
-        observeRpcEffect(
-          WS_METHODS.gcSetRigSuspended,
-          gcApiClient.setRigSuspended(input.rig, input.suspended).pipe(
-            Effect.as({
-              id: input.rig,
-              status: input.suspended ? "suspended" : "running",
-            }),
-            Effect.mapError((cause) =>
-              Schema.is(GcSetRigSuspendedError)(cause)
-                ? cause
-                : new GcSetRigSuspendedError({ message: messageFromUnknown(cause) }),
-            ),
-          ),
-          { "rpc.aggregate": "gc" },
-        ),
+      ...makeGcRpcHandlers({
+        gcApiClient,
+        gcContextProvider,
+        projectionSnapshotQuery,
+      }),
       [WS_METHODS.terminalOpen]: (input) =>
         observeRpcEffect(WS_METHODS.terminalOpen, terminalManager.open(input), {
           "rpc.aggregate": "terminal",

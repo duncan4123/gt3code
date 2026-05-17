@@ -20,4 +20,5 @@ export * from "./editor.ts";
 export * from "./project.ts";
 export * from "./filesystem.ts";
 export * from "./gc.ts";
+export * from "./gcRpc.ts";
 export * from "./rpc.ts";

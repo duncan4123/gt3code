@@ -36,6 +36,9 @@ describe("crew empty states", () => {
       if (path === "/v0/city/{cityName}/sessions") {
         return { data: { items: [] } } as never;
       }
+      if (path === "/v0/city/{cityName}/config") {
+        return { data: { agents: [] } } as never;
+      }
       throw new Error(`unexpected GET ${path}`);
     });
 
@@ -44,6 +47,42 @@ describe("crew empty states", () => {
     expect((document.getElementById("crew-empty") as HTMLElement).style.display).toBe("block");
     expect(document.getElementById("crew-empty")?.textContent).toContain("No crew configured");
     expect(document.getElementById("crew-empty")?.textContent).not.toContain("Select a city");
+  });
+
+  it("shows configured rigged and pooled agents even when no sessions are active", async () => {
+    vi.spyOn(api, "GET").mockImplementation(async (path: string) => {
+      if (path === "/v0/city/{cityName}/sessions") {
+        return { data: { items: [] } } as never;
+      }
+      if (path === "/v0/city/{cityName}/config") {
+        return {
+          data: {
+            agents: [
+              {
+                dir: "t3code",
+                is_pool: true,
+                name: "t3code/worker-1",
+                suspended: false,
+              },
+              {
+                is_pool: true,
+                name: "codex-1",
+                suspended: true,
+              },
+            ],
+          },
+        } as never;
+      }
+      throw new Error(`unexpected GET ${path}`);
+    });
+
+    await renderCrew();
+
+    expect(document.getElementById("rigged-count")?.textContent).toBe("1");
+    expect(document.getElementById("rigged-body")?.textContent).toContain("t3code/worker-1");
+    expect(document.getElementById("pooled-count")?.textContent).toBe("1");
+    expect(document.getElementById("pooled-body")?.textContent).toContain("codex-1");
+    expect(document.getElementById("pooled-body")?.textContent).toContain("Suspended");
   });
 
   it("loads older transcript pages without losing the drawer loading sentinel", async () => {
@@ -84,6 +123,20 @@ describe("crew empty states", () => {
                 rig: "rig-a",
                 running: true,
                 template: "reviewer",
+              },
+            ],
+          },
+        } as never;
+      }
+      if (path === "/v0/city/{cityName}/config") {
+        return {
+          data: {
+            agents: [
+              {
+                dir: "rig-a",
+                is_pool: true,
+                name: "rig-a/reviewer",
+                suspended: false,
               },
             ],
           },

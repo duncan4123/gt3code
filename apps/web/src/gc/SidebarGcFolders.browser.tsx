@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { SidebarGcFolders } from "./SidebarGcFolders";
-import { SidebarMenuSub } from "./ui/sidebar";
+import { SidebarMenuSub } from "../components/ui/sidebar";
 import type { SidebarGcRigGroup } from "./SidebarGcFolders";
 
 const threadId = (value: string): ThreadIdType => ThreadId.make(value);

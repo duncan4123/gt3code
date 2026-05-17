@@ -2,5 +2,7 @@ scope = "city"
 provider = "kimi-for-coding"
 option_defaults = { model = "kimi-for-coding/k2p6", agent = "build" }
 wake_mode = "fresh"
-work_dir = ".gc/agents/boot"
+work_dir = ".gc/agents/hq-witness"
+nudge = "Run 'gc prime' to check workspace worker status and begin HQ witness patrol."
+idle_timeout = "1h"
 max_active_sessions = 1

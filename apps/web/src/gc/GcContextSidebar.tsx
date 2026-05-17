@@ -1,7 +1,7 @@
 import { memo, type ReactNode, useMemo } from "react";
 import type { GcThreadContextResult } from "@t3tools/contracts";
 import { parseGcMeta } from "@t3tools/contracts";
-import { Badge } from "./ui/badge";
+import { Badge } from "../components/ui/badge";
 import {
   SidebarContent,
   SidebarGroup,
@@ -9,8 +9,8 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarSeparator,
-} from "./ui/sidebar";
-import { metadataValue } from "../lib/gcThreadContext";
+} from "../components/ui/sidebar";
+import { metadataValue } from "./gcThreadContext";
 
 interface GcContextSidebarProps {
   metadata: Record<string, string>;

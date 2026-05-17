@@ -92,11 +92,178 @@ function parseJsonSafe<T>(text: string): T | null {
   }
 }
 
+function parseTomlScalar(value: string): unknown {
+  const trimmed = value.trim();
+  if (trimmed === "true") return true;
+  if (trimmed === "false") return false;
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    return trimmed
+      .slice(1, -1)
+      .split(",")
+      .map((entry) => parseTomlScalar(entry))
+      .filter((entry): entry is string => typeof entry === "string");
+  }
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1);
+  }
+  const numberValue = Number(trimmed);
+  return Number.isFinite(numberValue) ? numberValue : trimmed;
+}
+
+function parseGcTomlConfig(content: string): Record<string, unknown> {
+  const root: Record<string, unknown> = {};
+  let current: Record<string, unknown> = root;
+
+  const tableFor = (parts: readonly string[]): Record<string, unknown> | null => {
+    let table = root;
+    for (const part of parts) {
+      const existing = table[part];
+      if (Array.isArray(existing)) {
+        return null;
+      }
+      if (existing && typeof existing === "object" && !Array.isArray(existing)) {
+        table = existing as Record<string, unknown>;
+        continue;
+      }
+      const next: Record<string, unknown> = {};
+      table[part] = next;
+      table = next;
+    }
+    return table;
+  };
+
+  for (const rawLine of content.split("\n")) {
+    const line = rawLine.replace(/\s+#.*$/, "").trim();
+    if (!line) continue;
+
+    const arrayMatch = line.match(/^\[\[([^\]]+)]]$/);
+    if (arrayMatch) {
+      const parts = arrayMatch[1]!.split(".").map((part) => part.trim());
+      if (parts.length > 1) {
+        current = {};
+        continue;
+      }
+      const parent = tableFor(parts.slice(0, -1));
+      if (!parent) {
+        current = {};
+        continue;
+      }
+      const key = parts.at(-1)!;
+      const items = Array.isArray(parent[key]) ? (parent[key] as Record<string, unknown>[]) : [];
+      const item: Record<string, unknown> = {};
+      items.push(item);
+      parent[key] = items;
+      current = item;
+      continue;
+    }
+
+    const tableMatch = line.match(/^\[([^\]]+)]$/);
+    if (tableMatch) {
+      current = tableFor(tableMatch[1]!.split(".").map((part) => part.trim())) ?? {};
+      continue;
+    }
+
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) continue;
+    const key = line.slice(0, separatorIndex).trim();
+    const value = line.slice(separatorIndex + 1);
+    current[key] = parseTomlScalar(value);
+  }
+
+  return root;
+}
+
 function escapePathSegments(value: string): string {
   return value
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
+}
+
+function discoverRepoRootFromCityPath(cityPath: string): string | null {
+  let current = path.resolve(cityPath);
+  for (;;) {
+    if (
+      existsSync(path.join(current, "package.json")) &&
+      existsSync(path.join(current, "packages"))
+    ) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return null;
+    }
+    current = parent;
+  }
+}
+
+function discoverBundledGcCityRoots(startCwd: string): readonly string[] {
+  const repoRoot = discoverRepoRootFromCityPath(startCwd);
+  if (!repoRoot) {
+    return [];
+  }
+
+  const citiesDir = path.join(repoRoot, "packages", "gascity-config", "config", "cities");
+  if (!existsSync(citiesDir)) {
+    return [];
+  }
+
+  return readdirSync(citiesDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(citiesDir, entry.name))
+    .filter((candidate) => existsSync(path.join(candidate, "city.toml")))
+    .toSorted((left, right) => path.basename(left).localeCompare(path.basename(right)));
+}
+
+function isRepositoryRoot(candidatePath: string): boolean {
+  if (!candidatePath) {
+    return false;
+  }
+  return (
+    existsSync(path.join(candidatePath, ".git")) || existsSync(path.join(candidatePath, ".jj"))
+  );
+}
+
+function loadSiteRigPathBindings(cityPath: string): ReadonlyMap<string, string> {
+  const sitePath = path.join(cityPath, ".gc", "site.toml");
+  if (!existsSync(sitePath)) {
+    return new Map();
+  }
+
+  const parsed = parseGcTomlConfig(readFileSync(sitePath, "utf8"));
+  const rigValues = Array.isArray(parsed.rig)
+    ? parsed.rig
+    : Array.isArray(parsed.rigs)
+      ? parsed.rigs
+      : [];
+  return new Map(
+    rigValues.flatMap((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return [];
+      }
+      const rig = value as Record<string, unknown>;
+      const name = typeof rig.name === "string" ? rig.name.trim() : "";
+      const rigPath = typeof rig.path === "string" ? rig.path.trim() : "";
+      if (!name || !rigPath) {
+        return [];
+      }
+      return [[name, path.isAbsolute(rigPath) ? rigPath : path.resolve(cityPath, rigPath)]];
+    }),
+  );
+}
+
+function resolveConfiguredRigPath(rig: Record<string, unknown>, cityPath: string): string | null {
+  const explicitPath = typeof rig.path === "string" ? rig.path.trim() : "";
+  if (explicitPath) {
+    return path.isAbsolute(explicitPath) ? explicitPath : path.resolve(cityPath, explicitPath);
+  }
+
+  const name = typeof rig.name === "string" ? rig.name.trim() : "";
+  if (!name) {
+    return null;
+  }
+
+  return loadSiteRigPathBindings(cityPath).get(name) ?? null;
 }
 
 function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | null {
@@ -215,20 +382,17 @@ function normalizeGcConfig(raw: unknown, cityPath: string): GcConfigResult | nul
       return [];
     }
     const rig = value as Record<string, unknown>;
-    if (
-      typeof rig.name !== "string" ||
-      rig.name.trim().length === 0 ||
-      typeof rig.path !== "string" ||
-      rig.path.trim().length === 0
-    ) {
+    if (typeof rig.name !== "string" || rig.name.trim().length === 0) {
       return [];
     }
+    const rigPath = resolveConfiguredRigPath(rig, cityPath) ?? "";
     return [
       {
-        name: rig.name,
-        path: rig.path,
+        name: rig.name.trim(),
+        path: rigPath,
         ...(typeof rig.prefix === "string" ? { prefix: rig.prefix } : {}),
         suspended: Boolean(rig.suspended),
+        isRepository: isRepositoryRoot(rigPath),
       },
     ];
   });
@@ -376,6 +540,7 @@ function prefixGcConfigForCity(config: GcConfigResult, city: GcSupervisorCity): 
         name: city.name,
         path: city.path,
         suspended: config.workspace.suspended,
+        isRepository: isRepositoryRoot(city.path),
         ...(config.lifecycle ? { lifecycle: config.lifecycle } : {}),
       },
       ...config.rigs.map((rig) => ({
@@ -604,6 +769,23 @@ function findConfiguredAgentIdentity(
     dir: typeof fallback.dir === "string" ? fallback.dir.trim() : "",
     template: resolveNamedSessionTemplate(fallback),
   };
+}
+
+function localizeAgentIdentityForCity(
+  identity: { readonly dir: string; readonly template: string },
+  cityName: string | null,
+): { readonly dir: string; readonly template: string } {
+  const normalizedCityName = cityName?.trim();
+  if (!normalizedCityName) {
+    return identity;
+  }
+  if (identity.dir === normalizedCityName) {
+    return { ...identity, dir: "" };
+  }
+  const cityPrefix = `${normalizedCityName}/`;
+  return identity.dir.startsWith(cityPrefix)
+    ? { ...identity, dir: identity.dir.slice(cityPrefix.length) }
+    : identity;
 }
 
 function updateCachedRigSuspended(
@@ -1172,8 +1354,24 @@ function mergeCliExpandedConfig(
   const expandedByQualifiedName = new Map(
     expanded.agents.map((agent) => [resolveAgentConfigKey(agent), agent] as const),
   );
+  const expandedRigByName = new Map(expanded.rigs.map((rig) => [rig.name, rig] as const));
   return {
     ...primary,
+    rigs: primary.rigs.map((rig) => {
+      const expandedRig = expandedRigByName.get(rig.name);
+      if (!expandedRig) {
+        return rig;
+      }
+      return {
+        ...rig,
+        path: expandedRig.path,
+        ...(expandedRig.prefix ? { prefix: expandedRig.prefix } : {}),
+        suspended: expandedRig.suspended,
+        ...(expandedRig.isRepository !== undefined
+          ? { isRepository: expandedRig.isRepository }
+          : {}),
+      };
+    }),
     agents: primary.agents.map((agent) => {
       const expandedAgent = expandedByQualifiedName.get(resolveAgentConfigKey(agent));
       if (!expandedAgent) {
@@ -1216,7 +1414,30 @@ function discoverGcApiBaseUrl(startCwd: string): string | null {
 }
 
 function resolveGcCliBinary(): string {
-  return process.env.GC_BIN?.trim() || "/home/ubuntu/go/bin/gc";
+  const configured = process.env.GC_BIN?.trim();
+  if (configured) {
+    return configured;
+  }
+
+  const cwd = process.cwd();
+  const bundledRuntime = path.join(cwd, ".t3-dev", "gascity", "bin", "gc");
+  if (existsSync(bundledRuntime)) {
+    return bundledRuntime;
+  }
+
+  const packageBinary = path.join(
+    cwd,
+    "packages",
+    "gascity",
+    "bin",
+    `${process.platform}-${process.arch}`,
+    "gc",
+  );
+  if (existsSync(packageBinary)) {
+    return packageBinary;
+  }
+
+  return "gc";
 }
 
 function runGcCli(
@@ -1381,7 +1602,7 @@ const makeGcApiClient = Effect.gen(function* () {
     }
 
     const workspaceName = lastKnownConfig?.workspace.name?.trim();
-    if (workspaceName) {
+    if (workspaceName && workspaceName !== "cities") {
       cachedCityName = workspaceName;
       return cachedCityName;
     }
@@ -1403,6 +1624,33 @@ const makeGcApiClient = Effect.gen(function* () {
     }
 
     return cachedCityName;
+  };
+
+  const resolveAgentMutationTarget = async (
+    normalizedName: string,
+  ): Promise<{
+    readonly cityName: string | null;
+    readonly cityPath: string | null;
+    readonly localName: string;
+  }> => {
+    const [firstSegment, ...remainingSegments] = normalizedName.split("/");
+    if (firstSegment && remainingSegments.length > 0) {
+      const cities = await fetchSupervisorCities();
+      const matchedCity = cities.find((city) => city.name === firstSegment);
+      if (matchedCity) {
+        return {
+          cityName: matchedCity.name,
+          cityPath: matchedCity.path,
+          localName: remainingSegments.join("/"),
+        };
+      }
+    }
+
+    return {
+      cityName: await resolveGcCityName(),
+      cityPath,
+      localName: normalizedName,
+    };
   };
 
   const requireGcCityName = async (): Promise<string> => {
@@ -1580,26 +1828,74 @@ const makeGcApiClient = Effect.gen(function* () {
   const getConfig: GcApiClientShape["getConfig"] = () =>
     Effect.tryPromise({
       try: async () => {
-        const loadExpandedCliConfig = (): GcConfigResult | null => {
-          if (!cityPath) {
+        const loadLocalCityTomlConfig = (targetCityPath: string): GcConfigResult | null => {
+          const cityTomlPath = path.join(targetCityPath, "city.toml");
+          if (!existsSync(cityTomlPath)) {
             return null;
           }
-          if (typeof Bun === "undefined") {
-            return null;
-          }
-          const cli = runGcCli(cityPath, ["config", "show"]);
+          return normalizeGcConfig(
+            parseGcTomlConfig(readFileSync(cityTomlPath, "utf8")),
+            targetCityPath,
+          );
+        };
+
+        const loadExpandedCliConfig = (targetCityPath: string): GcConfigResult | null => {
+          const cli = runGcCli(targetCityPath, ["config", "show"]);
           if (cli.exitCode !== 0) {
             logGcWarning("gc config show fallback failed", {
-              cityPath,
+              cityPath: targetCityPath,
               exitCode: cli.exitCode,
               stderr: cli.stderr,
             });
             return null;
           }
-          return normalizeGcConfig(Bun.TOML.parse(cli.stdout), cityPath);
+          return normalizeGcConfig(parseGcTomlConfig(cli.stdout), targetCityPath);
+        };
+
+        const loadBundledCityConfigs = (
+          supervisorCities: readonly GcSupervisorCity[],
+        ): GcConfigResult[] => {
+          const supervisorCityByPath = new Map(
+            supervisorCities.map((city) => [path.resolve(city.path), city] as const),
+          );
+          const supervisorCityByName = new Map(
+            supervisorCities.map((city) => [city.name, city] as const),
+          );
+          const cityRoots = discoverBundledGcCityRoots(process.cwd());
+          return cityRoots.flatMap((targetCityPath) => {
+            const expanded = loadExpandedCliConfig(targetCityPath);
+            const local = expanded ?? loadLocalCityTomlConfig(targetCityPath);
+            if (!local) {
+              return [];
+            }
+            const fallbackCityName = path.basename(targetCityPath);
+            const supervisorCity =
+              supervisorCityByPath.get(path.resolve(targetCityPath)) ??
+              supervisorCityByName.get(fallbackCityName);
+            return [
+              prefixGcConfigForCity(
+                withLifecycleStatus(local, {
+                  supervisorRunning: supervisorCities.length > 0,
+                  controllerRunning: supervisorCity?.running ?? false,
+                }),
+                {
+                  name: supervisorCity?.name ?? fallbackCityName,
+                  path: targetCityPath,
+                  running: supervisorCity?.running ?? false,
+                },
+              ),
+            ];
+          });
         };
 
         const supervisorCities = await fetchSupervisorCities().catch(() => []);
+        const bundledMergedConfig = mergeMultiCityConfig(loadBundledCityConfigs(supervisorCities));
+        if (bundledMergedConfig) {
+          lastKnownConfig = bundledMergedConfig;
+          cachedCityName = null;
+          return bundledMergedConfig;
+        }
+
         if (supervisorCities.length > 1) {
           const cityConfigs = await Promise.all(
             supervisorCities.map(async (city) => {
@@ -1615,10 +1911,10 @@ const makeGcApiClient = Effect.gen(function* () {
                 return null;
               });
               let normalizedConfig = remote ? normalizeGcConfig(remote, city.path) : null;
-              if (!normalizedConfig && typeof Bun !== "undefined") {
+              if (!normalizedConfig) {
                 const cli = runGcCli(city.path, ["config", "show"]);
                 if (cli.exitCode === 0) {
-                  normalizedConfig = normalizeGcConfig(Bun.TOML.parse(cli.stdout), city.path);
+                  normalizedConfig = normalizeGcConfig(parseGcTomlConfig(cli.stdout), city.path);
                 } else {
                   logGcWarning("gc city config cli fallback failed", {
                     cityName: city.name,
@@ -1659,13 +1955,13 @@ const makeGcApiClient = Effect.gen(function* () {
             cityPath && cityPath.trim().length > 0 ? normalizeGcConfig(remote, cityPath) : null;
           lastKnownConfig =
             normalizedRemote && cityPath
-              ? mergeCliExpandedConfig(normalizedRemote, loadExpandedCliConfig())
+              ? mergeCliExpandedConfig(normalizedRemote, loadExpandedCliConfig(cityPath))
               : (normalizedRemote ?? remote);
           cachedCityName = lastKnownConfig.workspace.name?.trim() || cachedCityName;
           return lastKnownConfig;
         }
         if (cityPath) {
-          const parsed = loadExpandedCliConfig();
+          const parsed = loadExpandedCliConfig(cityPath);
           if (parsed) {
             lastKnownConfig = parsed;
             return parsed;
@@ -1736,32 +2032,27 @@ const makeGcApiClient = Effect.gen(function* () {
       runLoggedGcMutation("agent-suspended", sanitizeKey(name), { suspended }, async () => {
         const normalizedName = sanitizeKey(name);
         const action = suspended ? "suspend" : "resume";
-        const cityName = await resolveGcCityName();
+        const target = await resolveAgentMutationTarget(normalizedName);
         try {
           await postMutation(
-            buildScopedOrLegacyPath(
-              cityName,
-              `/${buildGcAgentActionPath(cityName ?? "city", normalizedName, action)
-                .split("/")
-                .slice(4)
-                .join("/")}`,
-              `/v0/agent/${escapePathSegments(normalizedName)}/${action}`,
-            ),
+            target.cityName && useCityScopedRoutes
+              ? buildGcAgentActionPath(target.cityName, target.localName, action)
+              : `/v0/agent/${escapePathSegments(normalizedName)}/${action}`,
           );
           lastKnownConfig = updateCachedAgentSuspended(lastKnownConfig, normalizedName, suspended);
           return { result: undefined, path: "gc-api" };
         } catch (error) {
-          if (normalizedName.includes("/")) {
-            if (!cityPath) {
+          if (target.localName.includes("/")) {
+            if (!target.cityPath) {
               throw error;
             }
             logGcWarning("routing rig-scoped agent mutation via city.toml", {
               baseUrl,
-              cityPath,
+              cityPath: target.cityPath,
               agent: normalizedName,
               suspended,
             });
-            writeRigAgentSuspendedToCityToml(cityPath, normalizedName, suspended);
+            writeRigAgentSuspendedToCityToml(target.cityPath, target.localName, suspended);
             lastKnownConfig = updateCachedAgentSuspended(
               lastKnownConfig,
               normalizedName,
@@ -1769,10 +2060,10 @@ const makeGcApiClient = Effect.gen(function* () {
             );
             return { result: undefined, path: "city.toml" };
           }
-          if (!cityPath) {
+          if (!target.cityPath) {
             throw error;
           }
-          const cli = runGcCli(cityPath, ["agent", action, normalizedName]);
+          const cli = runGcCli(target.cityPath, ["agent", action, target.localName]);
           if (cli.exitCode === 0) {
             lastKnownConfig = updateCachedAgentSuspended(
               lastKnownConfig,
@@ -1810,7 +2101,8 @@ const makeGcApiClient = Effect.gen(function* () {
               `pool-size control for non-pool agent ${normalizedName} is not supported`,
             );
           }
-          if (!cityPath) {
+          const target = await resolveAgentMutationTarget(normalizedName);
+          if (!target.cityPath) {
             throw new Error("GC city path unavailable for pool-size mutation");
           }
           const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
@@ -1819,11 +2111,15 @@ const makeGcApiClient = Effect.gen(function* () {
           }
           logGcWarning("routing pool-size mutation via city.toml", {
             baseUrl,
-            cityPath,
+            cityPath: target.cityPath,
             agent: normalizedName,
             maxActiveSessions,
           });
-          writeAgentMaxActiveSessionsToCityToml(cityPath, identity, maxActiveSessions);
+          writeAgentMaxActiveSessionsToCityToml(
+            target.cityPath,
+            localizeAgentIdentityForCity(identity, target.cityName),
+            maxActiveSessions,
+          );
           lastKnownConfig = updateCachedAgentMaxActiveSessions(
             lastKnownConfig,
             normalizedName,
@@ -1856,7 +2152,8 @@ const makeGcApiClient = Effect.gen(function* () {
               `min-active control for non-pool agent ${normalizedName} is not supported`,
             );
           }
-          if (!cityPath) {
+          const target = await resolveAgentMutationTarget(normalizedName);
+          if (!target.cityPath) {
             throw new Error("GC city path unavailable for min-active mutation");
           }
           const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
@@ -1865,11 +2162,15 @@ const makeGcApiClient = Effect.gen(function* () {
           }
           logGcWarning("routing min-active mutation via city.toml", {
             baseUrl,
-            cityPath,
+            cityPath: target.cityPath,
             agent: normalizedName,
             minActiveSessions,
           });
-          writeAgentMinActiveSessionsToCityToml(cityPath, identity, minActiveSessions);
+          writeAgentMinActiveSessionsToCityToml(
+            target.cityPath,
+            localizeAgentIdentityForCity(identity, target.cityName),
+            minActiveSessions,
+          );
           lastKnownConfig = updateCachedAgentMinActiveSessions(
             lastKnownConfig,
             normalizedName,
@@ -1884,7 +2185,8 @@ const makeGcApiClient = Effect.gen(function* () {
     Effect.promise(async () =>
       runLoggedGcMutation("agent-wake-mode", sanitizeKey(name), { wakeMode }, async () => {
         const normalizedName = sanitizeKey(name);
-        if (!cityPath) {
+        const target = await resolveAgentMutationTarget(normalizedName);
+        if (!target.cityPath) {
           throw new Error("GC city path unavailable for wake-mode mutation");
         }
         const identity = findConfiguredAgentIdentity(lastKnownConfig, normalizedName);
@@ -1893,11 +2195,15 @@ const makeGcApiClient = Effect.gen(function* () {
         }
         logGcWarning("routing wake-mode mutation via city.toml", {
           baseUrl,
-          cityPath,
+          cityPath: target.cityPath,
           agent: normalizedName,
           wakeMode,
         });
-        writeAgentWakeModeToCityToml(cityPath, identity, wakeMode);
+        writeAgentWakeModeToCityToml(
+          target.cityPath,
+          localizeAgentIdentityForCity(identity, target.cityName),
+          wakeMode,
+        );
         lastKnownConfig = updateCachedAgentWakeMode(lastKnownConfig, normalizedName, wakeMode);
         return { result: undefined, path: "city.toml" };
       }),
@@ -1907,7 +2213,8 @@ const makeGcApiClient = Effect.gen(function* () {
     Effect.promise(async () =>
       runLoggedGcMutation("agent-session-mode", sanitizeKey(name), { mode }, async () => {
         const normalizedName = sanitizeKey(name);
-        if (!cityPath) {
+        const target = await resolveAgentMutationTarget(normalizedName);
+        if (!target.cityPath) {
           throw new Error("GC city path unavailable for named-session mode mutation");
         }
         if (isPoolAgent(lastKnownConfig, normalizedName)) {
@@ -1917,7 +2224,7 @@ const makeGcApiClient = Effect.gen(function* () {
         }
         logGcWarning("routing named-session mode mutation via city.toml", {
           baseUrl,
-          cityPath,
+          cityPath: target.cityPath,
           agent: normalizedName,
           mode,
         });
@@ -1925,7 +2232,11 @@ const makeGcApiClient = Effect.gen(function* () {
         if (!identity) {
           throw new Error(`GC agent identity "${normalizedName}" not found in current config`);
         }
-        writeAgentSessionModeToCityToml(cityPath, identity, mode);
+        writeAgentSessionModeToCityToml(
+          target.cityPath,
+          localizeAgentIdentityForCity(identity, target.cityName),
+          mode,
+        );
         lastKnownConfig = updateCachedAgentSessionMode(lastKnownConfig, normalizedName, mode);
         return { result: undefined, path: "city.toml" };
       }),

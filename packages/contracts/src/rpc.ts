@@ -99,38 +99,21 @@ import {
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
 import {
-  GcConfigResult,
-  GcFindThreadBindingError,
-  GcFindThreadBindingInput,
-  GcFindThreadBindingResult,
-  GcGetConfigError,
-  GcGetConfigInput,
-  GcGetThreadContextError,
-  GcGetThreadContextInput,
-  GcRespondToPendingError,
-  GcRespondToPendingInput,
-  GcSessionActionResult,
-  GcSetAgentMaxActiveSessionsError,
-  GcSetAgentMaxActiveSessionsInput,
-  GcSetAgentMinActiveSessionsError,
-  GcSetAgentMinActiveSessionsInput,
-  GcSetAgentSessionModeError,
-  GcSetAgentSessionModeInput,
-  GcSetAgentSuspendedError,
-  GcSetAgentSuspendedInput,
-  GcSetAgentWakeModeError,
-  GcSetAgentWakeModeInput,
-  GcSetCitySuspendedError,
-  GcSetCitySuspendedInput,
-  GcSetRigSuspendedError,
-  GcSetRigSuspendedInput,
-  GcStopSessionError,
-  GcStopSessionInput,
-  GcSubmitSessionError,
-  GcSubmitSessionInput,
-  GcSubmitSessionResult,
-  GcThreadContextResult,
-} from "./gc.ts";
+  GC_WS_METHODS,
+  WsGcFindThreadBindingRpc,
+  WsGcGetConfigRpc,
+  WsGcGetThreadContextRpc,
+  WsGcRespondToPendingRpc,
+  WsGcSetAgentMaxActiveSessionsRpc,
+  WsGcSetAgentMinActiveSessionsRpc,
+  WsGcSetAgentSessionModeRpc,
+  WsGcSetAgentSuspendedRpc,
+  WsGcSetAgentWakeModeRpc,
+  WsGcSetCitySuspendedRpc,
+  WsGcSetRigSuspendedRpc,
+  WsGcStopSessionRpc,
+  WsGcSubmitSessionRpc,
+} from "./gcRpc.ts";
 
 export const WS_METHODS = {
   // Project registry methods
@@ -188,20 +171,7 @@ export const WS_METHODS = {
   sourceControlCloneRepository: "sourceControl.cloneRepository",
   sourceControlPublishRepository: "sourceControl.publishRepository",
 
-  // Gas City
-  gcGetConfig: "gc.getConfig",
-  gcFindThreadBinding: "gc.findThreadBinding",
-  gcGetThreadContext: "gc.getThreadContext",
-  gcSubmitSession: "gc.submitSession",
-  gcStopSession: "gc.stopSession",
-  gcRespondToPending: "gc.respondToPending",
-  gcSetAgentSuspended: "gc.setAgentSuspended",
-  gcSetAgentMaxActiveSessions: "gc.setAgentMaxActiveSessions",
-  gcSetAgentMinActiveSessions: "gc.setAgentMinActiveSessions",
-  gcSetAgentWakeMode: "gc.setAgentWakeMode",
-  gcSetAgentSessionMode: "gc.setAgentSessionMode",
-  gcSetCitySuspended: "gc.setCitySuspended",
-  gcSetRigSuspended: "gc.setRigSuspended",
+  ...GC_WS_METHODS,
 
   // Streaming subscriptions
   subscribeVcsStatus: "subscribeVcsStatus",
@@ -311,84 +281,6 @@ export const WsSourceControlPublishRepositoryRpc = Rpc.make(
     error: SourceControlRepositoryError,
   },
 );
-
-export const WsGcGetConfigRpc = Rpc.make(WS_METHODS.gcGetConfig, {
-  payload: GcGetConfigInput,
-  success: GcConfigResult,
-  error: GcGetConfigError,
-});
-
-export const WsGcFindThreadBindingRpc = Rpc.make(WS_METHODS.gcFindThreadBinding, {
-  payload: GcFindThreadBindingInput,
-  success: GcFindThreadBindingResult,
-  error: GcFindThreadBindingError,
-});
-
-export const WsGcGetThreadContextRpc = Rpc.make(WS_METHODS.gcGetThreadContext, {
-  payload: GcGetThreadContextInput,
-  success: GcThreadContextResult,
-  error: GcGetThreadContextError,
-});
-
-export const WsGcSubmitSessionRpc = Rpc.make(WS_METHODS.gcSubmitSession, {
-  payload: GcSubmitSessionInput,
-  success: GcSubmitSessionResult,
-  error: GcSubmitSessionError,
-});
-
-export const WsGcStopSessionRpc = Rpc.make(WS_METHODS.gcStopSession, {
-  payload: GcStopSessionInput,
-  success: GcSessionActionResult,
-  error: GcStopSessionError,
-});
-
-export const WsGcRespondToPendingRpc = Rpc.make(WS_METHODS.gcRespondToPending, {
-  payload: GcRespondToPendingInput,
-  success: GcSessionActionResult,
-  error: GcRespondToPendingError,
-});
-
-export const WsGcSetAgentSuspendedRpc = Rpc.make(WS_METHODS.gcSetAgentSuspended, {
-  payload: GcSetAgentSuspendedInput,
-  success: GcSessionActionResult,
-  error: GcSetAgentSuspendedError,
-});
-
-export const WsGcSetAgentMaxActiveSessionsRpc = Rpc.make(WS_METHODS.gcSetAgentMaxActiveSessions, {
-  payload: GcSetAgentMaxActiveSessionsInput,
-  success: GcSessionActionResult,
-  error: GcSetAgentMaxActiveSessionsError,
-});
-
-export const WsGcSetAgentMinActiveSessionsRpc = Rpc.make(WS_METHODS.gcSetAgentMinActiveSessions, {
-  payload: GcSetAgentMinActiveSessionsInput,
-  success: GcSessionActionResult,
-  error: GcSetAgentMinActiveSessionsError,
-});
-
-export const WsGcSetAgentWakeModeRpc = Rpc.make(WS_METHODS.gcSetAgentWakeMode, {
-  payload: GcSetAgentWakeModeInput,
-  success: GcSessionActionResult,
-  error: GcSetAgentWakeModeError,
-});
-
-export const WsGcSetAgentSessionModeRpc = Rpc.make(WS_METHODS.gcSetAgentSessionMode, {
-  payload: GcSetAgentSessionModeInput,
-  success: GcSessionActionResult,
-  error: GcSetAgentSessionModeError,
-});
-
-export const WsGcSetCitySuspendedRpc = Rpc.make(WS_METHODS.gcSetCitySuspended, {
-  payload: GcSetCitySuspendedInput,
-  success: GcSessionActionResult,
-  error: GcSetCitySuspendedError,
-});
-
-export const WsGcSetRigSuspendedRpc = Rpc.make(WS_METHODS.gcSetRigSuspended, {
-  payload: GcSetRigSuspendedInput,
-  success: GcSessionActionResult,
-  error: GcSetRigSuspendedError,
-});
 
 export const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntries, {
   payload: ProjectSearchEntriesInput,
@@ -547,6 +439,12 @@ export const WsOrchestrationReplayEventsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.
   error: OrchestrationReplayEventsError,
 });
 
+export const WsOrchestrationGetSnapshotRpc = Rpc.make(ORCHESTRATION_WS_METHODS.getSnapshot, {
+  payload: OrchestrationRpcSchemas.getSnapshot.input,
+  success: OrchestrationRpcSchemas.getSnapshot.output,
+  error: OrchestrationGetSnapshotError,
+});
+
 export const WsOrchestrationGetArchivedShellSnapshotRpc = Rpc.make(
   ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot,
   {
@@ -657,6 +555,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
+  WsOrchestrationGetSnapshotRpc,
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,

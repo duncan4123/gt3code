@@ -2,7 +2,7 @@ import { memo } from "react";
 import { parseGcMeta, type EnvironmentId, type ThreadId } from "@t3tools/contracts";
 import type { Thread, ThreadShell } from "../types";
 import GcContextSidebar from "./GcContextSidebar";
-import { useGcThreadContext } from "../lib/gcThreadContext";
+import { useGcThreadContext } from "./gcThreadContext";
 
 interface GcPanelProps {
   environmentId: EnvironmentId;

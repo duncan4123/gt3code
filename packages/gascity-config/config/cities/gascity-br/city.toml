@@ -44,7 +44,7 @@ suspended = true
 [[rigs]]
 name = "t3-jj"
 prefix = "tj"
-suspended = true
+suspended = false
 includes = ["packs/flywheel/all", "packs/jj"]
 
 [[rigs.overrides]]

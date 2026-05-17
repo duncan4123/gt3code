@@ -65,6 +65,9 @@ if (
     inputRoots: [sourceRoot],
     extraInputs: [
       import.meta.url,
+      path.join(sourceRoot, "cmd", "gc", "dashboard", "web", "dist", "dashboard.css"),
+      path.join(sourceRoot, "cmd", "gc", "dashboard", "web", "dist", "dashboard.js"),
+      path.join(sourceRoot, "cmd", "gc", "dashboard", "web", "dist", "index.html"),
       path.join(doltliteBuildDir, doltliteLibrary),
       path.join(doltliteBuildDir, "sqlite3.h"),
     ],

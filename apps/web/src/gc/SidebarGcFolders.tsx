@@ -10,9 +10,9 @@ import {
 } from "lucide-react";
 import { Fragment, type ReactNode, useState } from "react";
 
-import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
-import { SidebarMenuSubItem } from "./ui/sidebar";
-import { Badge } from "./ui/badge";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../components/ui/tooltip";
+import { SidebarMenuSubItem } from "../components/ui/sidebar";
+import { Badge } from "../components/ui/badge";
 import type { GcLifecycleStatus, ThreadId } from "@t3tools/contracts";
 import type { SidebarGcThreadGroupingMode } from "@t3tools/contracts/settings";
 import {
@@ -73,6 +73,7 @@ function gcControlTestIdSuffix(value: string): string {
 
 interface SidebarGcFoldersProps {
   rigGroups: readonly SidebarGcRigGroup[];
+  flattenRootRigFolders?: boolean;
   indentDepth?: number;
   nestedParentId?: string;
   workspaceActionScope?: "city" | "rig";
@@ -282,6 +283,13 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   const visibleRigGroups = props.nestedParentId
     ? props.rigGroups
     : props.rigGroups.filter((rigGroup) => !nestedRigIds.has(rigGroup.id));
+  const flattenedRootRigGroup =
+    props.flattenRootRigFolders &&
+    !props.nestedParentId &&
+    visibleRigGroups.length === 1 &&
+    (visibleRigGroups[0]?.kind === "rig" || visibleRigGroups[0]?.kind === "workspace")
+      ? visibleRigGroups[0]
+      : null;
   const rigFolderIndentClassName = gcDepthClassName(indentDepth, RIG_FOLDER_INDENT_CLASSES);
   const agentFolderIndentClassName = gcDepthClassName(indentDepth, AGENT_FOLDER_INDENT_CLASSES);
   const threadGroupIndentClassName = gcDepthClassName(indentDepth, THREAD_GROUP_INDENT_CLASSES);
@@ -755,6 +763,16 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
       </Fragment>
     );
   };
+
+  if (flattenedRootRigGroup) {
+    return flattenedRootRigGroup.agentGroups.map((agentGroup) =>
+      renderAgentGroup(flattenedRootRigGroup, agentGroup, {
+        agentIndentClassName: rigFolderIndentClassName,
+        threadGroupIndentClassName: agentFolderIndentClassName,
+        threadIndentClassName,
+      }),
+    );
+  }
 
   return visibleRigGroups.map((rigGroup) => {
     const childRigGroups = childRigGroupsByWorkspaceId.get(rigGroup.id) ?? [];
