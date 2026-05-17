@@ -80,6 +80,34 @@ mise install
 bun install .
 ```
 
+### Bundled Gas City runtime
+
+Local development uses checkout-local runtime state by default:
+
+- T3 Code data: `./.t3-dev`
+- Gas City supervisor/runtime: `./.t3-dev/gascity`
+- Gas City worktrees: `./.t3-dev/worktrees`
+- Bundled city config: `./packages/gascity-config/config/cities/gascity-br`
+
+This is intentional. A clean install, a second checkout, or a JJ workspace must
+not reuse a supervisor registry from another T3 Code installation. Reusing a
+machine-global `GC_HOME` can make `gc start` fail with a city-name collision, or
+make the app talk to a city registered from a different checkout.
+
+For a clean dev setup:
+
+```bash
+bun install .
+bun run build:gascity-tools
+bun gascity:install
+bun gascity:start
+bun dev
+```
+
+Only override `T3CODE_HOME`, `T3CODE_GASCITY_HOME`, `T3CODE_WORKTREES_DIR`,
+`GC_CITY_PATH`, or `GC_API_URL` when deliberately connecting this checkout to an
+external runtime.
+
 Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening an issue or PR.
 
 Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).

@@ -17,21 +17,21 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { findBuiltBdBinaryPath, findBuiltDoltliteLibraryPath } from "@t3tools/beads-doltlite";
 import { findBrBeadsProviderScriptPath, findBuiltGcBinaryPath } from "@t3tools/gascity";
 import {
   getBundledGascityConfigLayout,
-  getDefaultGascityRuntimeRoot,
   resolveManagedBrBinaryPath,
   usesDoltliteBeadsBackend,
 } from "@t3tools/gascity-config";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const defaultRuntimeRoot = getDefaultGascityRuntimeRoot();
-const defaultCityRoot = getBundledGascityConfigLayout().rootDir;
+const defaultT3Home = join(repoRoot, ".t3-dev");
+const defaultRuntimeRoot = join(defaultT3Home, "gascity");
+const defaultCityRoot = getBundledGascityConfigLayout("gascity-br").rootDir;
 const configuredCitiesRoot = dirname(defaultCityRoot);
 const defaultRigBindings = [
   { name: "gascity", path: join(repoRoot, "packages", "gascity") },
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
         showControllerStatus: false,
       });
       const runtime = ensureRuntimeInstalled();
-      runGc(runtime, startArgs);
+      runStart(runtime, startArgs);
       return;
     }
     case "stop": {
@@ -500,7 +500,7 @@ function getRuntimePaths(): RuntimePaths {
     ),
     worktreesDir:
       process.env.T3CODE_WORKTREES_DIR ??
-      join(process.env.T3CODE_HOME?.trim() || join(homedir(), ".t3"), "worktrees"),
+      join(process.env.T3CODE_HOME?.trim() || defaultT3Home, "worktrees"),
   };
 }
 
@@ -830,6 +830,53 @@ function runGc(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
   process.exit(result.status ?? 1);
 }
 
+function runStart(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
+  const normalizedArgs = normalizeCityArgs(args);
+  const selectedCityPath = selectedCityPathForEnv(runtime, normalizedArgs);
+  if (!selectedCityPath || !cityWorkspaceIsSuspended(selectedCityPath)) {
+    runGc(runtime, normalizedArgs);
+  }
+
+  prepareActiveCity(selectedCityPath, { initializeStores: false });
+  const env = runtimeEnv(runtime, resolveGcApiUrl(runtime));
+  env.GC_CITY_PATH = selectedCityPath;
+  env.GC_CITY = selectedCityPath;
+
+  const supervisorStart = spawnSync(runtime.gcBinaryPath, ["supervisor", "start"], {
+    cwd: repoRoot,
+    env,
+    encoding: "utf8",
+  });
+  const supervisorStartOutput = `${supervisorStart.stdout ?? ""}${supervisorStart.stderr ?? ""}`;
+  if (
+    (supervisorStart.status ?? 1) !== 0 &&
+    !supervisorStartOutput.includes("supervisor already running")
+  ) {
+    process.stdout.write(supervisorStart.stdout ?? "");
+    process.stderr.write(supervisorStart.stderr ?? "");
+    process.exit(supervisorStart.status ?? 1);
+  }
+  process.stdout.write(supervisorStart.stdout ?? "");
+  process.stderr.write(supervisorStart.stderr ?? "");
+
+  upsertRuntimeCityRegistration(runtime, selectedCityPath);
+
+  const supervisorReload = spawnSync(runtime.gcBinaryPath, ["supervisor", "reload"], {
+    cwd: repoRoot,
+    env,
+    stdio: "inherit",
+  });
+  if ((supervisorReload.status ?? 1) !== 0) {
+    process.exit(supervisorReload.status ?? 1);
+  }
+
+  console.log(
+    `Registered suspended city '${registrationNameForCity(selectedCityPath)}' (${selectedCityPath})`,
+  );
+  console.log("Gas City supervisor API is ready; agents remain suspended by city config.");
+  process.exit(0);
+}
+
 function runtimeEnv(runtime: RuntimePaths, gcApiUrl = resolveGcApiUrl(runtime)): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -844,6 +891,66 @@ function runtimeEnv(runtime: RuntimePaths, gcApiUrl = resolveGcApiUrl(runtime)):
   };
   prepareRuntimeEnv(env, dirname(runtime.gcBinaryPath));
   return env;
+}
+
+function cityWorkspaceIsSuspended(cityPath: string): boolean {
+  const cityTomlPath = join(cityPath, "city.toml");
+  if (!existsSync(cityTomlPath)) {
+    return false;
+  }
+  const content = readFileSync(cityTomlPath, "utf8");
+  const workspaceMatch = /(?:^|\n)\[workspace\]([\s\S]*?)(?:\n\[|$)/.exec(content);
+  const workspaceBody = workspaceMatch?.[1] ?? "";
+  return /^\s*suspended\s*=\s*true\s*$/m.test(workspaceBody);
+}
+
+function registrationNameForCity(cityPath: string): string {
+  const cityTomlPath = join(cityPath, "city.toml");
+  if (existsSync(cityTomlPath)) {
+    const content = readFileSync(cityTomlPath, "utf8");
+    const workspaceMatch = /(?:^|\n)\[workspace\]([\s\S]*?)(?:\n\[|$)/.exec(content);
+    const explicitName = /^\s*name\s*=\s*"([^"]+)"\s*$/m.exec(workspaceMatch?.[1] ?? "")?.[1];
+    if (explicitName) {
+      return explicitName;
+    }
+  }
+  return basename(resolve(cityPath));
+}
+
+function upsertRuntimeCityRegistration(runtime: RuntimePaths, cityPath: string): void {
+  mkdirSync(runtime.rootDir, { recursive: true });
+  const registryPath = join(runtime.rootDir, "cities.toml");
+  const name = registrationNameForCity(cityPath);
+  const entries = readRuntimeCityRegistrations(registryPath).filter(
+    (entry) => entry.path !== cityPath && entry.name !== name,
+  );
+  entries.push({ name, path: cityPath });
+  writeFileSync(
+    registryPath,
+    `${entries
+      .map(
+        (entry) =>
+          `[[cities]]\n  path = ${JSON.stringify(entry.path)}\n  name = ${JSON.stringify(entry.name)}`,
+      )
+      .join("\n\n")}\n`,
+  );
+}
+
+function readRuntimeCityRegistrations(
+  registryPath: string,
+): ReadonlyArray<{ readonly name: string; readonly path: string }> {
+  if (!existsSync(registryPath)) {
+    return [];
+  }
+  const content = readFileSync(registryPath, "utf8");
+  return content
+    .split(/\n(?=\[\[cities\]\])/)
+    .map((block) => {
+      const path = /^\s*path\s*=\s*"([^"]+)"\s*$/m.exec(block)?.[1];
+      const name = /^\s*name\s*=\s*"([^"]+)"\s*$/m.exec(block)?.[1];
+      return path && name ? { name, path } : null;
+    })
+    .filter((entry): entry is { readonly name: string; readonly path: string } => entry !== null);
 }
 
 function gcArgsForRuntime(runtime: RuntimePaths, args: ReadonlyArray<string>): string[] {

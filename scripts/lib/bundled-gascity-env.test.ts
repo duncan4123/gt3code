@@ -1,36 +1,37 @@
 // @effect-diagnostics importFromBarrel:off nodeBuiltinImport:off
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as NodeOS from "node:os";
 import { mkdtempSync, writeFileSync } from "node:fs";
+import * as NodeOS from "node:os";
 import { assert, it } from "@effect/vitest";
 import { Effect, Path } from "effect";
 
-import { DEFAULT_GC_CITY_PATH, createBundledGascityProcessEnv } from "./bundled-gascity-env.ts";
+import {
+  DEFAULT_GC_CITY_PATH,
+  DEFAULT_T3CODE_GASCITY_HOME,
+  createBundledGascityProcessEnv,
+} from "./bundled-gascity-env.ts";
 import { getBundledGascityConfigLayout } from "@t3tools/gascity-config";
 
 it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
   it.effect("fills bundled GC runtime env defaults", () =>
     Effect.gen(function* () {
       const path = yield* Path.Path;
-      const runtimeHome = mkdtempSync(path.join(NodeOS.tmpdir(), "t3-gc-env-default-"));
       const env = yield* createBundledGascityProcessEnv({
-        baseEnv: {
-          T3CODE_GASCITY_HOME: runtimeHome,
-        },
+        baseEnv: {},
         t3Home: undefined,
       });
 
-      const expectedHome = path.resolve(NodeOS.homedir(), ".t3");
+      const expectedHome = path.resolve(import.meta.dirname, "..", "..", ".t3-dev");
       const expectedWorktreesDir = path.join(expectedHome, "worktrees");
-      const expectedBinDir = path.join(runtimeHome, "bin");
+      const expectedBinDir = path.join(DEFAULT_T3CODE_GASCITY_HOME, "bin");
 
       assert.equal(env.T3CODE_HOME, expectedHome);
-      assert.equal(env.T3CODE_GASCITY_HOME, runtimeHome);
+      assert.equal(env.T3CODE_GASCITY_HOME, DEFAULT_T3CODE_GASCITY_HOME);
       assert.equal(env.T3CODE_WORKTREES_DIR, expectedWorktreesDir);
       assert.equal(env.GC_WORKTREES_DIR, expectedWorktreesDir);
       assert.equal(DEFAULT_GC_CITY_PATH, getBundledGascityConfigLayout("gascity-br").rootDir);
       assert.equal(env.GC_CITY_PATH, DEFAULT_GC_CITY_PATH);
-      assert.equal(env.GC_API_URL, "http://127.0.0.1:8372");
+      assert.match(env.GC_API_URL ?? "", /^http:\/\/127\.0\.0\.1:\d+$/);
       assert.equal(env.GC_BEADS_BACKEND, undefined);
       assert.equal(env.BEADS_BACKEND, undefined);
       assert.equal(

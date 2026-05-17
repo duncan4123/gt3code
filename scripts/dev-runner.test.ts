@@ -65,6 +65,10 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         });
 
         assert.equal(env.T3CODE_HOME, path.resolve(import.meta.dirname, "..", ".t3-dev"));
+        assert.equal(
+          env.T3CODE_GASCITY_HOME,
+          path.resolve(import.meta.dirname, "..", ".t3-dev", "gascity"),
+        );
         assert.equal(env.GC_CITY_PATH, getBundledGascityConfigLayout("gascity-br").rootDir);
       }),
     );
