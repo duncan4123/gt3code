@@ -1626,6 +1626,40 @@ const makeGcApiClient = Effect.gen(function* () {
     return cachedCityName;
   };
 
+  const resolveConfiguredCityRoot = (
+    name: string,
+  ): {
+    readonly cityName: string;
+    readonly cityPath: string | null;
+  } | null => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      return null;
+    }
+
+    const configuredCity = lastKnownConfig?.rigs.find(
+      (rig) => rig.name === trimmedName && rig.path && isGcCityRoot(rig.path),
+    );
+    if (configuredCity) {
+      return {
+        cityName: trimmedName,
+        cityPath: configuredCity.path,
+      };
+    }
+
+    const bundledCityRoot = cityPath
+      ? discoverBundledGcCityRoots(cityPath).find(
+          (candidate) => path.basename(candidate) === trimmedName,
+        )
+      : null;
+    return bundledCityRoot
+      ? {
+          cityName: trimmedName,
+          cityPath: bundledCityRoot,
+        }
+      : null;
+  };
+
   const resolveAgentMutationTarget = async (
     normalizedName: string,
   ): Promise<{
@@ -1641,6 +1675,49 @@ const makeGcApiClient = Effect.gen(function* () {
         return {
           cityName: matchedCity.name,
           cityPath: matchedCity.path,
+          localName: remainingSegments.join("/"),
+        };
+      }
+      const configuredCity = resolveConfiguredCityRoot(firstSegment);
+      if (configuredCity) {
+        return {
+          cityName: configuredCity.cityName,
+          cityPath: configuredCity.cityPath,
+          localName: remainingSegments.join("/"),
+        };
+      }
+    }
+
+    return {
+      cityName: await resolveGcCityName(),
+      cityPath,
+      localName: normalizedName,
+    };
+  };
+
+  const resolveRigMutationTarget = async (
+    normalizedName: string,
+  ): Promise<{
+    readonly cityName: string | null;
+    readonly cityPath: string | null;
+    readonly localName: string;
+  }> => {
+    const [firstSegment, ...remainingSegments] = normalizedName.split("/");
+    if (firstSegment && remainingSegments.length > 0) {
+      const cities = await fetchSupervisorCities();
+      const matchedCity = cities.find((city) => city.name === firstSegment);
+      if (matchedCity) {
+        return {
+          cityName: matchedCity.name,
+          cityPath: matchedCity.path,
+          localName: remainingSegments.join("/"),
+        };
+      }
+      const configuredCity = resolveConfiguredCityRoot(firstSegment);
+      if (configuredCity) {
+        return {
+          cityName: configuredCity.cityName,
+          cityPath: configuredCity.cityPath,
           localName: remainingSegments.join("/"),
         };
       }
@@ -2289,25 +2366,20 @@ const makeGcApiClient = Effect.gen(function* () {
       runLoggedGcMutation("rig-suspended", sanitizeKey(name), { suspended }, async () => {
         const normalizedName = sanitizeKey(name);
         const action = suspended ? "suspend" : "resume";
-        const cityName = await resolveGcCityName();
+        const target = await resolveRigMutationTarget(normalizedName);
         try {
           await postMutation(
-            buildScopedOrLegacyPath(
-              cityName,
-              `/${buildGcRigActionPath(cityName ?? "city", normalizedName, action)
-                .split("/")
-                .slice(4)
-                .join("/")}`,
-              `/v0/rig/${escapePathSegments(normalizedName)}/${action}`,
-            ),
+            target.cityName && useCityScopedRoutes
+              ? buildGcRigActionPath(target.cityName, target.localName, action)
+              : `/v0/rig/${escapePathSegments(target.localName)}/${action}`,
           );
           lastKnownConfig = updateCachedRigSuspended(lastKnownConfig, normalizedName, suspended);
           return { result: undefined, path: "gc-api" };
         } catch (error) {
-          if (!cityPath) {
+          if (!target.cityPath) {
             throw error;
           }
-          const cli = runGcCli(cityPath, ["rig", action, normalizedName]);
+          const cli = runGcCli(target.cityPath, ["rig", action, target.localName]);
           if (cli.exitCode === 0) {
             lastKnownConfig = updateCachedRigSuspended(lastKnownConfig, normalizedName, suspended);
             return { result: undefined, path: "gc-cli" };

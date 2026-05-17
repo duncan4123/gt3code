@@ -171,6 +171,10 @@ suspended = false
 agent = "witness"
 suspended = true
 
+
+[[rigs.overrides]]
+agent = "codex"
+suspended = false
 [[rigs]]
 name = "t3code"
 prefix = "t3"

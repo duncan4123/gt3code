@@ -849,6 +849,43 @@ describe("groupThreadsByRigAndAgent", () => {
     });
   });
 
+  it("does not expose foreign-city thread rigs as controls for the active city", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-foreign-city",
+          customMetadata: {
+            "gc.agent": "beads-doltlite/polecat",
+            "gc.agentQualified": "beads-doltlite/polecat",
+            "gc.city": "gastown",
+            "gc.rig": "beads-doltlite",
+            "gc.groupKind": "rig",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "gascity-br",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "t3-jj",
+              path: "/repo/packages/gascity-config/config/cities/gascity-br/rigs/t3code",
+              suspended: false,
+            },
+          ],
+          agents: [],
+        },
+      },
+    );
+
+    expect(rigGroups.map((group) => group.id)).toEqual(["gascity-br", "t3-jj"]);
+    expect(rigGroups.some((group) => group.id === "beads-doltlite")).toBe(false);
+    expect(standaloneThreads.map((thread) => thread.id)).toEqual(["thread-foreign-city"]);
+  });
+
   it("seeds configured agent folders from grouped project members", () => {
     const config = {
       workspace: {

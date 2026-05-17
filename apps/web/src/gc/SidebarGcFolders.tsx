@@ -8,7 +8,7 @@ import {
   RotateCcwIcon,
   SquareIcon,
 } from "lucide-react";
-import { Fragment, type ReactNode, useState } from "react";
+import { Fragment, type ReactNode } from "react";
 
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../components/ui/tooltip";
 import { SidebarMenuSubItem } from "../components/ui/sidebar";
@@ -20,6 +20,10 @@ import {
   type GcWakeMode,
   summarizeGcRuntimeStates,
 } from "./sidebar/gcSidebarControls";
+import {
+  isGcSidebarFolderExpanded,
+  useGcSidebarUiStateStore,
+} from "./sidebar/gcSidebarUiStateStore";
 
 export interface SidebarGcThreadGroup {
   id: string;
@@ -61,6 +65,7 @@ export interface SidebarGcRigGroup {
   id: string;
   label: string;
   kind: "workspace" | "rig";
+  isConfigured?: boolean;
   isSuspended: boolean;
   lifecycle?: GcLifecycleStatus;
   agentGroups: readonly SidebarGcAgentGroup[];
@@ -250,11 +255,8 @@ function GcThreadGroupBadges({
 }
 
 export function SidebarGcFolders(props: SidebarGcFoldersProps) {
-  const [collapsedRigIds, setCollapsedRigIds] = useState<Set<string>>(() => new Set());
-  const [collapsedAgentIds, setCollapsedAgentIds] = useState<Set<string>>(() => new Set());
-  const [collapsedThreadGroupIds, setCollapsedThreadGroupIds] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const folderExpandedById = useGcSidebarUiStateStore((state) => state.folderExpandedById);
+  const toggleFolderExpanded = useGcSidebarUiStateStore((state) => state.toggleFolderExpanded);
   const workspaceSuspensionHint =
     "Workspace is suspended. Gas City will not start or reconcile agents until GC is resumed.";
   const indentDepth = props.indentDepth ?? 0;
@@ -290,46 +292,18 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
     (visibleRigGroups[0]?.kind === "rig" || visibleRigGroups[0]?.kind === "workspace")
       ? visibleRigGroups[0]
       : null;
+  const isConfiguredRigActionDisabled = (rigGroup: SidebarGcRigGroup): boolean =>
+    rigGroup.kind === "rig" && rigGroup.isConfigured === false;
   const rigFolderIndentClassName = gcDepthClassName(indentDepth, RIG_FOLDER_INDENT_CLASSES);
   const agentFolderIndentClassName = gcDepthClassName(indentDepth, AGENT_FOLDER_INDENT_CLASSES);
   const threadGroupIndentClassName = gcDepthClassName(indentDepth, THREAD_GROUP_INDENT_CLASSES);
   const threadIndentClassName = gcDepthClassName(indentDepth, THREAD_INDENT_CLASSES);
 
-  const toggleRig = (rigId: string) => {
-    setCollapsedRigIds((current) => {
-      const next = new Set(current);
-      if (next.has(rigId)) {
-        next.delete(rigId);
-      } else {
-        next.add(rigId);
-      }
-      return next;
-    });
-  };
-
-  const toggleAgent = (agentId: string) => {
-    setCollapsedAgentIds((current) => {
-      const next = new Set(current);
-      if (next.has(agentId)) {
-        next.delete(agentId);
-      } else {
-        next.add(agentId);
-      }
-      return next;
-    });
-  };
-
-  const toggleThreadGroup = (groupId: string) => {
-    setCollapsedThreadGroupIds((current) => {
-      const next = new Set(current);
-      if (next.has(groupId)) {
-        next.delete(groupId);
-      } else {
-        next.add(groupId);
-      }
-      return next;
-    });
-  };
+  const rigFolderKey = (rigId: string) => `rig:${rigId}`;
+  const agentFolderKey = (agentId: string) => `agent:${agentId}`;
+  const threadGroupFolderKey = (groupId: string) => `thread-group:${groupId}`;
+  const isFolderExpanded = (folderId: string) =>
+    isGcSidebarFolderExpanded(folderExpandedById, folderId);
 
   const renderAgentGroup = (
     rigGroup: SidebarGcRigGroup,
@@ -413,17 +387,17 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               type="button"
               data-thread-selection-safe
               data-testid={`gc-agent-folder-toggle-${gcControlTestIdSuffix(fragmentKey)}`}
-              aria-expanded={!collapsedAgentIds.has(fragmentKey)}
+              aria-expanded={isFolderExpanded(agentFolderKey(fragmentKey))}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md py-0.5 pr-1 transition-colors hover:bg-accent hover:text-foreground"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                toggleAgent(fragmentKey);
+                toggleFolderExpanded(agentFolderKey(fragmentKey));
               }}
             >
               <ChevronRightIcon
                 className={`size-3 shrink-0 transition-transform ${
-                  collapsedAgentIds.has(fragmentKey) ? "" : "rotate-90"
+                  isFolderExpanded(agentFolderKey(fragmentKey)) ? "rotate-90" : ""
                 }`}
               />
               <FolderIcon className="size-3 shrink-0" />
@@ -697,12 +671,12 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
             </div>
           </div>
         </SidebarMenuSubItem>
-        {!collapsedAgentIds.has(fragmentKey) &&
+        {isFolderExpanded(agentFolderKey(fragmentKey)) &&
           (agentGroup.threadGroups && agentGroup.threadGroups.length > 0 ? (
             <>
               {agentGroup.threadGroups.map((threadGroup) => {
                 const groupKey = `${fragmentKey}:${threadGroup.id}`;
-                const groupCollapsed = collapsedThreadGroupIds.has(groupKey);
+                const groupExpanded = isFolderExpanded(threadGroupFolderKey(groupKey));
                 return (
                   <Fragment key={groupKey}>
                     <SidebarMenuSubItem
@@ -717,17 +691,17 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           type="button"
                           data-thread-selection-safe
                           data-testid={`gc-thread-group-toggle-${gcControlTestIdSuffix(groupKey)}`}
-                          aria-expanded={!groupCollapsed}
+                          aria-expanded={groupExpanded}
                           className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md py-0.5 pr-1 transition-colors hover:bg-accent hover:text-foreground"
                           onClick={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
-                            toggleThreadGroup(groupKey);
+                            toggleFolderExpanded(threadGroupFolderKey(groupKey));
                           }}
                         >
                           <ChevronRightIcon
                             className={`size-3 shrink-0 transition-transform ${
-                              groupCollapsed ? "" : "rotate-90"
+                              groupExpanded ? "rotate-90" : ""
                             }`}
                           />
                           <FolderIcon className="size-3 shrink-0" />
@@ -748,7 +722,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         </button>
                       </div>
                     </SidebarMenuSubItem>
-                    {!groupCollapsed &&
+                    {groupExpanded &&
                       props.renderThreadRows(threadGroup.threadIds, options.threadIndentClassName)}
                   </Fragment>
                 );
@@ -829,17 +803,17 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               type="button"
               data-thread-selection-safe
               data-testid={`gc-rig-toggle-${gcControlTestIdSuffix(rigGroup.id)}`}
-              aria-expanded={!collapsedRigIds.has(rigGroup.id)}
+              aria-expanded={isFolderExpanded(rigFolderKey(rigGroup.id))}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md py-0.5 pr-1 transition-colors hover:bg-accent hover:text-foreground"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                toggleRig(rigGroup.id);
+                toggleFolderExpanded(rigFolderKey(rigGroup.id));
               }}
             >
               <ChevronRightIcon
                 className={`size-3 shrink-0 transition-transform ${
-                  collapsedRigIds.has(rigGroup.id) ? "" : "rotate-90"
+                  isFolderExpanded(rigFolderKey(rigGroup.id)) ? "rotate-90" : ""
                 }`}
               />
               <FolderIcon className="size-3 shrink-0" />
@@ -986,7 +960,8 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                     disabled={
                       rigGroup.kind === "workspace"
                         ? workspaceMutationInFlight
-                        : props.gcRigMutationsInFlight.has(rigGroup.id)
+                        : props.gcRigMutationsInFlight.has(rigGroup.id) ||
+                          isConfiguredRigActionDisabled(rigGroup)
                     }
                     className={`inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60 ${
                       lifecycle ? "" : "ml-auto"
@@ -1042,7 +1017,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
             </Tooltip>
           </div>
         </SidebarMenuSubItem>
-        {!collapsedRigIds.has(rigGroup.id) &&
+        {isFolderExpanded(rigFolderKey(rigGroup.id)) &&
           (props.gcThreadGroupingMode === "convoy" && rigGroup.threadGroups ? (
             <>
               {rigGroup.agentGroups.map((agentGroup) =>
@@ -1063,7 +1038,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               )}
               {rigGroup.threadGroups.map((threadGroup) => {
                 const groupKey = `${rigGroup.id}:${threadGroup.id}`;
-                const groupCollapsed = collapsedThreadGroupIds.has(groupKey);
+                const groupExpanded = isFolderExpanded(threadGroupFolderKey(groupKey));
                 return (
                   <Fragment key={groupKey}>
                     <SidebarMenuSubItem
@@ -1078,17 +1053,17 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           type="button"
                           data-thread-selection-safe
                           data-testid={`gc-thread-group-toggle-${gcControlTestIdSuffix(groupKey)}`}
-                          aria-expanded={!groupCollapsed}
+                          aria-expanded={groupExpanded}
                           className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md py-0.5 pr-1 transition-colors hover:bg-accent hover:text-foreground"
                           onClick={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
-                            toggleThreadGroup(groupKey);
+                            toggleFolderExpanded(threadGroupFolderKey(groupKey));
                           }}
                         >
                           <ChevronRightIcon
                             className={`size-3 shrink-0 transition-transform ${
-                              groupCollapsed ? "" : "rotate-90"
+                              groupExpanded ? "rotate-90" : ""
                             }`}
                           />
                           <FolderIcon className="size-3 shrink-0" />
@@ -1109,7 +1084,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         </button>
                       </div>
                     </SidebarMenuSubItem>
-                    {!groupCollapsed &&
+                    {groupExpanded &&
                       threadGroup.agentGroups?.map((agentGroup) =>
                         renderAgentGroup(rigGroup, agentGroup, {
                           agentIndentClassName: gcDepthClassName(
@@ -1140,7 +1115,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               }),
             )
           ))}
-        {!collapsedRigIds.has(rigGroup.id) && childRigGroups.length > 0 ? (
+        {isFolderExpanded(rigFolderKey(rigGroup.id)) && childRigGroups.length > 0 ? (
           <SidebarGcFolders
             {...props}
             rigGroups={childRigGroups}

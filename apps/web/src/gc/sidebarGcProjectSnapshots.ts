@@ -21,6 +21,21 @@ function isGcRigProject(
   return Boolean(cwd && gcRigPaths.has(cwd));
 }
 
+function gcOwnedProjectPaths(gcConfig: GcConfigResult | null): Set<string> {
+  const paths = new Set<string>();
+  const workspacePath = normalizeGcProjectPath(gcConfig?.workspace.path);
+  if (workspacePath) {
+    paths.add(workspacePath);
+  }
+  for (const rig of gcConfig?.rigs ?? []) {
+    const rigPath = normalizeGcProjectPath(rig.path);
+    if (rigPath) {
+      paths.add(rigPath);
+    }
+  }
+  return paths;
+}
+
 function environmentPresenceForMember(
   member: Pick<SidebarProjectGroupMember, "environmentId">,
   primaryEnvironmentId: EnvironmentId | null,
@@ -124,5 +139,35 @@ export function splitGcRigProjectSnapshots(input: {
         ? [groupedRemainderSnapshot(snapshot, remainderMembers, input.primaryEnvironmentId)]
         : []),
     ];
+  });
+}
+
+export function filterGcOwnedProjectSnapshots(input: {
+  snapshots: readonly SidebarProjectSnapshot[];
+  gcConfig: GcConfigResult | null;
+  primaryEnvironmentId: EnvironmentId | null;
+}): SidebarProjectSnapshot[] {
+  const gcProjectPaths = gcOwnedProjectPaths(input.gcConfig);
+  if (gcProjectPaths.size === 0) {
+    return [...input.snapshots];
+  }
+
+  return input.snapshots.flatMap((snapshot) => {
+    const members = snapshot.memberProjects;
+    if (members.length === 0) {
+      const cwd = normalizeGcProjectPath(snapshot.cwd);
+      return cwd && gcProjectPaths.has(cwd) ? [] : [snapshot];
+    }
+    const nonGcMembers = members.filter((member) => {
+      const cwd = normalizeGcProjectPath(member.cwd);
+      return !(cwd && gcProjectPaths.has(cwd));
+    });
+    if (nonGcMembers.length === 0) {
+      return [];
+    }
+    if (nonGcMembers.length === members.length) {
+      return [snapshot];
+    }
+    return [groupedRemainderSnapshot(snapshot, nonGcMembers, input.primaryEnvironmentId)];
   });
 }

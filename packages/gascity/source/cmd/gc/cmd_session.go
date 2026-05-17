@@ -645,6 +645,7 @@ func cmdSessionList(stateFilter, templateFilter string, jsonOutput bool, stdout,
 	}
 
 	providerCtx := loadSessionProviderContext()
+	var sp runtime.Provider
 
 	// Launch readyWaitSet concurrently with the shared session-bead load,
 	// but only on the non-JSON path — JSON output returns early and doesn't
@@ -662,18 +663,21 @@ func cmdSessionList(stateFilter, templateFilter string, jsonOutput bool, stdout,
 		}()
 	}
 
-	allSessionBeads, err := store.List(beads.ListQuery{
-		Label:      session.LabelSession,
+	sessionQuery := beads.ListQuery{
+		Type:       sessionBeadType,
+		SkipLabels: true,
 		SkipParent: true,
 		Sort:       beads.SortCreatedDesc,
-	})
+	}
+	if stateFilter == "" {
+		sessionQuery.Status = "open"
+	}
+	allSessionBeads, err := store.List(sessionQuery)
 	if err != nil {
 		fmt.Fprintf(stderr, "gc session list: listing sessions: %v\n", err) //nolint:errcheck // best-effort stderr
 		return 1
 	}
 
-	sessionBeads := newSessionBeadSnapshot(allSessionBeads)
-	sp := newSessionProviderFromContext(providerCtx, sessionBeads)
 	catalog, err := workerSessionCatalogWithConfig("", store, sp, providerCtx.cfg)
 	if err != nil {
 		fmt.Fprintf(stderr, "gc session list: %v\n", err) //nolint:errcheck // best-effort stderr

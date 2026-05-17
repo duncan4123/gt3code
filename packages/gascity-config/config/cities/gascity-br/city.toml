@@ -1,6 +1,6 @@
 [workspace]
 provider = "codex"
-suspended = true
+suspended = false
 install_agent_hooks = ["codex"]
 
 [[rigs]]
@@ -118,13 +118,7 @@ dir = "t3-jj"
 name = "planner"
 suspended = false
 provider = "codex"
-append_fragments = [
-  "beads-rust-backend",
-  "cass-search",
-  "cm-memory",
-  "agent-mail-secondary",
-  "ubs-scan",
-]
+append_fragments = ["beads-rust-backend", "cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]
 wake_mode = "resume"
 max_active_sessions = 1
 min_active_sessions = 0
@@ -134,13 +128,7 @@ dir = "t3-jj"
 name = "worker"
 suspended = false
 provider = "codex"
-append_fragments = [
-  "beads-rust-backend",
-  "cass-search",
-  "cm-memory",
-  "agent-mail-secondary",
-  "ubs-scan",
-]
+append_fragments = ["beads-rust-backend", "cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]
 wake_mode = "resume"
 max_active_sessions = 4
 min_active_sessions = 1
@@ -150,13 +138,7 @@ dir = "t3-jj"
 name = "lander"
 suspended = false
 provider = "codex"
-append_fragments = [
-  "beads-rust-backend",
-  "cass-search",
-  "cm-memory",
-  "agent-mail-secondary",
-  "ubs-scan",
-]
+append_fragments = ["beads-rust-backend", "cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]
 wake_mode = "resume"
 max_active_sessions = 1
 
@@ -165,13 +147,7 @@ dir = "t3-jj"
 name = "sentinel"
 suspended = false
 provider = "codex"
-append_fragments = [
-  "beads-rust-backend",
-  "cass-search",
-  "cm-memory",
-  "agent-mail-secondary",
-  "ubs-scan",
-]
+append_fragments = ["beads-rust-backend", "cass-search", "cm-memory", "agent-mail-secondary", "ubs-scan"]
 max_active_sessions = 1
 
 [[patches.agent]]
