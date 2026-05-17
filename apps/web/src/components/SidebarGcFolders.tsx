@@ -440,7 +440,8 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           props.onWakeAgentSession(agentGroup.qualifiedName);
                         }}
                       >
-                        {props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName) ? (
+                        {actionState?.kind === "wake" ||
+                        props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName) ? (
                           <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
                         ) : (
                           <RotateCcwIcon className="size-3.5 shrink-0" />

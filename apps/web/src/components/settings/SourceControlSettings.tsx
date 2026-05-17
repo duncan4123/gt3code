@@ -93,7 +93,13 @@ function isProviderDiscoveryItem(
 }
 
 function isVcsNotReady(item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem): boolean {
-  return !isProviderDiscoveryItem(item) && !item.implemented;
+  return !isProviderDiscoveryItem(item) && item.status !== "available" && !item.implemented;
+}
+
+function isDiscoveryItemEnabled(
+  item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem,
+): boolean {
+  return item.status === "available" && (isProviderDiscoveryItem(item) || !isVcsNotReady(item));
 }
 
 function authPresentation(auth: SourceControlProviderAuth): {
@@ -218,8 +224,7 @@ function DiscoveryItemRow({
   readonly children?: ReactNode;
 }) {
   const version = optionLabel(item.version);
-  const enabled =
-    item.status === "available" && (isProviderDiscoveryItem(item) || item.implemented);
+  const enabled = isDiscoveryItemEnabled(item);
   const auth = isProviderDiscoveryItem(item) ? item.auth : null;
   const authStatus = auth ? authPresentation(auth) : null;
   const authAccount = auth ? optionLabel(auth.account) : null;

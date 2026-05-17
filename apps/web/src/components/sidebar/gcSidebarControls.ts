@@ -17,8 +17,19 @@ export type GcAgentActionState =
       kind: "suspend";
     }
   | {
+      kind: "wake";
+    }
+  | {
       kind: "pool-size";
       maxActiveSessions: number;
+    }
+  | {
+      kind: "pool-min";
+      minActiveSessions: number;
+    }
+  | {
+      kind: "wake-mode";
+      wakeMode: GcWakeMode;
     }
   | {
       kind: "session-mode";
@@ -124,6 +135,9 @@ export function resolveGcAgentRuntimeState(input: {
   if (actionState?.kind === "suspend") {
     return { label: "Suspending", tone: "warning" };
   }
+  if (actionState?.kind === "wake") {
+    return { label: "Waking", tone: "info" };
+  }
   if (actionState?.kind === "session-mode") {
     return {
       label: actionState.targetMode === "always" ? "Switching to auto" : "Switching to demand",
@@ -133,6 +147,18 @@ export function resolveGcAgentRuntimeState(input: {
   if (actionState?.kind === "pool-size") {
     return {
       label: `Scaling to ${actionState.maxActiveSessions}`,
+      tone: "info",
+    };
+  }
+  if (actionState?.kind === "pool-min") {
+    return {
+      label: `Floor ${actionState.minActiveSessions}`,
+      tone: "info",
+    };
+  }
+  if (actionState?.kind === "wake-mode") {
+    return {
+      label: `Wake ${actionState.wakeMode}`,
       tone: "info",
     };
   }

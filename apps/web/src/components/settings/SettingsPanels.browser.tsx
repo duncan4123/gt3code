@@ -1322,6 +1322,34 @@ describe("SourceControlSettingsPanel discovery states", () => {
     await expect.element(page.getByText("Nothing detected yet")).not.toBeInTheDocument();
   });
 
+  it("does not show available Jujutsu as coming soon when discovery is stale", async () => {
+    setSourceControlDiscoveryStub(async () => ({
+      versionControlSystems: [
+        {
+          kind: "jj",
+          label: "Jujutsu",
+          executable: "jj",
+          implemented: false,
+          status: "available",
+          version: Option.some("jj 0.40.0"),
+          installHint: "Install Jujutsu.",
+          detail: Option.none(),
+        },
+      ],
+      sourceControlProviders: [],
+    }));
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <SourceControlSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await expect.element(page.getByRole("switch", { name: "Jujutsu availability" })).toBeDisabled();
+    await expect.element(page.getByText("Coming Soon")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Available")).toBeInTheDocument();
+  });
+
   it("shows Git fetch interval settings inside the Git details dropdown", async () => {
     setSourceControlDiscoveryStub(async () => ({
       versionControlSystems: [

@@ -147,6 +147,11 @@ function mapProjectScripts(scripts: ReadonlyArray<Project["scripts"][number]>): 
   return scripts.map((script) => ({ ...script }));
 }
 
+function readThreadCustomMetadata(thread: unknown): Record<string, string> | undefined {
+  return (thread as { readonly customMetadata?: Record<string, string> | undefined })
+    .customMetadata;
+}
+
 function mapSession(session: OrchestrationSession): ThreadSession {
   return {
     provider: toLegacyProvider(session.providerName),
@@ -231,6 +236,7 @@ function mapProject(
 }
 
 function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): Thread {
+  const customMetadata = readThreadCustomMetadata(thread);
   return {
     id: thread.id,
     environmentId,
@@ -251,6 +257,7 @@ function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): T
     pendingSourceProposedPlan: thread.latestTurn?.sourceProposedPlan,
     branch: thread.branch,
     worktreePath: thread.worktreePath,
+    ...(customMetadata ? { customMetadata: { ...customMetadata } } : {}),
     turnDiffSummaries: thread.checkpoints.map(mapTurnDiffSummary),
     activities: thread.activities.map((activity) => ({ ...activity })),
   };
@@ -280,6 +287,7 @@ function mapThreadShell(
     updatedAt: thread.updatedAt,
     branch: thread.branch,
     worktreePath: thread.worktreePath,
+    ...(thread.customMetadata ? { customMetadata: { ...thread.customMetadata } } : {}),
   };
   const session = thread.session ? mapSession(thread.session) : null;
   const turnState: ThreadTurnState = {
@@ -299,6 +307,7 @@ function mapThreadShell(
     latestTurn: thread.latestTurn,
     branch: thread.branch,
     worktreePath: thread.worktreePath,
+    ...(thread.customMetadata ? { customMetadata: { ...thread.customMetadata } } : {}),
     latestUserMessageAt: thread.latestUserMessageAt,
     hasPendingApprovals: thread.hasPendingApprovals,
     hasPendingUserInput: thread.hasPendingUserInput,
@@ -328,6 +337,7 @@ function toThreadShell(thread: Thread): ThreadShell {
     updatedAt: thread.updatedAt,
     branch: thread.branch,
     worktreePath: thread.worktreePath,
+    ...(thread.customMetadata ? { customMetadata: { ...thread.customMetadata } } : {}),
   };
 }
 
