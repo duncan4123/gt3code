@@ -61,6 +61,7 @@ function truncateOutput(
   }
 
   let text = value;
+  // Trim progressively so we avoid splitting multibyte output in one hard cut.
   while (Buffer.byteLength(text) > maxOutputBytes) {
     text = text.slice(0, Math.max(0, Math.floor(text.length * 0.9)));
   }

@@ -85,7 +85,7 @@ model = "kimi-for-coding/k2p6"
 [[agent]]
 name = "codex"
 dir = "t3code"
-suspended = true
+suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "codex"
 max_active_sessions = 5
@@ -189,7 +189,6 @@ suspended = false
 agent = "witness"
 suspended = false
 
-
 [[rigs.overrides]]
 agent = "lander"
 suspended = false
@@ -205,6 +204,7 @@ suspended = false
 [[rigs.overrides]]
 agent = "worker"
 suspended = false
+
 [[rigs]]
 name = "test-rig"
 prefix = "tr"
