@@ -112,4 +112,21 @@ it.layer(NodeServices.layer)("ServerAuthPolicyLive", (it) => {
       ),
     ),
   );
+
+  it.effect("uses unsafe-no-auth policy when explicitly enabled", () =>
+    Effect.gen(function* () {
+      const policy = yield* ServerAuthPolicy;
+      const descriptor = yield* policy.getDescriptor();
+
+      expect(descriptor.policy).toBe("unsafe-no-auth");
+      expect(descriptor.bootstrapMethods).toEqual([]);
+      expect(descriptor.sessionMethods).toEqual([]);
+    }).pipe(
+      Effect.provide(
+        makeServerAuthPolicyLayer({
+          unsafeNoAuth: true,
+        }),
+      ),
+    ),
+  );
 });

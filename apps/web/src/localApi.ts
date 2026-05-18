@@ -169,6 +169,10 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
         rpcClient
           ? rpcClient.orchestration.dispatchCommand(command)
           : Promise.reject(unavailableLocalBackendError()),
+      searchThreadMessages: (input) =>
+        rpcClient
+          ? rpcClient.orchestration.searchThreadMessages(input)
+          : Promise.reject(unavailableLocalBackendError()),
     },
     gc: {
       getConfig: (input) =>
@@ -180,6 +184,10 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
       getThreadContext: (input) =>
         rpcClient
           ? rpcClient.gc.getThreadContext(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      wakeSession: (input) =>
+        rpcClient
+          ? rpcClient.gc.wakeSession(input)
           : Promise.reject(unavailableLocalBackendError()),
       setAgentSuspended: (input) =>
         rpcClient

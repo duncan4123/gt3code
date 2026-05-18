@@ -20,7 +20,7 @@ export default mergeConfig(
       strictPort: false,
     },
     test: {
-      include: ["src/components/**/*.browser.tsx"],
+      include: ["src/components/**/*.browser.tsx", "src/gc/**/*.browser.tsx"],
       browser: {
         enabled: true,
         provider: playwright(),

@@ -293,6 +293,76 @@ export function orderItemsByPreferredIds<TItem, TId>(input: {
   return [...ordered, ...remaining];
 }
 
+export interface SidebarThreadSearchHit {
+  readonly threadId: string;
+  readonly snippet: string;
+}
+
+export interface SidebarThreadSearchState {
+  readonly isFiltering: boolean;
+  readonly matchingThreadIds: ReadonlySet<string>;
+  readonly snippetByThreadId: ReadonlyMap<string, string>;
+  readonly matchingProjectIds: ReadonlySet<string>;
+}
+
+export function normalizeThreadSearchQuery(query: string): string | null {
+  const terms = query
+    .trim()
+    .split(/\s+/)
+    .map((term) => term.replaceAll('"', "").trim())
+    .filter((term) => term.length > 0);
+
+  return terms.length > 0 ? terms.map((term) => `"${term}"`).join(" ") : null;
+}
+
+export function resolveSidebarThreadSearch(input: {
+  readonly query: string;
+  readonly threads: readonly { id: string; projectId: string; title: string }[];
+  readonly ftsHits: readonly SidebarThreadSearchHit[];
+}): SidebarThreadSearchState {
+  const trimmedQuery = input.query.trim();
+  if (trimmedQuery.length === 0) {
+    return {
+      isFiltering: false,
+      matchingThreadIds: new Set(),
+      snippetByThreadId: new Map(),
+      matchingProjectIds: new Set(),
+    };
+  }
+
+  const loweredQuery = trimmedQuery.toLowerCase();
+  const matchingThreadIds = new Set<string>();
+  const snippetByThreadId = new Map<string, string>();
+  const matchingProjectIds = new Set<string>();
+  const threadProjectById = new Map(
+    input.threads.map((thread) => [thread.id, thread.projectId] as const),
+  );
+
+  for (const hit of input.ftsHits) {
+    matchingThreadIds.add(hit.threadId);
+    const projectId = threadProjectById.get(hit.threadId);
+    if (projectId) {
+      matchingProjectIds.add(projectId);
+    }
+    if (!snippetByThreadId.has(hit.threadId)) {
+      snippetByThreadId.set(hit.threadId, hit.snippet);
+    }
+  }
+  for (const thread of input.threads) {
+    if (thread.title.toLowerCase().includes(loweredQuery)) {
+      matchingThreadIds.add(thread.id);
+      matchingProjectIds.add(thread.projectId);
+    }
+  }
+
+  return {
+    isFiltering: true,
+    matchingThreadIds,
+    snippetByThreadId,
+    matchingProjectIds,
+  };
+}
+
 export function getVisibleSidebarThreadIds<TThreadId>(
   renderedProjects: readonly {
     shouldShowThreadPanel?: boolean;

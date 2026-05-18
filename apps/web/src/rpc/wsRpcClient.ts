@@ -147,6 +147,9 @@ export interface WsRpcClient {
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
     readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
     readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
+    readonly searchThreadMessages: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.searchThreadMessages
+    >;
     readonly getArchivedShellSnapshot: RpcUnaryNoArgMethod<
       typeof ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot
     >;
@@ -157,6 +160,7 @@ export interface WsRpcClient {
     readonly getConfig: RpcUnaryMethod<typeof WS_METHODS.gcGetConfig>;
     readonly findThreadBinding: RpcUnaryMethod<typeof WS_METHODS.gcFindThreadBinding>;
     readonly getThreadContext: RpcUnaryMethod<typeof WS_METHODS.gcGetThreadContext>;
+    readonly wakeSession: RpcUnaryMethod<typeof WS_METHODS.gcWakeSession>;
     readonly setAgentSuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetAgentSuspended>;
     readonly setAgentMaxActiveSessions: RpcUnaryMethod<
       typeof WS_METHODS.gcSetAgentMaxActiveSessions
@@ -318,6 +322,8 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getTurnDiff](input)),
       getFullThreadDiff: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getFullThreadDiff](input)),
+      searchThreadMessages: (input) =>
+        transport.request((client) => client[ORCHESTRATION_WS_METHODS.searchThreadMessages](input)),
       getArchivedShellSnapshot: () =>
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot]({}),
@@ -341,6 +347,8 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.gcFindThreadBinding](input)),
       getThreadContext: (input) =>
         transport.request((client) => client[WS_METHODS.gcGetThreadContext](input)),
+      wakeSession: (input) =>
+        transport.request((client) => client[WS_METHODS.gcWakeSession](input)),
       setAgentSuspended: (input) =>
         transport.request((client) => client[WS_METHODS.gcSetAgentSuspended](input)),
       setAgentMaxActiveSessions: (input) =>

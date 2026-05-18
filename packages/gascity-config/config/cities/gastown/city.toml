@@ -156,7 +156,7 @@ suspended = false
 [[rigs]]
 name = "beads-doltlite"
 prefix = "bd"
-suspended = false
+suspended = true
 includes = ["../../packs/gastown"]
 
 [[rigs.overrides]]
@@ -208,7 +208,7 @@ suspended = false
 [[rigs]]
 name = "test-rig"
 prefix = "tr"
-suspended = false
+suspended = true
 includes = ["../../packs/gastown", "packs/jj"]
 
 [[rigs.overrides]]

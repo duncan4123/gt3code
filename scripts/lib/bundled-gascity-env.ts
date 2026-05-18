@@ -79,6 +79,14 @@ function resolveGcApiUrl(baseEnv: NodeJS.ProcessEnv, gascityHome: string, path: 
   }
 }
 
+function normalizeT3WsUrl(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed.endsWith("/ws") ? trimmed : `${trimmed.replace(/\/$/, "")}/ws`;
+}
+
 export function createBundledGascityProcessEnv({
   baseEnv,
   t3Home,
@@ -87,12 +95,11 @@ export function createBundledGascityProcessEnv({
     const path = yield* Path.Path;
     const resolvedBaseDir = yield* resolveBaseDir(t3Home ?? baseEnv.T3CODE_HOME);
     const gascityHome =
-      baseEnv.T3CODE_GASCITY_HOME?.trim() ||
-      baseEnv.GC_HOME?.trim() ||
-      DEFAULT_T3CODE_GASCITY_HOME;
+      baseEnv.T3CODE_GASCITY_HOME?.trim() || baseEnv.GC_HOME?.trim() || DEFAULT_T3CODE_GASCITY_HOME;
     const worktreesDir =
       baseEnv.T3CODE_WORKTREES_DIR?.trim() || path.join(resolvedBaseDir, "worktrees");
     const cityPath = baseEnv.GC_CITY_PATH ?? baseEnv.GC_CITY ?? DEFAULT_GC_CITY_PATH;
+    const t3WsUrl = normalizeT3WsUrl(baseEnv.T3_WS_URL) ?? normalizeT3WsUrl(baseEnv.VITE_WS_URL);
     const env = { ...baseEnv } satisfies NodeJS.ProcessEnv;
     if (cityPath && usesDoltliteBeadsBackend(cityPath)) {
       env.GC_BEADS_BACKEND ??= "doltlite";
@@ -102,6 +109,7 @@ export function createBundledGascityProcessEnv({
 
     const output: NodeJS.ProcessEnv = {
       ...env,
+      T3_HOME: baseEnv.T3_HOME?.trim() || resolvedBaseDir,
       T3CODE_HOME: resolvedBaseDir,
       T3CODE_GASCITY_HOME: gascityHome,
       GC_HOME: gascityHome,
@@ -115,6 +123,9 @@ export function createBundledGascityProcessEnv({
         baseEnv.BD_BIN ??
         path.join(gascityHome, "bin", process.platform === "win32" ? "bd.exe" : "bd"),
     };
+    if (t3WsUrl) {
+      output.T3_WS_URL = t3WsUrl;
+    }
     if (cityPath) {
       output.GC_CITY_PATH = cityPath;
     }

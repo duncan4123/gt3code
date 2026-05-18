@@ -10,6 +10,7 @@ import {
   OrchestrationGetSnapshotError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_WS_METHODS,
+  OrchestrationSearchThreadMessagesError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   OrchestrationReplayEventsError,
@@ -484,6 +485,23 @@ const WsRpcLayer = WsRpcGroup.toLayer(
               (cause) =>
                 new OrchestrationGetSnapshotError({
                   message: "Failed to load orchestration shell snapshot",
+                  cause,
+                }),
+            ),
+          ),
+          { "rpc.aggregate": "orchestration" },
+        ),
+      [ORCHESTRATION_WS_METHODS.searchThreadMessages]: (input) =>
+        observeRpcEffect(
+          ORCHESTRATION_WS_METHODS.searchThreadMessages,
+          (projectionSnapshotQuery.searchThreadMessages
+            ? projectionSnapshotQuery.searchThreadMessages(input.query, input.limit)
+            : Effect.succeed({ results: [] })
+          ).pipe(
+            Effect.mapError(
+              (cause) =>
+                new OrchestrationSearchThreadMessagesError({
+                  message: "Failed to search thread messages",
                   cause,
                 }),
             ),

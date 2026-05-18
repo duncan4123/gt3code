@@ -110,11 +110,12 @@ interface SidebarGcFoldersProps {
   ) => void;
   onAdjustAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
-  onWakeAgentSession: (agent: string) => void;
+  onWakeAgentSession?: (agent: string) => void;
   onToggleAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
   onSetSupervisorRunning?: (city: string, running: boolean) => void;
   onSetControllerRunning?: (city: string, running: boolean) => void;
+  renderWorkspaceRows?: (workspaceId: string) => ReactNode;
   renderThreadRows: (threadIds: readonly ThreadId[], indentClassName?: string) => ReactNode;
 }
 
@@ -301,6 +302,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   const threadIndentClassName = gcDepthClassName(indentDepth, THREAD_INDENT_CLASSES);
 
   const rigFolderKey = (rigId: string) => `rig:${rigId}`;
+  const workspaceFolderKey = (rigId: string) => `workspace:${rigId}`;
   const agentFolderKey = (agentId: string) => `agent:${agentId}`;
   const threadGroupFolderKey = (groupId: string) => `thread-group:${groupId}`;
   const isFolderExpanded = (folderId: string) =>
@@ -361,7 +363,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
     const canDecreasePoolMaximum =
       canAdjustPoolMaximum &&
       (maxActiveSessions ?? 0) > Math.max(0, agentGroup.minActiveSessions ?? 0);
+    const canShowWakeSession = Boolean(props.onWakeAgentSession) && canWakeAgentSession(agentGroup);
     const canWakeSession =
+      canShowWakeSession &&
       canWakeAgentSession(agentGroup) &&
       !rigGroup.isSuspended &&
       !isMutating &&
@@ -405,7 +409,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               <span className="truncate text-xs font-medium leading-none">{agentGroup.label}</span>
             </button>
             <div className="ml-auto flex items-center gap-1" data-thread-selection-safe>
-              {canWakeAgentSession(agentGroup) ? (
+              {canShowWakeSession ? (
                 <Tooltip>
                   <TooltipTrigger
                     render={
@@ -420,7 +424,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
-                          props.onWakeAgentSession(agentGroup.qualifiedName);
+                          props.onWakeAgentSession?.(agentGroup.qualifiedName);
                         }}
                       >
                         {actionState?.kind === "wake" ||
@@ -863,7 +867,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
             threadGroupIndentClassName: agentFolderIndentClassName,
             threadIndentClassName,
           })}
-          {childRigGroups.length > 0 ? (
+          {isFolderExpanded(rigFolderKey(rigGroup.id)) && childRigGroups.length > 0 ? (
             <SidebarGcFolders
               {...props}
               rigGroups={childRigGroups}
@@ -915,6 +919,114 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 rigGroup.agentGroups.map((agentGroup) => agentGroup.runtimeState),
                 { suspended: rigGroup.isSuspended },
               );
+    const renderDirectAgentGroups = (keyPrefix?: string) =>
+      rigGroup.agentGroups.map((agentGroup) =>
+        renderAgentGroup(rigGroup, agentGroup, {
+          agentIndentClassName: agentFolderIndentClassName,
+          threadGroupIndentClassName,
+          threadIndentClassName,
+          ...(keyPrefix ? { keyPrefix } : {}),
+        }),
+      );
+    const renderWorkspaceAgentFolder = () => {
+      if (rigGroup.kind !== "workspace" || rigGroup.agentGroups.length === 0) {
+        return null;
+      }
+      const workspaceKey = workspaceFolderKey(rigGroup.id);
+      const workspaceExpanded = isFolderExpanded(workspaceKey);
+      return (
+        <Fragment key={`workspace-${rigGroup.id}`}>
+          <SidebarMenuSubItem className="w-full" data-thread-selection-safe>
+            <div
+              className={`flex items-center gap-1.5 py-0.5 text-muted-foreground/60 ${agentFolderIndentClassName}`}
+            >
+              <button
+                type="button"
+                data-thread-selection-safe
+                aria-expanded={workspaceExpanded}
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md py-0.5 pr-1 transition-colors hover:bg-accent hover:text-foreground"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  toggleFolderExpanded(workspaceKey);
+                }}
+              >
+                <ChevronRightIcon
+                  className={`size-3 shrink-0 transition-transform ${
+                    workspaceExpanded ? "rotate-90" : ""
+                  }`}
+                />
+                <FolderIcon className="size-3 shrink-0" />
+                <span className="truncate text-[11px] font-medium leading-none">workspace</span>
+              </button>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      data-thread-selection-safe
+                      data-testid={`gc-workspace-action-${gcControlTestIdSuffix(rigGroup.id)}`}
+                      data-gc-action-icon={
+                        workspaceMutationInFlight
+                          ? "loading"
+                          : rigGroup.isSuspended
+                            ? "play"
+                            : "stop"
+                      }
+                      aria-label={gcConfigToggleLabel(
+                        "workspace",
+                        `${displayLabel} workspace`,
+                        rigGroup.isSuspended,
+                      )}
+                      disabled={workspaceMutationInFlight}
+                      className="ml-auto inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (cityFolderUsesRigAction) {
+                          props.onToggleRigSuspended(
+                            rigGroup.id,
+                            !rigGroup.isSuspended,
+                            rigGroup.agentGroups,
+                          );
+                          return;
+                        }
+                        props.onToggleCitySuspended(!rigGroup.isSuspended, rigGroup.agentGroups);
+                      }}
+                    >
+                      {workspaceMutationInFlight ? (
+                        <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
+                      ) : rigGroup.isSuspended ? (
+                        <PlayIcon className="size-3.5 shrink-0" />
+                      ) : (
+                        <SquareIcon className="size-3.5 shrink-0" />
+                      )}
+                    </button>
+                  }
+                />
+                <TooltipPopup side="top">
+                  <div className="space-y-1">
+                    <div>
+                      {gcConfigToggleLabel(
+                        "workspace",
+                        `${displayLabel} workspace`,
+                        rigGroup.isSuspended,
+                      )}
+                    </div>
+                    {rigGroup.isSuspended ? (
+                      <div className="max-w-56 text-[10px] text-muted-foreground">
+                        {workspaceSuspensionHint}
+                      </div>
+                    ) : null}
+                  </div>
+                </TooltipPopup>
+              </Tooltip>
+            </div>
+          </SidebarMenuSubItem>
+          {workspaceExpanded ? renderDirectAgentGroups(`${rigGroup.id}:workspace:`) : null}
+        </Fragment>
+      );
+    };
     return (
       <Fragment key={`rig-${rigGroup.id}`}>
         <SidebarMenuSubItem
@@ -1231,15 +1343,14 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                 );
               })}
             </>
+          ) : rigGroup.kind === "workspace" ? (
+            renderWorkspaceAgentFolder()
           ) : (
-            rigGroup.agentGroups.map((agentGroup) =>
-              renderAgentGroup(rigGroup, agentGroup, {
-                agentIndentClassName: agentFolderIndentClassName,
-                threadGroupIndentClassName,
-                threadIndentClassName,
-              }),
-            )
+            renderDirectAgentGroups()
           ))}
+        {isFolderExpanded(rigFolderKey(rigGroup.id)) && rigGroup.kind === "workspace"
+          ? props.renderWorkspaceRows?.(rigGroup.id)
+          : null}
         {isFolderExpanded(rigFolderKey(rigGroup.id)) && childRigGroups.length > 0 ? (
           <SidebarGcFolders
             {...props}

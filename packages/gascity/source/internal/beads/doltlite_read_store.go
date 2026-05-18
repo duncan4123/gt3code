@@ -434,19 +434,32 @@ func (s *DoltliteReadStore) HasOpenOrderRun(name string) (bool, error) {
 }
 
 func (s *DoltliteReadStore) currentDoltHash() (string, error) {
-	var hash sql.NullString
-	if err := s.db.QueryRow("SELECT dolt_hashof('HEAD')").Scan(&hash); err != nil {
-		return "", fmt.Errorf("doltlite hash HEAD: %w", err)
-	}
-	head := ""
-	if hash.Valid {
-		head = strings.TrimSpace(hash.String)
-	}
 	var dataVersion int64
 	if err := s.db.QueryRow("PRAGMA data_version").Scan(&dataVersion); err != nil {
 		return "", fmt.Errorf("doltlite data version: %w", err)
 	}
-	return fmt.Sprintf("head=%s;data=%d", head, dataVersion), nil
+
+	var issueCount int64
+	var issueMaxUpdated sql.NullString
+	if err := s.db.QueryRow("SELECT COUNT(*), MAX(updated_at) FROM issues").Scan(&issueCount, &issueMaxUpdated); err != nil {
+		return "", fmt.Errorf("doltlite issues fingerprint: %w", err)
+	}
+
+	var labelCount int64
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM labels").Scan(&labelCount); err != nil {
+		return "", fmt.Errorf("doltlite labels fingerprint: %w", err)
+	}
+
+	var depCount int64
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM dependencies").Scan(&depCount); err != nil {
+		return "", fmt.Errorf("doltlite dependencies fingerprint: %w", err)
+	}
+
+	updated := ""
+	if issueMaxUpdated.Valid {
+		updated = strings.TrimSpace(issueMaxUpdated.String)
+	}
+	return fmt.Sprintf("data=%d;issues=%d:%s;labels=%d;deps=%d", dataVersion, issueCount, updated, labelCount, depCount), nil
 }
 
 func (s *DoltliteReadStore) resetOrderRunCache() {

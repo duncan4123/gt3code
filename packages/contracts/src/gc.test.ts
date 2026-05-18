@@ -566,6 +566,67 @@ describe("groupThreadsByRigAndAgent", () => {
     expect(rigGroups[1]?.agentGroups[0]?.qualifiedName).toBe("t3code/gastown.crew");
   });
 
+  it("keeps rig-qualified worker sessions under their rig when stale metadata says workspace", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-worker",
+          customMetadata: {
+            "gc.agent": "t3code/worker",
+            "gc.agentQualified": "t3code/worker",
+            "gc.agentLabel": "worker",
+            "gc.city": "gc",
+            "gc.groupKind": "workspace",
+            "gc.groupId": "gc",
+            "gc.groupLabel": "GC",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "gastown",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "t3code",
+              path: "/data/projects/t3code",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "worker",
+              dir: "t3code",
+              suspended: false,
+              is_pool: true,
+            },
+          ],
+        },
+        projectCwd: "/data/projects/t3code",
+        projectName: "t3code",
+      },
+    );
+
+    expect(standaloneThreads).toEqual([]);
+    expect(rigGroups).toHaveLength(1);
+    expect(rigGroups[0]).toMatchObject({
+      id: "t3code",
+      kind: "rig",
+    });
+    expect(rigGroups[0]?.agentGroups).toHaveLength(1);
+    expect(rigGroups[0]?.agentGroups[0]).toMatchObject({
+      label: "worker",
+      qualifiedName: "t3code/worker",
+      isConfigured: true,
+      isPool: true,
+    });
+    expect(rigGroups[0]?.agentGroups[0]?.threads.map((thread) => thread.id)).toEqual([
+      "thread-worker",
+    ]);
+  });
+
   it("treats merged multicity root dirs as city folders without a synthetic cities group", () => {
     const { rigGroups } = groupThreadsByRigAndAgent([], {
       config: {
@@ -1126,5 +1187,56 @@ describe("groupThreadsByRigAndAgent", () => {
       wakeMode: "fresh",
     });
     expect(rigGroups[0]?.agentGroups[0]?.namedSessionMode).toBeUndefined();
+  });
+
+  it("does not let stale workspace metadata relabel configured city folders", () => {
+    const { rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          customMetadata: {
+            "gc.city": "gascity-br",
+            "gc.groupId": "gascity-br",
+            "gc.groupLabel": "GASTOWN",
+            "gc.groupKind": "workspace",
+            "gc.agent": "mayor",
+            "gc.agentQualified": "gascity-br/mayor",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "cities",
+            path: "/repo/packages/gascity-config/config/cities",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "gascity-br",
+              path: "/repo/packages/gascity-config/config/cities/gascity-br",
+              suspended: false,
+            },
+            {
+              name: "gascity-br/t3-jj",
+              path: "/repo/packages/gascity-config/config/cities/gascity-br/rigs/t3code",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "mayor",
+              dir: "gascity-br",
+              suspended: false,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(rigGroups.find((group) => group.id === "gascity-br")).toMatchObject({
+      label: "GASCITY-BR",
+      kind: "workspace",
+    });
   });
 });

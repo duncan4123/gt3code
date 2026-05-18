@@ -15,6 +15,8 @@ import {
   resolveProjectStatusIndicator,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
+  resolveSidebarThreadSearch,
+  normalizeThreadSearchQuery,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
@@ -36,6 +38,32 @@ import {
 } from "../types";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
+
+describe("normalizeThreadSearchQuery", () => {
+  it("quotes FTS terms and ignores empty terms", () => {
+    expect(normalizeThreadSearchQuery('  alpha  "beta"  ')).toBe('"alpha" "beta"');
+    expect(normalizeThreadSearchQuery("   ")).toBeNull();
+  });
+});
+
+describe("resolveSidebarThreadSearch", () => {
+  it("combines title matches with FTS message hits", () => {
+    const state = resolveSidebarThreadSearch({
+      query: "needle",
+      threads: [
+        { id: "thread-title", projectId: "project-title", title: "Needle in title" },
+        { id: "thread-message", projectId: "project-message", title: "Other" },
+        { id: "thread-miss", projectId: "project-miss", title: "Other" },
+      ],
+      ftsHits: [{ threadId: "thread-message", snippet: "needle in message" }],
+    });
+
+    expect(state.isFiltering).toBe(true);
+    expect([...state.matchingThreadIds].sort()).toEqual(["thread-message", "thread-title"]);
+    expect([...state.matchingProjectIds].sort()).toEqual(["project-message", "project-title"]);
+    expect(state.snippetByThreadId.get("thread-message")).toBe("needle in message");
+  });
+});
 
 function makeLatestTurn(overrides?: {
   completedAt?: string | null;

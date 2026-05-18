@@ -57,6 +57,8 @@ import type {
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
+  OrchestrationSearchThreadMessagesInput,
+  OrchestrationSearchThreadMessagesResult,
   OrchestrationShellSnapshot,
   OrchestrationShellStreamItem,
   OrchestrationSubscribeThreadInput,
@@ -92,6 +94,7 @@ import type {
   GcSetRigSuspendedInput,
   GcThreadContextResult,
   GcConfigResult,
+  GcWakeSessionInput,
 } from "./gc.ts";
 
 export interface ContextMenuItem<T extends string = string> {
@@ -500,11 +503,15 @@ export interface LocalApi {
   };
   orchestration: {
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
+    searchThreadMessages: (
+      input: OrchestrationSearchThreadMessagesInput,
+    ) => Promise<OrchestrationSearchThreadMessagesResult>;
   };
   gc: {
     getConfig: (input: GcGetConfigInput) => Promise<GcConfigResult>;
     findThreadBinding: (input: GcFindThreadBindingInput) => Promise<GcFindThreadBindingResult>;
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
+    wakeSession: (input: GcWakeSessionInput) => Promise<GcSessionActionResult>;
     setAgentSuspended: (input: GcSetAgentSuspendedInput) => Promise<GcSessionActionResult>;
     setAgentMaxActiveSessions: (
       input: GcSetAgentMaxActiveSessionsInput,
@@ -585,6 +592,9 @@ export interface EnvironmentApi {
     getFullThreadDiff: (
       input: OrchestrationGetFullThreadDiffInput,
     ) => Promise<OrchestrationGetFullThreadDiffResult>;
+    searchThreadMessages: (
+      input: OrchestrationSearchThreadMessagesInput,
+    ) => Promise<OrchestrationSearchThreadMessagesResult>;
     getArchivedShellSnapshot: () => Promise<OrchestrationShellSnapshot>;
     subscribeShell: (
       callback: (event: OrchestrationShellStreamItem) => void,

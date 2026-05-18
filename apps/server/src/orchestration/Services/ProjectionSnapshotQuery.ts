@@ -12,6 +12,7 @@ import type {
   OrchestrationProject,
   OrchestrationProjectShell,
   OrchestrationReadModel,
+  OrchestrationSearchThreadMessagesResult,
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadShell,
@@ -163,6 +164,11 @@ export interface ProjectionSnapshotQueryShape {
     OrchestrationShellSnapshot,
     ProjectionRepositoryError
   >;
+
+  readonly searchThreadMessages?: (
+    query: string,
+    limit: number,
+  ) => Effect.Effect<OrchestrationSearchThreadMessagesResult, ProjectionRepositoryError>;
 }
 
 /**

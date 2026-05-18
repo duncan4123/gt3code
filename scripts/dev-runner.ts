@@ -3,6 +3,8 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@t3tools/shared/Net";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join as joinPath } from "node:path";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -124,6 +126,33 @@ function resolveBaseDir(baseDir: string | undefined): Effect.Effect<string, neve
   });
 }
 
+function normalizeWsUrlForT3Bridge(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed.endsWith("/ws") ? trimmed : `${trimmed.replace(/\/$/, "")}/ws`;
+}
+
+function writeT3BridgeWsUrlHint(env: NodeJS.ProcessEnv): Effect.Effect<void, DevRunnerError> {
+  return Effect.try({
+    try: () => {
+      const baseDir = env.T3CODE_HOME?.trim();
+      const wsUrl = normalizeWsUrlForT3Bridge(env.T3_WS_URL ?? env.VITE_WS_URL);
+      if (!baseDir || !wsUrl) {
+        return;
+      }
+      mkdirSync(baseDir, { recursive: true });
+      writeFileSync(joinPath(baseDir, "ws-url"), `${wsUrl}\n`);
+    },
+    catch: (cause) =>
+      new DevRunnerError({
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
+  });
+}
+
 interface CreateDevRunnerEnvInput {
   readonly mode: DevMode;
   readonly baseEnv: NodeJS.ProcessEnv;
@@ -203,11 +232,13 @@ export function createDevRunnerEnv({
 
     if (mode === "dev") {
       output.T3CODE_MODE = "web";
+      output.T3CODE_UNSAFE_NO_AUTH = "1";
       delete output.T3CODE_DESKTOP_WS_URL;
     }
 
     if (mode === "dev:server" || mode === "dev:web") {
       output.T3CODE_MODE = "web";
+      output.T3CODE_UNSAFE_NO_AUTH = "1";
       delete output.T3CODE_DESKTOP_WS_URL;
     }
 
@@ -440,6 +471,8 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     if (input.dryRun) {
       return;
     }
+
+    yield* writeT3BridgeWsUrlHint(env);
 
     const child = yield* ChildProcess.make(
       "turbo",

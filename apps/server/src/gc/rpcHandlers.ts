@@ -12,6 +12,7 @@ import {
   GcSetRigSuspendedError,
   GcStopSessionError,
   GcSubmitSessionError,
+  GcWakeSessionError,
   parseGcMeta,
   ThreadId,
   WS_METHODS,
@@ -141,6 +142,20 @@ export const makeGcRpcHandlers = ({
         Effect.flatMap((sessionName) => gcApiClient.stopSession(sessionName)),
         Effect.mapError((cause) => new GcStopSessionError({ message: messageFromUnknown(cause) })),
       ),
+      { "rpc.aggregate": "gc" },
+    ),
+  [WS_METHODS.gcWakeSession]: (input: { readonly sessionName: string }) =>
+    observeRpcEffect(
+      WS_METHODS.gcWakeSession,
+      gcApiClient
+        .wakeSession(input.sessionName)
+        .pipe(
+          Effect.mapError((cause) =>
+            Schema.is(GcWakeSessionError)(cause)
+              ? cause
+              : new GcWakeSessionError({ message: messageFromUnknown(cause) }),
+          ),
+        ),
       { "rpc.aggregate": "gc" },
     ),
   [WS_METHODS.gcRespondToPending]: (input: {

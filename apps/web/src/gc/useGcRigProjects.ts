@@ -30,7 +30,9 @@ function projectNameFromRigName(rigName: string): string {
   return rigName;
 }
 
-function configuredWorkspaceRigNames(rigs: readonly GcConfigResult["rigs"][number][]): Set<string> {
+export function configuredWorkspaceRigNames(
+  rigs: readonly GcConfigResult["rigs"][number][],
+): Set<string> {
   const rigNames = new Set(rigs.map((rig) => rig.name.trim()).filter(Boolean));
   const workspaceRigNames = new Set<string>();
   for (const rigName of rigNames) {
@@ -46,7 +48,7 @@ function configuredWorkspaceRigNames(rigs: readonly GcConfigResult["rigs"][numbe
   return workspaceRigNames;
 }
 
-function resolveMissingGcRigProjects(input: {
+export function resolveMissingGcRigProjects(input: {
   projects: readonly GcRigProject[];
   gcConfig: GcConfigResult | null;
   pendingCwds: ReadonlySet<string>;
@@ -63,7 +65,8 @@ function resolveMissingGcRigProjects(input: {
   const workspaceRigNames = configuredWorkspaceRigNames(input.gcConfig.rigs);
 
   return input.gcConfig.rigs.filter((rig) => {
-    if (workspaceRigNames.has(rig.name)) {
+    const rigName = rig.name.trim();
+    if (workspaceRigNames.has(rigName)) {
       return false;
     }
     if (rig.isRepository !== true) {

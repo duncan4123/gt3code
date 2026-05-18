@@ -1,11 +1,12 @@
-import { memo, useState } from "react";
+import { memo, type ReactNode, useState } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { SidebarMenuSub } from "../components/ui/sidebar";
 import { SidebarGcFolders, type SidebarGcRigGroup } from "./SidebarGcFolders";
-import type { GcAgentActionState } from "./sidebar/gcSidebarControls";
+import type { GcAgentActionState, GcWakeMode } from "./sidebar/gcSidebarControls";
 
 interface GcSidebarGlobalSectionProps {
   rigGroups: readonly SidebarGcRigGroup[];
+  renderWorkspaceRows?: (workspaceId: string) => ReactNode;
   gcAgentMutationsInFlight: ReadonlySet<string>;
   gcAgentStartsInFlight: ReadonlySet<string>;
   gcRigMutationsInFlight: ReadonlySet<string>;
@@ -27,7 +28,10 @@ interface GcSidebarGlobalSectionProps {
     suspended: boolean,
     agentGroup: SidebarGcRigGroup["agentGroups"][number],
   ) => void;
+  onAdjustAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onWakeAgentSession: (agent: string) => void;
+  onToggleAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
 
@@ -71,11 +75,12 @@ export const GcSidebarGlobalSection = memo(function GcSidebarGlobalSection(
             onToggleCitySuspended={props.onToggleCitySuspended}
             onToggleRigSuspended={props.onToggleRigSuspended}
             onToggleAgentSuspended={props.onToggleAgentSuspended}
-            onAdjustAgentMinActiveSessions={() => undefined}
+            onAdjustAgentMinActiveSessions={props.onAdjustAgentMinActiveSessions}
             onAdjustAgentMaxActiveSessions={props.onAdjustAgentMaxActiveSessions}
-            onWakeAgentSession={() => undefined}
-            onToggleAgentWakeMode={() => undefined}
+            onWakeAgentSession={props.onWakeAgentSession}
+            onToggleAgentWakeMode={props.onToggleAgentWakeMode}
             onToggleAgentSessionMode={props.onToggleAgentSessionMode}
+            renderWorkspaceRows={props.renderWorkspaceRows}
             renderThreadRows={() => null}
           />
         </SidebarMenuSub>

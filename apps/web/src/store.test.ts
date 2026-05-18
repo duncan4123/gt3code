@@ -23,6 +23,7 @@ import {
   selectThreadExistsByRef,
   setThreadBranch,
   selectThreadsAcrossEnvironments,
+  syncServerShellSnapshot,
   type AppState,
   type EnvironmentState,
 } from "./store";
@@ -219,6 +220,63 @@ function projectsOf(state: AppState) {
 function threadsOf(state: AppState) {
   return selectThreadsAcrossEnvironments(state);
 }
+
+describe("shell snapshots", () => {
+  it("replaces stale sidebar folder projections with a fresh snapshot after database reset", () => {
+    const staleProjectId = ProjectId.make("project-stale");
+    const freshProjectId = ProjectId.make("project-fresh");
+    const state = makeEmptyState({
+      projectIds: [staleProjectId],
+      projectById: {
+        [staleProjectId]: {
+          id: staleProjectId,
+          environmentId: localEnvironmentId,
+          name: "Deleted DB Project",
+          cwd: "/tmp/deleted-db-project",
+          defaultModelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: DEFAULT_MODEL,
+          },
+          createdAt: "2026-02-27T00:00:00.000Z",
+          updatedAt: "2026-02-27T00:00:00.000Z",
+          scripts: [],
+        },
+      },
+      bootstrapComplete: true,
+    });
+
+    const next = syncServerShellSnapshot(
+      state,
+      {
+        snapshotSequence: 1,
+        updatedAt: "2026-02-27T00:01:00.000Z",
+        projects: [
+          {
+            id: freshProjectId,
+            title: "Fresh Project",
+            workspaceRoot: "/tmp/fresh-project",
+            repositoryIdentity: null,
+            defaultModelSelection: {
+              instanceId: ProviderInstanceId.make("codex"),
+              model: DEFAULT_MODEL,
+            },
+            scripts: [],
+            createdAt: "2026-02-27T00:01:00.000Z",
+            updatedAt: "2026-02-27T00:01:00.000Z",
+            deletedAt: null,
+          },
+        ],
+        threads: [],
+      },
+      localEnvironmentId,
+    );
+
+    expect(projectsOf(next).map((project) => project.name)).toEqual(["Fresh Project"]);
+    expect(localEnvironmentStateOf(next).projectIds).toEqual([freshProjectId]);
+    expect(localEnvironmentStateOf(next).projectById[staleProjectId]).toBeUndefined();
+    expect(localEnvironmentStateOf(next).bootstrapComplete).toBe(true);
+  });
+});
 
 function makeEvent<T extends OrchestrationEvent["type"]>(
   type: T,

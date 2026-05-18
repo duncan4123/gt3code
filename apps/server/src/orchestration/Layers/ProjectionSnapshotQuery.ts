@@ -579,7 +579,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             m.text AS "text",
             bm25(messages_fts) AS "rank"
           FROM messages_fts
-          JOIN projection_thread_messages m ON m.row_id = messages_fts.rowid
+          JOIN projection_thread_messages m ON m.rowid = messages_fts.rowid
           JOIN projection_threads t ON t.thread_id = m.thread_id
           WHERE messages_fts MATCH ?
             AND t.deleted_at IS NULL
@@ -1880,6 +1880,34 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
       );
     });
 
+  const searchThreadMessages: ProjectionSnapshotQueryShape["searchThreadMessages"] = (
+    query,
+    limit,
+  ) => {
+    const normalizedQuery = normalizeFtsSearchQuery(query);
+    if (normalizedQuery === null) {
+      return Effect.succeed({ results: [] });
+    }
+
+    return searchThreadMessageRows({
+      query: normalizedQuery,
+      limit: Math.max(0, limit),
+    }).pipe(
+      Effect.map((rows) => ({
+        results: rows.map((row) => ({
+          threadId: row.threadId,
+          snippet: buildSearchSnippet(row.text, normalizedQuery),
+        })),
+      })),
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "ProjectionSnapshotQuery.searchThreadMessages:query",
+          "ProjectionSnapshotQuery.searchThreadMessages:decode",
+        ),
+      ),
+    );
+  };
+
   return {
     getCommandReadModel,
     getSnapshot,
@@ -1895,6 +1923,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getActiveThreadBindingByGcSessionName,
     getThreadDetailById,
     getArchivedShellSnapshot,
+    searchThreadMessages,
   } satisfies ProjectionSnapshotQueryShape;
 });
 

@@ -753,6 +753,13 @@ export function groupThreadsByRigAndAgent<
       threads: [],
     });
   };
+  const isConfiguredCityAgent = (agent: GcConfigResult["agents"][number]): boolean =>
+    agent.scope === "city" ||
+    agent.name.includes(".") ||
+    agent.named_session_mode !== undefined ||
+    typeof agent.min_active_sessions === "number" ||
+    typeof agent.max_active_sessions === "number" ||
+    agent.wake_mode !== undefined;
 
   const isCityAliasProject = [...projectLabels].some((label) =>
     ["city", "gc"].some(
@@ -776,12 +783,22 @@ export function groupThreadsByRigAndAgent<
     const canonicalGroupId = normalizeMetadataValue(meta.groupId);
     const rig = normalizeMetadataValue(meta.rig);
     const agent = normalizeMetadataValue(meta.agentQualified) ?? normalizeMetadataValue(meta.agent);
+    const configuredAgent = agent
+      ? options?.config?.agents.find((entry) => configuredAgentQualifiedName(entry) === agent)
+      : undefined;
+    const agentImpliedRig =
+      normalizeMetadataValue(configuredAgent?.dir) ??
+      (agent ? deriveRigIdFromQualifiedAgent(agent) : null);
     const cityWorkspaceGroupId =
       resolvedCity && multiCityWorkspaceIds.has(resolvedCity) ? resolvedCity : null;
     let resolvedRig =
-      meta.groupKind === "workspace" && cityWorkspaceGroupId
-        ? cityWorkspaceGroupId
-        : (canonicalGroupId ?? rig ?? deriveRigIdFromQualifiedAgent(agent ?? ""));
+      meta.groupKind === "workspace" &&
+      agentImpliedRig &&
+      agentImpliedRig !== (cityWorkspaceGroupId ?? canonicalGroupId)
+        ? agentImpliedRig
+        : meta.groupKind === "workspace" && cityWorkspaceGroupId
+          ? cityWorkspaceGroupId
+          : (canonicalGroupId ?? rig ?? deriveRigIdFromQualifiedAgent(agent ?? ""));
     resolvedRig = qualifyMergedMultiCityRigId({
       rig: resolvedRig,
       city: resolvedCity,
@@ -821,7 +838,7 @@ export function groupThreadsByRigAndAgent<
       const isMultiCityWorkspace = isMergedMultiCityConfig && multiCityWorkspaceIds.has(rig.name);
       rigGroupsById.set(rig.name, {
         id: rig.name,
-        label: rig.name,
+        label: isMultiCityWorkspace ? rig.name.toUpperCase() : rig.name,
         kind: isMultiCityWorkspace ? "workspace" : "rig",
         isConfigured: true,
         isSuspended: rig.suspended,
@@ -888,7 +905,7 @@ export function groupThreadsByRigAndAgent<
     if (cityGroup) {
       for (const agent of options?.config?.agents ?? []) {
         const rigName = normalizeMetadataValue(agent.dir);
-        if (rigName) continue;
+        if (rigName || !isConfiguredCityAgent(agent)) continue;
         addConfiguredAgentGroup(cityGroup, agent);
       }
     }
@@ -897,12 +914,19 @@ export function groupThreadsByRigAndAgent<
   for (const thread of threads) {
     const meta = parseGcMeta(thread.customMetadata);
     const threadCity = normalizeMetadataValue(meta.city);
+    const threadAgent =
+      normalizeMetadataValue(meta.agentQualified) ?? normalizeMetadataValue(meta.agent);
+    const threadConfiguredAgent = threadAgent
+      ? options?.config?.agents.find((entry) => configuredAgentQualifiedName(entry) === threadAgent)
+      : undefined;
+    const threadConfiguredRig = normalizeMetadataValue(threadConfiguredAgent?.dir);
     if (
       options?.config &&
       workspaceName &&
       workspaceName.toLowerCase() !== "cities" &&
       threadCity &&
-      threadCity.localeCompare(workspaceName, undefined, { sensitivity: "accent" }) !== 0
+      threadCity.localeCompare(workspaceName, undefined, { sensitivity: "accent" }) !== 0 &&
+      !(threadConfiguredRig && configRigByName.has(threadConfiguredRig))
     ) {
       standaloneThreads.push(thread);
       continue;
@@ -917,11 +941,21 @@ export function groupThreadsByRigAndAgent<
     const canonicalAgentLabel = normalizeMetadataValue(meta.agentLabel);
     const cityWorkspaceGroupId =
       resolvedCity && multiCityWorkspaceIds.has(resolvedCity) ? resolvedCity : cityScopedRigGroupId;
-    let resolvedRig =
-      meta.groupKind === "workspace" && cityWorkspaceGroupId
-        ? cityWorkspaceGroupId
-        : (canonicalGroupId ?? rig ?? null);
     let resolvedAgent = canonicalAgentQualified ?? agent;
+    const configuredAgentForResolved = resolvedAgent
+      ? findConfiguredAgent(options?.config, resolvedAgent)
+      : undefined;
+    const agentImpliedRig =
+      normalizeMetadataValue(configuredAgentForResolved?.dir) ??
+      (resolvedAgent ? deriveRigIdFromQualifiedAgent(resolvedAgent) : null);
+    const workspaceMetadataRig =
+      meta.groupKind === "workspace" ? (cityWorkspaceGroupId ?? canonicalGroupId) : null;
+    let resolvedRig =
+      meta.groupKind === "workspace" && agentImpliedRig && agentImpliedRig !== workspaceMetadataRig
+        ? agentImpliedRig
+        : meta.groupKind === "workspace" && cityWorkspaceGroupId
+          ? cityWorkspaceGroupId
+          : (canonicalGroupId ?? rig ?? null);
 
     resolvedRig = qualifyMergedMultiCityRigId({
       rig: resolvedRig,
@@ -984,7 +1018,12 @@ export function groupThreadsByRigAndAgent<
     }
 
     let rigGroup = rigGroupsById.get(resolvedRig);
-    if (rigGroup && meta.groupKind === "workspace" && canonicalGroupLabel) {
+    if (
+      rigGroup &&
+      meta.groupKind === "workspace" &&
+      canonicalGroupLabel &&
+      !(isMergedMultiCityConfig && multiCityWorkspaceIds.has(rigGroup.id) && rigGroup.isConfigured)
+    ) {
       rigGroup.label = canonicalGroupLabel;
     }
     const resolvedRigLifecycle =
@@ -1094,6 +1133,9 @@ export function groupThreadsByRigAndAgent<
       }
       for (const agent of options.config.agents) {
         if (normalizeMetadataValue(agent.dir)) {
+          continue;
+        }
+        if (!isConfiguredCityAgent(agent)) {
           continue;
         }
         addConfiguredAgentGroup(cityGroup, agent);

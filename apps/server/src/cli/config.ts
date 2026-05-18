@@ -116,6 +116,7 @@ const EnvServerConfig = Config.all({
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
+  unsafeNoAuth: Config.boolean("T3CODE_UNSAFE_NO_AUTH").pipe(Config.withDefault(false)),
   bootstrapFd: Config.int("T3CODE_BOOTSTRAP_FD").pipe(
     Config.option,
     Config.map(Option.getOrUndefined),
@@ -368,6 +369,7 @@ export const resolveServerConfig = (
       staticDir,
       devUrl,
       noBrowser,
+      unsafeNoAuth: env.unsafeNoAuth,
       authToken: undefined,
       startupPresentation,
       desktopBootstrapToken,

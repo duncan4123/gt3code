@@ -129,10 +129,7 @@ func resolveWsURLCandidates() []string {
 	if runtimeURL, err := readRuntimeWSURL(); err == nil {
 		add(runtimeURL)
 	}
-	t3Home := os.Getenv("T3_HOME")
-	if t3Home == "" {
-		t3Home = filepath.Join(os.Getenv("HOME"), ".t3")
-	}
+	t3Home := resolveT3BaseDir()
 	if urlBytes, err := os.ReadFile(filepath.Join(t3Home, "ws-url")); err == nil {
 		add(string(urlBytes))
 	}

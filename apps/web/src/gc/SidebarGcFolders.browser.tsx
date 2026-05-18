@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { SidebarGcFolders } from "./SidebarGcFolders";
+import { useGcSidebarUiStateStore } from "./sidebar/gcSidebarUiStateStore";
 import { SidebarMenuSub } from "../components/ui/sidebar";
 import type { SidebarGcRigGroup } from "./SidebarGcFolders";
 
@@ -74,6 +75,7 @@ function makeRigGroups(): SidebarGcRigGroup[] {
 
 async function renderSidebarGcFolders(options?: {
   rigGroups?: SidebarGcRigGroup[];
+  flattenRigGroupIds?: ReadonlySet<string>;
   gcAgentMutationsInFlight?: ReadonlySet<string>;
   gcRigMutationsInFlight?: ReadonlySet<string>;
   gcCityMutationInFlight?: boolean;
@@ -91,6 +93,7 @@ async function renderSidebarGcFolders(options?: {
     <SidebarMenuSub>
       <SidebarGcFolders
         rigGroups={options?.rigGroups ?? makeRigGroups()}
+        flattenRigGroupIds={options?.flattenRigGroupIds}
         gcAgentMutationsInFlight={options?.gcAgentMutationsInFlight ?? new Set()}
         gcRigMutationsInFlight={options?.gcRigMutationsInFlight ?? new Set()}
         gcCityMutationInFlight={options?.gcCityMutationInFlight ?? false}
@@ -133,6 +136,7 @@ async function renderSidebarGcFolders(options?: {
 describe("SidebarGcFolders", () => {
   afterEach(() => {
     vi.clearAllMocks();
+    useGcSidebarUiStateStore.setState({ folderExpandedById: {} });
     document.body.innerHTML = "";
   });
 
@@ -162,8 +166,12 @@ describe("SidebarGcFolders", () => {
         .element(page.getByTestId("gc-agent-folder-t3code--refinery"))
         .toBeInTheDocument();
       await expect.element(page.getByTestId("gc-agent-folder-t3code--witness")).toBeInTheDocument();
-      await expect.element(page.getByTestId("gc-agent-folder-mayor")).toBeInTheDocument();
-      await expect.element(page.getByTestId("gc-agent-folder-deacon")).toBeInTheDocument();
+      await expect
+        .element(page.getByTestId("gc-agent-folder-GC:workspace:mayor"))
+        .toBeInTheDocument();
+      await expect
+        .element(page.getByTestId("gc-agent-folder-GC:workspace:deacon"))
+        .toBeInTheDocument();
       await expect.element(page.getByTestId("gc-thread-row-thread-refinery-1")).toBeInTheDocument();
       await expect.element(page.getByTestId("gc-thread-row-thread-refinery-2")).toBeInTheDocument();
       await expect.element(page.getByTestId("gc-thread-row-thread-mayor-1")).toBeInTheDocument();
@@ -181,13 +189,16 @@ describe("SidebarGcFolders", () => {
         .element(page.getByTestId("gc-city-action"))
         .toHaveAttribute("data-gc-action-icon", "stop");
       await expect
+        .element(page.getByTestId("gc-workspace-action-GC"))
+        .toHaveAttribute("data-gc-action-icon", "stop");
+      await expect
         .element(page.getByTestId("gc-agent-folder-toggle-t3code--refinery"))
         .toHaveAttribute("aria-expanded", "true");
 
       const suspendRefinery = page.getByTestId("gc-agent-toggle-t3code--refinery");
       const resumeWitness = page.getByTestId("gc-agent-toggle-t3code--witness");
-      const suspendMayor = page.getByTestId("gc-agent-toggle-mayor");
-      const resumeDeacon = page.getByTestId("gc-agent-toggle-deacon");
+      const suspendMayor = page.getByTestId("gc-agent-toggle-GC:workspace:mayor");
+      const resumeDeacon = page.getByTestId("gc-agent-toggle-GC:workspace:deacon");
 
       await expect.element(suspendRefinery).toHaveAttribute("data-gc-action-icon", "stop");
       await expect.element(resumeWitness).toHaveAttribute("data-gc-action-icon", "play");
@@ -201,6 +212,9 @@ describe("SidebarGcFolders", () => {
       expect(toggleCalls).toContainEqual(["t3code", true]);
 
       await page.getByTestId("gc-city-action").click();
+      expect(toggleCalls).toContainEqual(["__city__", true]);
+
+      await page.getByTestId("gc-workspace-action-GC").click();
       expect(toggleCalls).toContainEqual(["__city__", true]);
 
       await resumeWitness.click();
@@ -291,6 +305,53 @@ describe("SidebarGcFolders", () => {
     }
   });
 
+  it("hides child rig folders when a flattened parent rig folder is collapsed", async () => {
+    useGcSidebarUiStateStore.setState({ folderExpandedById: { "rig:gascity-br": false } });
+
+    const { host, screen } = await renderSidebarGcFolders({
+      flattenRigGroupIds: new Set(["gascity-br"]),
+      rigGroups: [
+        {
+          id: "gascity-br",
+          label: "gascity-br",
+          kind: "workspace",
+          isSuspended: false,
+          agentGroups: [],
+        },
+        {
+          id: "gascity-br/beads_rust",
+          label: "gascity-br/beads_rust",
+          kind: "rig",
+          isSuspended: false,
+          agentGroups: [
+            {
+              id: "gascity-br/beads_rust/polecat",
+              label: "polecat",
+              qualifiedName: "gascity-br/beads_rust/polecat",
+              isExplicitlySuspended: false,
+              isSuspended: false,
+              isPool: false,
+              runtimeState: { label: "Running", tone: "success" },
+              threadIds: [],
+            },
+          ],
+        },
+      ],
+    });
+
+    try {
+      await expect
+        .element(page.getByTestId("gc-rig-folder-gascity-br--beads_rust"))
+        .not.toBeInTheDocument();
+      await expect
+        .element(page.getByTestId("gc-agent-folder-gascity-br--beads_rust--polecat"))
+        .not.toBeInTheDocument();
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+
   it("labels agents inherited from a suspended rig as rig suspended", async () => {
     const toggleCalls: Array<[string, boolean]> = [];
     const { host, screen } = await renderSidebarGcFolders({
@@ -352,7 +413,9 @@ describe("SidebarGcFolders", () => {
     const { host, screen } = await renderSidebarGcFolders();
 
     try {
-      await expect.element(page.getByTestId("gc-agent-folder-mayor")).toBeInTheDocument();
+      await expect
+        .element(page.getByTestId("gc-agent-folder-GC:workspace:mayor"))
+        .toBeInTheDocument();
       await expect.element(page.getByTestId("gc-thread-row-thread-mayor-1")).toBeInTheDocument();
 
       await page.getByTestId("gc-rig-toggle-GC").click();
@@ -360,7 +423,9 @@ describe("SidebarGcFolders", () => {
       await expect
         .element(page.getByTestId("gc-rig-toggle-GC"))
         .toHaveAttribute("aria-expanded", "false");
-      await expect.element(page.getByTestId("gc-agent-folder-mayor")).not.toBeInTheDocument();
+      await expect
+        .element(page.getByTestId("gc-agent-folder-GC:workspace:mayor"))
+        .not.toBeInTheDocument();
       await expect
         .element(page.getByTestId("gc-thread-row-thread-mayor-1"))
         .not.toBeInTheDocument();

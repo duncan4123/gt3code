@@ -21,6 +21,54 @@ function isGcRigProject(
   return Boolean(cwd && gcRigPaths.has(cwd));
 }
 
+function isGcCityRootProject(
+  member: Pick<SidebarProjectGroupMember, "cwd">,
+  gcCityRootPaths: ReadonlySet<string>,
+): boolean {
+  const cwd = normalizeGcProjectPath(member.cwd);
+  return Boolean(cwd && gcCityRootPaths.has(cwd));
+}
+
+function gcRigMemberGroupKey(member: Pick<SidebarProjectGroupMember, "cwd">): string {
+  return normalizeGcProjectPath(member.cwd) ?? "";
+}
+
+function configuredCityRootNames(rigs: readonly GcConfigResult["rigs"][number][]): Set<string> {
+  const rigNames = new Set(rigs.map((rig) => rig.name.trim()).filter(Boolean));
+  const cityNames = new Set<string>();
+  for (const rigName of rigNames) {
+    const separatorIndex = rigName.indexOf("/");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    const cityName = rigName.slice(0, separatorIndex);
+    if (rigNames.has(cityName)) {
+      cityNames.add(cityName);
+    }
+  }
+  return cityNames;
+}
+
+function gcRigProjectPaths(config: GcConfigResult): Set<string> {
+  const cityRootNames = configuredCityRootNames(config.rigs);
+  return new Set(
+    config.rigs
+      .filter((rig) => !cityRootNames.has(rig.name.trim()))
+      .map((rig) => normalizeGcProjectPath(rig.path))
+      .filter((path): path is string => Boolean(path)),
+  );
+}
+
+function gcCityRootProjectPaths(config: GcConfigResult): Set<string> {
+  const cityRootNames = configuredCityRootNames(config.rigs);
+  return new Set(
+    config.rigs
+      .filter((rig) => cityRootNames.has(rig.name.trim()))
+      .map((rig) => normalizeGcProjectPath(rig.path))
+      .filter((path): path is string => Boolean(path)),
+  );
+}
+
 function environmentPresenceForMember(
   member: Pick<SidebarProjectGroupMember, "environmentId">,
   primaryEnvironmentId: EnvironmentId | null,
@@ -93,12 +141,7 @@ export function splitGcRigProjectSnapshots(input: {
     return [...input.snapshots];
   }
 
-  const gcRigPaths = new Set(
-    input.gcConfig.rigs
-      .filter((rig) => rig.isRepository === true)
-      .map((rig) => normalizeGcProjectPath(rig.path))
-      .filter((path): path is string => Boolean(path)),
-  );
+  const gcRigPaths = gcRigProjectPaths(input.gcConfig);
   if (gcRigPaths.size === 0) {
     return [...input.snapshots];
   }
@@ -118,8 +161,23 @@ export function splitGcRigProjectSnapshots(input: {
     const remainderMembers = snapshot.memberProjects.filter(
       (member) => !isGcRigProject(member, gcRigPaths),
     );
+    const rigMemberGroups = new Map<string, SidebarProjectGroupMember[]>();
+    for (const member of rigMembers) {
+      const key = gcRigMemberGroupKey(member);
+      const existing = rigMemberGroups.get(key);
+      if (existing) {
+        existing.push(member);
+      } else {
+        rigMemberGroups.set(key, [member]);
+      }
+    }
+
     return [
-      ...rigMembers.map((member) => singleMemberSnapshot(member, input.primaryEnvironmentId)),
+      ...Array.from(rigMemberGroups.values()).map((members) =>
+        members.length === 1
+          ? singleMemberSnapshot(members[0]!, input.primaryEnvironmentId)
+          : groupedRemainderSnapshot(snapshot, members, input.primaryEnvironmentId),
+      ),
       ...(remainderMembers.length > 0
         ? [groupedRemainderSnapshot(snapshot, remainderMembers, input.primaryEnvironmentId)]
         : []),
@@ -132,5 +190,25 @@ export function filterGcOwnedProjectSnapshots(input: {
   gcConfig: GcConfigResult | null;
   primaryEnvironmentId: EnvironmentId | null;
 }): SidebarProjectSnapshot[] {
-  return [...input.snapshots];
+  if (!input.gcConfig) {
+    return [...input.snapshots];
+  }
+
+  const gcCityRootPaths = gcCityRootProjectPaths(input.gcConfig);
+  if (gcCityRootPaths.size === 0) {
+    return [...input.snapshots];
+  }
+
+  return input.snapshots.flatMap((snapshot) => {
+    const visibleMembers = snapshot.memberProjects.filter(
+      (member) => !isGcCityRootProject(member, gcCityRootPaths),
+    );
+    if (visibleMembers.length === snapshot.memberProjects.length) {
+      return [snapshot];
+    }
+    if (visibleMembers.length === 0) {
+      return [];
+    }
+    return [groupedRemainderSnapshot(snapshot, visibleMembers, input.primaryEnvironmentId)];
+  });
 }

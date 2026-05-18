@@ -47,6 +47,7 @@ import {
   OrchestrationReplayEventsError,
   OrchestrationReplayEventsInput,
   OrchestrationRpcSchemas,
+  OrchestrationSearchThreadMessagesError,
 } from "./orchestration.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 import {
@@ -113,6 +114,7 @@ import {
   WsGcSetRigSuspendedRpc,
   WsGcStopSessionRpc,
   WsGcSubmitSessionRpc,
+  WsGcWakeSessionRpc,
 } from "./gcRpc.ts";
 
 export const WS_METHODS = {
@@ -439,6 +441,15 @@ export const WsOrchestrationReplayEventsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.
   error: OrchestrationReplayEventsError,
 });
 
+export const WsOrchestrationSearchThreadMessagesRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.searchThreadMessages,
+  {
+    payload: OrchestrationRpcSchemas.searchThreadMessages.input,
+    success: OrchestrationRpcSchemas.searchThreadMessages.output,
+    error: OrchestrationSearchThreadMessagesError,
+  },
+);
+
 export const WsOrchestrationGetSnapshotRpc = Rpc.make(ORCHESTRATION_WS_METHODS.getSnapshot, {
   payload: OrchestrationRpcSchemas.getSnapshot.input,
   success: OrchestrationRpcSchemas.getSnapshot.output,
@@ -517,6 +528,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGcGetThreadContextRpc,
   WsGcSubmitSessionRpc,
   WsGcStopSessionRpc,
+  WsGcWakeSessionRpc,
   WsGcRespondToPendingRpc,
   WsGcSetAgentSuspendedRpc,
   WsGcSetAgentMaxActiveSessionsRpc,
@@ -555,6 +567,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
+  WsOrchestrationSearchThreadMessagesRpc,
   WsOrchestrationGetSnapshotRpc,
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,

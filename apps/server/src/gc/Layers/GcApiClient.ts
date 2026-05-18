@@ -1776,6 +1776,34 @@ const makeGcApiClient = Effect.gen(function* () {
     return cityName;
   };
 
+  const resolveSessionMutationTarget = async (
+    normalizedSessionName: string,
+  ): Promise<{
+    readonly cityName: string | null;
+    readonly localName: string;
+  }> => {
+    const cities = await fetchSupervisorCities().catch(() => []);
+    const cityNames = new Set(cities.map((city) => city.name));
+    for (const rig of lastKnownConfig?.rigs ?? []) {
+      if (rig.path && isGcCityRoot(rig.path)) {
+        cityNames.add(rig.name);
+      }
+    }
+    for (const cityName of cityNames) {
+      const sessionPrefix = `${cityName}--`;
+      if (normalizedSessionName.startsWith(sessionPrefix)) {
+        return {
+          cityName,
+          localName: normalizedSessionName.slice(sessionPrefix.length),
+        };
+      }
+    }
+    return {
+      cityName: await resolveGcCityName(),
+      localName: normalizedSessionName,
+    };
+  };
+
   const buildScopedOrLegacyPath = (
     cityName: string | null,
     cityScopedPath: string,
@@ -2090,10 +2118,11 @@ const makeGcApiClient = Effect.gen(function* () {
   const submitSession: GcApiClientShape["submitSession"] = (sessionName, message) =>
     Effect.promise(async () => {
       const normalizedSessionName = sanitizeKey(sessionName);
+      const target = await resolveSessionMutationTarget(normalizedSessionName);
       if (useCityScopedRoutes) {
-        const cityName = await requireGcCityName();
+        const cityName = target.cityName ?? (await requireGcCityName());
         return postJson<GcSubmitSessionResult>(
-          buildGcCityPath(cityName, `/session/${encodeURIComponent(normalizedSessionName)}/submit`),
+          buildGcCityPath(cityName, `/session/${encodeURIComponent(target.localName)}/submit`),
           { message },
         );
       }
@@ -2106,14 +2135,30 @@ const makeGcApiClient = Effect.gen(function* () {
   const stopSession: GcApiClientShape["stopSession"] = (sessionName) =>
     Effect.promise(async () => {
       const normalizedSessionName = sanitizeKey(sessionName);
+      const target = await resolveSessionMutationTarget(normalizedSessionName);
       if (useCityScopedRoutes) {
-        const cityName = await requireGcCityName();
+        const cityName = target.cityName ?? (await requireGcCityName());
         return postJson<GcSessionActionResult>(
-          buildGcCityPath(cityName, `/session/${encodeURIComponent(normalizedSessionName)}/stop`),
+          buildGcCityPath(cityName, `/session/${encodeURIComponent(target.localName)}/stop`),
         );
       }
       return postJson<GcSessionActionResult>(
         `/v0/session/${escapePathSegments(normalizedSessionName)}/stop`,
+      );
+    });
+
+  const wakeSession: GcApiClientShape["wakeSession"] = (sessionName) =>
+    Effect.promise(async () => {
+      const normalizedSessionName = sanitizeKey(sessionName);
+      const target = await resolveSessionMutationTarget(normalizedSessionName);
+      if (useCityScopedRoutes) {
+        const cityName = target.cityName ?? (await requireGcCityName());
+        return postJson<GcSessionActionResult>(
+          buildGcCityPath(cityName, `/session/${encodeURIComponent(target.localName)}/wake`),
+        );
+      }
+      return postJson<GcSessionActionResult>(
+        `/v0/session/${escapePathSegments(normalizedSessionName)}/wake`,
       );
     });
 
@@ -2127,12 +2172,10 @@ const makeGcApiClient = Effect.gen(function* () {
         ...(response.metadata ? { metadata: response.metadata } : {}),
       };
       if (useCityScopedRoutes) {
-        const cityName = await requireGcCityName();
+        const target = await resolveSessionMutationTarget(normalizedSessionName);
+        const cityName = target.cityName ?? (await requireGcCityName());
         return postJson<GcSessionActionResult>(
-          buildGcCityPath(
-            cityName,
-            `/session/${encodeURIComponent(normalizedSessionName)}/respond`,
-          ),
+          buildGcCityPath(cityName, `/session/${encodeURIComponent(target.localName)}/respond`),
           body,
         );
       }
@@ -2459,6 +2502,7 @@ const makeGcApiClient = Effect.gen(function* () {
     getConfig,
     submitSession,
     stopSession,
+    wakeSession,
     respondToPending,
     setAgentSuspended,
     setAgentMaxActiveSessions,

@@ -35,6 +35,115 @@ const projectionSnapshotLayer = it.layer(
 );
 
 projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
+  it.effect("searches active thread messages with FTS snippets", () =>
+    Effect.gen(function* () {
+      const snapshotQuery = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+
+      yield* sql`DELETE FROM projection_thread_messages`;
+      yield* sql`DELETE FROM projection_threads`;
+      yield* sql`DELETE FROM projection_projects`;
+
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id,
+          title,
+          workspace_root,
+          default_model_selection_json,
+          scripts_json,
+          created_at,
+          updated_at,
+          deleted_at
+        )
+        VALUES (
+          'project-search',
+          'Search Project',
+          '/tmp/search-project',
+          '{"provider":"codex","model":"gpt-5-codex"}',
+          '[]',
+          '2026-05-19T00:00:00.000Z',
+          '2026-05-19T00:00:00.000Z',
+          NULL
+        )
+      `;
+
+      yield* sql`
+        INSERT INTO projection_threads (
+          thread_id,
+          project_id,
+          title,
+          model_selection_json,
+          runtime_mode,
+          interaction_mode,
+          branch,
+          worktree_path,
+          latest_turn_id,
+          latest_user_message_at,
+          pending_approval_count,
+          pending_user_input_count,
+          has_actionable_proposed_plan,
+          created_at,
+          updated_at,
+          deleted_at,
+          archived_at
+        )
+        VALUES (
+          'thread-search',
+          'project-search',
+          'Thread Search',
+          '{"provider":"codex","model":"gpt-5-codex"}',
+          'full-access',
+          'default',
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          0,
+          0,
+          0,
+          '2026-05-19T00:00:00.000Z',
+          '2026-05-19T00:00:00.000Z',
+          NULL,
+          NULL
+        )
+      `;
+
+      yield* sql`
+        INSERT INTO projection_thread_messages (
+          message_id,
+          thread_id,
+          turn_id,
+          role,
+          text,
+          attachments_json,
+          is_streaming,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          'message-search',
+          'thread-search',
+          'turn-search',
+          'assistant',
+          'The searchable needle is in this message.',
+          NULL,
+          0,
+          '2026-05-19T00:00:00.000Z',
+          '2026-05-19T00:00:00.000Z'
+        )
+      `;
+
+      assert.ok(snapshotQuery.searchThreadMessages);
+      const result = yield* snapshotQuery.searchThreadMessages("searchable needle", 10);
+      assert.deepStrictEqual(result?.results, [
+        {
+          threadId: ThreadId.make("thread-search"),
+          snippet: "The searchable needle is in this message.",
+        },
+      ]);
+    }),
+  );
+
   it.effect("hydrates read model from projection tables and computes snapshot sequence", () =>
     Effect.gen(function* () {
       const snapshotQuery = yield* ProjectionSnapshotQuery;

@@ -965,8 +965,11 @@ function runStart(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
 
 function runtimeEnv(runtime: RuntimePaths, gcApiUrl = resolveGcApiUrl(runtime)): NodeJS.ProcessEnv {
   const t3WsUrl = resolveT3WsUrl();
+  const t3Home = process.env.T3_HOME?.trim() || process.env.T3CODE_HOME?.trim() || defaultT3Home;
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    T3_HOME: t3Home,
+    T3CODE_HOME: t3Home,
     GC_HOME: runtime.rootDir,
     T3CODE_GASCITY_HOME: runtime.rootDir,
     GC_BIN: runtime.gcBinaryPath,

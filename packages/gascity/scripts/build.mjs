@@ -77,7 +77,7 @@ if (
   process.exit(0);
 }
 
-const result = spawnSync("go", ["build", "-o", outputPath, "./cmd/gc"], {
+const result = spawnSync("go", ["build", "-buildvcs=false", "-o", outputPath, "./cmd/gc"], {
   cwd: sourceRoot,
   env: {
     ...process.env,

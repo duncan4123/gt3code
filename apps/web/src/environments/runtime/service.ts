@@ -243,7 +243,13 @@ export function shouldApplyProjectionSnapshot(input: {
     return true;
   }
 
-  return compareAppliedProjectionVersion(input.current, toAppliedProjectionVersion(input.next)) < 0;
+  const nextVersion = toAppliedProjectionVersion(input.next);
+  if (nextVersion.sequence < input.current.sequence) {
+    const currentUpdatedAt = input.current.updatedAt ?? "";
+    return nextVersion.updatedAt > currentUpdatedAt;
+  }
+
+  return compareAppliedProjectionVersion(input.current, nextVersion) < 0;
 }
 
 export function shouldApplyProjectionEvent(input: {
@@ -273,10 +279,7 @@ function markAppliedProjectionSnapshot(
 ): void {
   const nextVersion = toAppliedProjectionVersion(snapshot);
   const currentVersion = readLastAppliedProjectionVersion(environmentId);
-  if (
-    currentVersion !== null &&
-    compareAppliedProjectionVersion(currentVersion, nextVersion) >= 0
-  ) {
+  if (!shouldApplyProjectionSnapshot({ current: currentVersion, next: snapshot })) {
     return;
   }
 

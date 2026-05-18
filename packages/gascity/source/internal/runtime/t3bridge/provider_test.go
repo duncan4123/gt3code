@@ -133,6 +133,31 @@ func TestResolveWsURLCandidates_PrefersRuntimeStateOverStaleWSURL(t *testing.T) 
 	}
 }
 
+func TestResolveWsURLCandidates_ReadsT3CodeHomeWSURLFile(t *testing.T) {
+	oldDefaults := defaultWSURLCandidates
+	defaultWSURLCandidates = nil
+	t.Cleanup(func() {
+		defaultWSURLCandidates = oldDefaults
+	})
+
+	t3CodeHome := t.TempDir()
+	t.Setenv("T3_HOME", "")
+	t.Setenv("T3_BASE_DIR", "")
+	t.Setenv("T3CODE_HOME", t3CodeHome)
+	t.Setenv("T3_WS_URL", "")
+	if err := os.WriteFile(filepath.Join(t3CodeHome, "ws-url"), []byte("ws://127.0.0.1:13773/ws"), 0o644); err != nil {
+		t.Fatalf("write ws-url: %v", err)
+	}
+
+	candidates := resolveWsURLCandidates()
+	if len(candidates) == 0 {
+		t.Fatal("resolveWsURLCandidates returned no candidates")
+	}
+	if candidates[0] != "ws://127.0.0.1:13773/ws" {
+		t.Fatalf("first candidate = %q, want ws://127.0.0.1:13773/ws", candidates[0])
+	}
+}
+
 func TestProcessAlive_ReadyCountsAsAlive(t *testing.T) {
 	server := newT3BridgeTestServer(t, map[string]interface{}{
 		"threads": []interface{}{

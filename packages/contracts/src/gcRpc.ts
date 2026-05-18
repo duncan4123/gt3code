@@ -32,6 +32,8 @@ import {
   GcSubmitSessionInput,
   GcSubmitSessionResult,
   GcThreadContextResult,
+  GcWakeSessionError,
+  GcWakeSessionInput,
 } from "./gc.ts";
 
 export const GC_WS_METHODS = {
@@ -40,6 +42,7 @@ export const GC_WS_METHODS = {
   gcGetThreadContext: "gc.getThreadContext",
   gcSubmitSession: "gc.submitSession",
   gcStopSession: "gc.stopSession",
+  gcWakeSession: "gc.wakeSession",
   gcRespondToPending: "gc.respondToPending",
   gcSetAgentSuspended: "gc.setAgentSuspended",
   gcSetAgentMaxActiveSessions: "gc.setAgentMaxActiveSessions",
@@ -78,6 +81,12 @@ export const WsGcStopSessionRpc = Rpc.make(GC_WS_METHODS.gcStopSession, {
   payload: GcStopSessionInput,
   success: GcSessionActionResult,
   error: GcStopSessionError,
+});
+
+export const WsGcWakeSessionRpc = Rpc.make(GC_WS_METHODS.gcWakeSession, {
+  payload: GcWakeSessionInput,
+  success: GcSessionActionResult,
+  error: GcWakeSessionError,
 });
 
 export const WsGcRespondToPendingRpc = Rpc.make(GC_WS_METHODS.gcRespondToPending, {

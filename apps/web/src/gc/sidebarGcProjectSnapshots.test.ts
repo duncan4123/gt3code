@@ -33,26 +33,32 @@ function makeProject(input: { id: string; name: string; cwd: string }): Project 
 function makeGcConfig(): GcConfigResult {
   return {
     workspace: {
-      name: "user-city",
-      path: "/home/user/cities/user-city",
+      name: "cities",
+      path: "/home/user/cities",
       suspended: false,
     },
     agents: [],
     rigs: [
       {
-        name: "customer-api",
+        name: "user-city",
+        path: "/home/user/cities/user-city",
+        suspended: false,
+        isRepository: false,
+      },
+      {
+        name: "user-city/customer-api",
         path: "/home/user/work/customer-api",
         suspended: false,
         isRepository: true,
       },
       {
-        name: "docs-site",
+        name: "user-city/docs-site",
         path: "/home/user/work/docs-site",
         suspended: false,
         isRepository: true,
       },
       {
-        name: "generated-scratch",
+        name: "user-city/generated-scratch",
         path: "/home/user/cities/user-city/rigs/generated-scratch",
         suspended: false,
         isRepository: false,
@@ -88,7 +94,7 @@ function repositoryIdentity(canonicalKey: string): RepositoryIdentity {
 }
 
 describe("filterGcOwnedProjectSnapshots", () => {
-  it("keeps user-configured GC city and rig project rows in the normal Projects list", () => {
+  it("removes GC city roots and keeps rig project rows in the normal Projects list", () => {
     const visible = filterGcOwnedProjectSnapshots({
       snapshots: snapshots([
         makeProject({ id: "city", name: "user-city", cwd: "/home/user/cities/user-city" }),
@@ -105,7 +111,6 @@ describe("filterGcOwnedProjectSnapshots", () => {
     });
 
     expect(visible.map((snapshot) => snapshot.displayName)).toEqual([
-      "user-city",
       "customer-api",
       "generated-scratch",
       "server",
@@ -143,7 +148,7 @@ describe("filterGcOwnedProjectSnapshots", () => {
     expect(visible[0]?.memberProjects.map((member) => member.name)).toEqual(["server"]);
   });
 
-  it("keeps GC city members in mixed repository groups", () => {
+  it("removes GC city members from mixed repository groups", () => {
     const [grouped] = snapshots(
       [
         {
@@ -165,14 +170,11 @@ describe("filterGcOwnedProjectSnapshots", () => {
     });
 
     expect(visible).toHaveLength(1);
-    expect(visible[0]?.memberProjects.map((member) => member.name)).toEqual([
-      "user-city",
-      "server",
-    ]);
-    expect(visible[0]?.groupedProjectCount).toBe(2);
+    expect(visible[0]?.memberProjects.map((member) => member.name)).toEqual(["server"]);
+    expect(visible[0]?.groupedProjectCount).toBe(1);
   });
 
-  it("keeps grouped repository rows when every member is GC-owned", () => {
+  it("removes city roots from grouped repository rows", () => {
     const [grouped] = snapshots(
       [
         {
@@ -204,8 +206,44 @@ describe("filterGcOwnedProjectSnapshots", () => {
     expect(visible).toHaveLength(1);
     expect(visible[0]?.memberProjects.map((member) => member.name)).toEqual([
       "customer-api",
-      "user-city",
       "generated-scratch",
+    ]);
+  });
+
+  it("does not duplicate project rows for multiple records of the same repository rig path", () => {
+    const [grouped] = snapshots(
+      [
+        {
+          ...makeProject({
+            id: "rig-a",
+            name: "customer-api",
+            cwd: "/home/user/work/customer-api",
+          }),
+          repositoryIdentity: repositoryIdentity("repo-key"),
+        },
+        {
+          ...makeProject({
+            id: "rig-b",
+            name: "customer-api",
+            cwd: "/home/user/work/customer-api/",
+          }),
+          repositoryIdentity: repositoryIdentity("repo-key"),
+        },
+      ],
+      "repository",
+    );
+
+    const split = splitGcRigProjectSnapshots({
+      snapshots: grouped ? [grouped] : [],
+      gcConfig: makeGcConfig(),
+      primaryEnvironmentId: environmentId,
+    });
+
+    expect(split).toHaveLength(1);
+    expect(split[0]?.displayName).toBe("customer-api");
+    expect(split[0]?.memberProjects.map((member) => member.id)).toEqual([
+      ProjectId.make("rig-a"),
+      ProjectId.make("rig-b"),
     ]);
   });
 });

@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gastownhall/gascity/cmd/gc/dashboard"
@@ -89,16 +91,34 @@ func runDashboardServe(commandName string, port int, apiURLOverride string, stde
 func resolveDashboardContext(warningWriter ...io.Writer) (cityPath string, cfg *config.City, err error) {
 	cityPath, err = resolveCity()
 	if err != nil {
-		if strings.TrimSpace(cityFlag) == "" && strings.Contains(err.Error(), "not in a city directory") {
+		if strings.TrimSpace(cityFlag) == "" && dashboardCanRunWithoutCity(err) {
 			return "", nil, nil
 		}
 		return "", nil, err
+	}
+	if strings.TrimSpace(cityFlag) == "" && !dashboardCityTomlExists(cityPath) {
+		return "", nil, nil
 	}
 	cfg, err = loadCityConfig(cityPath, warningWriter...)
 	if err != nil {
 		return "", nil, err
 	}
 	return cityPath, cfg, nil
+}
+
+func dashboardCanRunWithoutCity(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "not in a city directory") || strings.Contains(msg, "not a city directory")
+}
+
+func dashboardCityTomlExists(cityPath string) bool {
+	if strings.TrimSpace(cityPath) == "" {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(cityPath, "city.toml")); err == nil {
+		return true
+	}
+	return false
 }
 
 func resolveDashboardAPI(cityPath string, cfg *config.City, apiURLOverride string) (apiURL string, err error) {

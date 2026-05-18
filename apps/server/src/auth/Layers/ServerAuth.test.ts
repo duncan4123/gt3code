@@ -96,6 +96,27 @@ it.layer(NodeServices.layer)("ServerAuthLive", (it) => {
     }).pipe(Effect.provide(makeServerAuthLayer())),
   );
 
+  it.effect("authenticates requests without credentials in unsafe no-auth mode", () =>
+    Effect.gen(function* () {
+      const serverAuth = yield* ServerAuth;
+
+      const sessionState = yield* serverAuth.getSessionState({
+        cookies: {},
+        headers: {},
+      } as Parameters<ServerAuthShape["getSessionState"]>[0]);
+      const verified = yield* serverAuth.authenticateHttpRequest({
+        cookies: {},
+        headers: {},
+      } as Parameters<ServerAuthShape["authenticateHttpRequest"]>[0]);
+
+      expect(sessionState.authenticated).toBe(true);
+      expect(sessionState.role).toBe("owner");
+      expect(sessionState.auth.policy).toBe("unsafe-no-auth");
+      expect(verified.role).toBe("owner");
+      expect(verified.subject).toBe("unsafe-no-auth");
+    }).pipe(Effect.provide(makeServerAuthLayer({ unsafeNoAuth: true }))),
+  );
+
   it.effect("issues startup pairing URLs that bootstrap owner sessions", () =>
     Effect.gen(function* () {
       const serverAuth = yield* ServerAuth;

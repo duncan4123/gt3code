@@ -9,6 +9,7 @@ import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
 import { ServerConfig } from "./config.ts";
+import { ServerAuth } from "./auth/Services/ServerAuth.ts";
 import {
   OrchestrationEngineService,
   type OrchestrationEngineShape,
@@ -20,6 +21,7 @@ import {
   launchStartupHeartbeat,
   makeCommandGate,
   resolveAutoBootstrapWelcomeTargets,
+  resolveStartupBrowserTarget,
   resolveWelcomeBase,
   ServerRuntimeStartupError,
 } from "./serverRuntimeStartup.ts";
@@ -123,6 +125,30 @@ it.effect("resolveWelcomeBase derives cwd and project name from server config", 
       cwd: "/tmp/startup-project",
       projectName: "startup-project",
     });
+  }),
+);
+
+it.effect("resolveStartupBrowserTarget uses the plain dev URL when unsafe no-auth is enabled", () =>
+  Effect.gen(function* () {
+    const issuedPairingUrls = yield* Ref.make(0);
+    const target = yield* resolveStartupBrowserTarget.pipe(
+      Effect.provideService(ServerConfig, {
+        mode: "web",
+        host: "127.0.0.1",
+        port: 13773,
+        devUrl: new URL("http://localhost:5733"),
+        unsafeNoAuth: true,
+      } as never),
+      Effect.provideService(ServerAuth, {
+        issueStartupPairingUrl: () =>
+          Ref.update(issuedPairingUrls, (count) => count + 1).pipe(
+            Effect.as("http://localhost:5733/pair#token=PAIR"),
+          ),
+      } as never),
+    );
+
+    assert.equal(target, "http://localhost:5733/");
+    assert.equal(yield* Ref.get(issuedPairingUrls), 0);
   }),
 );
 

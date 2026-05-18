@@ -26,6 +26,7 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       const expectedBinDir = path.join(DEFAULT_T3CODE_GASCITY_HOME, "bin");
 
       assert.equal(env.T3CODE_HOME, expectedHome);
+      assert.equal(env.T3_HOME, expectedHome);
       assert.equal(env.T3CODE_GASCITY_HOME, DEFAULT_T3CODE_GASCITY_HOME);
       assert.equal(env.GC_HOME, DEFAULT_T3CODE_GASCITY_HOME);
       assert.equal(env.T3CODE_WORKTREES_DIR, expectedWorktreesDir);
@@ -75,11 +76,14 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
           GC_BIN: "/tmp/bin/gc",
           BD_BIN: "/tmp/bin/bd",
           GC_CITY_PATH: "/tmp/city",
+          VITE_WS_URL: "ws://localhost:13773",
         },
         t3Home: undefined,
       });
 
       assert.equal(env.T3CODE_HOME, "/tmp/base-home");
+      assert.equal(env.T3_HOME, "/tmp/base-home");
+      assert.equal(env.T3_WS_URL, "ws://localhost:13773/ws");
       assert.equal(env.T3CODE_GASCITY_HOME, "/tmp/gc-home");
       assert.equal(env.GC_HOME, "/tmp/gc-home");
       assert.equal(env.T3CODE_WORKTREES_DIR, "/tmp/worktrees");
