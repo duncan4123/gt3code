@@ -88,7 +88,7 @@ function repositoryIdentity(canonicalKey: string): RepositoryIdentity {
 }
 
 describe("filterGcOwnedProjectSnapshots", () => {
-  it("removes user-configured GC city and rig project rows from the normal Projects list", () => {
+  it("keeps user-configured GC city and rig project rows in the normal Projects list", () => {
     const visible = filterGcOwnedProjectSnapshots({
       snapshots: snapshots([
         makeProject({ id: "city", name: "user-city", cwd: "/home/user/cities/user-city" }),
@@ -104,10 +104,15 @@ describe("filterGcOwnedProjectSnapshots", () => {
       primaryEnvironmentId: environmentId,
     });
 
-    expect(visible.map((snapshot) => snapshot.displayName)).toEqual(["server"]);
+    expect(visible.map((snapshot) => snapshot.displayName)).toEqual([
+      "user-city",
+      "customer-api",
+      "generated-scratch",
+      "server",
+    ]);
   });
 
-  it("keeps non-GC members when a grouped project contains both GC and non-GC projects", () => {
+  it("keeps every member when a grouped project contains both GC and non-GC projects", () => {
     const [grouped] = snapshots(
       [
         {
@@ -138,7 +143,7 @@ describe("filterGcOwnedProjectSnapshots", () => {
     expect(visible[0]?.memberProjects.map((member) => member.name)).toEqual(["server"]);
   });
 
-  it("strips GC city members out of mixed repository groups", () => {
+  it("keeps GC city members in mixed repository groups", () => {
     const [grouped] = snapshots(
       [
         {
@@ -160,11 +165,14 @@ describe("filterGcOwnedProjectSnapshots", () => {
     });
 
     expect(visible).toHaveLength(1);
-    expect(visible[0]?.memberProjects.map((member) => member.name)).toEqual(["server"]);
-    expect(visible[0]?.groupedProjectCount).toBe(1);
+    expect(visible[0]?.memberProjects.map((member) => member.name)).toEqual([
+      "user-city",
+      "server",
+    ]);
+    expect(visible[0]?.groupedProjectCount).toBe(2);
   });
 
-  it("does not leave a grouped repository row when every member is GC-owned", () => {
+  it("keeps grouped repository rows when every member is GC-owned", () => {
     const [grouped] = snapshots(
       [
         {
@@ -193,6 +201,11 @@ describe("filterGcOwnedProjectSnapshots", () => {
       primaryEnvironmentId: environmentId,
     });
 
-    expect(visible).toEqual([]);
+    expect(visible).toHaveLength(1);
+    expect(visible[0]?.memberProjects.map((member) => member.name)).toEqual([
+      "customer-api",
+      "user-city",
+      "generated-scratch",
+    ]);
   });
 });

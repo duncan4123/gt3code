@@ -47,7 +47,7 @@
     "build": "turbo run build",
     "build:desktop": "turbo run build --filter=@t3tools/desktop --filter=t3",
     "build:beads-rust": "node scripts/build-beads-rust.ts",
-    "build:gascity-tools": "turbo run build --force --filter=doltlite --filter=@t3tools/doltlite-client --filter=@t3tools/gascity --filter=@t3tools/beads-doltlite && bun run build:beads-rust",
+    "build:gascity-tools": "node scripts/gascity-runner.ts prepare-update && turbo run build --force --filter=doltlite --filter=@t3tools/doltlite-client --filter=@t3tools/gascity --filter=@t3tools/beads-doltlite && bun run build:beads-rust",
     "typecheck": "turbo run typecheck",
     "lint": "oxlint --report-unused-disable-directives",
     "test": "turbo run test",

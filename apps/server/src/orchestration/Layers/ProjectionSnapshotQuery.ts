@@ -1341,47 +1341,50 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         }),
       );
 
-  const getShellSnapshot: ProjectionSnapshotQueryShape["getShellSnapshot"] = () =>
+  const getShellSnapshotFor = (
+    threadFilter: (row: Schema.Schema.Type<typeof ProjectionThreadDbRowSchema>) => boolean,
+    operation: string,
+  ) =>
     sql
       .withTransaction(
         Effect.all([
           listProjectRows(undefined).pipe(
             Effect.mapError(
               toPersistenceSqlOrDecodeError(
-                "ProjectionSnapshotQuery.getShellSnapshot:listProjects:query",
-                "ProjectionSnapshotQuery.getShellSnapshot:listProjects:decodeRows",
+                `${operation}:listProjects:query`,
+                `${operation}:listProjects:decodeRows`,
               ),
             ),
           ),
           listThreadRows(undefined).pipe(
             Effect.mapError(
               toPersistenceSqlOrDecodeError(
-                "ProjectionSnapshotQuery.getShellSnapshot:listThreads:query",
-                "ProjectionSnapshotQuery.getShellSnapshot:listThreads:decodeRows",
+                `${operation}:listThreads:query`,
+                `${operation}:listThreads:decodeRows`,
               ),
             ),
           ),
           listThreadSessionRows(undefined).pipe(
             Effect.mapError(
               toPersistenceSqlOrDecodeError(
-                "ProjectionSnapshotQuery.getShellSnapshot:listThreadSessions:query",
-                "ProjectionSnapshotQuery.getShellSnapshot:listThreadSessions:decodeRows",
+                `${operation}:listThreadSessions:query`,
+                `${operation}:listThreadSessions:decodeRows`,
               ),
             ),
           ),
           listActiveLatestTurnRows(undefined).pipe(
             Effect.mapError(
               toPersistenceSqlOrDecodeError(
-                "ProjectionSnapshotQuery.getShellSnapshot:listLatestTurns:query",
-                "ProjectionSnapshotQuery.getShellSnapshot:listLatestTurns:decodeRows",
+                `${operation}:listLatestTurns:query`,
+                `${operation}:listLatestTurns:decodeRows`,
               ),
             ),
           ),
           listProjectionStateRows(undefined).pipe(
             Effect.mapError(
               toPersistenceSqlOrDecodeError(
-                "ProjectionSnapshotQuery.getShellSnapshot:listProjectionState:query",
-                "ProjectionSnapshotQuery.getShellSnapshot:listProjectionState:decodeRows",
+                `${operation}:listProjectionState:query`,
+                `${operation}:listProjectionState:decodeRows`,
               ),
             ),
           ),
@@ -1429,7 +1432,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   mapProjectShellRow(row, repositoryIdentities.get(row.projectId) ?? null),
                 ),
               threads: threadRows
-                .filter((row) => row.deletedAt === null)
+                .filter((row) => row.deletedAt === null && threadFilter(row))
                 .map(
                   (row): OrchestrationThreadShell => ({
                     id: row.threadId,
@@ -1456,11 +1459,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             };
 
             return yield* decodeShellSnapshot(snapshot).pipe(
-              Effect.mapError(
-                toPersistenceDecodeError(
-                  "ProjectionSnapshotQuery.getShellSnapshot:decodeShellSnapshot",
-                ),
-              ),
+              Effect.mapError(toPersistenceDecodeError(`${operation}:decodeShellSnapshot`)),
             );
           }),
         ),
@@ -1468,9 +1467,23 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           if (isPersistenceError(error)) {
             return error;
           }
-          return toPersistenceSqlError("ProjectionSnapshotQuery.getShellSnapshot:query")(error);
+          return toPersistenceSqlError(`${operation}:query`)(error);
         }),
       );
+
+  const getShellSnapshot: ProjectionSnapshotQueryShape["getShellSnapshot"] = () =>
+    getShellSnapshotFor(
+      (row) => row.archivedAt === null,
+      "ProjectionSnapshotQuery.getShellSnapshot",
+    );
+
+  const getArchivedShellSnapshot: NonNullable<
+    ProjectionSnapshotQueryShape["getArchivedShellSnapshot"]
+  > = () =>
+    getShellSnapshotFor(
+      (row) => row.archivedAt !== null,
+      "ProjectionSnapshotQuery.getArchivedShellSnapshot",
+    );
 
   const getSnapshotSequence: ProjectionSnapshotQueryShape["getSnapshotSequence"] = () =>
     listProjectionStateRows(undefined).pipe(
@@ -1881,7 +1894,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getThreadShellById,
     getActiveThreadBindingByGcSessionName,
     getThreadDetailById,
-    getArchivedShellSnapshot: getShellSnapshot,
+    getArchivedShellSnapshot,
   } satisfies ProjectionSnapshotQueryShape;
 });
 

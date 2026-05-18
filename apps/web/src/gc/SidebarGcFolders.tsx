@@ -79,6 +79,7 @@ function gcControlTestIdSuffix(value: string): string {
 interface SidebarGcFoldersProps {
   rigGroups: readonly SidebarGcRigGroup[];
   flattenRootRigFolders?: boolean;
+  flattenRigGroupIds?: ReadonlySet<string>;
   indentDepth?: number;
   nestedParentId?: string;
   workspaceActionScope?: "city" | "rig";
@@ -738,18 +739,142 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
     );
   };
 
-  if (flattenedRootRigGroup) {
-    return flattenedRootRigGroup.agentGroups.map((agentGroup) =>
-      renderAgentGroup(flattenedRootRigGroup, agentGroup, {
-        agentIndentClassName: rigFolderIndentClassName,
-        threadGroupIndentClassName: agentFolderIndentClassName,
-        threadIndentClassName,
-      }),
+  const renderRigGroupContents = (
+    rigGroup: SidebarGcRigGroup,
+    options: {
+      readonly agentIndentClassName: string;
+      readonly threadGroupIndentClassName: string;
+      readonly threadIndentClassName: string;
+    },
+  ) =>
+    props.gcThreadGroupingMode === "convoy" && rigGroup.threadGroups ? (
+      <>
+        {rigGroup.agentGroups.map((agentGroup) =>
+          renderAgentGroup(
+            rigGroup,
+            {
+              ...agentGroup,
+              threadIds: [],
+              threadGroups: [],
+            },
+            {
+              agentIndentClassName: options.agentIndentClassName,
+              threadGroupIndentClassName: options.threadGroupIndentClassName,
+              threadIndentClassName: options.threadIndentClassName,
+              keyPrefix: `${rigGroup.id}:controls:`,
+            },
+          ),
+        )}
+        {rigGroup.threadGroups.map((threadGroup) => {
+          const groupKey = `${rigGroup.id}:${threadGroup.id}`;
+          const groupExpanded = isFolderExpanded(threadGroupFolderKey(groupKey));
+          return (
+            <Fragment key={groupKey}>
+              <SidebarMenuSubItem
+                className="w-full"
+                data-thread-selection-safe
+                data-testid={`gc-thread-group-${gcControlTestIdSuffix(groupKey)}`}
+              >
+                <div
+                  className={`flex items-center gap-1.5 py-0.5 text-muted-foreground/60 ${options.agentIndentClassName}`}
+                >
+                  <button
+                    type="button"
+                    data-thread-selection-safe
+                    data-testid={`gc-thread-group-toggle-${gcControlTestIdSuffix(groupKey)}`}
+                    aria-expanded={groupExpanded}
+                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md py-0.5 pr-1 transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      toggleFolderExpanded(threadGroupFolderKey(groupKey));
+                    }}
+                  >
+                    <ChevronRightIcon
+                      className={`size-3 shrink-0 transition-transform ${
+                        groupExpanded ? "rotate-90" : ""
+                      }`}
+                    />
+                    <FolderIcon className="size-3 shrink-0" />
+                    <span className="truncate text-[11px] font-medium leading-none">
+                      {threadGroup.label}
+                    </span>
+                    <GcThreadGroupBadges threadGroup={threadGroup} primary />
+                    {threadGroup.progressLabel ? (
+                      <span className="text-[.625rem] text-muted-foreground/55">
+                        {threadGroup.progressLabel}
+                      </span>
+                    ) : null}
+                    {threadGroup.status ? (
+                      <span className="text-[.625rem] text-muted-foreground/55">
+                        {threadGroup.status}
+                      </span>
+                    ) : null}
+                  </button>
+                </div>
+              </SidebarMenuSubItem>
+              {groupExpanded &&
+                threadGroup.agentGroups?.map((agentGroup) =>
+                  renderAgentGroup(rigGroup, agentGroup, {
+                    agentIndentClassName: gcDepthClassName(
+                      indentDepth,
+                      CONVOY_AGENT_INDENT_CLASSES,
+                    ),
+                    threadGroupIndentClassName: gcDepthClassName(
+                      indentDepth,
+                      CONVOY_THREAD_GROUP_INDENT_CLASSES,
+                    ),
+                    threadIndentClassName: gcDepthClassName(
+                      indentDepth,
+                      CONVOY_THREAD_INDENT_CLASSES,
+                    ),
+                    keyPrefix: `${groupKey}:`,
+                  }),
+                )}
+            </Fragment>
+          );
+        })}
+      </>
+    ) : (
+      rigGroup.agentGroups.map((agentGroup) =>
+        renderAgentGroup(rigGroup, agentGroup, {
+          agentIndentClassName: options.agentIndentClassName,
+          threadGroupIndentClassName: options.threadGroupIndentClassName,
+          threadIndentClassName: options.threadIndentClassName,
+        }),
+      )
     );
+
+  if (flattenedRootRigGroup) {
+    return renderRigGroupContents(flattenedRootRigGroup, {
+      agentIndentClassName: rigFolderIndentClassName,
+      threadGroupIndentClassName: agentFolderIndentClassName,
+      threadIndentClassName,
+    });
   }
 
   return visibleRigGroups.map((rigGroup) => {
     const childRigGroups = childRigGroupsByWorkspaceId.get(rigGroup.id) ?? [];
+    if (props.flattenRigGroupIds?.has(rigGroup.id)) {
+      return (
+        <Fragment key={`flattened-rig-${rigGroup.id}`}>
+          {renderRigGroupContents(rigGroup, {
+            agentIndentClassName: rigFolderIndentClassName,
+            threadGroupIndentClassName: agentFolderIndentClassName,
+            threadIndentClassName,
+          })}
+          {childRigGroups.length > 0 ? (
+            <SidebarGcFolders
+              {...props}
+              rigGroups={childRigGroups}
+              indentDepth={indentDepth}
+              nestedParentId={rigGroup.id}
+              workspaceActionScope={workspaceActionScope}
+            />
+          ) : null}
+        </Fragment>
+      );
+    }
     const displayLabel = gcRigGroupDisplayLabel(rigGroup, props.nestedParentId);
     const isCityFolder = rigGroup.kind === "workspace";
     const lifecycle = isCityFolder ? rigGroup.lifecycle : undefined;

@@ -69,6 +69,24 @@ rules above.
 - Non-GC project grouping must continue to behave like upstream.
 - Changes should stay in fork-owned GC modules where possible.
 
+## Thread Visibility
+
+Threads are user data and must not be hidden by GC-specific sidebar filtering.
+
+- Every non-deleted, non-archived thread returned by the main orchestration shell
+  snapshot must remain reachable from the normal sidebar.
+- GC-owned project folders must not be removed from the normal Projects list
+  when they contain threads.
+- Active, sleeping, stopped, suspended, or degraded GC runtime state must not
+  hide a thread.
+- Foreign-city or stale GC metadata may disable unsafe GC actions, but it must
+  not hide the thread row.
+- Archived pages must only receive threads whose canonical projection
+  `archivedAt` value is non-null.
+- Do not use Archived-page data, GC runtime state, project ownership, city
+  ownership, missing config, or missing API reachability as a reason to filter a
+  thread out of the main sidebar.
+
 ## Data Source
 
 Sidebar presence comes from configured Gas City config, not only running sessions

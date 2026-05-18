@@ -208,7 +208,7 @@ suspended = false
 [[rigs]]
 name = "test-rig"
 prefix = "tr"
-suspended = true
+suspended = false
 includes = ["../../packs/gastown", "packs/jj"]
 
 [[rigs.overrides]]

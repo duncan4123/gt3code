@@ -234,6 +234,39 @@ function describeGcSuspendedState(suspended: boolean): string {
   return suspended ? "suspended" : "active";
 }
 
+function normalizeGcProjectPath(value: string | null | undefined): string | null {
+  const normalized = value?.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  return normalized ? normalized : null;
+}
+
+function resolveProjectRepositoryRigGroupIds(
+  project: SidebarProjectSnapshot,
+  gcConfig: GcConfigResult | null,
+): ReadonlySet<string> {
+  if (!gcConfig) {
+    return new Set();
+  }
+
+  const projectPaths = new Set(
+    [project.cwd, ...project.memberProjects.map((member) => member.cwd)]
+      .map((path) => normalizeGcProjectPath(path))
+      .filter((path): path is string => Boolean(path)),
+  );
+  if (projectPaths.size === 0) {
+    return new Set();
+  }
+
+  return new Set(
+    gcConfig.rigs
+      .filter((rig) => rig.isRepository === true)
+      .filter((rig) => {
+        const rigPath = normalizeGcProjectPath(rig.path);
+        return Boolean(rigPath && projectPaths.has(rigPath));
+      })
+      .map((rig) => rig.name),
+  );
+}
+
 function threadJumpLabelMapsEqual(
   left: ReadonlyMap<string, string>,
   right: ReadonlyMap<string, string>,
@@ -780,6 +813,7 @@ interface SidebarProjectThreadListProps {
       threadIds: readonly ThreadId[];
     }>;
   }>;
+  flattenRigGroupIds: ReadonlySet<string>;
   showEmptyThreadState: boolean;
   shouldShowThreadPanel: boolean;
   isThreadListExpanded: boolean;
@@ -869,6 +903,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     folderThreads,
     renderedThreads,
     rigGroups,
+    flattenRigGroupIds,
     showEmptyThreadState,
     shouldShowThreadPanel,
     isThreadListExpanded,
@@ -935,6 +970,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
         <SidebarGcFolders
           rigGroups={rigGroups}
           flattenRootRigFolders
+          flattenRigGroupIds={flattenRigGroupIds}
           gcAgentMutationsInFlight={gcAgentMutationsInFlight}
           gcAgentStartsInFlight={gcAgentStartsInFlight}
           gcRigMutationsInFlight={gcRigMutationsInFlight}
@@ -1363,6 +1399,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
   const {
     folderThreads,
+    flattenRigGroupIds,
     hasOverflowingThreads,
     hiddenThreadStatus,
     renderedThreads,
@@ -1406,6 +1443,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     const hasVirtualAgentFolders = rigGroups.some((rigGroup) => rigGroup.agentGroups.length > 0);
     return {
       folderThreads,
+      flattenRigGroupIds: resolveProjectRepositoryRigGroupIds(project, gcConfig),
       hasOverflowingThreads: hasHiddenStandaloneThreads,
       hiddenThreadStatus: resolveProjectStatusIndicator(
         hiddenStandaloneThreads.map((thread) => resolveProjectThreadStatus(thread)),
@@ -1461,6 +1499,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     project.cwd,
     project.displayName,
     project.memberProjects,
+    project,
     projectExpanded,
     projectThreads,
     threadLastVisitedAts,
@@ -2311,6 +2350,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         folderThreads={folderThreads}
         renderedThreads={renderedThreads}
         rigGroups={rigGroups}
+        flattenRigGroupIds={flattenRigGroupIds}
         showEmptyThreadState={showEmptyThreadState}
         shouldShowThreadPanel={shouldShowThreadPanel}
         isThreadListExpanded={isThreadListExpanded}

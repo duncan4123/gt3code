@@ -353,6 +353,18 @@ describe("OrchestrationEngine", () => {
         ?.archivedAt,
     ).toBeNull();
 
+    await system.run(
+      engine.dispatch({
+        type: "thread.unarchive",
+        commandId: CommandId.make("cmd-thread-unarchive-idempotent"),
+        threadId: ThreadId.make("thread-archive"),
+      }),
+    );
+    expect(
+      (await system.readModel()).threads.find((thread) => thread.id === "thread-archive")
+        ?.archivedAt,
+    ).toBeNull();
+
     await system.dispose();
   });
 

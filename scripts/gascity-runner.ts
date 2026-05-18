@@ -58,6 +58,10 @@ async function main(): Promise<void> {
       printRuntime(runtime);
       return;
     }
+    case "prepare-update": {
+      stopRuntimeSupervisorForUpdate(getRuntimePaths(), "updating Gas City tools");
+      return;
+    }
     case "dry-run": {
       const runtime = ensureRuntimeInstalled();
       const startArgs = await resolveCityCommandArgs("start", passthroughArgs, {
@@ -372,6 +376,7 @@ function installRuntime(options: { readonly overwriteConfig: boolean }): Runtime
   }
   const brBinarySource = resolveManagedBrBinaryPath();
   const runtime = getRuntimePaths();
+  stopRuntimeSupervisorForUpdate(runtime, "installing Gas City tools");
   mkdirSync(dirname(runtime.gcBinaryPath), { recursive: true });
   copyRuntimeBinary(gcBinarySource, runtime.gcBinaryPath);
   copyRuntimeBinary(bdBinarySource, runtime.bdBinaryPath);
@@ -476,6 +481,92 @@ function sha256File(filePath: string): string {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
 }
 
+function stopRuntimeSupervisorForUpdate(runtime: RuntimePaths, action: string): void {
+  if (!existsSync(runtime.gcBinaryPath)) {
+    return;
+  }
+  const result = spawnSync(
+    runtime.gcBinaryPath,
+    ["supervisor", "stop", "--wait", "--wait-timeout", "45s"],
+    {
+      cwd: repoRoot,
+      env: runtimeEnv(runtime),
+      encoding: "utf8",
+      timeout: 60_000,
+    },
+  );
+  const outputText = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if ((result.status ?? 1) === 0) {
+    const output = outputText.trim();
+    if (output) {
+      console.log(output);
+    }
+    terminateOrphanedRuntimeSupervisors(runtime);
+    return;
+  }
+  if (/\bsupervisor is not running\b/i.test(outputText)) {
+    terminateOrphanedRuntimeSupervisors(runtime);
+    return;
+  }
+  if (terminateOrphanedRuntimeSupervisors(runtime) > 0) {
+    return;
+  }
+  if (outputText.trim()) {
+    process.stderr.write(outputText);
+  }
+  const reason = result.error instanceof Error ? `: ${result.error.message}` : "";
+  throw new Error(`Failed to stop Gas City supervisor before ${action}${reason}`);
+}
+
+function terminateOrphanedRuntimeSupervisors(runtime: RuntimePaths): number {
+  if (process.platform === "win32" || !existsSync("/proc")) {
+    return 0;
+  }
+  const pids = readdirSync("/proc")
+    .map((entry) => Number(entry))
+    .filter((pid) => Number.isInteger(pid) && pid > 0)
+    .filter((pid) => processMatchesRuntimeSupervisor(pid, runtime.gcBinaryPath));
+  for (const pid of pids) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // The process may already have exited between scan and signal.
+    }
+  }
+  waitForProcessesToExit(pids, 2000);
+  for (const pid of pids.filter((pid) => existsSync(`/proc/${pid}`))) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // The process may already have exited between scan and signal.
+    }
+  }
+  if (pids.length > 0) {
+    console.log(`Stopped ${pids.length} stale Gas City supervisor process(es).`);
+  }
+  return pids.length;
+}
+
+function processMatchesRuntimeSupervisor(pid: number, gcBinaryPath: string): boolean {
+  try {
+    const cmdline = readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ");
+    if (!cmdline.includes(" supervisor run")) {
+      return false;
+    }
+    const exePath = readlinkSync(`/proc/${pid}/exe`);
+    return exePath === gcBinaryPath || exePath === `${gcBinaryPath} (deleted)`;
+  } catch {
+    return false;
+  }
+}
+
+function waitForProcessesToExit(pids: ReadonlyArray<number>, timeoutMs: number): void {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && pids.some((pid) => existsSync(`/proc/${pid}`))) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+  }
+}
+
 function getRuntimePaths(): RuntimePaths {
   const rootDir = process.env.T3CODE_GASCITY_HOME ?? process.env.GC_HOME ?? defaultRuntimeRoot;
   const configuredCity = process.env.GC_CITY_PATH ?? process.env.GC_CITY;
@@ -518,7 +609,9 @@ function writeBundledCitySiteBinding(cityPath: string): void {
   const rigNames = readCityRigNames(cityPath);
   const rigEntries = rigNames
     .map((name) => ({ name, path: bundledRigPath(cityPath, name) }))
-    .filter((entry): entry is { readonly name: string; readonly path: string } => entry.path !== null);
+    .filter(
+      (entry): entry is { readonly name: string; readonly path: string } => entry.path !== null,
+    );
   const siteDir = join(cityPath, ".gc");
   mkdirSync(siteDir, { recursive: true });
   const workspaceName = registrationNameForCity(cityPath);
@@ -528,7 +621,8 @@ function writeBundledCitySiteBinding(cityPath: string): void {
     ...(workspacePrefix ? [`workspace_prefix = ${JSON.stringify(workspacePrefix)}`] : []),
   ];
   const rigBlocks = rigEntries.map(
-    (entry) => `[[rig]]\nname = ${JSON.stringify(entry.name)}\npath = ${JSON.stringify(entry.path)}`,
+    (entry) =>
+      `[[rig]]\nname = ${JSON.stringify(entry.name)}\npath = ${JSON.stringify(entry.path)}`,
   );
   writeFileSync(join(siteDir, "site.toml"), `${[...header, ...rigBlocks].join("\n\n")}\n`);
 }
@@ -1083,6 +1177,8 @@ function printHelp(): void {
 
 Commands:
   bun gascity:install   Install built GC, bd, and br binaries; use repo packaged city
+  bun gascity:prepare-update
+                         Stop bundled supervisor before rebuilding or reinstalling tools
   bun gascity:dry-run   Show agents GC would start without side effects
   bun gascity:status    Show bundled city status
   bun gascity:start     Choose and start a configured city in an interactive terminal
