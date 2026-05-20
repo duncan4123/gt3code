@@ -88,6 +88,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         readModel,
         command,
         projectId: command.projectId,
+        workspaceRoot: command.workspaceRoot,
       });
 
       return {

@@ -17,6 +17,7 @@ import {
   resolveSidebarNewThreadEnvMode,
   resolveSidebarThreadSearch,
   normalizeThreadSearchQuery,
+  partitionProjectThreadsForSidebar,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
@@ -62,6 +63,170 @@ describe("resolveSidebarThreadSearch", () => {
     expect([...state.matchingThreadIds].sort()).toEqual(["thread-message", "thread-title"]);
     expect([...state.matchingProjectIds].sort()).toEqual(["project-message", "project-title"]);
     expect(state.snippetByThreadId.get("thread-message")).toBe("needle in message");
+  });
+});
+
+describe("partitionProjectThreadsForSidebar", () => {
+  it("keeps GC workspace threads out of project partitions", () => {
+    const thread = {
+      id: ThreadId.make("thread-city-a-mayor"),
+      title: "city-a__mayor · mayor",
+      customMetadata: {
+        "gc.agent": "mayor",
+        "gc.agentQualified": "mayor",
+        "gc.city": "city-a",
+        "gc.groupId": "city-a",
+        "gc.groupKind": "workspace",
+        "gc.groupLabel": "CITY-A",
+      },
+    };
+
+    const result = partitionProjectThreadsForSidebar({
+      threads: [thread],
+      activeThreadId: undefined,
+      isThreadListExpanded: true,
+      previewLimit: 3,
+      allowedGcRigGroupIds: new Set(),
+      gcConfig: {
+        workspace: {
+          name: "cities",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "city-a",
+            path: "/fixtures/cities/city-a",
+            suspended: false,
+          },
+          {
+            name: "city-a/repo-main",
+            path: "/fixtures/repos/repo-main",
+            suspended: false,
+          },
+        ],
+        agents: [
+          {
+            name: "mayor",
+            dir: "city-a",
+            suspended: false,
+            named_session_mode: "always",
+          },
+        ],
+      },
+      projectCwd: "/fixtures/repos/repo-main",
+      projectName: "repo-main",
+    });
+
+    expect(result.rigGroups).toEqual([]);
+    expect(result.visibleStandaloneThreads).toEqual([]);
+  });
+
+  it("keeps configured agents for the matching rig project without allowing city wrappers", () => {
+    const result = partitionProjectThreadsForSidebar({
+      threads: [],
+      activeThreadId: undefined,
+      isThreadListExpanded: true,
+      previewLimit: 3,
+      allowedGcRigGroupIds: new Set(["city-a/repo-main"]),
+      gcConfig: {
+        workspace: {
+          name: "cities",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "city-a",
+            path: "/fixtures/cities/city-a",
+            suspended: false,
+          },
+          {
+            name: "city-a/repo-main",
+            path: "/fixtures/repos/repo-main",
+            suspended: false,
+          },
+        ],
+        agents: [
+          {
+            name: "worker",
+            dir: "city-a/repo-main",
+            suspended: false,
+          },
+        ],
+      },
+      projectCwd: "/fixtures/repos/repo-main",
+      projectName: "repo-main",
+    });
+
+    expect(result.rigGroups.map((group) => group.id)).toEqual(["city-a/repo-main"]);
+    expect(result.rigGroups[0]?.agentGroups.map((agent) => agent.qualifiedName)).toEqual([
+      "city-a/repo-main/worker",
+    ]);
+  });
+
+  it("does not merge workspace thread agents into a matching rig project agent list", () => {
+    const thread = {
+      id: ThreadId.make("thread-city-a-mayor"),
+      title: "city-a__mayor · mayor",
+      customMetadata: {
+        "gc.agent": "mayor",
+        "gc.agentQualified": "mayor",
+        "gc.city": "city-a",
+        "gc.groupId": "city-a",
+        "gc.groupKind": "workspace",
+        "gc.groupLabel": "CITY-A",
+      },
+    };
+
+    const result = partitionProjectThreadsForSidebar({
+      threads: [thread],
+      activeThreadId: undefined,
+      isThreadListExpanded: true,
+      previewLimit: 3,
+      allowedGcRigGroupIds: new Set(["city-a/repo-main"]),
+      gcConfig: {
+        workspace: {
+          name: "cities",
+          suspended: false,
+        },
+        rigs: [
+          {
+            name: "city-a",
+            path: "/fixtures/cities/city-a",
+            suspended: false,
+          },
+          {
+            name: "city-a/repo-main",
+            path: "/fixtures/repos/repo-main",
+            suspended: false,
+          },
+        ],
+        agents: [
+          {
+            name: "mayor",
+            dir: "city-a",
+            suspended: false,
+            named_session_mode: "always",
+          },
+          {
+            name: "worker",
+            dir: "city-a/repo-main",
+            suspended: false,
+          },
+        ],
+      },
+      projectCwd: "/fixtures/repos/repo-main",
+      projectName: "repo-main",
+    });
+
+    expect(result.rigGroups.map((group) => group.id)).toEqual(["city-a/repo-main"]);
+    expect(result.rigGroups[0]?.agentGroups.map((agent) => agent.qualifiedName)).toEqual([
+      "city-a/repo-main/worker",
+    ]);
+    expect(
+      result.rigGroups[0]?.agentGroups.find((agent) => agent.qualifiedName === "city-a/mayor")
+        ?.threads,
+    ).toBeUndefined();
+    expect(result.visibleStandaloneThreads).toEqual([]);
   });
 });
 

@@ -138,7 +138,7 @@ model = "kimi-for-coding/k2p6"
 
 [[rigs]]
 name = "gascity"
-suspended = true
+suspended = false
 includes = ["../../packs/gastown"]
 
 [[rigs.overrides]]
@@ -436,6 +436,16 @@ model = "kimi-for-coding/k2p6"
 [[patches.agent]]
 dir = ""
 name = "gastown.mayor"
+suspended = false
+
+[[patches.agent]]
+dir = "t3code"
+name = "worker"
+wake_mode = "resume"
+
+[[patches.agent]]
+dir = ""
+name = "gastown.deacon"
 suspended = false
 
 [[patches.named_session]]

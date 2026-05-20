@@ -31,6 +31,15 @@ export function findProjectById(
   return readModel.projects.find((project) => project.id === projectId);
 }
 
+export function findActiveProjectByWorkspaceRoot(
+  readModel: OrchestrationReadModel,
+  workspaceRoot: string,
+): OrchestrationProject | undefined {
+  return readModel.projects.find(
+    (project) => project.deletedAt === null && project.workspaceRoot === workspaceRoot,
+  );
+}
+
 export function listThreadsByProjectId(
   readModel: OrchestrationReadModel,
   projectId: ProjectId,
@@ -59,16 +68,31 @@ export function requireProjectAbsent(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
   readonly projectId: ProjectId;
+  readonly workspaceRoot?: string;
 }): Effect.Effect<void, OrchestrationCommandInvariantError> {
-  if (!findProjectById(input.readModel, input.projectId)) {
-    return Effect.void;
+  if (findProjectById(input.readModel, input.projectId)) {
+    return Effect.fail(
+      invariantError(
+        input.command.type,
+        `Project '${input.projectId}' already exists and cannot be created twice.`,
+      ),
+    );
   }
-  return Effect.fail(
-    invariantError(
-      input.command.type,
-      `Project '${input.projectId}' already exists and cannot be created twice.`,
-    ),
-  );
+
+  const workspaceRoot = input.workspaceRoot?.trim();
+  if (workspaceRoot) {
+    const existingProject = findActiveProjectByWorkspaceRoot(input.readModel, workspaceRoot);
+    if (existingProject) {
+      return Effect.fail(
+        invariantError(
+          input.command.type,
+          `Project workspace '${workspaceRoot}' already exists as '${existingProject.id}' and cannot be created twice.`,
+        ),
+      );
+    }
+  }
+
+  return Effect.void;
 }
 
 export function requireThread(input: {

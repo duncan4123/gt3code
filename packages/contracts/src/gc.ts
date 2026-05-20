@@ -942,6 +942,17 @@ export function groupThreadsByRigAndAgent<
     const cityWorkspaceGroupId =
       resolvedCity && multiCityWorkspaceIds.has(resolvedCity) ? resolvedCity : cityScopedRigGroupId;
     let resolvedAgent = canonicalAgentQualified ?? agent;
+    if (
+      meta.groupKind === "workspace" &&
+      isMergedMultiCityConfig &&
+      resolvedCity &&
+      multiCityWorkspaceIds.has(resolvedCity) &&
+      resolvedAgent &&
+      !resolvedAgent.includes("/") &&
+      !resolvedAgent.includes(".")
+    ) {
+      resolvedAgent = `${resolvedCity}/${resolvedAgent}`;
+    }
     const configuredAgentForResolved = resolvedAgent
       ? findConfiguredAgent(options?.config, resolvedAgent)
       : undefined;

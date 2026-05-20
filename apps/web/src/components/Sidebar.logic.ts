@@ -592,6 +592,7 @@ export function partitionProjectThreadsForSidebar<
   previewLimit: number;
   gcConfig?: GcConfigResult | null;
   includeGcFolders?: boolean;
+  allowedGcRigGroupIds?: ReadonlySet<string>;
   projectCwd?: string | null;
   projectName?: string | null;
   projectMembers?: ReadonlyArray<{
@@ -613,6 +614,11 @@ export function partitionProjectThreadsForSidebar<
         projectMembers: input.projectMembers,
       })
     : { rigGroups: [], standaloneThreads: [...input.threads] };
+  const allowedGcRigGroupIds = input.allowedGcRigGroupIds;
+  const allowedRigGroups = allowedGcRigGroupIds
+    ? rigGroups.filter((rigGroup) => allowedGcRigGroupIds.has(rigGroup.id))
+    : rigGroups;
+  const visibleRigGroups = allowedRigGroups;
   const standaloneVisibility = getVisibleThreadsForProject({
     threads: standaloneThreads,
     activeThreadId: input.activeThreadId,
@@ -621,7 +627,7 @@ export function partitionProjectThreadsForSidebar<
   });
 
   return {
-    rigGroups,
+    rigGroups: visibleRigGroups,
     visibleStandaloneThreads: standaloneVisibility.visibleThreads,
     hiddenStandaloneThreads: standaloneVisibility.hiddenThreads,
     hasHiddenStandaloneThreads: standaloneVisibility.hasHiddenThreads,

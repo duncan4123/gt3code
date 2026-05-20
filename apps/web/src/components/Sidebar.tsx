@@ -178,10 +178,7 @@ import {
 } from "./Sidebar.logic";
 import { sortThreads } from "../lib/threadSort";
 import { SidebarGcFolders } from "../gc/SidebarGcFolders";
-import {
-  filterGcOwnedProjectSnapshots,
-  splitGcRigProjectSnapshots,
-} from "../gc/sidebarGcProjectSnapshots";
+import { splitGcRigProjectSnapshots } from "../gc/sidebarGcProjectSnapshots";
 import { useGcRigProjects } from "../gc/useGcRigProjects";
 import {
   gcSessionNameForQualifiedAgent,
@@ -1483,6 +1480,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       });
     };
     const folderThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : visibleProjectThreads;
+    const projectRepositoryRigGroupIds = resolveProjectRepositoryRigGroupIds(project, gcConfig);
     const {
       rigGroups,
       visibleStandaloneThreads,
@@ -1494,6 +1492,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       isThreadListExpanded,
       previewLimit: THREAD_PREVIEW_LIMIT,
       gcConfig,
+      allowedGcRigGroupIds: projectRepositoryRigGroupIds,
       projectCwd: project.cwd,
       projectName: project.displayName,
       projectMembers: project.memberProjects,
@@ -1501,7 +1500,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     const hasVirtualAgentFolders = rigGroups.some((rigGroup) => rigGroup.agentGroups.length > 0);
     return {
       folderThreads,
-      flattenRigGroupIds: resolveProjectRepositoryRigGroupIds(project, gcConfig),
+      flattenRigGroupIds: projectRepositoryRigGroupIds,
       hasOverflowingThreads: hasHiddenStandaloneThreads,
       hiddenThreadStatus: resolveProjectStatusIndicator(
         hiddenStandaloneThreads.map((thread) => resolveProjectThreadStatus(thread)),
@@ -2856,7 +2855,12 @@ interface SidebarProjectsContentProps {
   gcAgentActionStateByAgent: ReadonlyMap<string, GcAgentActionState>;
   gcRigActionStateByRig: ReadonlyMap<string, "resume" | "suspend">;
   gcCityActionState: "resume" | "suspend" | null;
-  gcSection: (renderWorkspaceRows: (workspaceId: string) => React.ReactNode) => React.ReactNode;
+  sidebarThreadById: ReadonlyMap<string, SidebarThreadSummary>;
+  navigateToThread: (threadRef: ScopedThreadRef) => void;
+  gcSection: (
+    renderWorkspaceRows: (workspaceId: string) => React.ReactNode,
+    renderThreadRows: (threadIds: readonly string[], indentClassName?: string) => React.ReactNode,
+  ) => React.ReactNode;
   attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
   expandThreadListForProject: (projectKey: string) => void;
   collapseThreadListForProject: (projectKey: string) => void;
@@ -2903,7 +2907,6 @@ interface SidebarProjectsContentProps {
 
 interface SidebarGcCityProjectGroup {
   readonly cityId: string;
-  readonly label: string;
   readonly projects: readonly SidebarProjectSnapshot[];
 }
 
@@ -2923,72 +2926,67 @@ function resolveSidebarGcProjectCityGroups(input: {
     return { cityGroups: [], looseProjects: input.projects };
   }
 
-  const rigNames = new Set(input.gcConfig.rigs.map((rig) => rig.name.trim()).filter(Boolean));
-  const cityNames = new Set<string>();
-  for (const rigName of rigNames) {
-    const separatorIndex = rigName.indexOf("/");
-    if (separatorIndex <= 0) continue;
-    const cityName = rigName.slice(0, separatorIndex);
-    if (rigNames.has(cityName)) {
-      cityNames.add(cityName);
-    }
-  }
-  if (cityNames.size === 0) {
-    return { cityGroups: [], looseProjects: input.projects };
-  }
-
+  const cityIds = new Set(
+    input.gcConfig.rigs
+      .map((rig) => rig.name.trim())
+      .filter((name) => name.length > 0 && !name.includes("/")),
+  );
   const cityByRigPath = new Map<string, string>();
   for (const rig of input.gcConfig.rigs) {
     const rigName = rig.name.trim();
     const separatorIndex = rigName.indexOf("/");
-    if (separatorIndex <= 0) continue;
-    const cityName = rigName.slice(0, separatorIndex);
-    if (!cityNames.has(cityName)) continue;
+    if (separatorIndex <= 0 || rig.isRepository !== true) {
+      continue;
+    }
+    const cityId = rigName.slice(0, separatorIndex);
+    if (!cityIds.has(cityId)) {
+      continue;
+    }
     const path = normalizeSidebarGcProjectPath(rig.path);
     if (path) {
-      cityByRigPath.set(path, cityName);
+      cityByRigPath.set(path, cityId);
     }
+  }
+  if (cityByRigPath.size === 0) {
+    return { cityGroups: [], looseProjects: input.projects };
   }
 
   const groupsByCity = new Map<string, SidebarProjectSnapshot[]>();
   const looseProjects: SidebarProjectSnapshot[] = [];
   for (const project of input.projects) {
-    const cityName =
-      project.memberProjects
-        .map((member) => normalizeSidebarGcProjectPath(member.cwd))
+    const cityId =
+      [project.cwd, ...project.memberProjects.map((member) => member.cwd)]
+        .map((path) => normalizeSidebarGcProjectPath(path))
         .flatMap((path) => (path ? [cityByRigPath.get(path)] : []))
         .find((city): city is string => Boolean(city)) ?? null;
-    if (!cityName) {
+    if (!cityId) {
       looseProjects.push(project);
       continue;
     }
-    const projects = groupsByCity.get(cityName) ?? [];
+    const projects = groupsByCity.get(cityId) ?? [];
     projects.push(project);
-    groupsByCity.set(cityName, projects);
+    groupsByCity.set(cityId, projects);
   }
 
   const configuredCityOrder = input.gcConfig.rigs
     .map((rig) => rig.name.trim())
-    .filter((name) => cityNames.has(name));
-  const cityGroups = [...groupsByCity.entries()]
-    .toSorted(([left], [right]) => {
-      const leftIndex = configuredCityOrder.indexOf(left);
-      const rightIndex = configuredCityOrder.indexOf(right);
-      if (leftIndex !== -1 || rightIndex !== -1) {
-        return (
-          (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex) -
-          (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex)
-        );
-      }
-      return left.localeCompare(right);
-    })
-    .map(([cityId, projects]) => ({
-      cityId,
-      label: cityId.toUpperCase(),
-      projects,
-    }));
-
-  return { cityGroups, looseProjects };
+    .filter((name) => cityIds.has(name));
+  return {
+    cityGroups: [...groupsByCity.entries()]
+      .toSorted(([left], [right]) => {
+        const leftIndex = configuredCityOrder.indexOf(left);
+        const rightIndex = configuredCityOrder.indexOf(right);
+        if (leftIndex !== -1 || rightIndex !== -1) {
+          return (
+            (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex) -
+            (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex)
+          );
+        }
+        return left.localeCompare(right);
+      })
+      .map(([cityId, projects]) => ({ cityId, projects })),
+    looseProjects,
+  };
 }
 
 const SidebarProjectsContent = memo(function SidebarProjectsContent(
@@ -3036,6 +3034,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     gcAgentActionStateByAgent,
     gcRigActionStateByRig,
     gcCityActionState,
+    sidebarThreadById,
+    navigateToThread,
     gcSection,
     attachThreadListAutoAnimateRef,
     expandThreadListForProject,
@@ -3163,12 +3163,63 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
       onToggleGcAgentSuspended,
       onToggleGcCitySuspended,
       onToggleGcRigSuspended,
+      onWakeGcAgentSession,
       routeThreadKey,
       searchSnippetByThreadId,
       suppressProjectClickAfterDragRef,
       suppressProjectClickForContextMenuRef,
       threadJumpLabelByKey,
     ],
+  );
+  const renderGcThreadRows = useCallback(
+    (threadIds: readonly string[], indentClassName?: string) =>
+      threadIds.flatMap((threadId) => {
+        const thread = sidebarThreadById.get(threadId);
+        if (
+          !thread ||
+          thread.archivedAt !== null ||
+          (isThreadSearchActive && !matchingThreadIds.has(thread.id))
+        ) {
+          return [];
+        }
+        const threadRef = scopeThreadRef(thread.environmentId, thread.id);
+        const threadKey = scopedThreadKey(threadRef);
+        const threadStatus = resolveThreadStatusPill({ thread });
+        return [
+          <SidebarMenuSubItem key={threadKey} className="w-full" data-thread-item>
+            <SidebarMenuSubButton
+              data-thread-selection-safe
+              size="sm"
+              aria-current={routeThreadKey === threadKey ? "page" : undefined}
+              className={`group h-6 w-full translate-x-0 justify-start gap-1.5 text-left text-xs ${
+                routeThreadKey === threadKey
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground/80 hover:bg-accent hover:text-foreground"
+              } ${indentClassName ?? "px-2"}`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                navigateToThread(threadRef);
+              }}
+            >
+              {threadStatus ? <ThreadStatusLabel status={threadStatus} compact /> : null}
+              <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+              <span
+                className={`ml-auto shrink-0 text-[10px] ${
+                  routeThreadKey === threadKey
+                    ? "text-foreground/72 dark:text-foreground/82"
+                    : "text-muted-foreground/40"
+                }`}
+              >
+                {formatRelativeTimeLabel(
+                  thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
+                )}
+              </span>
+            </SidebarMenuSubButton>
+          </SidebarMenuSubItem>,
+        ];
+      }),
+    [isThreadSearchActive, matchingThreadIds, navigateToThread, routeThreadKey, sidebarThreadById],
   );
   return (
     <SidebarContent className="gap-0">
@@ -3280,7 +3331,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           ) : null}
         </div>
 
-        {gcSection(renderGcCityProjectRows)}
+        {gcSection(renderGcCityProjectRows, renderGcThreadRows)}
 
         {isManualProjectSorting ? (
           <DndContext
@@ -3398,6 +3449,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
             No projects yet
           </div>
         )}
+
       </SidebarGroup>
     </SidebarContent>
   );
@@ -3686,15 +3738,7 @@ export default function Sidebar() {
     () => new Map(sidebarProjects.map((project) => [project.projectKey, project] as const)),
     [sidebarProjects],
   );
-  const normalSidebarProjects = useMemo(
-    () =>
-      filterGcOwnedProjectSnapshots({
-        snapshots: sidebarProjects,
-        gcConfig,
-        primaryEnvironmentId,
-      }),
-    [gcConfig, primaryEnvironmentId, sidebarProjects],
-  );
+  const normalSidebarProjects = sidebarProjects;
   const normalSidebarProjectByKey = useMemo(
     () => new Map(normalSidebarProjects.map((project) => [project.projectKey, project] as const)),
     [normalSidebarProjects],
@@ -3716,6 +3760,10 @@ export default function Sidebar() {
             [scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)), thread] as const,
         ),
       ),
+    [sidebarThreads],
+  );
+  const sidebarThreadById = useMemo(
+    () => new Map(sidebarThreads.map((thread) => [thread.id, thread] as const)),
     [sidebarThreads],
   );
   const gcGlobalRigGroups = useMemo(() => {
@@ -3759,12 +3807,26 @@ export default function Sidebar() {
   // are displayed together.
   const threadsByProjectKey = useMemo(() => {
     const next = new Map<string, SidebarThreadSummary[]>();
+    const projectKeyByPath = new Map<string, string>();
+    for (const project of normalSidebarProjects) {
+      for (const path of [project.cwd, ...project.memberProjects.map((member) => member.cwd)]) {
+        const normalized = normalizeSidebarGcProjectPath(path);
+        if (normalized) {
+          projectKeyByPath.set(normalized, project.projectKey);
+        }
+      }
+    }
     for (const thread of sidebarThreads) {
+      const gcRigPath = normalizeSidebarGcProjectPath(thread.customMetadata?.["gc.rigPath"]);
+      const gcProjectKey =
+        thread.customMetadata?.["gc.groupKind"] === "rig" && gcRigPath
+          ? projectKeyByPath.get(gcRigPath)
+          : undefined;
       const physicalKey =
         projectPhysicalKeyByScopedRef.get(
           scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
         ) ?? scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
-      const logicalKey = normalProjectLogicalKeyByPhysicalKey.get(physicalKey);
+      const logicalKey = gcProjectKey ?? normalProjectLogicalKeyByPhysicalKey.get(physicalKey);
       if (!logicalKey) {
         continue;
       }
@@ -3776,7 +3838,12 @@ export default function Sidebar() {
       }
     }
     return next;
-  }, [normalProjectLogicalKeyByPhysicalKey, projectPhysicalKeyByScopedRef, sidebarThreads]);
+  }, [
+    normalProjectLogicalKeyByPhysicalKey,
+    normalSidebarProjects,
+    projectPhysicalKeyByScopedRef,
+    sidebarThreads,
+  ]);
   const visibleThreads = useMemo(
     () => sidebarThreads.filter((thread) => thread.archivedAt === null),
     [sidebarThreads],
@@ -4645,8 +4712,8 @@ export default function Sidebar() {
   }, [allSortedProjects, isThreadSearchActive, threadSearchState.matchingProjectIds]);
   const isManualProjectSorting = sidebarProjectSortOrder === "manual";
   const visibleSidebarThreadKeys = useMemo(
-    () =>
-      sortedProjects.flatMap((project) => {
+    () => {
+      const projectThreadKeys = sortedProjects.flatMap((project) => {
         const projectThreads = sortThreads(
           (threadsByProjectKey.get(project.projectKey) ?? []).filter(
             (thread) =>
@@ -4672,12 +4739,14 @@ export default function Sidebar() {
         }
         const isThreadListExpanded = expandedThreadListsByProject.has(project.projectKey);
         const renderedThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : projectThreads;
+        const projectRepositoryRigGroupIds = resolveProjectRepositoryRigGroupIds(project, gcConfig);
         const { rigGroups, visibleStandaloneThreads } = partitionProjectThreadsForSidebar({
           threads: renderedThreads,
           activeThreadId: pinnedCollapsedThread?.id,
           isThreadListExpanded,
           previewLimit: THREAD_PREVIEW_LIMIT,
           gcConfig,
+          allowedGcRigGroupIds: projectRepositoryRigGroupIds,
           projectCwd: project.cwd,
           projectName: project.displayName,
           projectMembers: project.memberProjects,
@@ -4694,7 +4763,24 @@ export default function Sidebar() {
             scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
           ),
         ];
-      }),
+      });
+      const globalGcThreadKeys = visibleGcGlobalRigGroups.flatMap((rigGroup) =>
+        rigGroup.agentGroups.flatMap((agentGroup) =>
+          agentGroup.threadIds.flatMap((threadId) => {
+            const thread = sidebarThreadById.get(threadId);
+            if (
+              !thread ||
+              thread.archivedAt !== null ||
+              (isThreadSearchActive && !threadSearchState.matchingThreadIds.has(thread.id))
+            ) {
+              return [];
+            }
+            return [scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))];
+          }),
+        ),
+      );
+      return [...globalGcThreadKeys, ...projectThreadKeys];
+    },
     [
       gcConfig,
       sidebarThreadSortOrder,
@@ -4702,9 +4788,11 @@ export default function Sidebar() {
       projectExpandedById,
       isThreadSearchActive,
       routeThreadKey,
+      sidebarThreadById,
       sortedProjects,
       threadSearchState.matchingThreadIds,
       threadsByProjectKey,
+      visibleGcGlobalRigGroups,
     ],
   );
   const threadJumpCommandByKey = useMemo(() => {
@@ -5097,10 +5185,14 @@ export default function Sidebar() {
             gcAgentActionStateByAgent={gcAgentActionStateByAgent}
             gcRigActionStateByRig={gcRigActionStateByRig}
             gcCityActionState={gcCityActionState}
-            gcSection={(renderWorkspaceRows) => (
+            sidebarThreadById={sidebarThreadById}
+            navigateToThread={navigateToThread}
+            gcSection={(renderWorkspaceRows, renderThreadRows) => (
               <GcSidebarGlobalSection
                 rigGroups={visibleGcGlobalRigGroups}
+                showHeader={false}
                 renderWorkspaceRows={renderWorkspaceRows}
+                renderThreadRows={renderThreadRows}
                 gcAgentMutationsInFlight={gcAgentMutationsInFlight}
                 gcAgentStartsInFlight={gcAgentStartsInFlight}
                 gcRigMutationsInFlight={gcRigMutationsInFlight}

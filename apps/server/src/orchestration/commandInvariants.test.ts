@@ -12,9 +12,11 @@ import {
 import * as Effect from "effect/Effect";
 
 import {
+  findActiveProjectByWorkspaceRoot,
   findThreadById,
   listThreadsByProjectId,
   requireNonNegativeInteger,
+  requireProjectAbsent,
   requireThread,
   requireThreadAbsent,
 } from "./commandInvariants.ts";
@@ -118,6 +120,40 @@ const messageSendCommand: OrchestrationCommand = {
 };
 
 describe("commandInvariants", () => {
+  it("finds active projects by workspace root", () => {
+    expect(findActiveProjectByWorkspaceRoot(readModel, "/tmp/project-a")?.id).toBe(
+      ProjectId.make("project-a"),
+    );
+    expect(findActiveProjectByWorkspaceRoot(readModel, "/tmp/missing")).toBeUndefined();
+  });
+
+  it("rejects duplicate active project workspace roots", async () => {
+    const command: OrchestrationCommand = {
+      type: "project.create",
+      commandId: CommandId.make("cmd-create-project"),
+      projectId: ProjectId.make("project-new"),
+      title: "Project New",
+      workspaceRoot: "/tmp/project-a",
+      createWorkspaceRootIfMissing: false,
+      defaultModelSelection: {
+        instanceId: ProviderInstanceId.make("codex"),
+        model: "gpt-5-codex",
+      },
+      createdAt: now,
+    };
+
+    await expect(
+      Effect.runPromise(
+        requireProjectAbsent({
+          readModel,
+          command,
+          projectId: command.projectId,
+          workspaceRoot: command.workspaceRoot,
+        }),
+      ),
+    ).rejects.toThrow("already exists");
+  });
+
   it("finds threads by id and project", () => {
     expect(findThreadById(readModel, ThreadId.make("thread-1"))?.projectId).toBe("project-a");
     expect(findThreadById(readModel, ThreadId.make("missing"))).toBeUndefined();

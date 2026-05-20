@@ -9,10 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
 import type { Project } from "../types";
-import {
-  filterGcOwnedProjectSnapshots,
-  splitGcRigProjectSnapshots,
-} from "./sidebarGcProjectSnapshots";
+import { splitGcRigProjectSnapshots } from "./sidebarGcProjectSnapshots";
 
 const environmentId = EnvironmentId.make("env-primary");
 
@@ -93,31 +90,8 @@ function repositoryIdentity(canonicalKey: string): RepositoryIdentity {
   };
 }
 
-describe("filterGcOwnedProjectSnapshots", () => {
-  it("removes GC city roots and keeps rig project rows in the normal Projects list", () => {
-    const visible = filterGcOwnedProjectSnapshots({
-      snapshots: snapshots([
-        makeProject({ id: "city", name: "user-city", cwd: "/home/user/cities/user-city" }),
-        makeProject({ id: "rig", name: "customer-api", cwd: "/home/user/work/customer-api/" }),
-        makeProject({
-          id: "non-repo",
-          name: "generated-scratch",
-          cwd: "/home/user/cities/user-city/rigs/generated-scratch",
-        }),
-        makeProject({ id: "regular", name: "server", cwd: "/home/user/work/server" }),
-      ]),
-      gcConfig: makeGcConfig(),
-      primaryEnvironmentId: environmentId,
-    });
-
-    expect(visible.map((snapshot) => snapshot.displayName)).toEqual([
-      "customer-api",
-      "generated-scratch",
-      "server",
-    ]);
-  });
-
-  it("keeps every member when a grouped project contains both GC and non-GC projects", () => {
+describe("splitGcRigProjectSnapshots", () => {
+  it("splits configured rig repositories out of mixed upstream repository groups", () => {
     const [grouped] = snapshots(
       [
         {
@@ -132,82 +106,16 @@ describe("filterGcOwnedProjectSnapshots", () => {
       "repository",
     );
 
-    const [split] = splitGcRigProjectSnapshots({
-      snapshots: grouped ? [grouped] : [],
-      gcConfig: makeGcConfig(),
-      primaryEnvironmentId: environmentId,
-    }).filter((snapshot) => snapshot.memberProjects.some((member) => member.name === "server"));
-
-    const visible = filterGcOwnedProjectSnapshots({
-      snapshots: split ? [split] : [],
-      gcConfig: makeGcConfig(),
-      primaryEnvironmentId: environmentId,
-    });
-
-    expect(visible).toHaveLength(1);
-    expect(visible[0]?.memberProjects.map((member) => member.name)).toEqual(["server"]);
-  });
-
-  it("removes GC city members from mixed repository groups", () => {
-    const [grouped] = snapshots(
-      [
-        {
-          ...makeProject({ id: "city", name: "user-city", cwd: "/home/user/cities/user-city" }),
-          repositoryIdentity: repositoryIdentity("repo-key"),
-        },
-        {
-          ...makeProject({ id: "regular", name: "server", cwd: "/home/user/work/server" }),
-          repositoryIdentity: repositoryIdentity("repo-key"),
-        },
-      ],
-      "repository",
-    );
-
-    const visible = filterGcOwnedProjectSnapshots({
+    const visible = splitGcRigProjectSnapshots({
       snapshots: grouped ? [grouped] : [],
       gcConfig: makeGcConfig(),
       primaryEnvironmentId: environmentId,
     });
 
-    expect(visible).toHaveLength(1);
-    expect(visible[0]?.memberProjects.map((member) => member.name)).toEqual(["server"]);
-    expect(visible[0]?.groupedProjectCount).toBe(1);
-  });
-
-  it("removes city roots from grouped repository rows", () => {
-    const [grouped] = snapshots(
-      [
-        {
-          ...makeProject({ id: "root", name: "customer-api", cwd: "/home/user/work/customer-api" }),
-          repositoryIdentity: repositoryIdentity("repo-key"),
-        },
-        {
-          ...makeProject({ id: "city", name: "user-city", cwd: "/home/user/cities/user-city" }),
-          repositoryIdentity: repositoryIdentity("repo-key"),
-        },
-        {
-          ...makeProject({
-            id: "generated",
-            name: "generated-scratch",
-            cwd: "/home/user/cities/user-city/rigs/generated-scratch",
-          }),
-          repositoryIdentity: repositoryIdentity("repo-key"),
-        },
-      ],
-      "repository",
-    );
-
-    const visible = filterGcOwnedProjectSnapshots({
-      snapshots: grouped ? [grouped] : [],
-      gcConfig: makeGcConfig(),
-      primaryEnvironmentId: environmentId,
-    });
-
-    expect(visible).toHaveLength(1);
-    expect(visible[0]?.memberProjects.map((member) => member.name)).toEqual([
-      "customer-api",
-      "generated-scratch",
-    ]);
+    expect(visible).toHaveLength(2);
+    expect(visible.map((snapshot) => snapshot.displayName)).toEqual(["customer-api", "server"]);
+    expect(visible[0]?.memberProjects.map((member) => member.name)).toEqual(["customer-api"]);
+    expect(visible[1]?.memberProjects.map((member) => member.name)).toEqual(["server"]);
   });
 
   it("does not duplicate project rows for multiple records of the same repository rig path", () => {

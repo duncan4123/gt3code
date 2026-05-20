@@ -1261,6 +1261,24 @@ func projectIsActive(snapshot map[string]interface{}, projectID string) bool {
 	return false
 }
 
+func projectMatchesWorkspaceRoot(snapshot map[string]interface{}, projectID, workspaceRoot string) bool {
+	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(workspaceRoot) == "" {
+		return false
+	}
+	for _, project := range snapshotProjects(snapshot) {
+		id, _ := project["id"].(string)
+		if id != projectID {
+			continue
+		}
+		if deletedAt, ok := project["deletedAt"]; ok && deletedAt != nil {
+			return false
+		}
+		root, _ := project["workspaceRoot"].(string)
+		return filepath.Clean(root) == filepath.Clean(workspaceRoot)
+	}
+	return false
+}
+
 func threadIsActive(snapshot map[string]interface{}, threadID string) bool {
 	for _, thread := range snapshotThreads(snapshot) {
 		id, _ := thread["id"].(string)
@@ -1454,6 +1472,105 @@ func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state string, se
 	return meta
 }
 
+func repairStartupEnvelopeFromRuntimeEnv(envelope *StartupEnvelope, env map[string]string) {
+	if envelope == nil {
+		return
+	}
+	if envelope.GC.CityPath == "" {
+		envelope.GC.CityPath = env["GC_CITY_PATH"]
+	}
+	if envelope.GC.CityName == "" {
+		envelope.GC.CityName = cleanGCCityName(filepath.Base(filepath.Clean(envelope.GC.CityPath)))
+	}
+	if envelope.GC.SessionName == "" {
+		envelope.GC.SessionName = env["GC_SESSION_NAME"]
+	}
+	if envelope.GC.Template == "" {
+		envelope.GC.Template = env["GC_TEMPLATE"]
+	}
+	if envelope.GC.Agent == "" {
+		envelope.GC.Agent = envelope.GC.Template
+		if envelope.GC.Agent == "" {
+			envelope.GC.Agent = env["GC_AGENT"]
+		}
+	}
+
+	rigName := strings.TrimSpace(envelope.GC.RigName)
+	if rigName == "" {
+		rigName = strings.TrimSpace(env["GC_RIG"])
+	}
+	if rigName == "" {
+		for _, candidate := range []string{envelope.GC.Template, envelope.GC.Agent, env["GC_TEMPLATE"], env["GC_ALIAS"], env["GC_AGENT"]} {
+			if slash := strings.Index(candidate, "/"); slash > 0 {
+				rigName = strings.TrimSpace(candidate[:slash])
+				break
+			}
+		}
+	}
+	if rigName == "" {
+		return
+	}
+	envelope.GC.RigName = rigName
+
+	rigPath := strings.TrimSpace(envelope.GC.RigPath)
+	if rigPath == "" {
+		rigPath = strings.TrimSpace(env["GC_RIG_ROOT"])
+	}
+	if rigPath == "" || !isRepositoryRoot(rigPath) {
+		if bound := resolveSiteRigPath(envelope.GC.CityPath, rigName); bound != "" {
+			rigPath = bound
+		}
+	}
+	envelope.GC.RigPath = rigPath
+}
+
+func resolveSiteRigPath(cityPath, rigName string) string {
+	if strings.TrimSpace(cityPath) == "" || strings.TrimSpace(rigName) == "" {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(cityPath, ".gc", "site.toml"))
+	if err != nil {
+		return ""
+	}
+	inRig := false
+	var name, path string
+	flush := func() string {
+		if inRig && name == rigName && path != "" {
+			return path
+		}
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "[[rig]]" {
+			if matched := flush(); matched != "" {
+				return matched
+			}
+			inRig = true
+			name, path = "", ""
+			continue
+		}
+		if !inRig {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "name") {
+			name = parseSimpleTOMLStringValue(trimmed)
+		}
+		if strings.HasPrefix(trimmed, "path") {
+			path = parseSimpleTOMLStringValue(trimmed)
+		}
+	}
+	return flush()
+}
+
+func parseSimpleTOMLStringValue(line string) string {
+	parts := strings.SplitN(line, "=", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	return strings.Trim(strings.TrimSpace(parts[1]), `"`)
+}
+
 func normalizedGCCityName(envelope StartupEnvelope, sessionEnv map[string]string) string {
 	for _, value := range []string{
 		envelope.GC.CityName,
@@ -1567,13 +1684,73 @@ func deriveThreadTitle(name string, envelope StartupEnvelope) string {
 }
 
 func deriveProjectWorkspaceRoot(workDir string, envelope StartupEnvelope) string {
-	if root := strings.TrimSpace(envelope.GC.RigPath); root != "" {
+	if root := cleanRepositoryRoot(envelope.GC.RigPath); root != "" {
 		return root
 	}
-	if root := strings.TrimSpace(envelope.GC.CityPath); root != "" {
-		return root
+	if strings.TrimSpace(envelope.GC.RigPath) != "" {
+		return ""
 	}
-	return strings.TrimSpace(workDir)
+
+	for _, candidate := range []string{
+		envelope.GC.CityPath,
+		envelope.Runtime.WorkDir,
+		workDir,
+	} {
+		if root := nearestRepositoryRoot(candidate); root != "" {
+			return root
+		}
+	}
+	return ""
+}
+
+func cleanRepositoryRoot(path string) string {
+	root := strings.TrimSpace(path)
+	if root == "" {
+		return ""
+	}
+	root = filepath.Clean(root)
+	if !isRepositoryRoot(root) {
+		return ""
+	}
+	return root
+}
+
+func nearestRepositoryRoot(path string) string {
+	current := strings.TrimSpace(path)
+	if current == "" {
+		return ""
+	}
+	current = filepath.Clean(current)
+	for {
+		if isRepositoryRoot(current) {
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return ""
+		}
+		current = parent
+	}
+}
+
+func isRepositoryRoot(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	for _, marker := range []string{".git", ".jj"} {
+		if _, err := os.Stat(filepath.Join(path, marker)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func deriveProjectRootError(name string, cfg runtime.Config, envelope StartupEnvelope) error {
+	if strings.TrimSpace(envelope.GC.RigPath) != "" {
+		return fmt.Errorf("t3bridge: configured rig %q for session %q is not a repository root: %s", envelope.GC.RigName, name, envelope.GC.RigPath)
+	}
+	candidates := []string{envelope.GC.CityPath, envelope.Runtime.WorkDir, cfg.WorkDir}
+	return fmt.Errorf("t3bridge: cannot resolve repository-backed T3 project root for session %q from %s", name, strings.Join(candidates, ", "))
 }
 
 func deriveProjectTitle(name, workspaceRoot string, envelope StartupEnvelope) string {
@@ -2122,6 +2299,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 			envelope.Startup.InitialNudge = cfg.Nudge
 		}
 	}
+	repairStartupEnvelopeFromRuntimeEnv(&envelope, cfg.Env)
 	if envelope.Runtime.Branch != "" {
 		hasWorktree = true
 		cwd = envelope.GC.RigPath
@@ -2203,6 +2381,9 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 
 	threadTitle := deriveThreadTitle(name, envelope)
 	projectWorkspaceRoot := deriveProjectWorkspaceRoot(cfg.WorkDir, envelope)
+	if projectWorkspaceRoot == "" {
+		return fail(deriveProjectRootError(name, cfg, envelope))
+	}
 	projectTitle := deriveProjectTitle(name, projectWorkspaceRoot, envelope)
 
 	projectID := ""
@@ -2210,11 +2391,12 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 
 	if existingBinding != nil {
 		fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) found existing binding thread=%s project=%s\n", name, existingBinding.ThreadID, existingBinding.ProjectID) //nolint:errcheck
+		projectMatchesRoot := projectMatchesWorkspaceRoot(snapshot, existingBinding.ProjectID, projectWorkspaceRoot)
 		reuse := DecideThreadReuse(ReuseCheck{
 			Desired:       envelope,
 			Stored:        storedEnvelopeFromThread(existingThread),
 			ThreadActive:  threadIsActive(snapshot, existingBinding.ThreadID),
-			ProjectActive: projectIsActive(snapshot, existingBinding.ProjectID),
+			ProjectActive: projectMatchesRoot,
 		})
 
 		switch reuse.Decision {

@@ -1239,4 +1239,75 @@ describe("groupThreadsByRigAndAgent", () => {
       kind: "workspace",
     });
   });
+
+  it("keeps unqualified workspace thread agents in their metadata city", () => {
+    const { rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          title: "city-b__mayor · mayor",
+          customMetadata: {
+            "gc.city": "city-b",
+            "gc.groupId": "city-b",
+            "gc.groupKind": "workspace",
+            "gc.agent": "mayor",
+            "gc.agentQualified": "mayor",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "cities",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "city-a",
+              path: "/fixtures/cities/city-a",
+              suspended: false,
+            },
+            {
+              name: "city-a/repo-main",
+              path: "/fixtures/repos/city-a/repo-main",
+              suspended: false,
+            },
+            {
+              name: "city-b",
+              path: "/fixtures/cities/city-b",
+              suspended: false,
+            },
+            {
+              name: "city-b/repo-main",
+              path: "/fixtures/repos/city-b/repo-main",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "mayor",
+              dir: "city-a",
+              suspended: false,
+            },
+            {
+              name: "mayor",
+              dir: "city-b",
+              suspended: false,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(
+      rigGroups
+        .find((group) => group.id === "city-a")
+        ?.agentGroups.find((agent) => agent.qualifiedName === "city-a/mayor")?.threads,
+    ).toEqual([]);
+    expect(
+      rigGroups
+        .find((group) => group.id === "city-b")
+        ?.agentGroups.find((agent) => agent.qualifiedName === "city-b/mayor")?.threads,
+    ).toHaveLength(1);
+  });
 });

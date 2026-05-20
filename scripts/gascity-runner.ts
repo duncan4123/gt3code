@@ -482,7 +482,9 @@ function sha256File(filePath: string): string {
 }
 
 function stopRuntimeSupervisorForUpdate(runtime: RuntimePaths, action: string): void {
+  stopRuntimeSupervisorServices();
   if (!existsSync(runtime.gcBinaryPath)) {
+    terminateOrphanedRuntimeSupervisors(runtime);
     return;
   }
   const result = spawnSync(
@@ -516,6 +518,42 @@ function stopRuntimeSupervisorForUpdate(runtime: RuntimePaths, action: string): 
   }
   const reason = result.error instanceof Error ? `: ${result.error.message}` : "";
   throw new Error(`Failed to stop Gas City supervisor before ${action}${reason}`);
+}
+
+function stopRuntimeSupervisorServices(): void {
+  if (process.platform === "win32") {
+    return;
+  }
+  const listed = spawnSync(
+    "systemctl",
+    ["--user", "--all", "--plain", "--no-legend", "list-units", "gascity-supervisor*.service"],
+    {
+      encoding: "utf8",
+      timeout: 5000,
+    },
+  );
+  if ((listed.status ?? 1) !== 0) {
+    return;
+  }
+  const units = (listed.stdout ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim().split(/\s+/)[0])
+    .filter((unit) => unit.startsWith("gascity-supervisor") && unit.endsWith(".service"));
+  if (units.length === 0) {
+    return;
+  }
+  spawnSync("systemctl", ["--user", "stop", "--no-block", ...units], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  spawnSync("systemctl", ["--user", "kill", "--signal=SIGKILL", ...units], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  spawnSync("systemctl", ["--user", "reset-failed", ...units], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
 }
 
 function terminateOrphanedRuntimeSupervisors(runtime: RuntimePaths): number {
@@ -552,6 +590,9 @@ function processMatchesRuntimeSupervisor(pid: number, gcBinaryPath: string): boo
     const cmdline = readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ");
     if (!cmdline.includes(" supervisor run")) {
       return false;
+    }
+    if (cmdline.includes(`${gcBinaryPath} supervisor run`)) {
+      return true;
     }
     const exePath = readlinkSync(`/proc/${pid}/exe`);
     return exePath === gcBinaryPath || exePath === `${gcBinaryPath} (deleted)`;

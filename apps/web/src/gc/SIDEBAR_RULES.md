@@ -46,6 +46,13 @@ normal project folder.
 - Rig repositories must use the existing upstream project folder UI and behavior exactly.
 - The normal upstream "new thread" affordance must work for every rig repository.
 - If a configured rig path does not exist, the project creation path must create it.
+- T3 bridge sessions must attach threads to repository-backed project roots.
+  They must not create project rows for city roots, `.gc` runtime directories,
+  agent workdirs, generated worktrees, package folders inside another repo, or
+  any other non-repository path.
+- City/workspace agent threads may be grouped virtually under a city's
+  `workspace` folder, but their backing T3 project must still be an ordinary
+  repository project row.
 
 ## Gas City Section
 
@@ -64,6 +71,10 @@ rules above.
 
 - Project rows remain ordinary T3 Code project rows.
 - Each configured rig repository must have its own project row.
+- Active project rows must be unique by canonical workspace root. Duplicate rig
+  project folders are a data invariant violation, not a sidebar rendering case.
+- Duplicate active project rows for the same canonical workspace root must be
+  rejected at write time, not cleaned up by sidebar filtering.
 - Package folders that are not repositories must not be promoted into project
   rows as rigs.
 - Non-GC project grouping must continue to behave like upstream.
@@ -72,17 +83,20 @@ rules above.
 ## Thread Visibility
 
 Threads are user data and must not be hidden by GC-specific sidebar filtering.
+This is the first rule of the sidebar: if a thread exists in the T3 projection,
+there must be a visible sidebar path to it.
 
-- Every non-deleted, non-archived thread returned by the main orchestration shell
-  snapshot must remain reachable from the normal sidebar.
+- Every non-deleted thread returned by the main orchestration shell snapshot must
+  remain reachable from the normal sidebar.
+- GC may decorate, group, or label threads, but it must not use city, rig,
+  agent, session, provider, runtime, archive, or config state to make a thread
+  unreachable.
 - GC-owned project folders must not be removed from the normal Projects list
-  when they contain threads.
+  when they contain any threads.
 - Active, sleeping, stopped, suspended, or degraded GC runtime state must not
   hide a thread.
 - Foreign-city or stale GC metadata may disable unsafe GC actions, but it must
   not hide the thread row.
-- Archived pages must only receive threads whose canonical projection
-  `archivedAt` value is non-null.
 - Do not use Archived-page data, GC runtime state, project ownership, city
   ownership, missing config, or missing API reachability as a reason to filter a
   thread out of the main sidebar.

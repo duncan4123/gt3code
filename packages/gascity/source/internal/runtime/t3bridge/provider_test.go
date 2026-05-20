@@ -18,6 +18,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func mustMkdir(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", path, err)
+	}
+}
+
 func TestResolveProviderModel_PrefersCurrentConfigOverStoredEnvelope(t *testing.T) {
 	cfg := runtime.Config{
 		Command: "codex --dangerously-bypass-approvals-and-sandbox",
@@ -304,6 +311,7 @@ func TestNudge_NoopsWhenThreadMissingOrTextEmpty(t *testing.T) {
 
 func TestStart_NewThreadSendsConfiguredNudge(t *testing.T) {
 	workDir := t.TempDir()
+	mustMkdir(t, filepath.Join(workDir, ".git"))
 	server := newT3BridgeTestServer(t, map[string]interface{}{
 		"projects": []interface{}{
 			map[string]interface{}{
@@ -354,6 +362,7 @@ func TestStart_NewThreadSendsConfiguredNudge(t *testing.T) {
 
 func TestStart_NewPoolThreadSendsPoolKickoffWhenNudgeEmpty(t *testing.T) {
 	workDir := t.TempDir()
+	mustMkdir(t, filepath.Join(workDir, ".git"))
 	rawEnvelope, err := json.Marshal(StartupEnvelope{
 		Version: 1,
 		GC: GCSection{
@@ -577,11 +586,13 @@ func TestAuthenticatedWsURL_UsesBearerTokenForNonLoopback(t *testing.T) {
 }
 
 func TestStart_ReusedThreadDoesNotInjectStartupTurns(t *testing.T) {
+	workDir := t.TempDir()
+	mustMkdir(t, filepath.Join(workDir, ".git"))
 	server := newT3BridgeTestServer(t, map[string]interface{}{
 		"projects": []interface{}{
 			map[string]interface{}{
 				"id":            "project-1",
-				"workspaceRoot": "/tmp/mayor",
+				"workspaceRoot": workDir,
 			},
 		},
 		"threads": []interface{}{
@@ -603,7 +614,7 @@ func TestStart_ReusedThreadDoesNotInjectStartupTurns(t *testing.T) {
 		recentStarts: make(map[string]time.Time),
 	}
 	cfg := runtime.Config{
-		WorkDir:      "/tmp/mayor",
+		WorkDir:      workDir,
 		Command:      "codex",
 		PromptSuffix: "gc prime --hook",
 		Nudge:        "Check mail and hook status, then act accordingly.",
@@ -648,6 +659,7 @@ func TestStart_ReusedThreadDoesNotInjectStartupTurns(t *testing.T) {
 
 func TestStart_RecreateStopsExistingThreadWithoutArchiving(t *testing.T) {
 	workDir := t.TempDir()
+	mustMkdir(t, filepath.Join(workDir, ".git"))
 	server := newT3BridgeTestServer(t, map[string]interface{}{
 		"projects": []interface{}{
 			map[string]interface{}{
@@ -773,6 +785,74 @@ func TestBuildGCMetadata_UsesFirstClassT3BridgeProviderName(t *testing.T) {
 	}
 }
 
+func TestRepairStartupEnvelopeFromRuntimeEnv_UsesSiteRigBinding(t *testing.T) {
+	cityPath := t.TempDir()
+	rigPath := t.TempDir()
+	if err := os.Mkdir(filepath.Join(rigPath, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(cityPath, ".gc"), 0o755); err != nil {
+		t.Fatalf("mkdir .gc: %v", err)
+	}
+	site := `workspace_name = "gastown"
+
+[[rig]]
+name = "gascity"
+path = "` + rigPath + `"
+`
+	if err := os.WriteFile(filepath.Join(cityPath, ".gc", "site.toml"), []byte(site), 0o644); err != nil {
+		t.Fatalf("write site.toml: %v", err)
+	}
+
+	envelope := StartupEnvelope{
+		GC: GCSection{
+			CityPath:    cityPath,
+			Template:    "gascity/control-dispatcher",
+			Agent:       "gascity/control-dispatcher",
+			SessionName: "gascity--control-dispatcher",
+			RigPath:     filepath.Join(cityPath, "packages", "gascity"),
+		},
+	}
+	repairStartupEnvelopeFromRuntimeEnv(&envelope, map[string]string{
+		"GC_CITY_PATH": cityPath,
+		"GC_TEMPLATE":  "gascity/control-dispatcher",
+		"GC_RIG_ROOT": filepath.Join(cityPath, "packages", "gascity"),
+	})
+
+	if envelope.GC.RigName != "gascity" {
+		t.Fatalf("RigName = %q, want gascity", envelope.GC.RigName)
+	}
+	if envelope.GC.RigPath != rigPath {
+		t.Fatalf("RigPath = %q, want %q", envelope.GC.RigPath, rigPath)
+	}
+	meta := buildGCMetadata(envelope, "codex", "active", nil)
+	if meta["gc.groupKind"] != "rig" || meta["gc.groupId"] != "gascity" {
+		t.Fatalf("metadata group = %v/%v, want rig/gascity", meta["gc.groupKind"], meta["gc.groupId"])
+	}
+}
+
+func TestProjectMatchesWorkspaceRoot_RejectsWrongProjectRoot(t *testing.T) {
+	snapshot := map[string]interface{}{
+		"projects": []interface{}{
+			map[string]interface{}{
+				"id":            "p-t3code",
+				"workspaceRoot": "/data/projects/t3code",
+			},
+			map[string]interface{}{
+				"id":            "p-gascity",
+				"workspaceRoot": "/data/projects/gascity",
+			},
+		},
+	}
+
+	if projectMatchesWorkspaceRoot(snapshot, "p-t3code", "/data/projects/gascity") {
+		t.Fatal("p-t3code should not match gascity workspace root")
+	}
+	if !projectMatchesWorkspaceRoot(snapshot, "p-gascity", "/data/projects/gascity") {
+		t.Fatal("p-gascity should match gascity workspace root")
+	}
+}
+
 func TestRefreshAssignmentProjection_ProjectsBeadGitContext(t *testing.T) {
 	server := newT3BridgeTestServer(t, map[string]interface{}{})
 	defer server.Close()
@@ -824,31 +904,66 @@ func TestRefreshAssignmentProjection_ProjectsBeadGitContext(t *testing.T) {
 	t.Fatalf("missing branch/worktree thread.meta.update: %#v", updates)
 }
 
-func TestDeriveProjectWorkspaceRoot_UsesCityRootForCityAgents(t *testing.T) {
-	root := deriveProjectWorkspaceRoot("/data/projects/gc/.gc/agents/deacon", StartupEnvelope{
+func TestDeriveProjectWorkspaceRoot_UsesContainingRepoForCityAgents(t *testing.T) {
+	repoRoot := t.TempDir()
+	mustMkdir(t, filepath.Join(repoRoot, ".git"))
+	cityRoot := filepath.Join(repoRoot, "packages", "gascity-config", "config", "cities", "gc")
+	agentWorkDir := filepath.Join(cityRoot, ".gc", "agents", "deacon")
+	mustMkdir(t, agentWorkDir)
+
+	root := deriveProjectWorkspaceRoot(agentWorkDir, StartupEnvelope{
 		GC: GCSection{
-			CityPath: "/data/projects/gc",
+			CityPath: cityRoot,
 			Agent:    "deacon",
 		},
 	})
 
-	if root != "/data/projects/gc" {
-		t.Fatalf("root = %q, want /data/projects/gc", root)
+	if root != repoRoot {
+		t.Fatalf("root = %q, want %q", root, repoRoot)
 	}
 }
 
 func TestDeriveProjectWorkspaceRoot_UsesRigRootForRigAgents(t *testing.T) {
-	root := deriveProjectWorkspaceRoot("/data/projects/gc/.gc/agents/t3code/witness", StartupEnvelope{
+	cityRepo := t.TempDir()
+	mustMkdir(t, filepath.Join(cityRepo, ".git"))
+	rigRoot := t.TempDir()
+	mustMkdir(t, filepath.Join(rigRoot, ".git"))
+	workDir := filepath.Join(cityRepo, ".gc", "agents", "t3code", "witness")
+	mustMkdir(t, workDir)
+
+	root := deriveProjectWorkspaceRoot(workDir, StartupEnvelope{
 		GC: GCSection{
-			CityPath: "/data/projects/gc",
-			RigPath:  "/data/projects/t3code",
+			CityPath: cityRepo,
+			RigPath:  rigRoot,
 			RigName:  "t3code",
 			Agent:    "t3code/witness",
 		},
 	})
 
-	if root != "/data/projects/t3code" {
-		t.Fatalf("root = %q, want /data/projects/t3code", root)
+	if root != rigRoot {
+		t.Fatalf("root = %q, want %q", root, rigRoot)
+	}
+}
+
+func TestDeriveProjectWorkspaceRoot_RejectsNonRepositoryRigRoot(t *testing.T) {
+	cityRepo := t.TempDir()
+	mustMkdir(t, filepath.Join(cityRepo, ".git"))
+	rigRoot := filepath.Join(cityRepo, "packages", "not-a-repo-rig")
+	workDir := filepath.Join(cityRepo, ".gc", "agents", "bad-rig", "witness")
+	mustMkdir(t, rigRoot)
+	mustMkdir(t, workDir)
+
+	root := deriveProjectWorkspaceRoot(workDir, StartupEnvelope{
+		GC: GCSection{
+			CityPath: cityRepo,
+			RigPath:  rigRoot,
+			RigName:  "bad-rig",
+			Agent:    "bad-rig/witness",
+		},
+	})
+
+	if root != "" {
+		t.Fatalf("root = %q, want empty for non-repository rig root", root)
 	}
 }
 

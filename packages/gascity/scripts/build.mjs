@@ -13,6 +13,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+const repoRoot = path.resolve(packageRoot, "..", "..");
 const platform = process.env.T3CODE_GASCITY_BUILD_PLATFORM || process.platform;
 const arch = process.env.T3CODE_GASCITY_BUILD_ARCH || process.arch;
 const goos = platform === "win32" ? "windows" : platform === "darwin" ? "darwin" : "linux";
@@ -37,6 +38,7 @@ const doltliteBuildDir = resolveDoltliteBuildDir();
 const goBuildTags = "libsqlite3,gascity_native_beads";
 const goToolchain = process.env.GOTOOLCHAIN || "go1.26.2+auto";
 
+stopBundledSupervisorsBeforeBuild();
 mkdirSync(path.dirname(outputPath), { recursive: true });
 const cgoFlags = appendFlag(process.env.CGO_CFLAGS, `-I${doltliteBuildDir}`);
 const rpathFlag = platform === "darwin" ? "-Wl,-rpath,@loader_path" : "-Wl,-rpath,$ORIGIN";
@@ -191,4 +193,84 @@ function isGoBuildInput(file) {
 
 function fileURLToPathSafe(value) {
   return value.startsWith("file:") ? fileURLToPath(value) : value;
+}
+
+function stopBundledSupervisorsBeforeBuild() {
+  if (process.platform === "win32" || !existsSync("/proc")) return;
+
+  stopSystemdSupervisorServices();
+  const runtimeRoot = path.resolve(
+    process.env.T3CODE_GASCITY_HOME ||
+      process.env.GC_HOME ||
+      path.join(repoRoot, ".t3-dev", "gascity"),
+  );
+  const gcBinaryPath = path.join(runtimeRoot, "bin", executable);
+  const pids = readdirSync("/proc")
+    .map((entry) => Number(entry))
+    .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid)
+    .filter((pid) => processMatchesBundledSupervisor(pid, gcBinaryPath));
+
+  for (const pid of pids) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // Process exited between scan and signal.
+    }
+  }
+  waitForProcessesToExit(pids, 2000);
+  for (const pid of pids.filter((pid) => existsSync(`/proc/${pid}`))) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Process exited between scan and signal.
+    }
+  }
+  if (pids.length > 0) {
+    console.log(`[gascity build] stopped ${pids.length} bundled supervisor process(es).`);
+  }
+}
+
+function stopSystemdSupervisorServices() {
+  const listed = spawnSync(
+    "systemctl",
+    ["--user", "--all", "--plain", "--no-legend", "list-units", "gascity-supervisor*.service"],
+    {
+      encoding: "utf8",
+      timeout: 5000,
+    },
+  );
+  if ((listed.status ?? 1) !== 0) return;
+  const units = (listed.stdout || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim().split(/\s+/)[0])
+    .filter((unit) => unit.startsWith("gascity-supervisor") && unit.endsWith(".service"));
+  if (units.length === 0) return;
+  spawnSync("systemctl", ["--user", "stop", "--no-block", ...units], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  spawnSync("systemctl", ["--user", "kill", "--signal=SIGKILL", ...units], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  spawnSync("systemctl", ["--user", "reset-failed", ...units], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+}
+
+function processMatchesBundledSupervisor(pid, gcBinaryPath) {
+  try {
+    const cmdline = readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ");
+    return cmdline.includes(`${gcBinaryPath} supervisor run`);
+  } catch {
+    return false;
+  }
+}
+
+function waitForProcessesToExit(pids, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && pids.some((pid) => existsSync(`/proc/${pid}`))) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+  }
 }

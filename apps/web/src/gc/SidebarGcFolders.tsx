@@ -154,12 +154,20 @@ function gcConfigToggleLabel(
 
 const NON_WAKEABLE_AGENT_RUNTIME_LABELS = new Set(["Running", "Ready", "Connecting", "Starting"]);
 
+function hasVisibleAgentThreads(agentGroup: SidebarGcAgentGroup): boolean {
+  return (
+    agentGroup.threadIds.length > 0 ||
+    Boolean(agentGroup.threadGroups?.some((threadGroup) => threadGroup.threadIds.length > 0))
+  );
+}
+
 function canWakeAgentSession(agentGroup: SidebarGcAgentGroup): boolean {
   return (
     Boolean(agentGroup.namedSessionMode) &&
     !agentGroup.isPool &&
     !agentGroup.isSuspended &&
-    !NON_WAKEABLE_AGENT_RUNTIME_LABELS.has(agentGroup.runtimeState.label)
+    (!NON_WAKEABLE_AGENT_RUNTIME_LABELS.has(agentGroup.runtimeState.label) ||
+      !hasVisibleAgentThreads(agentGroup))
   );
 }
 
