@@ -18,19 +18,16 @@ bd setup claude
 ```
 
 This installs:
-
 - **SessionStart hook** - Runs `bd prime` when Claude Code starts
-- **PreCompact hook** - Ensures `bd dolt push` before context compaction
+- **SessionStart compact refresh** - Runs `bd prime` after context compaction
 
 **How it works:**
-
 1. SessionStart hook runs `bd prime` automatically
 2. `bd prime` injects ~1-2k tokens of workflow context
 3. You use `bd` CLI commands directly
-4. Git hooks auto-sync the database
+4. Git hooks refresh exports and legacy fallbacks; Dolt remotes handle sync
 
 **Verify installation:**
-
 ```bash
 bd setup claude --check
 ```
@@ -43,7 +40,7 @@ If you prefer manual configuration, add to your Claude Code hooks:
 {
   "hooks": {
     "SessionStart": ["bd prime"],
-    "PreCompact": ["bd dolt push"]
+    "SessionStart": ["bd prime"]
   }
 }
 ```
@@ -58,7 +55,6 @@ bd setup cursor
 This creates `.cursor/rules/beads.mdc` with beads-aware rules.
 
 **Verify:**
-
 ```bash
 bd setup cursor --check
 ```
@@ -73,7 +69,6 @@ bd setup aider
 This creates/updates `.aider.conf.yml` with beads context.
 
 **Verify:**
-
 ```bash
 bd setup aider --check
 ```
@@ -101,11 +96,11 @@ Create `.vscode/mcp.json` in your project:
 
 **For all projects:** Add to VS Code user-level MCP config:
 
-| Platform | Path                                               |
-| -------- | -------------------------------------------------- |
-| macOS    | `~/Library/Application Support/Code/User/mcp.json` |
-| Linux    | `~/.config/Code/User/mcp.json`                     |
-| Windows  | `%APPDATA%\Code\User\mcp.json`                     |
+| Platform | Path |
+|----------|------|
+| macOS | `~/Library/Application Support/Code/User/mcp.json` |
+| Linux | `~/.config/Code/User/mcp.json` |
+| Windows | `%APPDATA%\Code\User\mcp.json` |
 
 ```json
 {
@@ -135,14 +130,21 @@ bd prime
 ```
 
 This outputs a compact (~1-2k tokens) workflow reference including:
-
 - Available commands
 - Current project status
 - Workflow patterns
 - Best practices
+- Persistent memories from `bd remember`
+
+`bd prime` prints memories near the top and starts with a truncation warning. If your host stores the full hook output in a file and only shows a preview, have the agent read the full file before continuing.
+
+For memory-only hooks:
+
+```bash
+bd prime --memories-only
+```
 
 **Why context efficiency matters:**
-
 - Compute cost scales with tokens
 - Latency increases with context size
 - Models attend better to smaller, focused contexts
@@ -157,7 +159,6 @@ pip install beads-mcp
 ```
 
 Add to Claude Desktop config:
-
 ```json
 {
   "mcpServers": {
@@ -169,7 +170,6 @@ Add to Claude Desktop config:
 ```
 
 **Trade-offs:**
-
 - Works in MCP-only environments
 - Higher context overhead (10-50k tokens for tool schemas)
 - Additional latency from MCP protocol
@@ -178,20 +178,18 @@ See [MCP Server](/integrations/mcp-server) for detailed configuration.
 
 ## Git Hooks
 
-Ensure git hooks are installed for auto-sync:
+Ensure git hooks are installed for export refresh and legacy fallback behavior:
 
 ```bash
 bd hooks install
 ```
 
 This installs:
-
 - **pre-commit** - Validates changes before commit
 - **post-merge** - Imports changes after pull
 - **pre-push** - Ensures sync before push
 
 **Check hook status:**
-
 ```bash
 bd info  # Shows warnings if hooks are outdated
 ```

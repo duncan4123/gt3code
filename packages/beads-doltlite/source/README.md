@@ -24,45 +24,64 @@ curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/inst
 cd your-project
 bd init
 
-# Tell your agent
-echo "Use 'bd' for task tracking" >> AGENTS.md
+# Optional: install richer instructions for your agent
+bd setup codex    # Codex CLI - creates/updates AGENTS.md
+bd setup claude   # Claude Code - installs hooks/settings
+bd setup factory  # Factory.ai Droid - creates/updates AGENTS.md
 ```
 
 **Note:** Beads is a CLI tool you install once and use everywhere. You don't need to clone this repository into your project.
 
+`bd init` creates or updates `AGENTS.md` by default so agents can discover the beads workflow. It skips agent files only when you pass `--skip-agents` or `--stealth`, or when you configure a custom agent file. Use `bd setup --list` to see supported integrations, including `bd setup codex`, `bd setup factory`, `bd setup claude`, `bd setup mux`, `bd setup cursor`, and more. See [Agent and IDE setup](docs/SETUP.md).
+
+Manual copy-paste is only for unsupported agents, existing projects where you cannot rerun `bd init`/`bd setup`, or custom instruction files. In those cases, run `bd onboard` and paste the printed snippet into the file your agent reads.
+
+If your agent is not covered by `bd setup`, add this minimal `AGENTS.md` section:
+
+```markdown
+This project uses bd (beads) for issue tracking.
+
+- Run `bd prime` for workflow context and command guidance.
+- Use `bd ready`, `bd show <id>`, `bd update <id> --claim`, and `bd close <id>`.
+- Use `bd remember "insight"` for persistent project memory; do not create MEMORY.md files.
+- Do not use markdown TODO lists for task tracking.
+```
+
 ## 🛠 Features
 
-- **[Dolt](https://github.com/dolthub/dolt)-Powered:** Version-controlled SQL database with cell-level merge, native branching, and built-in sync via Dolt remotes.
-- **Agent-Optimized:** JSON output, dependency tracking, and auto-ready task detection.
-- **Zero Conflict:** Hash-based IDs (`bd-a1b2`) prevent merge collisions in multi-agent/multi-branch workflows.
-- **Compaction:** Semantic "memory decay" summarizes old closed tasks to save context window.
-- **Messaging:** Message issue type with threading (`--thread`), ephemeral lifecycle, and mail delegation.
-- **Graph Links:** `relates_to`, `duplicates`, `supersedes`, and `replies_to` for knowledge graphs.
+* **[Dolt](https://github.com/dolthub/dolt)-Powered:** Version-controlled SQL database with cell-level merge, native branching, and built-in sync via Dolt remotes.
+* **Agent-Optimized:** JSON output, dependency tracking, and auto-ready task detection.
+* **Zero Conflict:** Hash-based IDs (`bd-a1b2`) prevent merge collisions in multi-agent/multi-branch workflows.
+* **Compaction:** Semantic "memory decay" summarizes old closed tasks to save context window.
+* **Messaging:** Message issue type with threading (`--thread`), ephemeral lifecycle, and mail delegation.
+* **Graph Links:** `relates_to`, `duplicates`, `supersedes`, and `replies_to` for knowledge graphs.
 
 ## 📖 Essential Commands
 
-| Command                       | Action                                                 |
-| ----------------------------- | ------------------------------------------------------ |
-| `bd ready`                    | List tasks with no open blockers.                      |
-| `bd create "Title" -p 0`      | Create a P0 task.                                      |
-| `bd update <id> --claim`      | Atomically claim a task (sets assignee + in_progress). |
-| `bd dep add <child> <parent>` | Link tasks (blocks, related, parent-child).            |
-| `bd show <id>`                | View task details and audit trail.                     |
+| Command | Action |
+| --- | --- |
+| `bd ready` | List tasks with no open blockers. |
+| `bd create "Title" -p 0` | Create a P0 task. |
+| `bd update <id> --claim` | Atomically claim a task (sets assignee + in_progress). |
+| `bd dep add <child> <parent>` | Link tasks (blocks, related, parent-child). |
+| `bd show <id>` | View task details and audit trail. |
+| `bd prime` | Print agent workflow context and persistent memories. |
+| `bd remember "insight"` | Store project memory that `bd prime` injects later. |
 
 ## 🔗 Hierarchy & Workflow
 
 Beads supports hierarchical IDs for epics:
 
-- `bd-a3f8` (Epic)
-- `bd-a3f8.1` (Task)
-- `bd-a3f8.1.1` (Sub-task)
+* `bd-a3f8` (Epic)
+* `bd-a3f8.1` (Task)
+* `bd-a3f8.1.1` (Sub-task)
 
 **Stealth Mode:** Run `bd init --stealth` to use Beads locally without committing files to the main repo. Perfect for personal use on shared projects. See [Git-Free Usage](#-git-free-usage) below.
 
 **Contributor vs Maintainer:** When working on open-source projects:
 
-- **Contributors** (forked repos): Run `bd init --contributor` to route planning issues to a separate repo (e.g., `~/.beads-planning`). Keeps experimental work out of PRs.
-- **Maintainers** (write access): Beads auto-detects maintainer role via SSH URLs or HTTPS with credentials. Only need `git config beads.role maintainer` if using GitHub HTTPS without credentials but you have write access.
+* **Contributors** (forked repos): Run `bd init --contributor` to route planning issues to a separate repo (e.g., `~/.beads-planning`). Keeps experimental work out of PRs.
+* **Maintainers** (write access): Beads auto-detects maintainer role via SSH URLs or HTTPS with credentials. Only need `git config beads.role maintainer` if using GitHub HTTPS without credentials but you have write access.
 
 ## 📦 Installation
 
@@ -100,6 +119,12 @@ Dolt runs in-process — no external server needed. Data lives in
 `.beads/embeddeddolt/`. Single-writer only (file locking enforced).
 This is the recommended mode for most users.
 
+When the git repo has an `origin` remote, `bd init` configures a Dolt remote
+named `origin` automatically. Cross-machine sync uses `bd dolt push` and
+`bd dolt pull` against `refs/dolt/data`; `.beads/issues.jsonl` is an export
+for viewers and interchange, not the source of truth or a full database
+backup.
+
 ### Server Mode
 
 ```bash
@@ -110,14 +135,13 @@ Connects to an external `dolt sql-server`. Data lives in `.beads/dolt/`.
 Supports multiple concurrent writers. Configure the connection with flags
 or environment variables:
 
-| Flag              | Env Var                    | Default                                    |
-| ----------------- | -------------------------- | ------------------------------------------ |
-| `--server-host`   | `BEADS_DOLT_SERVER_HOST`   | `127.0.0.1`                                |
-| `--server-port`   | `BEADS_DOLT_SERVER_PORT`   | `3307`                                     |
-| `--server-socket` | `BEADS_DOLT_SERVER_SOCKET` | (none; uses TCP)                           |
-| `--server-user`   | `BEADS_DOLT_SERVER_USER`   | `root`                                     |
-|                   | `BEADS_DOLT_PASSWORD`      | (none)                                     |
-|                   | `BEADS_DOLT_CLI_DIR`       | local Dolt database path for CLI push/pull |
+| Flag | Env Var | Default |
+|------|---------|---------|
+| `--server-host` | `BEADS_DOLT_SERVER_HOST` | `127.0.0.1` |
+| `--server-port` | `BEADS_DOLT_SERVER_PORT` | `3307` |
+| `--server-socket` | `BEADS_DOLT_SERVER_SOCKET` | (none; uses TCP) |
+| `--server-user` | `BEADS_DOLT_SERVER_USER` | `root` |
+| | `BEADS_DOLT_PASSWORD` | (none) |
 
 **Unix domain sockets:** Use `--server-socket` to connect via a Unix socket
 instead of TCP. This avoids port conflicts between concurrent projects and
@@ -125,12 +149,6 @@ is useful in sandboxed environments (e.g., Claude Code) where file-level
 access control is simpler than network allowlists. The Dolt server must be
 started with `dolt sql-server --socket <path>`. Auto-start is not supported
 in socket mode.
-
-When `BEADS_DOLT_SERVER_MODE=1` points at a Dolt server managed outside
-Beads, set `BEADS_DOLT_CLI_DIR` if `bd dolt push` / `bd dolt pull` must use
-the local `dolt` CLI (for example git-protocol remotes or credentials that
-only exist in the current shell). Use the actual Dolt database directory, not
-the server root.
 
 ### Backup & Migration
 
@@ -148,6 +166,11 @@ bd backup restore --force /path/to/backup
 
 See [docs/DOLT.md](docs/DOLT.md#migrating-between-backends) for full
 migration instructions.
+
+`bd export` and `.beads/issues.jsonl` are issue-table exports. They are useful
+for review, migration, and interoperability, but they do not capture Dolt
+branches, commit history, working-set state, or non-issue tables. Use
+`bd backup` or a manual Dolt backup when you need a restorable database backup.
 
 ## 🌐 Community Tools
 
@@ -176,7 +199,6 @@ bypassing git repo discovery. `--stealth` sets `no-git-ops: true` in
 config, disabling all git hook installation and git operations.
 
 This is useful for:
-
 - **Non-git VCS** (Sapling, Jujutsu, Piper) — no `.git/` directory needed
 - **Monorepos** — point `BEADS_DIR` at a specific subdirectory
 - **CI/CD** — isolated task tracking without repo-level side effects
@@ -187,5 +209,5 @@ For daemon mode without git, use `bd daemon start --local`
 
 ## 📝 Documentation
 
-- [Documentation site](https://gastownhall.github.io/beads/) (versioned) | [Installing](docs/INSTALLING.md) | [Agent Workflow](AGENT_INSTRUCTIONS.md) | [Copilot Setup](docs/COPILOT_INTEGRATION.md) | [Articles](ARTICLES.md) | [Sync Branch Mode](docs/PROTECTED_BRANCHES.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) | [FAQ](docs/FAQ.md)
-- [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/gastownhall/beads)
+* [Documentation site](https://gastownhall.github.io/beads/) (versioned) | [Installing](docs/INSTALLING.md) | [Sync Concepts](docs/SYNC_CONCEPTS.md) | [Agent Workflow](AGENT_INSTRUCTIONS.md) | [Copilot CLI Setup](docs/COPILOT_CLI_INTEGRATION.md) | [Copilot VS Code MCP](docs/COPILOT_INTEGRATION.md) | [Articles](ARTICLES.md) | [Sync Branch Mode](docs/PROTECTED_BRANCHES.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) | [FAQ](docs/FAQ.md)
+* [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/gastownhall/beads)

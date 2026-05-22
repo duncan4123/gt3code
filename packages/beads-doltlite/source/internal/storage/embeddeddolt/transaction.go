@@ -20,9 +20,8 @@ import (
 func (s *EmbeddedDoltStore) RunInTransaction(ctx context.Context, commitMsg string, fn func(tx storage.Transaction) error) error {
 	var tracker versioncontrolops.DirtyTableTracker
 
-	if err := s.withConn(ctx, true, func(sqlTx *sql.Tx) error {
-		tx := &embeddedTransaction{tx: sqlTx, dirty: &tracker, created: make(map[string]*types.Issue)}
-		return fn(tx)
+	if err := s.withConn(ctx, true, func(tx *sql.Tx) error {
+		return fn(&embeddedTransaction{tx: tx, dirty: &tracker})
 	}); err != nil {
 		return err
 	}
@@ -36,11 +35,9 @@ func (s *EmbeddedDoltStore) RunInTransaction(ctx context.Context, commitMsg stri
 	return nil
 }
 
-// embeddedTransaction implements storage.Transaction for EmbeddedDoltStore.
 type embeddedTransaction struct {
-	tx      *sql.Tx
-	dirty   *versioncontrolops.DirtyTableTracker
-	created map[string]*types.Issue
+	tx    *sql.Tx
+	dirty *versioncontrolops.DirtyTableTracker
 }
 
 func (t *embeddedTransaction) CreateIssue(ctx context.Context, issue *types.Issue, actor string) error {
@@ -50,11 +47,7 @@ func (t *embeddedTransaction) CreateIssue(ctx context.Context, issue *types.Issu
 	}
 	t.dirty.MarkDirty("issues")
 	t.dirty.MarkDirty("events")
-	if err := issueops.CreateIssueInTx(ctx, t.tx, bc, issue, actor); err != nil {
-		return err
-	}
-	t.created[issue.ID] = issue
-	return nil
+	return issueops.CreateIssueInTx(ctx, t.tx, bc, issue, actor)
 }
 
 func (t *embeddedTransaction) CreateIssues(ctx context.Context, issues []*types.Issue, actor string) error {
@@ -103,22 +96,10 @@ func (t *embeddedTransaction) AddDependency(ctx context.Context, dep *types.Depe
 
 func (t *embeddedTransaction) AddDependencyWithOptions(ctx context.Context, dep *types.Dependency, actor string, addOpts storage.DependencyAddOptions) error {
 	t.dirty.MarkDirty("dependencies")
-	opts := issueops.AddDependencyOpts{
+	return issueops.AddDependencyInTx(ctx, t.tx, dep, actor, issueops.AddDependencyOpts{
 		IsCrossPrefix:  types.ExtractPrefix(dep.IssueID) != types.ExtractPrefix(dep.DependsOnID),
 		SkipCycleCheck: addOpts.SkipCycleCheck,
-	}
-	if source := t.created[dep.IssueID]; source != nil {
-		sourceTable, _, _, writeTable := issueops.WispTableRouting(issueops.IsWisp(source))
-		opts.SourceTable = sourceTable
-		opts.WriteTable = writeTable
-		opts.SourceType = string(source.IssueType)
-	}
-	if target := t.created[dep.DependsOnID]; target != nil {
-		targetTable, _, _, _ := issueops.WispTableRouting(issueops.IsWisp(target))
-		opts.TargetTable = targetTable
-		opts.TargetType = string(target.IssueType)
-	}
-	return issueops.AddDependencyInTx(ctx, t.tx, dep, actor, opts)
+	})
 }
 
 func (t *embeddedTransaction) RemoveDependency(ctx context.Context, issueID, dependsOnID string, actor string) error {

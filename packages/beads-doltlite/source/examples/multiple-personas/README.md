@@ -5,14 +5,12 @@ This example demonstrates how to use beads when different roles work on the same
 ## Problem
 
 Complex projects involve different personas with different concerns:
-
 - **Architect:** System design, technical decisions, high-level planning
 - **Implementer:** Write code, fix bugs, implement features
 - **Reviewer:** Code review, quality gates, testing
 - **Product:** Requirements, priorities, user stories
 
 Each persona needs:
-
 - Different views of the same work
 - Clear handoffs between roles
 - Track discovered work in context

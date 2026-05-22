@@ -11,7 +11,6 @@ Molecules are work graphs created from formulas.
 ## What is a Molecule?
 
 A molecule is a persistent instance of a formula:
-
 - Contains steps with dependencies
 - Tracked in `.beads/` (syncs with git)
 - Steps map to issues with parent-child relationships
@@ -26,13 +25,11 @@ bd pour <formula-name> [--var key=value]
 ```
 
 **Example:**
-
 ```bash
 bd pour release --var version=1.0.0
 ```
 
 This creates:
-
 - Parent issue: `bd-xyz` (the molecule root)
 - Child issues: `bd-xyz.1`, `bd-xyz.2`, etc. (the steps)
 

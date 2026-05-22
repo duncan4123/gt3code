@@ -10,7 +10,9 @@ import (
 	"github.com/gastownhall/gascity/internal/agent"
 	"github.com/gastownhall/gascity/internal/beads"
 	"github.com/gastownhall/gascity/internal/config"
+	"github.com/gastownhall/gascity/internal/events"
 	"github.com/gastownhall/gascity/internal/runtime"
+	sessiont3bridge "github.com/gastownhall/gascity/internal/runtime/t3bridge"
 )
 
 func TestTmuxConfigFromSessionDefaultsSocketToCityName(t *testing.T) {
@@ -434,6 +436,143 @@ func TestNewSessionProvider_PreregistersACPBeadAndLegacyNames(t *testing.T) {
 	}
 }
 
+func TestEventsProviderNameUsesMergedCityConfig(t *testing.T) {
+	cityDir := t.TempDir()
+	t.Setenv("GC_EVENTS", "")
+	t.Setenv("GC_CITY", cityDir)
+	t.Setenv("GC_CITY_PATH", "")
+	t.Setenv("GC_CITY_ROOT", "")
+	t.Setenv("GC_RIG", "")
+
+	oldCityFlag, oldRigFlag := cityFlag, rigFlag
+	cityFlag, rigFlag = "", ""
+	t.Cleanup(func() {
+		cityFlag = oldCityFlag
+		rigFlag = oldRigFlag
+	})
+
+	if err := os.WriteFile(filepath.Join(cityDir, "city.toml"), []byte(`
+include = ["infra.toml"]
+
+[workspace]
+name = "test-city"
+
+[events]
+provider = "fake"
+`), 0o644); err != nil {
+		t.Fatalf("write city.toml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cityDir, "infra.toml"), []byte(`
+[events]
+provider = "fail"
+`), 0o644); err != nil {
+		t.Fatalf("write infra.toml: %v", err)
+	}
+
+	if got := eventsProviderName(); got != "fail" {
+		t.Fatalf("eventsProviderName() = %q, want included provider %q", got, "fail")
+	}
+}
+
+func TestOpenCityEventsProviderUsesMergedCityConfig(t *testing.T) {
+	cityDir := t.TempDir()
+	t.Setenv("GC_EVENTS", "")
+	t.Setenv("GC_CITY", cityDir)
+	t.Setenv("GC_CITY_PATH", "")
+	t.Setenv("GC_CITY_ROOT", "")
+	t.Setenv("GC_RIG", "")
+
+	oldCityFlag, oldRigFlag := cityFlag, rigFlag
+	cityFlag, rigFlag = "", ""
+	t.Cleanup(func() {
+		cityFlag = oldCityFlag
+		rigFlag = oldRigFlag
+	})
+
+	if err := os.WriteFile(filepath.Join(cityDir, "city.toml"), []byte(`
+include = ["infra.toml"]
+
+[workspace]
+name = "test-city"
+
+[events]
+provider = "fail"
+`), 0o644); err != nil {
+		t.Fatalf("write city.toml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cityDir, "infra.toml"), []byte(`
+[events]
+provider = "fake"
+`), 0o644); err != nil {
+		t.Fatalf("write infra.toml: %v", err)
+	}
+
+	var stderr strings.Builder
+	ep, code := openCityEventsProvider(&stderr, "test")
+	if code != 0 || ep == nil {
+		t.Fatalf("openCityEventsProvider() code = %d, provider nil = %t, stderr = %q", code, ep == nil, stderr.String())
+	}
+	t.Cleanup(func() { _ = ep.Close() })
+
+	if _, err := ep.List(events.Filter{}); err != nil {
+		t.Fatalf("openCityEventsProvider() did not use included fake provider: %v", err)
+	}
+}
+
+func TestEventsProviderNamePrefersEnvOverCityConfig(t *testing.T) {
+	cityDir := t.TempDir()
+	t.Setenv("GC_EVENTS", "fake")
+	t.Setenv("GC_CITY", cityDir)
+	t.Setenv("GC_CITY_PATH", "")
+	t.Setenv("GC_CITY_ROOT", "")
+	t.Setenv("GC_RIG", "")
+
+	oldCityFlag, oldRigFlag := cityFlag, rigFlag
+	cityFlag, rigFlag = "", ""
+	t.Cleanup(func() {
+		cityFlag = oldCityFlag
+		rigFlag = oldRigFlag
+	})
+
+	if err := os.WriteFile(filepath.Join(cityDir, "city.toml"), []byte(`
+[workspace]
+name = "test-city"
+
+[events]
+provider = "fail"
+`), 0o644); err != nil {
+		t.Fatalf("write city.toml: %v", err)
+	}
+
+	if got := eventsProviderName(); got != "fake" {
+		t.Fatalf("eventsProviderName() = %q, want env provider %q", got, "fake")
+	}
+}
+
+func TestEventsProviderNameFallsBackOnMalformedCityTOML(t *testing.T) {
+	cityDir := t.TempDir()
+	t.Setenv("GC_EVENTS", "")
+	t.Setenv("GC_CITY", cityDir)
+	t.Setenv("GC_CITY_PATH", "")
+	t.Setenv("GC_CITY_ROOT", "")
+	t.Setenv("GC_RIG", "")
+
+	oldCityFlag, oldRigFlag := cityFlag, rigFlag
+	cityFlag, rigFlag = "", ""
+	t.Cleanup(func() {
+		cityFlag = oldCityFlag
+		rigFlag = oldRigFlag
+	})
+
+	if err := os.WriteFile(filepath.Join(cityDir, "city.toml"), []byte(`invalid ][`), 0o644); err != nil {
+		t.Fatalf("write city.toml: %v", err)
+	}
+
+	if got := eventsProviderName(); got != "" {
+		t.Fatalf("eventsProviderName() = %q, want empty fallback", got)
+	}
+}
+
 func TestNewSessionProvider_PreregistersACPNamedSessionRuntimeName(t *testing.T) {
 	t.Setenv("GC_BEADS", "file")
 	t.Setenv("GC_SESSION", "fake")
@@ -670,6 +809,26 @@ func TestNewSessionProviderRoutesLegacyObservedACPProviderSessionsWithoutTranspo
 	sp := newSessionProvider()
 	if err := sp.Attach("provider-session"); err == nil || !strings.Contains(err.Error(), "ACP transport") {
 		t.Fatalf("Attach(provider-session) error = %v, want ACP transport error", err)
+	}
+}
+
+func TestNewSessionProviderByName_UsesFirstClassT3Bridge(t *testing.T) {
+	sp, err := newSessionProviderByName("t3bridge", config.SessionConfig{}, "city", t.TempDir())
+	if err != nil {
+		t.Fatalf("newSessionProviderByName(t3bridge): %v", err)
+	}
+	if _, ok := sp.(*sessiont3bridge.Provider); !ok {
+		t.Fatalf("provider type = %T, want *t3bridge.Provider", sp)
+	}
+}
+
+func TestNewSessionProviderByName_LegacyExecT3BridgeStillMapsNative(t *testing.T) {
+	sp, err := newSessionProviderByName("exec:/tmp/gc-session-t3", config.SessionConfig{}, "city", t.TempDir())
+	if err != nil {
+		t.Fatalf("newSessionProviderByName(exec gc-session-t3): %v", err)
+	}
+	if _, ok := sp.(*sessiont3bridge.Provider); !ok {
+		t.Fatalf("provider type = %T, want *t3bridge.Provider", sp)
 	}
 }
 

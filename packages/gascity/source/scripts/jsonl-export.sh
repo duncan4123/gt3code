@@ -1,1 +1,0 @@
-/data/projects/gc/.gc/system/packs/maintenance/assets/scripts/jsonl-export.sh

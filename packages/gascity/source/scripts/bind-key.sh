@@ -1,1 +1,0 @@
-/data/projects/gc/packs/gastown/scripts/bind-key.sh

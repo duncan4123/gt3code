@@ -46,6 +46,9 @@ import Migration0030 from "./Migrations/030_ProjectionThreadShellArchiveIndexes.
 import Migration0031 from "./Migrations/031_ProjectionThreadCustomMetadata.ts";
 import Migration0032 from "./Migrations/032_ProjectionThreadMessagesFts.ts";
 import Migration0033 from "./Migrations/033_UniqueActiveProjectWorkspaceRoot.ts";
+import Migration0034 from "./Migrations/034_ContentlessProjectionThreadMessagesFts.ts";
+import Migration0036 from "./Migrations/036_ContentlessProjectionThreadMessagesFts.ts";
+import Migration0037 from "./Migrations/037_RebuildContentlessProjectionThreadMessagesFts.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -91,6 +94,9 @@ export const migrationEntries = [
   [31, "ProjectionThreadCustomMetadata", Migration0031],
   [32, "ProjectionThreadMessagesFts", Migration0032],
   [33, "UniqueActiveProjectWorkspaceRoot", Migration0033],
+  [34, "ContentlessProjectionThreadMessagesFts", Migration0034],
+  [36, "ContentlessProjectionThreadMessagesFts", Migration0036],
+  [37, "RebuildContentlessProjectionThreadMessagesFts", Migration0037],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

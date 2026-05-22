@@ -53,11 +53,10 @@ func GetCommentCountsInTx(ctx context.Context, tx *sql.Tx, issueIDs []string) (m
 
 	result := make(map[string]int)
 
-	wispSet, err := WispIDSetInTx(ctx, tx, issueIDs)
+	wispIDs, permIDs, err := PartitionWispIDsInTx(ctx, tx, issueIDs)
 	if err != nil {
-		return nil, fmt.Errorf("get comment counts: build wisp set: %w", err)
+		return nil, fmt.Errorf("partition comment issue IDs: %w", err)
 	}
-	wispIDs, permIDs := partitionByWispSet(issueIDs, wispSet)
 
 	for _, pair := range []struct {
 		table string

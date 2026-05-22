@@ -48,14 +48,18 @@ Then use in Claude Desktop config:
   "mcpServers": {
     "beads": {
       "command": "uv",
-      "args": ["--directory", "/path/to/beads-mcp", "run", "beads-mcp"]
+      "args": [
+        "--directory",
+        "/path/to/beads-mcp",
+        "run",
+        "beads-mcp"
+      ]
     }
   }
 }
 ```
 
 **Environment Variables** (all optional):
-
 - `BEADS_PATH` - Path to bd executable (default: `~/.local/bin/bd`)
 - `BEADS_DB` - Path to beads database file (default: auto-discover from cwd)
 - `BEADS_WORKING_DIR` - Working directory for bd commands (default: `$PWD` or current directory). Used for multi-repo setups - see below
@@ -70,7 +74,6 @@ Then use in Claude Desktop config:
 ### Single MCP Server (Recommended)
 
 **Simple config - works for all projects:**
-
 ```json
 {
   "mcpServers": {
@@ -82,14 +85,12 @@ Then use in Claude Desktop config:
 ```
 
 **How it works (LSP model):**
-
 1. MCP server detects the beads project in your current workspace
 2. Routes requests to the **per-project Dolt server** based on working directory
 3. Auto-starts the local Dolt server if not running
 4. **Each project gets its own isolated Dolt server** serving only its database
 
 **Architecture:**
-
 ```
 MCP Server (one instance)
     ↓
@@ -99,7 +100,6 @@ Dolt Databases (complete isolation)
 ```
 
 **Why per-project Dolt servers?**
-
 - Complete database isolation between projects
 - No cross-project pollution or git worktree conflicts
 - Simpler mental model: one project = one database = one Dolt server
@@ -157,20 +157,17 @@ await beads_create_issue(
 ### Architecture
 
 **Connection Pool**: The MCP server maintains a connection pool keyed by canonical workspace path:
-
 - Each workspace gets its own Dolt server connection
 - Paths are canonicalized (symlinks resolved, git toplevel detected)
 - Concurrent requests use `asyncio.Lock` to prevent race conditions
 - No LRU eviction (keeps all connections open for session)
 
 **ContextVar Routing**: Per-request workspace context is managed via Python's `ContextVar`:
-
 - Each tool call sets the workspace for its duration
 - Properly isolated for concurrent calls (no cross-contamination)
 - Falls back to `BEADS_WORKING_DIR` if `workspace_root` not provided
 
 **Path Canonicalization**:
-
 - Symlinks are resolved to physical paths (prevents duplicate connections)
 - Git submodules with `.beads` directories use local context
 - Git toplevel is used for non-initialized directories
@@ -210,11 +207,9 @@ await beads_ready_work(workspace_root="/Users/you/project-a")
 ## Features
 
 **Resource:**
-
 - `beads://quickstart` - Quickstart guide for using beads
 
 **Tools (all support `workspace_root` parameter):**
-
 - `init` - Initialize bd in current directory
 - `create` - Create new issue (bug, feature, task, epic, chore, decision)
 - `list` - List issues with filters (status, priority, type, assignee)
@@ -237,7 +232,6 @@ await beads_ready_work(workspace_root="/Users/you/project-a")
 This issue affected versions prior to v0.24.0. The problem was caused by self-referential Pydantic models (`Issue` with `dependencies: list["Issue"]`) generating invalid MCP schemas with `$ref` at root level.
 
 **Solution:** The issue was fixed in commit f3a678f by refactoring the data models:
-
 - Created `IssueBase` with common fields
 - Created `LinkedIssue(IssueBase)` for dependency references
 - Changed `Issue` to use `list[LinkedIssue]` instead of `list["Issue"]`
@@ -245,30 +239,27 @@ This issue affected versions prior to v0.24.0. The problem was caused by self-re
 This breaks the circular reference and ensures all tool outputSchemas have `type: object` at root level.
 
 **Upgrade:** If you're running beads-mcp < 0.24.0:
-
 ```bash
 pip install --upgrade beads-mcp
 ```
 
 All MCP tools now load correctly in Claude Code with v0.24.0+.
 
+
 ## Development
 
 Run MCP inspector:
-
 ```bash
 # inside beads-mcp dir
 uv run fastmcp dev src/beads_mcp/server.py
 ```
 
 Type checking:
-
 ```bash
 uv run mypy src/beads_mcp
 ```
 
 Linting and formatting:
-
 ```bash
 uv run ruff check src/beads_mcp
 uv run ruff format src/beads_mcp
@@ -277,13 +268,11 @@ uv run ruff format src/beads_mcp
 ## Testing
 
 Run all tests:
-
 ```bash
 uv run pytest
 ```
 
 With coverage:
-
 ```bash
 uv run pytest --cov=beads_mcp tests/
 ```
@@ -293,7 +282,6 @@ Test suite includes both mocked unit tests and integration tests with real `bd` 
 ### Multi-Repo Integration Test
 
 Test Dolt server with multiple repositories:
-
 ```bash
 # Start the Dolt server first
 cd /path/to/beads

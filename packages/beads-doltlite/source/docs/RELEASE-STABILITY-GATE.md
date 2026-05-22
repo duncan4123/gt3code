@@ -8,12 +8,12 @@ data-path changes.
 
 Every release candidate must pass upgrade smoke tests from these starting points:
 
-| From Version            | Mode                       | Scenario                                               |
-| ----------------------- | -------------------------- | ------------------------------------------------------ |
-| Previous release (N-1)  | Embedded (maintainer)      | Init → create issues → upgrade → verify data + role    |
-| Previous release (N-1)  | Shared-server (maintainer) | Init → create issues → upgrade → verify routing + data |
-| Previous release (N-1)  | Contributor                | Init --contributor → upgrade → verify role preserved   |
-| Two releases back (N-2) | Embedded (maintainer)      | Init → upgrade → verify schema migration               |
+| From Version | Mode | Scenario |
+|---|---|---|
+| Previous release (N-1) | Embedded (maintainer) | Init → create issues → upgrade → verify data + role |
+| Previous release (N-1) | Shared-server (maintainer) | Init → create issues → upgrade → verify routing + data |
+| Previous release (N-1) | Contributor | Init --contributor → upgrade → verify role preserved |
+| Two releases back (N-2) | Embedded (maintainer) | Init → upgrade → verify schema migration |
 
 ### What each scenario verifies
 
@@ -34,7 +34,6 @@ make test-upgrade
 ```
 
 The script:
-
 1. Downloads the previous release binary (cached in `~/.cache/beads-regression/`)
 2. Creates isolated workspaces for each scenario
 3. Initialises with the old binary, creates test data

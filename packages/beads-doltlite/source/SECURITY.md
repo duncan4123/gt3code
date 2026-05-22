@@ -7,7 +7,6 @@ If you discover a security vulnerability in bd, please report it responsibly:
 **Email**: security@steveyegge.com (or open a private security advisory on GitHub)
 
 Please include:
-
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
@@ -22,7 +21,6 @@ We will respond within 48 hours and work with you to address the issue.
 bd stores issue data locally in a Dolt database (`.beads/dolt/`), which is gitignored.
 
 **Important**:
-
 - Do not store sensitive information (passwords, API keys, secrets) in issue descriptions or metadata
 - Issue data is committed to git and will be visible to anyone with repository access
 - bd does not encrypt data at rest (it's a local development tool)
@@ -62,27 +60,23 @@ continues working normally with no degradation.
 When syncing with external trackers (GitHub Issues, Jira, Linear, GitLab, Azure DevOps), all data crossing the integration boundary is treated as **untrusted input**.
 
 **Trust boundaries:**
-
 - Issue titles and descriptions from external trackers may contain arbitrary content, including ANSI escape sequences, control characters, or prompt injection payloads targeting AI agents
 - External content is sanitized before terminal display (ANSI stripping, control character removal)
 - API responses are size-limited to prevent out-of-memory conditions from malformed responses
 - External issue identifiers are validated before use in SQL queries
 
 **Credential handling:**
-
 - Tracker API tokens stored in beads config (`bd config set`) are **plaintext** in the Dolt database
 - Prefer platform-native authentication when available (`gh auth`, `glab auth`, Azure CLI) — these use the platform's secure credential store
 - Never store tokens in environment variables in shared environments
 - Tokens are scoped to the permissions you grant — use minimal required scopes
 
 **Sync security model:**
-
 - Sync is always **user-initiated** — no background daemons, no inbound webhooks, no listening ports
 - No data is sent to external trackers unless the user explicitly runs a sync command such as `bd dolt push`
 - Conflict resolution strategies are deterministic and auditable via Dolt history
 
 **Content safety for AI agents:**
-
 - Issue descriptions imported from external trackers may contain prompt injection payloads
 - Consuming agents should treat all issue content as untrusted input
 - The `--json` output flag provides structured data that separates metadata from free-text content
@@ -91,7 +85,6 @@ When syncing with external trackers (GitHub Issues, Jira, Linear, GitLab, Azure 
 ### Command Injection Protection
 
 bd uses parameterized SQL queries to prevent SQL injection. However:
-
 - Do not pass untrusted input directly to `bd` commands
 - Issue IDs are validated against the pattern `^[a-z0-9-]+$`
 - File paths are validated before reading/writing
@@ -99,7 +92,6 @@ bd uses parameterized SQL queries to prevent SQL injection. However:
 ### Dependency Security
 
 bd has minimal dependencies:
-
 - Go standard library
 - Dolt (version-controlled SQL database)
 - Cobra CLI framework
@@ -137,7 +129,6 @@ For sensitive workflows, consider using bd only for non-sensitive task tracking.
 ## Security Updates
 
 Security updates will be announced via:
-
 - GitHub Security Advisories
 - Release notes on GitHub
 - Git commit messages (tagged with `[security]`)

@@ -13,6 +13,7 @@ package regression
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
@@ -21,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -247,8 +249,15 @@ type workspace struct {
 
 func newWorkspace(t *testing.T, bdPath string) *workspace {
 	t.Helper()
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("", "bd-regression-workspace-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		removeWorkspaceDir(t, dir)
+	})
 	w := &workspace{dir: dir, bdPath: bdPath, t: t}
+	w.cleanupBaselineDaemon()
 
 	w.git("init")
 	w.git("config", "user.name", "regression-test")
@@ -271,11 +280,56 @@ func newWorkspace(t *testing.T, bdPath string) *workspace {
 	return w
 }
 
+func removeWorkspaceDir(t *testing.T, dir string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	var err error
+	for {
+		err = os.RemoveAll(dir)
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("remove workspace dir %s: %v", dir, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func (w *workspace) cleanupBaselineDaemon() {
+	w.t.Helper()
+	if baselineBin == "" || w.bdPath != baselineBin {
+		return
+	}
+
+	w.t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, w.bdPath, "daemon", "stop")
+		cmd.Dir = w.dir
+		cmd.Env = w.runEnv()
+		_ = cmd.Run()
+
+		if pkill, err := exec.LookPath("pkill"); err == nil {
+			pkillCtx, pkillCancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer pkillCancel()
+
+			pattern := "^" + regexp.QuoteMeta(w.bdPath) + " daemon start$"
+			_ = exec.CommandContext(pkillCtx, pkill, "-f", pattern).Run()
+		}
+	})
+}
+
 func (w *workspace) runEnv() []string {
 	env := []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + w.dir,
 		"BEADS_TEST_MODE=1",
+		// The pinned v0.49.6 baseline still has daemon mode. Disable it
+		// up front so it cannot race t.TempDir cleanup by writing .beads files.
+		"BD_NO_DAEMON=1",
+		"BEADS_NO_DAEMON=1",
 		"GIT_CONFIG_NOSYSTEM=1",
 	}
 	if testDoltServerPort != 0 {

@@ -19,7 +19,6 @@ bd setup junie
 ```
 
 This creates:
-
 - `.junie/guidelines.md` - Agent instructions for beads workflow
 - `.junie/mcp/mcp.json` - MCP server configuration
 
@@ -28,7 +27,6 @@ This creates:
 ### Guidelines (`.junie/guidelines.md`)
 
 Junie automatically reads this file on session start. It contains:
-
 - Core workflow rules for using beads
 - Command reference for the `bd` CLI
 - Issue types and priorities
@@ -52,7 +50,6 @@ Configures the beads MCP server so Junie can use beads tools directly:
 ## Usage
 
 Once installed, Junie will:
-
 1. Read workflow instructions from `.junie/guidelines.md`
 2. Have access to beads MCP tools for direct issue management
 3. Be able to use `bd` CLI commands

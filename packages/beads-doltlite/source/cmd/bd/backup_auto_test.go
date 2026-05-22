@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/steveyegge/beads/internal/config"
-	"github.com/steveyegge/beads/internal/storage"
-	"github.com/steveyegge/beads/internal/storage/doltlite"
 )
 
 func TestIsBackupAutoEnabled(t *testing.T) {
@@ -84,17 +82,5 @@ func TestIsBackupAutoEnabled(t *testing.T) {
 				t.Errorf("isBackupAutoEnabled() = %v, want %v", got, tt.wantResult)
 			}
 		})
-	}
-}
-
-func TestIsDoltliteStore(t *testing.T) {
-	var nilStore storage.DoltStorage
-	if isDoltliteStore(nilStore) {
-		t.Fatal("isDoltliteStore(nil) = true, want false")
-	}
-
-	var st storage.DoltStorage = &doltlite.DoltliteStore{}
-	if !isDoltliteStore(st) {
-		t.Fatal("isDoltliteStore(doltlite store) = false, want true")
 	}
 }

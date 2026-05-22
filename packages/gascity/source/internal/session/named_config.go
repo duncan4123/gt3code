@@ -67,11 +67,11 @@ func FindNamedSessionSpec(cfg *config.City, cityName, identity string) (NamedSes
 
 // NamedSessionBackingTemplate returns the resolved backing agent template for a named session spec.
 func NamedSessionBackingTemplate(spec NamedSessionSpec) string {
-	if spec.Named != nil {
-		return strings.TrimSpace(spec.Named.Template)
-	}
 	if spec.Agent != nil {
-		return strings.TrimSpace(spec.Agent.Name)
+		return spec.Agent.QualifiedName()
+	}
+	if spec.Named != nil {
+		return spec.Named.TemplateQualifiedName()
 	}
 	return ""
 }
@@ -193,7 +193,7 @@ func NamedSessionContinuityEligible(b beads.Bead) bool {
 	switch strings.TrimSpace(b.Metadata["state"]) {
 	case "archived":
 		return continuity == "true"
-	case "closing", "closed":
+	case "closing", "closed", string(StateFailedCreate):
 		return false
 	default:
 		return true
@@ -314,8 +314,7 @@ func listConfiguredNamedSessionBeadsByMetadata(store beads.Store, key, value str
 		return nil, nil
 	}
 	items, err := store.List(beads.ListQuery{
-		Metadata:   map[string]string{key: value},
-		SkipParent: true,
+		Metadata: map[string]string{key: value},
 	})
 	if err != nil {
 		return nil, err
@@ -371,10 +370,7 @@ func NamedSessionResolutionCandidates(store beads.Store, spec NamedSessionSpec) 
 	if identity == "" && sessionName == "" {
 		return nil, nil
 	}
-	items, err := store.List(beads.ListQuery{
-		Label:      LabelSession,
-		SkipParent: true,
-	})
+	items, err := store.List(beads.ListQuery{Label: LabelSession})
 	if err != nil {
 		return nil, err
 	}
@@ -485,11 +481,11 @@ func closedNamedSessionReopenEligible(b beads.Bead) bool {
 		return false
 	}
 	switch strings.TrimSpace(b.Metadata["close_reason"]) {
-	case "duplicate", "duplicate-repair", "gc_swept", "orphaned", "reconfigured", "stale-session":
+	case "duplicate", "duplicate-repair", "gc_swept", "orphaned", "reconfigured", "stale-session", string(StateFailedCreate):
 		return false
 	}
 	switch strings.TrimSpace(b.Metadata["state"]) {
-	case "duplicate", "duplicate-repair", "gc_swept", "orphaned", "reconfigured", "stale-session":
+	case "duplicate", "duplicate-repair", "gc_swept", "orphaned", "reconfigured", "stale-session", string(StateFailedCreate):
 		return false
 	}
 	return true

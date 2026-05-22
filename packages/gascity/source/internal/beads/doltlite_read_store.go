@@ -1,3 +1,5 @@
+//go:build cgo && gascity_native_beads
+
 package beads
 
 import (
@@ -118,7 +120,6 @@ func (s *DoltliteReadStore) GetSessionBead(id string) (Bead, error) {
 		AllowScan:     true,
 		IncludeClosed: true,
 		SkipLabels:    true,
-		SkipParent:    true,
 	}, "i.id = ?", []any{id}, 1)
 	if err != nil {
 		return Bead{}, err
@@ -148,7 +149,6 @@ func (s *DoltliteReadStore) ListSessionBeads() ([]Bead, error) {
 	rows, err := s.queryIssues(ListQuery{
 		Type:       "session",
 		SkipLabels: true,
-		SkipParent: true,
 	}, "", nil, 0)
 	if err != nil {
 		return nil, err
@@ -222,7 +222,7 @@ func (s *DoltliteReadStore) Ready(query ...ReadyQuery) ([]Bead, error) {
 	}
 	s.readyMu.Unlock()
 
-	q := ListQuery{Status: "open", AllowScan: true, IncludeClosed: false, Limit: 0, SkipLabels: true, SkipParent: true}
+	q := ListQuery{Status: "open", AllowScan: true, IncludeClosed: false, Limit: 0, SkipLabels: true}
 	if rq.Assignee != "" {
 		q.Assignee = rq.Assignee
 	}
@@ -549,7 +549,6 @@ func (s *DoltliteReadStore) SetMetadataBatch(id string, kvs map[string]string) e
 			AllowScan:     true,
 			IncludeClosed: true,
 			SkipLabels:    true,
-			SkipParent:    true,
 		}, "i.id = ?", []any{id}, 1)
 		if queryErr != nil {
 			return queryErr
@@ -762,7 +761,7 @@ func scanDep(rows interface{ Scan(...any) error }) (Dep, error) {
 func (s *DoltliteReadStore) queryIssues(query ListQuery, extraWhere string, extraArgs []any, limit int) ([]Bead, error) {
 	where := []string{}
 	args := []any{}
-	needParent := !query.SkipParent || query.ParentID != ""
+	needParent := true
 	if !query.IncludeClosed && query.Status != "closed" {
 		where = append(where, "i.status != 'closed'")
 	}

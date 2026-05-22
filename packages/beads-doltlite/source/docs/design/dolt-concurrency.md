@@ -88,7 +88,6 @@ a bottleneck in practice.
 ### The Two Patterns
 
 **Pattern 1: Transaction-Wrapped Dolt Commits** (recommended for us)
-
 ```sql
 BEGIN;
 INSERT INTO issues (id, title, status) VALUES ('gt-abc', 'Fix bug', 'open');
@@ -98,7 +97,6 @@ CALL DOLT_COMMIT('-Am', 'bd: create gt-abc');
 ```
 
 **Pattern 2: Branch-Per-Client** (our current approach — retiring)
-
 ```sql
 CALL DOLT_BRANCH('worker-ace-1708642800');
 CALL DOLT_CHECKOUT('worker-ace-1708642800');
@@ -139,7 +137,6 @@ func (s *DoltStore) CreateIssue(ctx, issue, actor) {
 ```
 
 This ensures:
-
 - All writes within a logical operation are **atomic**
 - No other connection can commit our uncommitted writes
 - The `DOLT_COMMIT` is part of the transaction, so it only includes our changes
@@ -244,7 +241,6 @@ dead code for the normal write path. Retain for federation use cases
 
 The orchestrator's worker dispatch previously created a Dolt branch and injected `BD_BRANCH` into
 the worker environment. After migration:
-
 - No branch creation at dispatch time
 - No `BD_BRANCH` env var
 - All agents use the same main-branch connection pool
@@ -253,7 +249,6 @@ the worker environment. After migration:
 
 The orchestrator's task completion previously checked out main, merged the worker's branch, and
 deleted it. After migration:
-
 - No merge step
 - No branch deletion
 - Task completion simply closes the bead (already on main, already visible)
@@ -301,13 +296,13 @@ coordination) uses the events/comments tables, which are also dolt_ignored.
 With multiple connections writing to main concurrently, conflicts are possible
 but rare due to Dolt's cell-level merge semantics:
 
-| Scenario                                        | Conflict? | Resolution                    |
-| ----------------------------------------------- | --------- | ----------------------------- |
-| Two agents create different beads               | No        | Different rows, auto-merged   |
-| Two agents update different beads               | No        | Different rows, auto-merged   |
-| Two agents update different fields of same bead | No        | Different cells, auto-merged  |
-| Two agents update same field of same bead       | **Yes**   | Last writer wins (updated_at) |
-| One agent writes while another reads            | No        | Read sees committed state     |
+| Scenario | Conflict? | Resolution |
+|----------|-----------|------------|
+| Two agents create different beads | No | Different rows, auto-merged |
+| Two agents update different beads | No | Different rows, auto-merged |
+| Two agents update different fields of same bead | No | Different cells, auto-merged |
+| Two agents update same field of same bead | **Yes** | Last writer wins (updated_at) |
+| One agent writes while another reads | No | Read sees committed state |
 
 The "same field of same bead" case is rare in practice — beads are typically
 owned by one agent at a time (assigned via sling). The main risk is
@@ -384,7 +379,6 @@ is single-process and doesn't have the multi-connection concurrency
 concerns described here.
 
 For standalone `bd` with embedded Dolt:
-
 - Single connection, auto-commit is fine
 - No branch-per-worker (single user)
 - Transaction wrapping is still good practice but not critical
@@ -394,7 +388,6 @@ For standalone `bd` with embedded Dolt:
 Tim's guidance: **hundreds of transactions per second on a single branch.**
 
 Our workload:
-
 - Typical orchestrator rig: 6-12 concurrent agents (all roles combined)
 - Write patterns: create/update/close beads, ~1-10 writes per agent per minute
 - Read patterns: status queries, bead lookups, ~10-100 reads per agent per minute

@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net"
-	"strconv"
 	"strings"
 
 	"github.com/gastownhall/gascity/internal/api"
@@ -43,17 +41,6 @@ func discoverReachableSupervisorAPIBaseURL() (string, bool) {
 		return "", false
 	}
 	return baseURL, true
-}
-
-func standaloneAPIBaseURL(cfg *config.City) string {
-	bind := cfg.API.BindOrDefault()
-	switch bind {
-	case "", "0.0.0.0":
-		bind = "127.0.0.1"
-	case "::":
-		bind = "::1"
-	}
-	return "http://" + net.JoinHostPort(bind, strconv.Itoa(cfg.API.Port))
 }
 
 func effectiveAPIStatusLine(cityPath string, cfg *config.City) string {

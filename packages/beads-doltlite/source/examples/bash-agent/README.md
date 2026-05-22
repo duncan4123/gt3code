@@ -72,21 +72,18 @@ Open: 5  In Progress: 0  Closed: 2
 ## Use Cases
 
 **Continuous Integration**
-
 ```bash
 # Run agent in CI to process testing tasks
 ./agent.sh 5
 ```
 
 **Cron Jobs**
-
 ```bash
 # Run agent every hour
 0 * * * * cd /path/to/project && /path/to/agent.sh 3
 ```
 
 **One-off Task Processing**
-
 ```bash
 # Process exactly one task and exit
 ./agent.sh 1

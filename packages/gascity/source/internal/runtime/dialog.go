@@ -30,10 +30,12 @@ func StartupDialogTimeout() time.Duration {
 
 // AcceptStartupDialogs dismisses startup dialogs that can block automated
 // sessions. Handles (in order):
-//  1. Codex update dialog ("Update available") — requires Down+Enter to skip
-//  2. Workspace trust dialog (Claude "Quick safety check", Codex "Do you trust the contents of this directory?")
-//  3. Bypass permissions warning ("Bypass Permissions mode") — requires Down+Enter
-//  4. Claude custom API key confirmation — requires Up+Enter to select "Yes"
+//  1. Claude resume selector — requires Down+Enter to resume the full session
+//  2. Codex update dialog ("Update available") — requires Down+Enter to skip
+//  3. Workspace trust dialog (Claude "Quick safety check", Codex "Do you trust the contents of this directory?")
+//  4. Codex hook review dialog — requires Down+Enter to trust hooks
+//  5. Bypass permissions warning ("Bypass Permissions mode") — requires Down+Enter
+//  6. Claude custom API key confirmation — requires Up+Enter to select "Yes"
 //
 // The peek function should return the last N lines of the session's terminal output.
 // The sendKeys function should send bare tmux-style keystrokes (e.g., "Enter", "Down").
@@ -76,7 +78,18 @@ func AcceptStartupDialogsFromStreamWithStatus(
 		return sendKeys(keys...)
 	}
 
-	phaseObserved, err := acceptCodexUpdateDialogFromStream(ctx, timeout, stream, trackingSendKeys)
+	phaseObserved, err := acceptClaudeResumeDialogFromStream(ctx, timeout, stream, trackingSendKeys)
+	if err != nil {
+		return observed, fmt.Errorf("claude resume dialog: %w", err)
+	}
+	observed = observed || phaseObserved
+	if !phaseObserved && !observed {
+		return false, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return observed, err
+	}
+	phaseObserved, err = acceptCodexUpdateDialogFromStream(ctx, timeout, stream, trackingSendKeys)
 	if err != nil {
 		return observed, fmt.Errorf("codex update dialog: %w", err)
 	}
@@ -90,6 +103,17 @@ func AcceptStartupDialogsFromStreamWithStatus(
 	phaseObserved, err = acceptWorkspaceTrustDialogFromStream(ctx, timeout, stream, trackingSendKeys)
 	if err != nil {
 		return observed, fmt.Errorf("workspace trust dialog: %w", err)
+	}
+	observed = observed || phaseObserved
+	if !phaseObserved && !observed {
+		return false, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return observed, err
+	}
+	phaseObserved, err = acceptCodexHookReviewDialogFromStream(ctx, timeout, stream, trackingSendKeys)
+	if err != nil {
+		return observed, fmt.Errorf("codex hook review dialog: %w", err)
 	}
 	observed = observed || phaseObserved
 	if !phaseObserved && !observed {
@@ -148,6 +172,12 @@ func AcceptStartupDialogsWithTimeout(
 	peek func(lines int) (string, error),
 	sendKeys func(keys ...string) error,
 ) error {
+	if err := acceptClaudeResumeDialog(ctx, timeout, peek, sendKeys); err != nil {
+		return fmt.Errorf("claude resume dialog: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := acceptCodexUpdateDialog(ctx, timeout, peek, sendKeys); err != nil {
 		return fmt.Errorf("codex update dialog: %w", err)
 	}
@@ -156,6 +186,12 @@ func AcceptStartupDialogsWithTimeout(
 	}
 	if err := acceptWorkspaceTrustDialog(ctx, timeout, peek, sendKeys); err != nil {
 		return fmt.Errorf("workspace trust dialog: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := acceptCodexHookReviewDialog(ctx, timeout, peek, sendKeys); err != nil {
+		return fmt.Errorf("codex hook review dialog: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -176,6 +212,80 @@ func AcceptStartupDialogsWithTimeout(
 		return fmt.Errorf("rate limit dialog: %w", err)
 	}
 	return nil
+}
+
+// acceptClaudeResumeDialog dismisses Claude's high-token/old-session resume
+// selector. The menu cursor uses the same ❯ prefix as the normal input prompt,
+// so this must run before generic prompt detection. Choose "Resume full session
+// as-is" to preserve the in-flight workflow context instead of summarizing it.
+func acceptClaudeResumeDialog(
+	ctx context.Context,
+	timeout time.Duration,
+	peek func(lines int) (string, error),
+	sendKeys func(keys ...string) error,
+) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		content, err := peek(startupDialogPeekLines)
+		if err != nil {
+			return err
+		}
+
+		if containsClaudeResumeDialog(content) {
+			if err := sendKeys("Down"); err != nil {
+				return err
+			}
+			sleep(ctx, bypassDialogConfirmDelay)
+			return sendKeys("Enter")
+		}
+
+		if containsPromptIndicator(content) ||
+			containsCodexUpdateDialog(content) ||
+			containsWorkspaceTrustDialog(content) ||
+			containsCodexHookReviewDialog(content) ||
+			strings.Contains(content, "Bypass Permissions mode") ||
+			containsCustomAPIKeyDialog(content) ||
+			ContainsRateLimitDialog(content) {
+			return nil
+		}
+
+		sleep(ctx, dialogPollInterval)
+	}
+	return nil
+}
+
+func containsClaudeResumeDialog(content string) bool {
+	return strings.Contains(content, "Resume from summary") &&
+		strings.Contains(content, "Resume full session as-is") &&
+		strings.Contains(content, "Enter to confirm")
+}
+
+func acceptClaudeResumeDialogFromStream(
+	ctx context.Context,
+	timeout time.Duration,
+	snapshots *replayableSnapshotCursor,
+	sendKeys func(keys ...string) error,
+) (bool, error) {
+	return acceptDialogFromStream(ctx, timeout, snapshots, sendKeys, streamDialogSpec{
+		match:       containsClaudeResumeDialog,
+		matchKeys:   []string{"Down", "Enter"},
+		matchDelay:  bypassDialogConfirmDelay,
+		ready:       containsPromptIndicator,
+		readyOrNext: containsPostClaudeResumeStartupDialog,
+	})
+}
+
+func containsPostClaudeResumeStartupDialog(content string) bool {
+	return containsCodexUpdateDialog(content) ||
+		containsWorkspaceTrustDialog(content) ||
+		containsCodexHookReviewDialog(content) ||
+		strings.Contains(content, "Bypass Permissions mode") ||
+		containsCustomAPIKeyDialog(content) ||
+		ContainsRateLimitDialog(content)
 }
 
 // acceptCodexUpdateDialog skips Codex's interactive update prompt. The default
@@ -207,6 +317,7 @@ func acceptCodexUpdateDialog(
 
 		if containsPromptIndicator(content) ||
 			containsWorkspaceTrustDialog(content) ||
+			containsCodexHookReviewDialog(content) ||
 			strings.Contains(content, "Bypass Permissions mode") ||
 			containsCustomAPIKeyDialog(content) ||
 			ContainsRateLimitDialog(content) {
@@ -241,6 +352,7 @@ func acceptCodexUpdateDialogFromStream(
 
 func containsPostUpdateStartupDialog(content string) bool {
 	return containsWorkspaceTrustDialog(content) ||
+		containsCodexHookReviewDialog(content) ||
 		strings.Contains(content, "Bypass Permissions mode") ||
 		containsCustomAPIKeyDialog(content) ||
 		ContainsRateLimitDialog(content)
@@ -279,8 +391,10 @@ func acceptWorkspaceTrustDialog(
 			return nil
 		}
 
-		// Check if a bypass dialog appeared instead — let the next phase handle it.
-		if strings.Contains(content, "Bypass Permissions mode") {
+		if containsCodexHookReviewDialog(content) ||
+			strings.Contains(content, "Bypass Permissions mode") ||
+			containsCustomAPIKeyDialog(content) ||
+			ContainsRateLimitDialog(content) {
 			return nil
 		}
 
@@ -312,6 +426,74 @@ func containsWorkspaceTrustDialog(content string) bool {
 }
 
 func containsPostTrustStartupDialog(content string) bool {
+	return containsCodexHookReviewDialog(content) ||
+		strings.Contains(content, "Bypass Permissions mode") ||
+		containsCustomAPIKeyDialog(content) ||
+		ContainsRateLimitDialog(content)
+}
+
+// acceptCodexHookReviewDialog dismisses Codex's startup hook trust review.
+// The first option reviews hook details; automated managed sessions want the
+// second option, "Trust all and continue", so press Down then Enter.
+func acceptCodexHookReviewDialog(
+	ctx context.Context,
+	timeout time.Duration,
+	peek func(lines int) (string, error),
+	sendKeys func(keys ...string) error,
+) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		content, err := peek(startupDialogPeekLines)
+		if err != nil {
+			return err
+		}
+
+		if containsCodexHookReviewDialog(content) {
+			if err := sendKeys("Down"); err != nil {
+				return err
+			}
+			sleep(ctx, bypassDialogConfirmDelay)
+			return sendKeys("Enter")
+		}
+
+		if containsPromptIndicator(content) ||
+			strings.Contains(content, "Bypass Permissions mode") ||
+			containsCustomAPIKeyDialog(content) ||
+			ContainsRateLimitDialog(content) {
+			return nil
+		}
+
+		sleep(ctx, dialogPollInterval)
+	}
+	return nil
+}
+
+func acceptCodexHookReviewDialogFromStream(
+	ctx context.Context,
+	timeout time.Duration,
+	snapshots *replayableSnapshotCursor,
+	sendKeys func(keys ...string) error,
+) (bool, error) {
+	return acceptDialogFromStream(ctx, timeout, snapshots, sendKeys, streamDialogSpec{
+		match:       containsCodexHookReviewDialog,
+		matchKeys:   []string{"Down", "Enter"},
+		matchDelay:  bypassDialogConfirmDelay,
+		ready:       containsPromptIndicator,
+		readyOrNext: containsPostCodexHookReviewStartupDialog,
+	})
+}
+
+func containsCodexHookReviewDialog(content string) bool {
+	return strings.Contains(content, "Hooks need review") &&
+		strings.Contains(content, "Trust all and continue") &&
+		strings.Contains(content, "Continue without trusting")
+}
+
+func containsPostCodexHookReviewStartupDialog(content string) bool {
 	return strings.Contains(content, "Bypass Permissions mode") ||
 		containsCustomAPIKeyDialog(content) ||
 		ContainsRateLimitDialog(content)

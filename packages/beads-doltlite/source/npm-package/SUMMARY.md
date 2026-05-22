@@ -28,7 +28,6 @@ npm-package/
 ### Key Components
 
 #### 1. package.json
-
 - **Name**: `@beads/bd` (scoped to @beads organization)
 - **Version**: 0.21.5 (matches current beads release)
 - **Main**: CLI wrapper (bin/bd.js)
@@ -37,7 +36,6 @@ npm-package/
 - **Architecture support**: x64 (amd64), arm64
 
 #### 2. bin/bd.js - CLI Wrapper
-
 - Node.js script that acts as the `bd` command
 - Detects platform and architecture
 - Spawns the native bd binary with arguments passed through
@@ -45,9 +43,7 @@ npm-package/
 - Provides clear error messages if binary is missing
 
 #### 3. scripts/postinstall.js - Binary Downloader
-
 **What it does**:
-
 - Runs automatically after `npm install`
 - Detects OS (darwin/linux/windows) and architecture (amd64/arm64)
 - Downloads the correct binary from GitHub releases
@@ -59,13 +55,11 @@ npm-package/
 - Cleans up downloaded archive
 
 **Platforms supported**:
-
 - macOS (darwin): amd64, arm64
 - Linux: amd64, arm64
 - Windows: amd64, arm64
 
 #### 4. scripts/test.js - Test Suite
-
 - Verifies binary was downloaded correctly
 - Tests version command
 - Tests help command
@@ -74,7 +68,6 @@ npm-package/
 ### Documentation
 
 #### README.md
-
 - Installation instructions
 - Quick start guide
 - Common commands
@@ -83,7 +76,6 @@ npm-package/
 - Links to full documentation
 
 #### PUBLISHING.md
-
 - npm authentication setup
 - Organization setup (@beads)
 - Publishing workflow
@@ -92,7 +84,6 @@ npm-package/
 - Future automation options (GitHub Actions)
 
 #### CLAUDE_CODE_WEB.md
-
 - SessionStart hook setup (3 options)
 - Usage examples
 - Agent integration instructions
@@ -165,7 +156,6 @@ All success criteria from bd-febc met:
 **Chosen approach: Native binary wrapper**
 
 Advantages:
-
 - Full SQLite support (no custom VFS)
 - 100% feature parity with standalone bd
 - Better performance (native vs WASM)
@@ -174,7 +164,6 @@ Advantages:
 - Single binary build process
 
 Trade-offs:
-
 - Slightly larger download (~17MB vs ~5MB for WASM)
 - Requires platform detection
 - Must maintain release binaries
@@ -184,7 +173,6 @@ Trade-offs:
 **Chosen approach: npm package**
 
 Advantages for Claude Code for Web:
-
 - npm is pre-installed and configured
 - Familiar installation method
 - Works in restricted network environments
@@ -197,7 +185,6 @@ Advantages for Claude Code for Web:
 **Chosen approach: Scoped to @beads organization**
 
 Advantages:
-
 - Namespace control (no collisions)
 - Professional appearance
 - Room for future packages (@beads/mcp, etc.)
@@ -225,7 +212,7 @@ Note: Requires creating @beads organization on npm.
 
 1. **Automated Publishing**
    - GitHub Action to publish on release
-   - Triggered by git tag (v\*)
+   - Triggered by git tag (v*)
    - Auto-update package.json version
 
 2. **Binary Caching**

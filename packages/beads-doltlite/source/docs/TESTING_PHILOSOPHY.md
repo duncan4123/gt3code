@@ -66,23 +66,21 @@ A good test:
 
 ## What to Test (Priority Matrix)
 
-| Priority   | What                                | Why                                     | Examples in beads                                   |
-| ---------- | ----------------------------------- | --------------------------------------- | --------------------------------------------------- |
-| **High**   | Core business logic                 | This is what users depend on            | `sync`, `doctor`, `export`, `import`                |
-| **High**   | Error paths that could corrupt data | Data loss is catastrophic               | Config handling, git operations, database integrity |
-| **Medium** | Edge cases from production bugs     | Discovered through real issues          | Orphan handling, ID collision detection             |
-| **Low**    | Display/formatting                  | Visual output, can be manually verified | Table formatting, color output                      |
+| Priority | What | Why | Examples in beads |
+|----------|------|-----|-------------------|
+| **High** | Core business logic | This is what users depend on | `sync`, `doctor`, `export`, `import` |
+| **High** | Error paths that could corrupt data | Data loss is catastrophic | Config handling, git operations, database integrity |
+| **Medium** | Edge cases from production bugs | Discovered through real issues | Orphan handling, ID collision detection |
+| **Low** | Display/formatting | Visual output, can be manually verified | Table formatting, color output |
 
 ---
 
 ## What NOT to Test Extensively
 
 ### Simple utility functions
-
 Trust the language. Don't test that `strings.TrimSpace` works.
 
 ### Every permutation of inputs
-
 Use table-driven tests with representative cases instead of exhaustive permutations.
 
 ```go
@@ -106,11 +104,9 @@ func TestPriorityMapping(t *testing.T) {
 ```
 
 ### Obvious behavior
-
 Don't test "if file exists, return true" - trust the implementation.
 
 ### Same logic through different entry points
-
 If you test a function directly, don't also test it through every caller.
 
 ---
@@ -214,12 +210,12 @@ TestPriority(5)  // boundary - first invalid
 
 ## Target Metrics
 
-| Metric               | Target        | Current (beads) | Status     |
-| -------------------- | ------------- | --------------- | ---------- |
-| Test-to-code ratio   | 0.5:1 - 1.5:1 | 0.85:1          | Healthy    |
-| Fast test suite      | < 5 seconds   | 3.8 seconds     | Good       |
-| Integration tests    | < 30 seconds  | ~15 seconds     | Good       |
-| Compilation overhead | Minimize      | 180 seconds     | Bottleneck |
+| Metric | Target | Current (beads) | Status |
+|--------|--------|-----------------|--------|
+| Test-to-code ratio | 0.5:1 - 1.5:1 | 0.85:1 | Healthy |
+| Fast test suite | < 5 seconds | 3.8 seconds | Good |
+| Integration tests | < 30 seconds | ~15 seconds | Good |
+| Compilation overhead | Minimize | 180 seconds | Bottleneck |
 
 ### Interpretation
 
@@ -234,20 +230,20 @@ TestPriority(5)  // boundary - first invalid
 
 ### Well-Covered (Maintain)
 
-| Area                | Why It's Well-Tested                               |
-| ------------------- | -------------------------------------------------- |
-| Sync/Export/Import  | Data integrity critical - comprehensive edge cases |
-| SQLite transactions | Rollback safety, atomicity guarantees              |
-| Merge operations    | Dolt-native cell-level merge                       |
-| Database locking    | Prevents corruption from multiple instances        |
+| Area | Why It's Well-Tested |
+|------|---------------------|
+| Sync/Export/Import | Data integrity critical - comprehensive edge cases |
+| SQLite transactions | Rollback safety, atomicity guarantees |
+| Merge operations | Dolt-native cell-level merge |
+| Database locking | Prevents corruption from multiple instances |
 
 ### Needs Attention
 
-| Area                  | Gap                              | Priority |
-| --------------------- | -------------------------------- | -------- |
-| Server lifecycle      | Shutdown/signal handling         | Medium   |
-| Concurrent operations | Stress testing under load        | Medium   |
-| Boundary validation   | Edge inputs in mapping functions | Low      |
+| Area | Gap | Priority |
+|------|-----|----------|
+| Server lifecycle | Shutdown/signal handling | Medium |
+| Concurrent operations | Stress testing under load | Medium |
+| Boundary validation | Edge inputs in mapping functions | Low |
 
 ### Skip These
 
@@ -260,5 +256,4 @@ TestPriority(5)  // boundary - first invalid
 ## Related Docs
 
 - [TESTING.md](TESTING.md) - How to run tests
-- [README_TESTING.md](README_TESTING.md) - Fast vs integration test strategy
-- [dev-notes/TEST_SUITE_AUDIT.md](dev-notes/TEST_SUITE_AUDIT.md) - Test refactoring progress
+- [README_TESTING.md](README_TESTING.md) - Stable pointer to the active testing docs

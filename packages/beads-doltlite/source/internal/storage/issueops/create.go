@@ -46,10 +46,6 @@ func NewBatchContext(ctx context.Context, tx *sql.Tx, opts storage.BatchCreateOp
 	}, nil
 }
 
-// CreateIssueInTx handles a single issue within a transaction:
-// prepare, resolve prefix, generate ID, validate prefix, check orphans,
-// insert, record event, persist labels/comments.
-// Returns nil if the issue was skipped (e.g., orphan skip mode).
 func CreateIssueInTx(ctx context.Context, tx *sql.Tx, bc *BatchContext, issue *types.Issue, actor string) error {
 	if err := PrepareIssueForInsert(issue, bc.CustomStatuses, bc.CustomTypes); err != nil {
 		return err
@@ -57,7 +53,6 @@ func CreateIssueInTx(ctx context.Context, tx *sql.Tx, bc *BatchContext, issue *t
 
 	issueTable, eventTable := TableRouting(issue)
 
-	// Resolve prefix and generate ID if needed.
 	if issue.ID == "" {
 		prefix := bc.ConfigPrefix
 		if issue.PrefixOverride != "" {
@@ -101,9 +96,6 @@ func CreateIssueInTx(ctx context.Context, tx *sql.Tx, bc *BatchContext, issue *t
 	return PersistComments(ctx, tx, issue)
 }
 
-// CreateIssuesInTx creates multiple issues within a single transaction.
-// Handles the first pass (insert each issue), second pass (dependencies),
-// and child counter reconciliation. Does NOT handle dolt versioning.
 func CreateIssuesInTx(ctx context.Context, tx *sql.Tx, issues []*types.Issue, actor string, opts storage.BatchCreateOptions) error {
 	bc, err := NewBatchContext(ctx, tx, opts)
 	if err != nil {
@@ -252,7 +244,6 @@ func InsertIssueIfNew(ctx context.Context, tx *sql.Tx, issueTable string, issue 
 	return existingCount == 0, nil
 }
 
-// PersistLabels writes issue.Labels into the appropriate labels table.
 func PersistLabels(ctx context.Context, tx *sql.Tx, issue *types.Issue) error {
 	return PersistLabelsWithDialect(ctx, tx, issue, SQLDialectDolt)
 }
@@ -283,11 +274,6 @@ func PersistLabelsWithDialect(ctx context.Context, tx *sql.Tx, issue *types.Issu
 	return nil
 }
 
-// PersistComments writes issue.Comments into the appropriate comments table.
-// The comments table uses a UUID PK (DEFAULT UUID()), so ON DUPLICATE KEY UPDATE
-// would never match. Instead, we check for an existing identical comment
-// (same issue_id, author, and created_at) before inserting to prevent
-// duplicates on re-import.
 func PersistComments(ctx context.Context, tx *sql.Tx, issue *types.Issue) error {
 	if len(issue.Comments) == 0 {
 		return nil
@@ -327,17 +313,14 @@ func PersistComments(ctx context.Context, tx *sql.Tx, issue *types.Issue) error 
 	return nil
 }
 
-// PersistDependencies inserts dependencies for all issues (second pass).
 func PersistDependencies(ctx context.Context, tx *sql.Tx, issues []*types.Issue, actor string) error {
 	for _, issue := range issues {
 		if len(issue.Dependencies) == 0 {
 			continue
 		}
 		depTable := "dependencies"
-		lookupTable := "issues"
 		if IsWisp(issue) {
 			depTable = "wisp_dependencies"
-			lookupTable = "wisps"
 		}
 		for _, dep := range issue.Dependencies {
 			// Default IssueID to the owning issue when not pre-set (e.g.,
@@ -345,22 +328,33 @@ func PersistDependencies(ctx context.Context, tx *sql.Tx, issues []*types.Issue,
 			if dep.IssueID == "" {
 				dep.IssueID = issue.ID
 			}
-			// Skip if target doesn't exist.
-			var exists int
-			//nolint:gosec // G201: table is determined by isWisp flag
-			if err := tx.QueryRowContext(ctx, fmt.Sprintf("SELECT 1 FROM %s WHERE id = ?", lookupTable), dep.DependsOnID).Scan(&exists); err != nil {
-				continue
+
+			kind := ClassifyDepTarget(ctx, tx, dep, false)
+
+			if kind != DepTargetExternal {
+				lookupTable := "issues"
+				if kind == DepTargetWisp {
+					lookupTable = "wisps"
+				}
+				var exists int
+				//nolint:gosec // G201: lookupTable is one of two hardcoded constants
+				if err := tx.QueryRowContext(ctx,
+					fmt.Sprintf("SELECT 1 FROM %s WHERE id = ?", lookupTable),
+					dep.DependsOnID).Scan(&exists); err != nil {
+					continue
+				}
 			}
+
 			createdAt := dep.CreatedAt
 			if createdAt.IsZero() {
 				createdAt = time.Now().UTC()
 			}
-			//nolint:gosec // G201: table is determined by isWisp flag
+			//nolint:gosec // G201: depTable is one of two hardcoded constants; target column from DepTargetKind.Column()
 			_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-				INSERT INTO %s (issue_id, depends_on_id, type, created_by, created_at)
+				INSERT INTO %s (issue_id, %s, type, created_by, created_at)
 				VALUES (?, ?, ?, ?, ?)
 				ON DUPLICATE KEY UPDATE type = type
-			`, depTable), dep.IssueID, dep.DependsOnID, dep.Type, actor, createdAt)
+			`, depTable, kind.Column()), dep.IssueID, dep.DependsOnID, dep.Type, actor, createdAt)
 			if err != nil {
 				return fmt.Errorf("failed to insert dependency %s -> %s: %w", dep.IssueID, dep.DependsOnID, err)
 			}
@@ -369,37 +363,66 @@ func PersistDependencies(ctx context.Context, tx *sql.Tx, issues []*types.Issue,
 	return nil
 }
 
-// ReconcileChildCounters updates child_counters so that subsequent
-// bd create --parent doesn't collide with imported hierarchical IDs.
 func ReconcileChildCounters(ctx context.Context, tx *sql.Tx, issues []*types.Issue) error {
 	return ReconcileChildCountersWithDialect(ctx, tx, issues, SQLDialectDolt)
 }
 
 func ReconcileChildCountersWithDialect(ctx context.Context, tx *sql.Tx, issues []*types.Issue, dialect SQLDialect) error {
-	childMaxMap := make(map[string]int)
+	type bucket struct {
+		maxChild int
+		isWisp   bool
+		known    bool
+	}
+	parents := make(map[string]*bucket)
+
 	for _, issue := range issues {
-		if parentID, childNum, ok := ParseHierarchicalID(issue.ID); ok {
-			if childNum > childMaxMap[parentID] {
-				childMaxMap[parentID] = childNum
+		if IsWisp(issue) {
+			if b, ok := parents[issue.ID]; ok {
+				b.isWisp, b.known = true, true
+			} else {
+				parents[issue.ID] = &bucket{isWisp: true, known: true}
 			}
 		}
 	}
-	for parentID, maxChild := range childMaxMap {
-		var parentExists int
-		if err := tx.QueryRowContext(ctx, "SELECT 1 FROM issues WHERE id = ?", parentID).Scan(&parentExists); err != nil {
-			continue // parent not in issues table — skip counter
+
+	for _, issue := range issues {
+		parentID, childNum, ok := ParseHierarchicalID(issue.ID)
+		if !ok {
+			continue
 		}
-		upsert := `
-			INSERT INTO child_counters (parent_id, last_child) VALUES (?, ?)
+		b, exists := parents[parentID]
+		if !exists {
+			b = &bucket{}
+			parents[parentID] = b
+		}
+		if childNum > b.maxChild {
+			b.maxChild = childNum
+		}
+	}
+
+	for parentID, b := range parents {
+		if b.maxChild == 0 {
+			continue
+		}
+		if !b.known {
+			b.isWisp = IsActiveWispInTx(ctx, tx, parentID)
+		}
+		table := "child_counters"
+		if b.isWisp {
+			table = "wisp_child_counters"
+		}
+		//nolint:gosec // G201: table is one of two hardcoded constants.
+		upsert := fmt.Sprintf(`
+			INSERT INTO %s (parent_id, last_child) VALUES (?, ?)
 			ON DUPLICATE KEY UPDATE last_child = GREATEST(last_child, ?)
-		`
-		args := []any{parentID, maxChild, maxChild}
+		`, table)
+		args := []any{parentID, b.maxChild, b.maxChild}
 		if dialect == SQLDialectSQLite {
-			upsert = `
-				INSERT INTO child_counters (parent_id, last_child) VALUES (?, ?)
-				ON CONFLICT(parent_id) DO UPDATE SET last_child = MAX(child_counters.last_child, excluded.last_child)
-			`
-			args = []any{parentID, maxChild}
+			upsert = fmt.Sprintf(`
+				INSERT INTO %s (parent_id, last_child) VALUES (?, ?)
+				ON CONFLICT(parent_id) DO UPDATE SET last_child = MAX(%s.last_child, excluded.last_child)
+			`, table, table)
+			args = []any{parentID, b.maxChild}
 		}
 		_, err := tx.ExecContext(ctx, upsert, args...)
 		if err != nil {

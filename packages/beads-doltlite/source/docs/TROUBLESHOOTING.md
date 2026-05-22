@@ -22,18 +22,17 @@ bd supports several environment variables for debugging specific subsystems. Ena
 
 ### Available Debug Variables
 
-| Variable             | Purpose                                       | Output Location | Usage                      |
-| -------------------- | --------------------------------------------- | --------------- | -------------------------- |
-| `BD_DEBUG`           | General debug logging                         | stderr          | Set to any value to enable |
-| `BD_DEBUG_RPC`       | RPC communication between CLI and Dolt server | stderr          | Set to `1` or `true`       |
-| `BD_DEBUG_SYNC`      | Sync and import timestamp protection          | stderr          | Set to any value to enable |
-| `BD_DEBUG_ROUTING`   | Issue routing and multi-repo resolution       | stderr          | Set to any value to enable |
-| `BD_DEBUG_FRESHNESS` | Database file replacement detection           | server logs     | Set to any value to enable |
+| Variable | Purpose | Output Location | Usage |
+|----------|---------|----------------|-------|
+| `BD_DEBUG` | General debug logging | stderr | Set to any value to enable |
+| `BD_DEBUG_RPC` | RPC communication between CLI and Dolt server | stderr | Set to `1` or `true` |
+| `BD_DEBUG_SYNC` | Sync and import timestamp protection | stderr | Set to any value to enable |
+| `BD_DEBUG_ROUTING` | Issue routing and multi-repo resolution | stderr | Set to any value to enable |
+| `BD_DEBUG_FRESHNESS` | Database file replacement detection | server logs | Set to any value to enable |
 
 ### Usage Examples
 
 **General debugging:**
-
 ```bash
 # Enable all general debug logging
 export BD_DEBUG=1
@@ -41,7 +40,6 @@ bd ready
 ```
 
 **RPC communication issues:**
-
 ```bash
 # Debug Dolt server communication
 export BD_DEBUG_RPC=1
@@ -54,7 +52,6 @@ bd list
 ```
 
 **Sync conflicts:**
-
 ```bash
 # Debug timestamp protection during sync
 export BD_DEBUG_SYNC=1
@@ -65,7 +62,6 @@ bd dolt push
 ```
 
 **Routing issues:**
-
 ```bash
 # Debug issue routing in multi-repo setups
 export BD_DEBUG_ROUTING=1
@@ -77,7 +73,6 @@ bd create "Test issue" --rig=planning
 ```
 
 **Database reconnection issues:**
-
 ```bash
 # Debug database file replacement detection
 export BD_DEBUG_FRESHNESS=1
@@ -93,7 +88,6 @@ tail -f .beads/dolt/sql-server.log | grep freshness
 ```
 
 **Multiple debug flags:**
-
 ```bash
 # Enable multiple subsystems
 export BD_DEBUG=1
@@ -105,7 +99,6 @@ bd dolt start
 ### Tips
 
 - **Disable after debugging**: Debug logging can be verbose. Disable by unsetting the variable:
-
   ```bash
   unset BD_DEBUG
   unset BD_DEBUG_RPC
@@ -113,13 +106,11 @@ bd dolt start
   ```
 
 - **Capture debug output**: Redirect stderr to a file for analysis:
-
   ```bash
   BD_DEBUG=1 bd dolt push 2> debug.log
   ```
 
 - **Server logs**: `BD_DEBUG_FRESHNESS` output goes to server logs, not stderr:
-
   ```bash
   # View Dolt server logs
   tail -f .beads/dolt/sql-server.log
@@ -153,7 +144,6 @@ curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/inst
 If `bd version` shows an unexpected version (e.g., older than what you just installed), you likely have multiple `bd` binaries in your PATH.
 
 **Diagnosis:**
-
 ```bash
 # Check all bd binaries in PATH
 which -a bd
@@ -164,7 +154,6 @@ which -a bd
 ```
 
 **Solution:**
-
 ```bash
 # Remove old go install version
 rm ~/go/bin/bd
@@ -186,7 +175,6 @@ bd version      # Should show the expected version
 Some users report crashes when running `bd init` or other commands on macOS. This is typically caused by CGO/SQLite compatibility issues.
 
 **Workaround:**
-
 ```bash
 # Install an embedded-capable build
 CGO_ENABLED=1 GOFLAGS=-tags=gms_pure_go go install github.com/steveyegge/beads/cmd/bd@latest
@@ -207,7 +195,6 @@ If you installed via Homebrew, this shouldn't be necessary as the formula alread
 **Symptom**: Kaspersky, Windows Defender, or other antivirus software detects `bd` or `bd.exe` as a trojan or malicious software and removes it.
 
 **Common detections**:
-
 - Kaspersky: `PDM:Trojan.Win32.Generic`
 - Windows Defender: Various generic trojan detections
 
@@ -216,7 +203,6 @@ If you installed via Homebrew, this shouldn't be necessary as the formula alread
 **Solutions**:
 
 1. **Verify file integrity first**:
-
    ```bash
    # Windows PowerShell
    Get-FileHash bd.exe -Algorithm SHA256
@@ -224,7 +210,6 @@ If you installed via Homebrew, this shouldn't be necessary as the formula alread
    # macOS/Linux
    shasum -a 256 bd
    ```
-
    Compare with checksums from the [GitHub release page](https://github.com/gastownhall/beads/releases)
 
 2. **Add bd to antivirus exclusions only after verification**:
@@ -236,7 +221,6 @@ If you installed via Homebrew, this shouldn't be necessary as the formula alread
    - Most vendors have false positive submission forms
 
 **Detailed guide**: See [docs/ANTIVIRUS.md](ANTIVIRUS.md) for complete instructions including:
-
 - How to add exclusions for specific antivirus software
 - How to report false positives to vendors
 - Why Go binaries trigger these detections
@@ -525,7 +509,6 @@ If you see a warning about multiple `.beads` databases in the directory hierarch
 This means bd found multiple `.beads` directories in your directory hierarchy. The `▶` marker shows which database is actively being used (usually the closest one to your current directory).
 
 **Why this matters:**
-
 - Can cause confusion about which database contains your work
 - Easy to accidentally work in the wrong database
 - May lead to duplicate tracking of the same work
@@ -540,12 +523,11 @@ This means bd found multiple `.beads` directories in your directory hierarchy. T
 
 2. **If you have accidental duplicates** (unintentional):
    - Decide which database to keep
-   - Export issues from the unwanted database: `cd <unwanted-dir> && bd export -o backup.jsonl`
+   - Export issues from the unwanted database: `cd <unwanted-dir> && bd export -o issue-export.jsonl`
    - Remove the unwanted `.beads` directory: `rm -rf <unwanted-dir>/.beads`
    - Optionally import issues into the main database if needed
 
 3. **Override database selection**:
-
    ```bash
    # Temporarily use specific .beads directory (recommended)
    BEADS_DIR=/path/to/.beads bd list
@@ -660,7 +642,6 @@ chmod +x .git/hooks/post-checkout
 ### "Branch already checked out" when switching branches
 
 **Symptom:**
-
 ```bash
 $ git checkout main
 fatal: 'main' is already checked out at '/path/to/.git/beads-worktrees/beads-sync'
@@ -669,7 +650,6 @@ fatal: 'main' is already checked out at '/path/to/.git/beads-worktrees/beads-syn
 **Cause:** Beads previously created git worktrees internally for a sync-branch feature (configured via `bd config set sync.branch`). These worktrees lock the branches they're checked out to. This feature has been removed; Dolt now stores data under `refs/dolt/data`, separate from standard Git refs.
 
 **Solution:**
-
 ```bash
 # Remove beads-created worktrees
 rm -rf .git/beads-worktrees
@@ -681,7 +661,6 @@ git checkout main
 ```
 
 **Permanent fix (disable sync-branch):**
-
 ```bash
 bd config set sync.branch ""
 ```
@@ -695,7 +674,6 @@ See [WORKTREES.md#beads-created-worktrees-sync-branch](WORKTREES.md#beads-create
 **Explanation:** Beads automatically creates these worktrees when using the sync-branch feature to commit issue updates to a separate branch without switching your working directory.
 
 **If you don't want these:**
-
 ```bash
 # Disable sync-branch feature
 bd config set sync.branch ""
@@ -708,7 +686,7 @@ git worktree prune
 
 See [WORKTREES.md](WORKTREES.md) for details on how beads uses worktrees.
 
-### Auto-sync not working
+### Dolt remote sync not working
 
 Check if Dolt server is running and configured:
 
@@ -773,7 +751,6 @@ bd dep tree <issue-id>
 ```
 
 Remember: Different dependency types have different meanings:
-
 - `blocks` - Hard blocker, affects ready work
 - `related` - Soft relationship, doesn't block
 - `parent-child` - Hierarchical (child depends on parent)
@@ -814,7 +791,6 @@ cd .beads/dolt && dolt gc
 ```
 
 Consider splitting large projects into multiple databases:
-
 ```bash
 cd ~/project/component1 && bd init --prefix comp1
 cd ~/project/component2 && bd init --prefix comp2
@@ -888,7 +864,6 @@ See [integrations/beads-mcp/README.md](../integrations/beads-mcp/README.md) for 
 **Issue:** Sandboxed environments restrict permissions, preventing server control and causing "out of sync" errors.
 
 **Common symptoms:**
-
 - "Database out of sync" errors that persist after running `bd dolt pull`
 - `bd dolt stop` fails with "operation not permitted"
 - Hash mismatch warnings (bd-160)
@@ -913,14 +888,12 @@ bd --sandbox update bd-42 --claim
 ```
 
 **What sandbox mode does:**
-
 - Uses embedded database mode (no server needed)
 - Disables auto-export
 - Disables auto-import
 - Allows bd to work in network-restricted environments
 
 **Note:** You'll need to manually sync when outside the sandbox:
-
 ```bash
 # After leaving sandbox, sync manually
 bd dolt push
@@ -973,13 +946,12 @@ bd dolt push
 
 #### Understanding the flags
 
-| Flag              | Purpose                              | When to use                                | Risk                        |
-| ----------------- | ------------------------------------ | ------------------------------------------ | --------------------------- |
-| `--sandbox`       | Use embedded mode, disable auto-sync | Sandboxed environments (Codex, containers) | Low - safe for sandboxes    |
-| `bd doctor --fix` | Force metadata update                | Stuck staleness loop                       | Low - updates metadata only |
+| Flag | Purpose | When to use | Risk |
+|------|---------|-------------|------|
+| `--sandbox` | Use embedded mode, disable Dolt auto-push | Sandboxed environments (Codex, containers) | Low - safe for sandboxes |
+| `bd doctor --fix` | Force metadata update | Stuck staleness loop | Low - updates metadata only |
 
 **Related:**
-
 - See [Claude Code sandboxing documentation](https://www.anthropic.com/engineering/claude-code-sandboxing) for more about sandbox restrictions
 - GitHub issue [#353](https://github.com/gastownhall/beads/issues/353) for background
 
@@ -1018,7 +990,6 @@ The Dolt server listens on loopback TCP. Allow `bd.exe` through Windows Firewall
 **Cause:** Windows Controlled Folder Access is blocking `bd.exe` from creating the `.beads` directory.
 
 **Diagnosis:** Run with verbose flag to see the actual error:
-
 ```pwsh
 bd init -v
 # Error: failed to create .beads directory: mkdir .beads: The system cannot find the file specified

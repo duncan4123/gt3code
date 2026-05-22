@@ -22,7 +22,6 @@ This guide explains how to use beads with protected branches on platforms like G
 **Current solution:** Beads uses Dolt-native sync (`bd dolt push` / `bd dolt pull`). No Git branch commits are needed. The information below is retained for historical reference and for users migrating from older versions.
 
 **Benefits:**
-
 - ✅ Works with any git platform's branch protection
 - ✅ Main branch stays protected
 - ✅ No disruption to your primary working directory
@@ -56,17 +55,14 @@ git push origin main  # Or create a PR if required
 **Files created by `bd init`:**
 
 Files that should be committed to your protected branch (main):
-
 - `.beads/.gitignore` - Tells git what to ignore in .beads/ directory
 - `.gitattributes` - Configures merge driver for beads data
 
 Files that are automatically gitignored (do NOT commit):
-
 - `.beads/dolt/` - Dolt database directory (local only)
 - `.beads/dolt/sql-server.pid`, `sql-server.log` - Dolt server runtime files
 
 The sync branch (beads-sync) will contain:
-
 - `.beads/metadata.json` - Metadata about the beads installation
 - `.beads/config.yaml` - Configuration template (optional)
 
@@ -115,22 +111,18 @@ your-project/
 **What lives in each branch:**
 
 Main branch (protected):
-
 - `.beads/.gitignore` - Tells git what to ignore
 - `.gitattributes` - Merge driver configuration
 
 Sync branch (beads-sync):
-
 - `.beads/metadata.json` - Repository metadata
 - `.beads/config.yaml` - Configuration template
 
 Not tracked (gitignored):
-
 - `.beads/dolt/` - Dolt database directory (local only)
 - `.beads/dolt/sql-server.*` - Dolt server runtime files
 
 **Key points:**
-
 - The worktree is in `.git/beads-worktrees/` (hidden from your workspace)
 - Only `.beads/` is checked out in the worktree (sparse checkout)
 - Changes to issues are committed in the worktree
@@ -156,7 +148,6 @@ bd init
 ```
 
 This will:
-
 - Create `.beads/` directory with Dolt database
 - Prompt to install git hooks (recommended: say yes)
 
@@ -269,7 +260,6 @@ bd dolt pull
 ```
 
 **Safety checks:**
-
 - ✅ Verifies you're not on the sync branch
 - ✅ Checks for uncommitted changes in working tree
 - ✅ Detects merge conflicts and provides resolution steps
@@ -360,7 +350,6 @@ bd dolt stop && bd dolt start
 ```
 
 Common issues:
-
 - Port already in use: Another Dolt server is running
 - Permission denied: Check `.beads/` directory permissions
 - Git errors: Ensure git is installed and repository is initialized
@@ -452,7 +441,6 @@ Or create a pull request and review on GitHub/GitLab.
 ### What about disk space?
 
 Worktrees are very lightweight:
-
 - Sparse checkout means only `.beads/` is checked out
 - Typically < 1 MB for the worktree
 - Shared git history (no duplication)
@@ -511,8 +499,8 @@ name: Sync Beads Metadata
 
 on:
   schedule:
-    - cron: "0 0 * * *" # Daily at midnight
-  workflow_dispatch: # Manual trigger
+    - cron: '0 0 * * *'  # Daily at midnight
+  workflow_dispatch:     # Manual trigger
 
 jobs:
   sync:
@@ -520,7 +508,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # Full history
+          fetch-depth: 0  # Full history
 
       - name: Install bd
         run: |
@@ -546,14 +534,12 @@ jobs:
 ### GitHub
 
 Protected branch settings:
-
 1. Go to Settings → Branches → Add rule
 2. Branch name pattern: `main`
 3. Check "Require pull request before merging"
 4. Save
 
 Create sync branch PR:
-
 ```bash
 git push origin beads-sync
 gh pr create --base main --head beads-sync --title "Update beads metadata"
@@ -562,14 +548,12 @@ gh pr create --base main --head beads-sync --title "Update beads metadata"
 ### GitLab
 
 Protected branch settings:
-
 1. Settings → Repository → Protected Branches
 2. Branch: `main`
 3. Allowed to merge: Maintainers
 4. Allowed to push: No one
 
 Create sync branch MR:
-
 ```bash
 git push origin beads-sync
 glab mr create --source-branch beads-sync --target-branch main
@@ -578,13 +562,11 @@ glab mr create --source-branch beads-sync --target-branch main
 ### Bitbucket
 
 Protected branch settings:
-
 1. Repository settings → Branch permissions
 2. Branch: `main`
 3. Check "Prevent direct pushes"
 
 Create sync branch PR:
-
 ```bash
 git push origin beads-sync
 # Create PR via Bitbucket web UI
@@ -634,13 +616,11 @@ By default, worktrees are in `.git/beads-worktrees/`. This is hidden and automat
 If you have an existing beads setup committing to `main`:
 
 1. **Set sync branch:**
-
    ```bash
    bd config set sync.branch beads-sync
    ```
 
 2. **Restart Dolt server:**
-
    ```bash
    bd dolt stop && bd dolt start
    ```
@@ -657,7 +637,6 @@ Future commits will go to `beads-sync`. Historical commits on `main` are preserv
 If you want to stop using a sync branch:
 
 1. **Unset sync branch:**
-
    ```bash
    bd config set sync.branch ""
    ```

@@ -11,7 +11,6 @@ Automatic issue routing across repositories.
 ## Overview
 
 Routing enables:
-
 - Issues created in one repo routed to another
 - Pattern-based routing rules
 - Fallback to default repository
@@ -29,22 +28,20 @@ Create `.beads/routes.jsonl`:
 
 ## Route Fields
 
-| Field      | Description            |
-| ---------- | ---------------------- |
-| `pattern`  | Glob pattern to match  |
-| `target`   | Target repository      |
+| Field | Description |
+|-------|-------------|
+| `pattern` | Glob pattern to match |
+| `target` | Target repository |
 | `priority` | Higher = checked first |
 
 ## Pattern Matching
 
 Patterns match against:
-
 - Issue title
 - Labels
 - Explicit path prefix
 
 **Examples:**
-
 ```jsonl
 {"pattern": "frontend/*", "target": "frontend"}
 {"pattern": "*api*", "target": "backend"}

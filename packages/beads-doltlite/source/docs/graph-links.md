@@ -9,12 +9,10 @@ Beads supports several types of links between issues to create a knowledge graph
 Creates message threads, similar to email or chat conversations.
 
 **Created by:**
-
 - Orchestrator mail reply commands (orchestrator handles messaging)
 - `bd dep add <new-id> <original-id> --type replies_to` (manual linking)
 
 **Use cases:**
-
 - Agent-to-agent message threads
 - Discussion chains on issues
 - Follow-up communications
@@ -42,15 +40,12 @@ bd show gt-a1b2 --thread
 Bidirectional "see also" links between related issues. Not blocking, not hierarchical - just related.
 
 **Created by:**
-
 - `bd relate <id1> <id2>` - Links both issues to each other
 
 **Removed by:**
-
 - `bd unrelate <id1> <id2>` - Removes link in both directions
 
 **Use cases:**
-
 - Cross-referencing related features
 - Linking bugs to associated tasks
 - Building knowledge graphs
@@ -87,11 +82,9 @@ bd relate bd-api bd-tests
 Marks an issue as a duplicate of a canonical issue. The duplicate is automatically closed.
 
 **Created by:**
-
 - `bd duplicate <id> --of <canonical>`
 
 **Use cases:**
-
 - Consolidating duplicate bug reports
 - Merging similar feature requests
 - Database deduplication at scale
@@ -114,7 +107,6 @@ bd show bd-bug2
 ```
 
 **Behavior:**
-
 - Duplicate issue is automatically closed
 - Original (canonical) issue remains open
 - `duplicate_of` field stores the canonical ID
@@ -124,11 +116,9 @@ bd show bd-bug2
 Marks an issue as superseded by a newer version. The old issue is automatically closed.
 
 **Created by:**
-
 - `bd supersede <old-id> --with <new-id>`
 
 **Use cases:**
-
 - Design document versions
 - Spec evolution
 - Artifact versioning
@@ -156,7 +146,6 @@ bd show bd-doc1
 ```
 
 **Behavior:**
-
 - Old issue is automatically closed
 - New issue remains in its current state
 - `superseded_by` field stores the replacement ID
@@ -165,12 +154,12 @@ bd show bd-doc1
 
 These fields are added to issues:
 
-| Field           | Type     | Description                           |
-| --------------- | -------- | ------------------------------------- |
-| `replies_to`    | string   | ID of parent message (threading)      |
-| `relates_to`    | []string | IDs of related issues (bidirectional) |
-| `duplicate_of`  | string   | ID of canonical issue                 |
-| `superseded_by` | string   | ID of replacement issue               |
+| Field | Type | Description |
+|-------|------|-------------|
+| `replies_to` | string | ID of parent message (threading) |
+| `relates_to` | []string | IDs of related issues (bidirectional) |
+| `duplicate_of` | string | ID of canonical issue |
+| `superseded_by` | string | ID of replacement issue |
 
 ## Querying Links
 
@@ -221,14 +210,14 @@ Returns all fields including graph links:
 
 ## Comparison with Dependencies
 
-| Link Type       | Blocking? | Hierarchical? | Direction     |
-| --------------- | --------- | ------------- | ------------- |
-| `blocks`        | Yes       | No            | One-way       |
-| `parent_id`     | No        | Yes           | One-way       |
-| `relates_to`    | No        | No            | Bidirectional |
-| `replies_to`    | No        | No            | One-way       |
-| `duplicate_of`  | No        | No            | One-way       |
-| `superseded_by` | No        | No            | One-way       |
+| Link Type | Blocking? | Hierarchical? | Direction |
+|-----------|-----------|---------------|-----------|
+| `blocks` | Yes | No | One-way |
+| `parent_id` | No | Yes | One-way |
+| `relates_to` | No | No | Bidirectional |
+| `replies_to` | No | No | One-way |
+| `duplicate_of` | No | No | One-way |
+| `superseded_by` | No | No | One-way |
 
 ## Use Cases
 

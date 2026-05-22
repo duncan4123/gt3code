@@ -13,9 +13,6 @@ import (
 
 func chooseManagedDoltPort(cityPath, stateFile string) (string, error) {
 	cityPath = normalizePathForCompare(cityPath)
-	if cityUsesDoltliteBeadsBackend(cityPath) {
-		return "", nil
-	}
 	if port := strings.TrimSpace(os.Getenv("GC_DOLT_PORT")); port != "" {
 		return port, nil
 	}

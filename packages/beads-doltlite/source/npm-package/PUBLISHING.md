@@ -18,7 +18,6 @@ npm login
 ```
 
 This will prompt for:
-
 - Username
 - Password
 - Email
@@ -119,8 +118,8 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: "18"
-          registry-url: "https://registry.npmjs.org"
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
       - run: cd npm-package && npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -149,7 +148,6 @@ npm whoami  # verify
 ### "E403: forbidden"
 
 You don't have permission to publish to @beads. Either:
-
 - Create the organization
 - Ask the organization owner to add you
 - Change the package name to something you own
@@ -163,13 +161,11 @@ Check: https://github.com/gastownhall/beads/releases/v{VERSION}
 ## Version Sync
 
 Keep these in sync:
-
 - `npm-package/package.json` version
 - GitHub release tag (e.g., `v0.21.5`)
 - Beads binary version
 
 The postinstall script downloads binaries from:
-
 ```
 https://github.com/gastownhall/beads/releases/download/v{VERSION}/beads_{VERSION}_{platform}_{arch}.{ext}
 ```

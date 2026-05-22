@@ -22,14 +22,12 @@ make bench
 ```
 
 This runs all benchmarks with:
-
 - 1 second per benchmark (`-benchtime=1s`)
 - 10K and 20K issue databases
 - Automatic CPU profiling
 - 30 minute timeout
 
 Output includes:
-
 - `ns/op` - Nanoseconds per operation
 - `allocs/op` - Memory allocations per operation
 - Profile file path
@@ -60,16 +58,15 @@ go test -bench=Large -benchtime=1s -tags=bench -run=^$ ./internal/storage/dolt/
 BenchmarkGetReadyWork_Large-8    	    1234	    812345 ns/op	   12345 B/op	     123 allocs/op
 ```
 
-| Field           | Meaning                        |
-| --------------- | ------------------------------ |
-| `-8`            | Number of CPU cores used       |
-| `1234`          | Number of iterations run       |
-| `812345 ns/op`  | ~0.8ms per operation           |
-| `12345 B/op`    | Bytes allocated per operation  |
+| Field | Meaning |
+|-------|---------|
+| `-8` | Number of CPU cores used |
+| `1234` | Number of iterations run |
+| `812345 ns/op` | ~0.8ms per operation |
+| `12345 B/op` | Bytes allocated per operation |
 | `123 allocs/op` | Heap allocations per operation |
 
 **Performance Targets:**
-
 - `GetReadyWork`: < 50ms on 20K database
 - `SearchIssues`: < 100ms on 20K database
 - `CreateIssue`: < 10ms
@@ -90,7 +87,6 @@ go tool pprof -http=:8080 bench-cpu-*.prof
 ```
 
 This opens an interactive web UI at `http://localhost:8080` with:
-
 - **Flamegraph**: Visual call stack (wider = more time)
 - **Graph**: Call graph with time percentages
 - **Top**: Functions by CPU time
@@ -103,7 +99,6 @@ This opens an interactive web UI at `http://localhost:8080` with:
 4. **Click to zoom**: Focus on specific call stacks
 
 Common hotspots in database operations:
-
 - SQL query execution
 - JSON encoding/decoding
 - Memory allocations
@@ -122,7 +117,6 @@ go tool pprof -http=:8080 mem.prof
 ```
 
 Look for:
-
 - Large allocation sizes
 - Frequent small allocations
 - Retained memory that should be freed
@@ -138,7 +132,6 @@ bd doctor --perf
 ```
 
 This:
-
 1. Measures time for common operations
 2. Generates a CPU profile
 3. Reports any performance issues
@@ -167,7 +160,6 @@ CPU profile saved: beads-perf-2024-01-15-143022.prof
 ```
 
 Status indicators:
-
 - `[OK]` - Within acceptable range
 - `[SLOW]` - Slower than expected, may need investigation
 - `[CRITICAL]` - Significantly degraded, likely a bug
@@ -196,13 +188,11 @@ benchstat old.txt new.txt
 ```
 
 Output shows:
-
 - Performance change percentage
 - Statistical significance (p-value)
 - Confidence that change is real
 
 Example:
-
 ```
 name                    old time/op  new time/op  delta
 GetReadyWork_Large-8    812µs ± 2%   654µs ± 1%  -19.46%  (p=0.000 n=5+5)
@@ -211,7 +201,6 @@ GetReadyWork_Large-8    812µs ± 2%   654µs ± 1%  -19.46%  (p=0.000 n=5+5)
 ### Detecting Regressions
 
 A change is significant if:
-
 - Delta is > 5%
 - p-value is < 0.05
 - Consistent across multiple runs (`-count=5` or more)
@@ -220,11 +209,11 @@ A change is significant if:
 
 ### When to Profile vs Benchmark
 
-| Use Case                | Tool               |
-| ----------------------- | ------------------ |
-| "Is this fast enough?"  | Benchmark          |
-| "Why is this slow?"     | Profile            |
-| "Did my change help?"   | benchstat          |
+| Use Case | Tool |
+|----------|------|
+| "Is this fast enough?" | Benchmark |
+| "Why is this slow?" | Profile |
+| "Did my change help?" | benchstat |
 | "User reports slowness" | `bd doctor --perf` |
 
 ### Common Optimization Patterns
@@ -259,7 +248,6 @@ make clean
 ```
 
 This removes:
-
 - CPU profile files (`bench-cpu-*.prof`)
 - User diagnostic profiles (`beads-perf-*.prof`)
 - Cached benchmark databases are in `/tmp/beads-bench-cache/`

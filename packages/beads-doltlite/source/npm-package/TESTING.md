@@ -11,12 +11,10 @@ This document describes the testing strategy and how to run tests for the @beads
 **Purpose**: Quick smoke tests to verify basic installation
 
 **Tests**:
-
 - Binary version check
 - Help command
 
 **Run**:
-
 ```bash
 npm test
 ```
@@ -32,19 +30,16 @@ npm test
 **Tests**:
 
 #### Test 1: Package Installation
-
 - Packs the npm package into a tarball
 - Installs globally in an isolated test environment
 - Verifies binary is downloaded and installed correctly
 
 #### Test 2: Binary Functionality
-
 - Tests `bd version` command
 - Tests `bd --help` command
 - Verifies native binary works through Node wrapper
 
 #### Test 3: Basic bd Workflow
-
 - Creates test project with git
 - Runs `bd init --quiet`
 - Creates an issue with `bd create`
@@ -55,7 +50,6 @@ npm test
 - Verifies ready work detection with `bd ready`
 
 #### Test 4: Claude Code for Web Simulation
-
 - **Session 1**: Initializes bd, creates an issue
 - Verifies JSONL export
 - Deletes database to simulate fresh clone
@@ -65,13 +59,11 @@ npm test
 - Verifies JSONL auto-export works
 
 #### Test 5: Platform Detection
-
 - Verifies current platform is supported
 - Validates binary URL construction
 - Confirms GitHub release has required binaries
 
 **Run**:
-
 ```bash
 npm run test:integration
 ```
@@ -105,7 +97,6 @@ Failed: 0
 ## What the Tests Verify
 
 ### Package Installation
-
 - ✅ npm pack creates valid tarball
 - ✅ npm install downloads and installs package
 - ✅ Postinstall script runs automatically
@@ -114,14 +105,12 @@ Failed: 0
 - ✅ Binary is executable
 
 ### Binary Functionality
-
 - ✅ CLI wrapper invokes native binary
 - ✅ All arguments pass through correctly
 - ✅ Exit codes propagate
 - ✅ stdio streams work (stdin/stdout/stderr)
 
 ### bd Commands
-
 - ✅ `bd init` creates .beads directory
 - ✅ `bd create` creates issues with hash IDs
 - ✅ `bd list` returns JSON array
@@ -131,7 +120,6 @@ Failed: 0
 - ✅ `bd ready` finds work with no blockers
 
 ### Claude Code for Web Use Case
-
 - ✅ Fresh installation works
 - ✅ JSONL export happens automatically
 - ✅ Database can be recreated from JSONL
@@ -141,7 +129,6 @@ Failed: 0
 - ✅ Auto-sync keeps JSONL updated
 
 ### Platform Support
-
 - ✅ macOS (darwin) - amd64, arm64
 - ✅ Linux - amd64, arm64
 - ✅ Windows - amd64 (zip format)
@@ -187,10 +174,10 @@ name: Test npm Package
 on:
   push:
     paths:
-      - "npm-package/**"
+      - 'npm-package/**'
   pull_request:
     paths:
-      - "npm-package/**"
+      - 'npm-package/**'
 
 jobs:
   test:
@@ -224,7 +211,6 @@ jobs:
 ### Scenario 1: Claude Code for Web SessionStart Hook
 
 1. Create `.claude/hooks/session-start.sh`:
-
    ```bash
    #!/bin/bash
    npm install -g @beads/bd
@@ -293,7 +279,6 @@ npm install -g @beads/bd
 **Cause**: Postinstall script didn't download binary
 
 **Fix**:
-
 - Check GitHub release has required binaries
 - Verify package.json version matches release
 - Check network connectivity
@@ -303,7 +288,6 @@ npm install -g @beads/bd
 **Cause**: Binary not executable
 
 **Fix**:
-
 - Postinstall should chmod +x on Unix
 - Windows doesn't need this
 
@@ -312,7 +296,6 @@ npm install -g @beads/bd
 **Cause**: Network slow, binary download taking too long
 
 **Fix**:
-
 - Increase timeout in test
 - Use cached npm packages
 - Run on faster network
@@ -322,23 +305,22 @@ npm install -g @beads/bd
 **Cause**: Database format changed or JSONL format incorrect
 
 **Fix**:
-
 - Check bd version compatibility
 - Verify JSONL format matches current schema
 - Update test to use proper operation records
 
 ## Test Coverage
 
-| Area                 | Coverage             |
-| -------------------- | -------------------- |
-| Package installation | ✅ Full              |
-| Binary download      | ✅ Full              |
-| CLI wrapper          | ✅ Full              |
-| Basic commands       | ✅ High (8 commands) |
-| JSONL sync           | ✅ Full              |
-| Platform detection   | ✅ Full              |
-| Error handling       | ⚠️ Partial           |
-| MCP server           | ❌ Not included      |
+| Area | Coverage |
+|------|----------|
+| Package installation | ✅ Full |
+| Binary download | ✅ Full |
+| CLI wrapper | ✅ Full |
+| Basic commands | ✅ High (8 commands) |
+| JSONL sync | ✅ Full |
+| Platform detection | ✅ Full |
+| Error handling | ⚠️ Partial |
+| MCP server | ❌ Not included |
 
 ## Known Limitations
 

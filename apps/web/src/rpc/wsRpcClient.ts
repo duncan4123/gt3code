@@ -161,6 +161,8 @@ export interface WsRpcClient {
     readonly findThreadBinding: RpcUnaryMethod<typeof WS_METHODS.gcFindThreadBinding>;
     readonly getThreadContext: RpcUnaryMethod<typeof WS_METHODS.gcGetThreadContext>;
     readonly wakeSession: RpcUnaryMethod<typeof WS_METHODS.gcWakeSession>;
+    readonly setSupervisorRunning: RpcUnaryMethod<typeof WS_METHODS.gcSetSupervisorRunning>;
+    readonly setControllerRunning: RpcUnaryMethod<typeof WS_METHODS.gcSetControllerRunning>;
     readonly setAgentSuspended: RpcUnaryMethod<typeof WS_METHODS.gcSetAgentSuspended>;
     readonly setAgentMaxActiveSessions: RpcUnaryMethod<
       typeof WS_METHODS.gcSetAgentMaxActiveSessions
@@ -349,6 +351,10 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.gcGetThreadContext](input)),
       wakeSession: (input) =>
         transport.request((client) => client[WS_METHODS.gcWakeSession](input)),
+      setSupervisorRunning: (input) =>
+        transport.request((client) => client[WS_METHODS.gcSetSupervisorRunning](input)),
+      setControllerRunning: (input) =>
+        transport.request((client) => client[WS_METHODS.gcSetControllerRunning](input)),
       setAgentSuspended: (input) =>
         transport.request((client) => client[WS_METHODS.gcSetAgentSuspended](input)),
       setAgentMaxActiveSessions: (input) =>

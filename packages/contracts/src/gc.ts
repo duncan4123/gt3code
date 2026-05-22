@@ -467,6 +467,127 @@ function configuredAgentQualifiedName(agent: Pick<GcConfigAgent, "dir" | "name">
   return dir ? `${dir}/${agent.name}` : agent.name;
 }
 
+function gcSessionSafeName(value: string): string {
+  return value.trim().replaceAll("/", "--").replaceAll(".", "__");
+}
+
+function configuredAgentSessionNameCandidates(
+  agent: Pick<GcConfigAgent, "dir" | "name" | "scope">,
+): string[] {
+  const dir = normalizeMetadataValue(agent.dir);
+  const name = normalizeMetadataValue(agent.name);
+  if (!name) {
+    return [];
+  }
+  if (!dir) {
+    return [gcSessionSafeName(name)];
+  }
+
+  const candidates = new Set<string>();
+  if (agent.scope === "city" || !dir.includes("/")) {
+    candidates.add(`${gcSessionSafeName(dir)}__${gcSessionSafeName(name)}`);
+  }
+
+  const rigBase = pathBasename(dir);
+  candidates.add(`${gcSessionSafeName(rigBase)}--${gcSessionSafeName(name)}`);
+  candidates.add(`${gcSessionSafeName(dir)}--${gcSessionSafeName(name)}`);
+  return [...candidates];
+}
+
+function inferGcMetaFromConfiguredSession(
+  thread: { title?: string | undefined },
+  config: GcConfigResult | null | undefined,
+): GcThreadMeta | null {
+  if (!config) {
+    return null;
+  }
+  const { sessionName } = parseGcSessionTitleSegments(thread.title);
+  const normalizedSessionName = normalizeMetadataValue(sessionName ?? undefined);
+  if (!normalizedSessionName) {
+    return null;
+  }
+
+  for (const agent of config.agents) {
+    if (!configuredAgentSessionNameCandidates(agent).includes(normalizedSessionName)) {
+      continue;
+    }
+    const dir = normalizeMetadataValue(agent.dir);
+    const city = dir?.split("/").find(Boolean);
+    const isRigAgent = Boolean(dir?.includes("/") || agent.scope === "rig");
+    const groupId = isRigAgent ? dir : (city ?? dir);
+    if (!groupId) {
+      continue;
+    }
+    const qualifiedName = configuredAgentQualifiedName(agent);
+    return {
+      isGcManaged: true,
+      agent: qualifiedName,
+      sessionName: normalizedSessionName,
+      rig: isRigAgent ? (dir ?? undefined) : undefined,
+      rigPath: undefined,
+      city: city ?? undefined,
+      bead: undefined,
+      beadTitle: undefined,
+      beadStatus: undefined,
+      beadType: undefined,
+      beadPriority: undefined,
+      beadAssignee: undefined,
+      beadLabels: undefined,
+      beadDescription: undefined,
+      convoy: undefined,
+      convoyTitle: undefined,
+      convoyStatus: undefined,
+      convoyClosedCount: undefined,
+      convoyTotalCount: undefined,
+      provider: undefined,
+      runtimeProvider: undefined,
+      state: undefined,
+      startupTemplate: undefined,
+      startupModel: undefined,
+      startupWorkDir: undefined,
+      sessionEnv: undefined,
+      molecule: undefined,
+      formula: undefined,
+      groupKind: isRigAgent ? "rig" : "workspace",
+      groupId,
+      groupLabel: isRigAgent ? groupId : groupId.toUpperCase(),
+      agentQualified: qualifiedName,
+      agentLabel: agentFolderLabel(qualifiedName),
+    };
+  }
+  return null;
+}
+
+function resolveGcMetaForGrouping(
+  thread: { customMetadata?: Record<string, string> | undefined; title?: string | undefined },
+  config: GcConfigResult | null | undefined,
+): GcThreadMeta {
+  const parsedMeta = parseGcMeta(thread.customMetadata);
+  const inferredMeta = inferGcMetaFromConfiguredSession(thread, config);
+  if (!parsedMeta.isGcManaged) {
+    return inferredMeta ?? parsedMeta;
+  }
+  const parsedAgent = normalizeMetadataValue(parsedMeta.agentQualified) ?? parsedMeta.agent;
+  const parsedAgentIsExactlyConfigured = Boolean(
+    config?.agents.some((entry) => configuredAgentQualifiedName(entry) === parsedAgent),
+  );
+  if (!inferredMeta || parsedAgentIsExactlyConfigured) {
+    return parsedMeta;
+  }
+  return {
+    ...parsedMeta,
+    agent: inferredMeta.agent,
+    sessionName: parsedMeta.sessionName ?? inferredMeta.sessionName,
+    rig: inferredMeta.rig,
+    city: inferredMeta.city,
+    groupKind: inferredMeta.groupKind,
+    groupId: inferredMeta.groupId,
+    groupLabel: inferredMeta.groupLabel,
+    agentQualified: inferredMeta.agentQualified,
+    agentLabel: inferredMeta.agentLabel,
+  };
+}
+
 export function parseGcSessionTitleSegments(title?: string): {
   sessionName: string | null;
   agentHint: string | null;
@@ -760,6 +881,20 @@ export function groupThreadsByRigAndAgent<
     typeof agent.min_active_sessions === "number" ||
     typeof agent.max_active_sessions === "number" ||
     agent.wake_mode !== undefined;
+  const isConfiguredSidebarAgent = (agent: GcConfigResult["agents"][number]): boolean =>
+    !(
+      agent.provider !== undefined &&
+      agent.prompt_template !== undefined &&
+      agent.default_sling_formula !== undefined &&
+      agent.scope === undefined &&
+      agent.named_session_mode === undefined &&
+      typeof agent.min_active_sessions !== "number" &&
+      typeof agent.max_active_sessions !== "number" &&
+      agent.wake_mode === undefined &&
+      agent.description === undefined &&
+      agent.start_command === undefined &&
+      agent.is_pool !== true
+    );
 
   const isCityAliasProject = [...projectLabels].some((label) =>
     ["city", "gc"].some(
@@ -778,7 +913,7 @@ export function groupThreadsByRigAndAgent<
   const configRigByName = new Map(configRigs.map((rig) => [rig.name, rig] as const));
   const threadReferencedRigIds = new Set<string>();
   for (const thread of threads) {
-    const meta = parseGcMeta(thread.customMetadata);
+    const meta = resolveGcMetaForGrouping(thread, options?.config);
     const resolvedCity = normalizeMetadataValue(meta.city);
     const canonicalGroupId = normalizeMetadataValue(meta.groupId);
     const rig = normalizeMetadataValue(meta.rig);
@@ -872,6 +1007,9 @@ export function groupThreadsByRigAndAgent<
       if (!rigName || !relevantRigNames.has(rigName)) {
         continue;
       }
+      if (!isConfiguredSidebarAgent(agent)) {
+        continue;
+      }
       const rigGroup = rigGroupsById.get(rigName);
       if (!rigGroup) {
         continue;
@@ -912,7 +1050,7 @@ export function groupThreadsByRigAndAgent<
   }
 
   for (const thread of threads) {
-    const meta = parseGcMeta(thread.customMetadata);
+    const meta = resolveGcMetaForGrouping(thread, options?.config);
     const threadCity = normalizeMetadataValue(meta.city);
     const threadAgent =
       normalizeMetadataValue(meta.agentQualified) ?? normalizeMetadataValue(meta.agent);

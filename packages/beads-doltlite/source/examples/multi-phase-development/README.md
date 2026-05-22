@@ -5,7 +5,6 @@ This example demonstrates how to use beads for large projects with multiple deve
 ## Problem
 
 When building complex features, you want to:
-
 - **Phase 1:** Research and planning
 - **Phase 2:** Build MVP quickly
 - **Phase 3:** Iterate based on feedback

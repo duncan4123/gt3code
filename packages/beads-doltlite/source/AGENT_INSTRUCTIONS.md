@@ -86,18 +86,14 @@ This enables `bd doctor` to detect **orphaned issues** - work that was committed
 
 bd uses **Dolt** as its primary database. Changes are committed to Dolt history automatically (one Dolt commit per write command).
 
-**Install git hooks** for automatic sync:
-
+**Install git hooks** for commit integration and legacy fallback behavior:
 ```bash
 bd hooks install
 ```
 
 ### Git Integration
 
-**doltlite sync**: This workspace uses the `bd` doltlite backend. Do not run
-`bd dolt push` or `bd dolt pull` here; those commands are for server-mode Dolt
-stores and target the wrong backend. Use normal `bd` commands for issue updates
-and Git for code handoff.
+**Dolt sync**: Dolt handles sync natively via `bd dolt push` / `bd dolt pull`. No export/import round-trip needed for normal sync.
 
 **Protected branches**: Dolt stores data under `refs/dolt/data`, separate from standard Git refs. See [docs/PROTECTED_BRANCHES.md](docs/PROTECTED_BRANCHES.md).
 
@@ -116,6 +112,14 @@ defer to the standard PR flow to keep changes reviewable.
   narrow operational fixes; prefer a PR when unsure
 - When handling external contributor PRs, use fix-merge: checkout the PR
   branch locally, fix/rebase onto main, merge via PR, then close the PR
+
+### Maintainer PR Guidelines
+
+Before triaging, reviewing, landing, closing, or otherwise maintaining PRs,
+read [PR_MAINTAINER_GUIDELINES.md](PR_MAINTAINER_GUIDELINES.md). The
+maintainer policy is to maximize community throughput: find useful contributor
+value, absorb or transform it locally when practical, preserve attribution, and
+use request-changes only as a last resort.
 
 ### External Contributor PRs: Check Before You Build
 
@@ -136,7 +140,6 @@ gh pr list --repo gastownhall/beads --state open --search "<topic keywords>" --j
 ```
 
 **Contributor work gets priority.** If an external PR already exists:
-
 1. **Review it first** — read the diff, understand the approach
 2. **Build on their work, don't rewrite it** — checkout their branch, fix/adapt as needed
 3. **Preserve their tests** — contributor tests are signal; keep them unless they're wrong
@@ -161,7 +164,6 @@ gate for PR handling.
    - File P0 issues if quality gates are broken
 3. **Update beads issues** - close finished work, update status
 4. **PUSH TO REMOTE - NON-NEGOTIABLE** - This step is MANDATORY. Execute ALL commands below:
-
    ```bash
    # Pull first to catch any remote changes
    git pull --rebase
@@ -236,7 +238,6 @@ bd show bd-44 --json
 ## Agent Session Workflow
 
 **WARNING: DO NOT use `bd edit`** - it opens an interactive editor ($EDITOR) which AI agents cannot use. Use `bd update` with flags instead:
-
 ```bash
 bd update <id> --description "new description"
 bd update <id> --title "new title"
@@ -268,7 +269,6 @@ subagents because a running subagent cannot change its model or reasoning effort
 after launch.
 
 **Use stdin for descriptions with special characters** (backticks, `!`, nested quotes):
-
 ```bash
 # Pipe via stdin to avoid shell escaping issues
 echo 'Description with `backticks` and "quotes"' | bd create "Title" --stdin
@@ -287,17 +287,111 @@ bd create "Add tests" -p 1
 bd update bd-42 --claim
 bd close bd-40 --reason "Completed"
 
+# Push Dolt data to remote if configured
+bd dolt push
+
 # Now safe to end session
 ```
 
 This installs:
 
 - **pre-commit** — Commits pending Dolt changes
-- **post-merge** — Pulls remote Dolt changes after git merge
+- **post-merge** — Runs chained hooks and a legacy JSONL import fallback only when no Dolt remote is configured
 
 **Note:** Hooks are embedded in the bd binary and work for all bd users (not just source repo users).
 
 ## Common Development Tasks
+
+### Visual Design System
+
+When adding CLI output features, follow these design principles for consistent,
+cognitively friendly visuals.
+
+#### No Emoji-Style Icons
+
+Do not use large colored emoji icons like red/orange/yellow/blue/white circles
+for priorities or status. They cause cognitive overload and break visual
+consistency.
+
+Use small Unicode symbols with semantic colors applied via lipgloss:
+
+- Status: `○ ◐ ● ✓ ❄`
+- Priority: `●` (filled circle with color)
+
+#### Status Icons
+
+Use these symbols consistently across all commands:
+
+```text
+○ open        - Available to work (white/default)
+◐ in_progress - Currently being worked (yellow)
+● blocked     - Waiting on dependencies (red)
+✓ closed      - Completed (muted gray)
+❄ deferred    - Scheduled for later (blue/muted)
+```
+
+#### Priority Icons and Colors
+
+Format priority as `● P0` (filled circle icon plus label, colored by priority):
+
+- `● P0`: Red + bold (critical)
+- `● P1`: Orange (high)
+- `● P2-P4`: Default text (normal)
+
+#### Issue Type Colors
+
+- `bug`: Red (problems need attention)
+- `epic`: Purple (larger scope)
+- Others: Default text
+
+#### Design Principles
+
+1. Small Unicode symbols only; avoid emoji blobs.
+2. Semantic colors only for actionable items; do not color everything.
+3. Closed items fade using muted gray.
+4. Prefer icons over text labels for scanability.
+5. Keep icons consistent across list, graph, show, and related commands.
+6. Use tree connectors (`├──`, `└──`, `│`) for hierarchies.
+7. Reduce cognitive noise; do not show `needs:1` when it is just the parent epic.
+
+#### Semantic Styles
+
+Use exported styles from `internal/ui/styles.go`:
+
+```go
+// Status styles
+ui.StatusInProgressStyle  // Yellow - active work
+ui.StatusBlockedStyle     // Red - needs attention
+ui.StatusClosedStyle      // Muted gray - done
+
+// Priority styles
+ui.PriorityP0Style        // Red + bold
+ui.PriorityP1Style        // Orange
+
+// Type styles
+ui.TypeBugStyle           // Red
+ui.TypeEpicStyle          // Purple
+
+// General styles
+ui.PassStyle, ui.WarnStyle, ui.FailStyle
+ui.MutedStyle, ui.AccentStyle
+ui.RenderMuted(text), ui.RenderAccent(text)
+```
+
+Example:
+
+```go
+switch issue.Status {
+case types.StatusOpen:
+    icon = "○"
+case types.StatusInProgress:
+    icon = ui.StatusInProgressStyle.Render("◐")
+case types.StatusBlocked:
+    icon = ui.StatusBlockedStyle.Render("●")
+case types.StatusClosed:
+    icon = ui.StatusClosedStyle.Render("✓")
+}
+```
 
 ### CLI Design Principles
 
@@ -406,8 +500,9 @@ git push origin main
 **Files updated automatically:**
 
 - `cmd/bd/version.go` - CLI version
-- `claude-plugin/.claude-plugin/plugin.json` - Plugin version
-- `.claude-plugin/marketplace.json` - Marketplace version
+- `plugins/beads/.claude-plugin/plugin.json` - Claude plugin version
+- `plugins/beads/.codex-plugin/plugin.json` - Codex plugin version
+- `.claude-plugin/marketplace.json` - Claude marketplace version
 - `integrations/beads-mcp/pyproject.toml` - MCP server version
 - `README.md` - Documentation version
 - `PLUGIN.md` - Version requirements

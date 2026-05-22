@@ -23,6 +23,8 @@ import (
 )
 
 func TestControllerStateReadAccess(t *testing.T) {
+	t.Setenv("GC_BEADS", "file")
+
 	sp := runtime.NewFake()
 	ep := events.NewFake()
 	cfg := &config.City{
@@ -71,6 +73,8 @@ func TestControllerStateReadAccess(t *testing.T) {
 }
 
 func TestControllerStateConcurrentAccess(t *testing.T) {
+	t.Setenv("GC_BEADS", "file")
+
 	sp := runtime.NewFake()
 	ep := events.NewFake()
 	cfg := &config.City{
@@ -101,6 +105,8 @@ func TestControllerStateConcurrentAccess(t *testing.T) {
 }
 
 func TestControllerStateUpdate(t *testing.T) {
+	t.Setenv("GC_BEADS", "file")
+
 	sp := runtime.NewFake()
 	ep := events.NewFake()
 	cfg1 := &config.City{
@@ -336,6 +342,7 @@ func TestControllerStateRuntimeUpdateIgnoresEmptyRevisionDuringPendingMutation(t
 
 func TestControllerStateRuntimeUpdateAcceptsBuiltinAwareRevision(t *testing.T) {
 	configureTestDoltIdentityEnv(t)
+	disableManagedDoltRecoveryForTest(t)
 	t.Setenv("GC_BEADS", "")
 
 	cityDir := shortSocketTempDir(t, "gc-state-runtime-builtin-")
@@ -373,6 +380,7 @@ func TestControllerStateRuntimeUpdateAcceptsBuiltinAwareRevision(t *testing.T) {
 
 func TestControllerStateMutationRefreshKeepsBuiltinOrdersAndClearsPending(t *testing.T) {
 	configureTestDoltIdentityEnv(t)
+	disableManagedDoltRecoveryForTest(t)
 	t.Setenv("GC_BEADS", "")
 
 	cityDir := shortSocketTempDir(t, "gc-state-mutation-builtin-")
@@ -515,6 +523,58 @@ func TestControllerStateRuntimeUpdatePreservesCurrentStoresWithoutPendingMutatio
 	}
 }
 
+func TestControllerStateRuntimeUpdateRebuildsStoresWhenBackendMetadataChanges(t *testing.T) {
+	t.Setenv("GC_BEADS", "file")
+
+	cityDir := t.TempDir()
+	writeBackendMetadata(t, cityDir, `{"database":"dolt","backend":"dolt","dolt_mode":"server","dolt_database":"hq"}`)
+
+	current := &config.City{
+		Workspace: config.Workspace{Name: "city1"},
+		Beads:     config.BeadsConfig{Provider: "file"},
+	}
+	oldStore := beads.NewMemStore()
+	cs := &controllerState{
+		cfg:                    current,
+		sp:                     runtime.NewFake(),
+		beadStores:             map[string]beads.Store{},
+		cityBeadStore:          oldStore,
+		cityName:               "city1",
+		cityPath:               cityDir,
+		storeMetadataSignature: storeMetadataSignature(cityDir, current),
+	}
+	oldSignature := cs.storeMetadataSignature
+
+	if !cs.runtimeUpdateCanReuseCurrentStores(current) {
+		t.Fatal("precondition: matching metadata should allow store reuse")
+	}
+
+	writeBackendMetadata(t, cityDir, `{"database":"beads","backend":"postgres","postgres_host":"db.example.test","postgres_port":"5432","postgres_user":"bd","postgres_database":"beads_pg"}`)
+	nextProvider := runtime.NewFake()
+	cs.updateFromRuntime(current, nextProvider, "")
+
+	if got := cs.CityBeadStore(); got == oldStore {
+		t.Fatal("CityBeadStore() reused stale store after backend metadata changed")
+	}
+	if cs.SessionProvider() != nextProvider {
+		t.Fatal("SessionProvider() was not advanced after metadata-triggered update")
+	}
+	if cs.storeMetadataSignature == "" || cs.storeMetadataSignature == oldSignature {
+		t.Fatal("store metadata signature was not refreshed after backend metadata changed")
+	}
+}
+
+func writeBackendMetadata(t *testing.T, scopeRoot, data string) {
+	t.Helper()
+	dir := filepath.Join(scopeRoot, ".beads")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir .beads: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(data+"\n"), 0o644); err != nil {
+		t.Fatalf("write metadata.json: %v", err)
+	}
+}
+
 func TestControllerStateRuntimeUpdateIgnoresStaleRevisionWithoutPendingMutation(t *testing.T) {
 	t.Setenv("GC_BEADS", "file")
 
@@ -576,6 +636,7 @@ provider = "bash"
 
 func TestControllerStateCreateRigPokesReconciler(t *testing.T) {
 	t.Setenv("GC_BEADS", "file")
+	t.Setenv("GC_BEADS_SCOPE_ROOT", "")
 
 	cityDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(cityDir, "city.toml"), []byte("[workspace]\nname = \"city1\"\n"), 0o644); err != nil {
@@ -605,8 +666,85 @@ func TestControllerStateCreateRigPokesReconciler(t *testing.T) {
 	}
 }
 
+func TestControllerStateCreateRigDetectsDefaultBranch(t *testing.T) {
+	t.Setenv("GC_BEADS", "file")
+	t.Setenv("GC_DOLT", "skip")
+
+	cityDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cityDir, "city.toml"), []byte("[workspace]\nname = \"city1\"\n"), 0o644); err != nil {
+		t.Fatalf("write city.toml: %v", err)
+	}
+	cfg := &config.City{
+		Workspace: config.Workspace{Name: "city1"},
+	}
+	cs := newControllerState(context.Background(), cfg, runtime.NewFake(), events.NewFake(), "city1", cityDir)
+
+	rigDir := newRepoWithOriginHead(t, "master")
+	if err := cs.CreateRig(config.Rig{Name: "rig1", Path: rigDir}); err != nil {
+		t.Fatalf("CreateRig: %v", err)
+	}
+
+	got := cs.Config()
+	if got == nil || len(got.Rigs) != 1 {
+		t.Fatalf("Config() rigs = %+v, want one rig", got.Rigs)
+	}
+	if got.Rigs[0].DefaultBranch != "master" {
+		t.Fatalf("DefaultBranch = %q, want %q", got.Rigs[0].DefaultBranch, "master")
+	}
+}
+
+func TestControllerStateCreateRigDetectsDefaultBranchForRelativePath(t *testing.T) {
+	t.Setenv("GC_BEADS", "file")
+	t.Setenv("GC_DOLT", "skip")
+
+	cityDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cityDir, "city.toml"), []byte("[workspace]\nname = \"city1\"\n"), 0o644); err != nil {
+		t.Fatalf("write city.toml: %v", err)
+	}
+	cityRigDir := filepath.Join(cityDir, "rig")
+	if err := os.MkdirAll(cityRigDir, 0o755); err != nil {
+		t.Fatalf("mkdir city rig: %v", err)
+	}
+	gitCmd(t, cityRigDir, "init")
+	gitCmd(t, cityRigDir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+
+	otherRoot := t.TempDir()
+	otherRigDir := filepath.Join(otherRoot, "rig")
+	if err := os.MkdirAll(otherRigDir, 0o755); err != nil {
+		t.Fatalf("mkdir other rig: %v", err)
+	}
+	gitCmd(t, otherRigDir, "init")
+	gitCmd(t, otherRigDir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/master")
+	t.Chdir(otherRoot)
+
+	cfg := &config.City{
+		Workspace: config.Workspace{Name: "city1"},
+	}
+	cs := newControllerState(context.Background(), cfg, runtime.NewFake(), events.NewFake(), "city1", cityDir)
+
+	if err := cs.CreateRig(config.Rig{Name: "rig1", Path: "rig"}); err != nil {
+		t.Fatalf("CreateRig: %v", err)
+	}
+
+	got := cs.Config()
+	if got == nil || len(got.Rigs) != 1 {
+		t.Fatalf("Config() rigs = %+v, want one rig", got.Rigs)
+	}
+	if got.Rigs[0].DefaultBranch != "trunk" {
+		t.Fatalf("DefaultBranch = %q, want %q", got.Rigs[0].DefaultBranch, "trunk")
+	}
+}
+
+func TestDetectRigDefaultBranchSkipsEmptyPath(t *testing.T) {
+	got := detectRigDefaultBranch(t.TempDir(), config.Rig{Name: "rig1"})
+	if got.DefaultBranch != "" {
+		t.Fatalf("DefaultBranch = %q, want empty for empty rig path", got.DefaultBranch)
+	}
+}
+
 func TestControllerStateCreateRigInitializesStoreBeforePublishing(t *testing.T) {
 	t.Setenv("GC_BEADS", "file")
+	t.Setenv("GC_BEADS_SCOPE_ROOT", "")
 
 	cityDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(cityDir, "city.toml"), []byte("[workspace]\nname = \"city1\"\n"), 0o644); err != nil {
@@ -783,6 +921,37 @@ func TestControllerStateAppliesCacheReconcileBeadEventsToStores(t *testing.T) {
 	}
 	if items[0].Status != "in_progress" {
 		t.Fatalf("status after cache-reconcile event = %q, want in_progress", items[0].Status)
+	}
+}
+
+func TestWrapWithCachingStoreCachesNonBdStore(t *testing.T) {
+	backing := beads.NewMemStore()
+	created, err := backing.Create(beads.Bead{Title: "non-bd backing"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	store := wrapWithCachingStore(context.Background(), backing, nil)
+	cached, ok := store.(*beads.CachingStore)
+	if !ok {
+		t.Fatalf("store type = %T, want *beads.CachingStore", store)
+	}
+	if cached.Backing() != backing {
+		t.Fatalf("Backing = %#v, want original non-BdStore backing", cached.Backing())
+	}
+
+	items, err := cached.ListOpen()
+	if err != nil {
+		t.Fatalf("ListOpen: %v", err)
+	}
+	if len(items) != 1 || items[0].ID != created.ID {
+		t.Fatalf("ListOpen = %#v, want only %s", items, created.ID)
+	}
+}
+
+func TestWrapWithCachingStoreReturnsNilStore(t *testing.T) {
+	if got := wrapWithCachingStore(context.Background(), nil, nil); got != nil {
+		t.Fatalf("wrapWithCachingStore(nil) = %#v, want nil", got)
 	}
 }
 
@@ -1374,6 +1543,8 @@ provider = "file"
 }
 
 func TestControllerStateNilEventProvider(t *testing.T) {
+	t.Setenv("GC_BEADS", "file")
+
 	sp := runtime.NewFake()
 	cfg := &config.City{
 		Workspace: config.Workspace{Name: "test-city"},
@@ -1387,6 +1558,8 @@ func TestControllerStateNilEventProvider(t *testing.T) {
 }
 
 func TestControllerStateOrdersIncludeVisibleCityRoot(t *testing.T) {
+	t.Setenv("GC_BEADS", "file")
+
 	cityDir := t.TempDir()
 	autoDir := filepath.Join(cityDir, "orders", "digest")
 	if err := os.MkdirAll(autoDir, 0o755); err != nil {

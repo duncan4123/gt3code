@@ -27,10 +27,9 @@ export async function renderStatus(): Promise<void> {
 
   const status = currentCityStatus();
   if (isKnownUnavailableCity(status)) {
-    const reason =
-      status.kind === "not-running"
-        ? (status.city.error ?? status.city.status ?? "City not running")
-        : "City unavailable";
+    const reason = status.kind === "not-running"
+      ? (status.city.error ?? status.city.status ?? "City not running")
+      : "City unavailable";
     renderCityScopeBannerUnavailable(city, "Sessions unavailable");
     renderUnavailableCitySummary(banner, reason);
     return;
@@ -39,48 +38,36 @@ export async function renderStatus(): Promise<void> {
   const statusP = requestWithTimeout<StatusBody>(
     "status",
     city,
-    (signal) =>
-      api.GET("/v0/city/{cityName}/status", {
-        params: { path: { cityName: city } },
-        signal,
-      }) as Promise<APIResult<StatusBody>>,
+    (signal) => api.GET("/v0/city/{cityName}/status", { params: { path: { cityName: city } }, signal }) as Promise<APIResult<StatusBody>>,
   );
   const sessionsP = requestWithTimeout<SessionList>(
     "sessions",
     city,
-    (signal) =>
-      api.GET("/v0/city/{cityName}/sessions", {
-        params: { path: { cityName: city }, query: { state: "active", peek: true } },
-        signal,
-      }) as Promise<APIResult<SessionList>>,
+    (signal) => api.GET("/v0/city/{cityName}/sessions", {
+      params: { path: { cityName: city }, query: { state: "active", peek: true } },
+      signal,
+    }) as Promise<APIResult<SessionList>>,
   );
   const beadsP = requestWithTimeout<BeadList>(
     "beads",
     city,
-    (signal) =>
-      api.GET("/v0/city/{cityName}/beads", {
-        params: { path: { cityName: city }, query: { status: "open", limit: 500 } },
-        signal,
-      }) as Promise<APIResult<BeadList>>,
+    (signal) => api.GET("/v0/city/{cityName}/beads", {
+      params: { path: { cityName: city }, query: { status: "open", limit: 500 } },
+      signal,
+    }) as Promise<APIResult<BeadList>>,
   );
   const convoysP = requestWithTimeout<BeadList>(
     "convoys",
     city,
-    (signal) =>
-      api.GET("/v0/city/{cityName}/convoys", {
-        params: { path: { cityName: city }, query: { limit: 200 } },
-        signal,
-      }) as Promise<APIResult<BeadList>>,
+    (signal) => api.GET("/v0/city/{cityName}/convoys", {
+      params: { path: { cityName: city }, query: { limit: 200 } },
+      signal,
+    }) as Promise<APIResult<BeadList>>,
   );
 
   sessionsP.then((sessionsR) => renderCityScopeFromSessions(city, sessionsR));
 
-  const [statusR, sessionsR, beadsR, convoysR] = await Promise.all([
-    statusP,
-    sessionsP,
-    beadsP,
-    convoysP,
-  ]);
+  const [statusR, sessionsR, beadsR, convoysR] = await Promise.all([statusP, sessionsP, beadsP, convoysP]);
 
   if (cityScope() !== city) return;
 
@@ -99,10 +86,8 @@ export async function renderStatus(): Promise<void> {
   const highPriorityIssues = beads.filter((bead) => beadPriority(bead.priority) <= 2).length;
   const deadSessions = sessions.filter((session) => !session.running).length;
   const statusUnavailable = Boolean(statusR.error || !statusR.data);
-  const partialUnavailable =
-    statusUnavailable || Boolean(sessionsR.error || beadsR.error || convoysR.error);
-  const runningAgents =
-    statusR.data?.agents.running ?? sessions.filter((session) => session.running).length;
+  const partialUnavailable = statusUnavailable || Boolean(sessionsR.error || beadsR.error || convoysR.error);
+  const runningAgents = statusR.data?.agents.running ?? sessions.filter((session) => session.running).length;
   const assignedWork = statusR.data?.work.in_progress ?? staleAssigned;
   const openWork = statusR.data?.work.open ?? beads.length;
   const unreadMail = statusR.data?.mail.unread ?? "n/a";
@@ -189,7 +174,10 @@ async function renderSupervisorStatus(banner: HTMLElement): Promise<void> {
   renderCityScopeBannerFleet();
   lastStatusBannerKey = "";
 
-  const [healthR, citiesR] = await Promise.all([api.GET("/health"), api.GET("/v0/cities")]);
+  const [healthR, citiesR] = await Promise.all([
+    api.GET("/health"),
+    api.GET("/v0/cities"),
+  ]);
   if (cityScope() !== "") return;
 
   const health = healthR.data;
@@ -214,18 +202,8 @@ async function renderSupervisorStatus(banner: HTMLElement): Promise<void> {
 
   const alerts = el("div", { class: "summary-alerts" });
   appendAlert(alerts, total === 0, "alert-yellow", "No registered cities");
-  appendAlert(
-    alerts,
-    stopped > 0,
-    "alert-yellow",
-    `${stopped} ${stopped === 1 ? "city" : "cities"} not running`,
-  );
-  appendAlert(
-    alerts,
-    errored > 0,
-    "alert-red",
-    `${errored} ${errored === 1 ? "city" : "cities"} reporting errors`,
-  );
+  appendAlert(alerts, stopped > 0, "alert-yellow", `${stopped} ${stopped === 1 ? "city" : "cities"} not running`);
+  appendAlert(alerts, errored > 0, "alert-red", `${errored} ${errored === 1 ? "city" : "cities"} reporting errors`);
   appendAlert(
     alerts,
     Boolean(health?.startup && !health.startup.ready),
@@ -277,7 +255,10 @@ function renderCityScopeBanner(city: string, sessions: SessionSummary[]): void {
     badge.className = "badge badge-cyan";
     badge.textContent = "City";
     clear(status);
-    status.append(scopeStat("City", city), scopeStat("Session", "none"));
+    status.append(
+      scopeStat("City", city),
+      scopeStat("Session", "none"),
+    );
     return;
   }
 
@@ -292,11 +273,7 @@ function renderCityScopeBanner(city: string, sessions: SessionSummary[]): void {
   status.append(
     scopeStat("City", city),
     scopeStat("Session", overseer.template),
-    scopeStat(
-      "Activity",
-      overseer.last_active ? formatTimestamp(overseer.last_active) : "Unknown",
-      active ? "active" : "idle",
-    ),
+    scopeStat("Activity", overseer.last_active ? formatTimestamp(overseer.last_active) : "Unknown", active ? "active" : "idle"),
     scopeStat("Terminal", overseer.attached ? "Attached" : "Detached"),
     scopeStat("State", overseer.running ? "Running" : "Stopped"),
   );
@@ -311,7 +288,10 @@ function renderCityScopeBannerUnavailable(city: string, reason: string): void {
   badge.className = "badge badge-muted";
   badge.textContent = "Unknown";
   clear(status);
-  status.append(scopeStat("Scope", city), scopeStat("Sessions", reason));
+  status.append(
+    scopeStat("Scope", city),
+    scopeStat("Sessions", reason),
+  );
 }
 
 function renderCityScopeBannerFleet(): void {
@@ -323,7 +303,10 @@ function renderCityScopeBannerFleet(): void {
   badge.className = "badge badge-muted";
   badge.textContent = "Supervisor";
   clear(status);
-  status.append(scopeStat("Scope", "Fleet"), scopeStat("City", "Select one"));
+  status.append(
+    scopeStat("Scope", "Fleet"),
+    scopeStat("City", "Select one"),
+  );
 }
 
 function scopeStat(label: string, value: string, variant = ""): HTMLElement {

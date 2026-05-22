@@ -23,16 +23,16 @@ bd info --whats-new --json  # Machine-readable
 
 Use the command that matches your install method.
 
-| Install method                | Platforms                      | Command                                                                                          |
-| ----------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------ |
-| Quick install script          | macOS, Linux, FreeBSD          | `curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh \| bash` |
-| PowerShell installer          | Windows                        | `irm https://raw.githubusercontent.com/gastownhall/beads/main/install.ps1 \| iex`                |
-| Homebrew                      | macOS, Linux                   | `brew upgrade beads`                                                                             |
-| go install (server-mode only) | macOS, Linux, FreeBSD, Windows | `CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest`                             |
-| go install (embedded-capable) | macOS, Linux, Windows          | `CGO_ENABLED=1 GOFLAGS=-tags=gms_pure_go go install github.com/steveyegge/beads/cmd/bd@latest`   |
-| npm                           | macOS, Linux, Windows          | `npm update -g @beads/bd`                                                                        |
-| bun                           | macOS, Linux, Windows          | `bun install -g --trust @beads/bd`                                                               |
-| From source (Unix shell)      | macOS, Linux, FreeBSD          | `git pull && make build`                                                                         |
+| Install method | Platforms | Command |
+|---|---|---|
+| Quick install script | macOS, Linux, FreeBSD | `curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh \| bash` |
+| PowerShell installer | Windows | `irm https://raw.githubusercontent.com/gastownhall/beads/main/install.ps1 \| iex` |
+| Homebrew | macOS, Linux | `brew upgrade beads` |
+| go install (server-mode only) | macOS, Linux, FreeBSD, Windows | `CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest` |
+| go install (embedded-capable) | macOS, Linux, Windows | `CGO_ENABLED=1 GOFLAGS=-tags=gms_pure_go go install github.com/steveyegge/beads/cmd/bd@latest` |
+| npm | macOS, Linux, Windows | `npm update -g @beads/bd` |
+| bun | macOS, Linux, Windows | `bun install -g --trust @beads/bd` |
+| From source (Unix shell) | macOS, Linux, FreeBSD | `git pull && make build` |
 
 ### Quick install script (macOS/Linux/FreeBSD)
 
@@ -89,7 +89,7 @@ bd info  # Shows warnings if hooks are outdated
 bd dolt stop && bd dolt start
 ```
 
-**Why update hooks?** Git hooks are versioned with bd. Outdated hooks may miss new auto-sync features or bug fixes.
+**Why update hooks?** Git hooks are versioned with bd. Outdated hooks may miss export refresh, legacy fallback, or safety fixes.
 
 ## Database Migrations
 
@@ -113,20 +113,39 @@ bd migrate --cleanup --yes
 
 If you're upgrading from a much older version of bd, your project may use a different storage backend. bd has gone through several storage eras:
 
-| Era                     | Versions      | Storage                          |
-| ----------------------- | ------------- | -------------------------------- |
-| SQLite                  | v0.30–v0.50   | `.beads/beads.db`                |
-| Dolt server             | v0.50–v0.58   | `.beads/dolt/` (external server) |
-| Embedded Dolt (old)     | v0.59–v0.63.2 | `.beads/dolt/` (in-process)      |
-| Embedded Dolt (current) | v0.63.3+      | `.beads/embeddeddolt/`           |
+| Era | Versions | Storage | 
+|---|---|---|
+| SQLite | v0.30–v0.50 | `.beads/beads.db` |
+| Dolt server | v0.50–v0.58 | `.beads/dolt/` (external server) |
+| Embedded Dolt (old) | v0.59–v0.63.2 | `.beads/dolt/` (in-process) |
+| Embedded Dolt (current) | v0.63.3+ | `.beads/embeddeddolt/` |
 
 ### From v0.63.3+ (current era)
 
-No special steps needed. Just upgrade the binary and run:
+Upgrade the binary and run:
 
 ```bash
 bd migrate
 ```
+
+If the project was initialized before `bd init` automatically wired git origin
+as the Dolt remote, verify the remote after upgrading:
+
+```bash
+bd dolt remote list
+```
+
+When the list is empty, fix it on the machine whose local database is
+authoritative:
+
+```bash
+bd export -o .beads/issues.pre-remote.jsonl   # optional issue audit export
+bd dolt remote add origin git+ssh://git@github.com/org/repo.git
+bd dolt push
+```
+
+Commit the resulting `.beads/config.yaml` change so other clones can run
+`bd bootstrap` or `bd dolt pull`.
 
 ### From v0.59–v0.63.2 (old embedded)
 

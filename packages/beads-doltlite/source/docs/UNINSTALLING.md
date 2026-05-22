@@ -43,13 +43,13 @@ bd dolt stop 2>/dev/null || true
 
 Beads installs these hooks in `.git/hooks/`:
 
-| Hook                 | Purpose                                |
-| -------------------- | -------------------------------------- |
-| `pre-commit`         | Runs beads pre-commit checks           |
+| Hook | Purpose |
+|------|---------|
+| `pre-commit` | Runs beads pre-commit checks |
 | `prepare-commit-msg` | Adds beads metadata to commit messages |
-| `post-merge`         | Imports changes after merges           |
-| `pre-push`           | Syncs before pushing                   |
-| `post-checkout`      | Imports after branch switches          |
+| `post-merge` | Imports changes after merges |
+| `pre-push` | Syncs before pushing |
+| `post-checkout` | Imports after branch switches |
 
 To remove them:
 
@@ -62,13 +62,11 @@ rm -f .git/hooks/post-checkout
 ```
 
 **Note:** If you had custom hooks before installing Beads, check for `.backup` files:
-
 ```bash
 ls .git/hooks/*.backup
 ```
 
 Restore any backups if needed:
-
 ```bash
 mv .git/hooks/pre-commit.backup .git/hooks/pre-commit
 ```
@@ -101,25 +99,23 @@ rm -f .gitattributes
 
 The `.beads/` directory contains:
 
-| File/Dir              | Description                              |
-| --------------------- | ---------------------------------------- |
-| `dolt/`               | Dolt database directory                  |
+| File/Dir | Description |
+|----------|-------------|
+| `dolt/` | Dolt database directory |
 | `dolt/sql-server.pid` | Running Dolt server PID (if server mode) |
-| `dolt/sql-server.log` | Dolt server logs (if server mode)        |
-| `issues.jsonl`        | Legacy issue data (if present)           |
-| `config.yaml`         | Project configuration                    |
-| `metadata.json`       | Version tracking                         |
-| `deletions.jsonl`     | Soft-deleted issues (if present)         |
-| `README.md`           | Human-readable overview                  |
+| `dolt/sql-server.log` | Dolt server logs (if server mode) |
+| `issues.jsonl` | Legacy issue data (if present) |
+| `config.yaml` | Project configuration |
+| `metadata.json` | Version tracking |
+| `deletions.jsonl` | Soft-deleted issues (if present) |
+| `README.md` | Human-readable overview |
 
 Remove everything:
-
 ```bash
 rm -rf .beads
 ```
 
 **Warning:** This permanently deletes all issue data. Consider backing up first:
-
 ```bash
 bd export -o ~/beads-backup-$(date +%Y%m%d).jsonl
 ```
@@ -147,14 +143,12 @@ git push
 The `bd` command itself is a standalone binary. Remove it based on how you installed:
 
 **If installed via go install:**
-
 ```bash
 rm $(which bd)
 # Or: rm ~/go/bin/bd
 ```
 
 **If installed manually:**
-
 ```bash
 # Remove from wherever you placed it
 rm /usr/local/bin/bd

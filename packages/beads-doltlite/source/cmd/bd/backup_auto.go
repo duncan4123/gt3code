@@ -9,7 +9,6 @@ import (
 	"github.com/steveyegge/beads/internal/config"
 	"github.com/steveyegge/beads/internal/debug"
 	"github.com/steveyegge/beads/internal/storage"
-	"github.com/steveyegge/beads/internal/storage/doltlite"
 )
 
 // isBackupAutoEnabled returns whether backup should run.
@@ -20,14 +19,6 @@ func isBackupAutoEnabled() bool {
 		return config.GetBool("backup.enabled")
 	}
 	return primeHasGitRemote()
-}
-
-func isDoltliteStore(st storage.DoltStorage) bool {
-	if st == nil {
-		return false
-	}
-	_, ok := storage.UnwrapStore(st).(*doltlite.DoltliteStore)
-	return ok
 }
 
 // maybeAutoBackup runs a Dolt-native backup if enabled and the throttle interval has passed.
@@ -45,10 +36,6 @@ func maybeAutoBackup(ctx context.Context) {
 		return
 	}
 	if store == nil {
-		return
-	}
-	if isDoltliteStore(store) {
-		debug.Logf("backup: skipping — disabled for doltlite backend\n")
 		return
 	}
 	if lm, ok := storage.UnwrapStore(store).(storage.LifecycleManager); ok && lm.IsClosed() {

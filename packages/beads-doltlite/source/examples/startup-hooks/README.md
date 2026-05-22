@@ -7,7 +7,6 @@ This directory contains startup hook scripts that help AI agents automatically d
 **Purpose:** Automatically detect bd (beads) upgrades and show what changed
 
 **Features:**
-
 - ✅ Detects when bd version changes between sessions
 - ✅ Shows `bd info --whats-new` output automatically
 - ✅ Auto-updates outdated git hooks
@@ -29,7 +28,6 @@ bash examples/startup-hooks/bd-version-check.sh
 #### Claude Code
 
 If Claude Code supports startup hooks:
-
 ```bash
 # Add to .claude/hooks/session-start
 source examples/startup-hooks/bd-version-check.sh
@@ -40,7 +38,6 @@ Alternatively, manually run at the start of each coding session.
 #### GitHub Copilot
 
 Add to your shell initialization file:
-
 ```bash
 # ~/.bashrc or ~/.zshrc
 # Run bd version check when entering a beads project

@@ -26,32 +26,27 @@ bd doctor --dry-run
 ## Solution
 
 **Step 1:** Back up current state
-
 ```bash
 cp -r .beads .beads.backup
 ```
 
 **Step 2:** Check for conflicts
-
 ```bash
 bd doctor
 ```
 
 **Step 3:** Fix to reconcile
-
 ```bash
 bd doctor --fix
 ```
 
 **Step 4:** Verify state
-
 ```bash
 bd list
 bd stats
 ```
 
 **Step 5:** Push resolved state
-
 ```bash
 bd dolt push
 ```

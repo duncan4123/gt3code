@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/spf13/cobra"
 )
 
 // TestGitAddFile_InWorktreeHook_StagesCorrectPath is a regression test for
@@ -173,6 +176,15 @@ func TestScrubGitHookEnv(t *testing.T) {
 		if !strings.Contains(joined, k) {
 			t.Errorf("scrubGitHookEnv dropped %s\nresult:\n%s", k, joined)
 		}
+	}
+}
+
+func TestShouldRunPostCommandAutoExportSkipsReadOnlyCommands(t *testing.T) {
+	if shouldRunPostCommandAutoExport(&cobra.Command{Use: "search"}) {
+		t.Fatal("search is read-only and must not trigger post-command auto-export")
+	}
+	if !shouldRunPostCommandAutoExport(&cobra.Command{Use: "create"}) {
+		t.Fatal("write commands should still trigger post-command auto-export")
 	}
 }
 
@@ -535,4 +547,55 @@ func TestGitAddFile_RedirectCase_DoesNotStageInMainRepo(t *testing.T) {
 	}
 	checkNoStage("worktree", worktree)
 	checkNoStage("main", mainRepo)
+}
+
+// TestShouldExport covers the pure throttle-window decision used by
+// maybeAutoExport. Adapted from Jeremy Longshore's GH#4061 refactor.
+func TestShouldExport(t *testing.T) {
+	now := time.Now()
+	cases := []struct {
+		name     string
+		state    *exportAutoState
+		interval time.Duration
+		want     bool
+	}{
+		{
+			name:     "first run always exports",
+			state:    &exportAutoState{},
+			interval: time.Minute,
+			want:     true,
+		},
+		{
+			name:     "throttle window active blocks",
+			state:    &exportAutoState{Timestamp: now.Add(-10 * time.Second)},
+			interval: time.Minute,
+			want:     false,
+		},
+		{
+			name:     "throttle window elapsed allows",
+			state:    &exportAutoState{Timestamp: now.Add(-2 * time.Minute)},
+			interval: time.Minute,
+			want:     true,
+		},
+		{
+			name:     "at interval boundary allows",
+			state:    &exportAutoState{Timestamp: now.Add(-time.Minute)},
+			interval: time.Minute,
+			want:     true,
+		},
+		{
+			name:     "zero interval allows",
+			state:    &exportAutoState{Timestamp: now.Add(-time.Microsecond)},
+			interval: 0,
+			want:     true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldExport(tc.state, tc.interval); got != tc.want {
+				t.Errorf("shouldExport(%+v, %s) = %v, want %v", tc.state, tc.interval, got, tc.want)
+			}
+		})
+	}
 }

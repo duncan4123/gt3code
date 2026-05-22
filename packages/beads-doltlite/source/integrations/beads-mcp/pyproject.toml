@@ -1,25 +1,33 @@
 [project]
 name = "beads-mcp"
-version = "1.0.3"
+version = "1.0.4"
 description = "MCP server for beads issue tracker."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
-dependencies = ["fastmcp==3.2.4", "pydantic==2.13.3", "pydantic-settings==2.14.0"]
-authors = [{ name = "Beads Contributors" }]
-maintainers = [{ name = "Beads Contributors" }]
+license = {text = "MIT"}
+dependencies = [
+    "fastmcp==3.2.4",
+    "pydantic==2.13.3",
+    "pydantic-settings==2.14.0",
+]
+authors = [
+    {name = "Beads Contributors"}
+]
+maintainers = [
+    {name = "Beads Contributors"}
+]
 keywords = ["beads", "mcp", "claude", "issue-tracker", "ai-agent", "model-context-protocol"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
-  "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
-  "Topic :: Software Development :: Libraries :: Python Modules",
-  "Topic :: Software Development :: Bug Tracking",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Bug Tracking",
 ]
 
 [project.urls]
@@ -62,7 +70,16 @@ target-version = "py310"
 line-length = 115
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I", "UP", "B", "SIM", "C4"]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "SIM",
+    "C4",
+]
 ignore = []
 
 [tool.ruff.format]
@@ -76,10 +93,10 @@ asyncio_default_fixture_loop_scope = "function"
 
 [dependency-groups]
 dev = [
-  "mypy>=1.18.2",
-  "pytest>=8.4.2",
-  "pytest-asyncio>=1.2.0",
-  "pytest-cov>=7.0.0",
-  "ruff>=0.14.0",
-  "types-requests>=2.31.0",
+    "mypy>=1.18.2",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.14.0",
+    "types-requests>=2.31.0",
 ]

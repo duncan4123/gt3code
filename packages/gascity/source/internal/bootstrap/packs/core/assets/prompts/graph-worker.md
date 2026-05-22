@@ -69,12 +69,18 @@ gc runtime drain-ack
      --status closed
    ```
 10. After closing, check for more assigned work:
-
-```bash
-bd ready --assignee="$GC_SESSION_NAME" --json --limit=1
-```
-
+   ```bash
+   bd ready --assignee="$GC_SESSION_NAME" --json --limit=1
+   ```
 11. If more work exists, go to step 2. If not, poll briefly (see below).
+
+**Never use wide filesystem searches when a CLI command exists.** Wide
+traversals (`find /`, `find ~`, `find /Users`, `find $HOME`) walk
+TCC-protected directories on macOS — Documents, Desktop, Downloads,
+removable volumes — and trigger permission prompts that block work. If
+you don't know how to locate a formula, recipe, bead, mail, or Dolt
+state, the answer is a `gc` / `bd` introspection command, not a
+filesystem search. If no command exists for what you need, file a bead.
 
 ## Continuation Group — Session Affinity
 

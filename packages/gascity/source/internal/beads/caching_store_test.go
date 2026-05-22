@@ -1010,6 +1010,16 @@ func (s *staleListAfterUpdateStore) List(query beads.ListQuery) ([]beads.Bead, e
 	return s.Store.List(query)
 }
 
+type nonBdCachingBacking struct {
+	beads.Store
+	listCalls int
+}
+
+func (s *nonBdCachingBacking) List(query beads.ListQuery) ([]beads.Bead, error) {
+	s.listCalls++
+	return s.Store.List(query)
+}
+
 type primeRaceStore struct {
 	beads.Store
 	started chan struct{}
@@ -2036,6 +2046,69 @@ func TestNewCachingStoreRecordsProblemForMissingProductionPrefix(t *testing.T) {
 	}
 }
 
+func TestNewCachingStoreWrapsAnyStoreImplementation(t *testing.T) {
+	t.Parallel()
+	mem := beads.NewMemStore()
+	created, err := mem.Create(beads.Bead{Title: "non-bd backing"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	backing := &nonBdCachingBacking{Store: mem}
+
+	cs := beads.NewCachingStore(backing, nil)
+	if cs.Backing() != backing {
+		t.Fatalf("Backing = %#v, want original non-BdStore backing", cs.Backing())
+	}
+	if stats := cs.Stats(); stats.ProblemCount != 0 {
+		t.Fatalf("ProblemCount = %d, want 0 for valid non-BdStore backing (last problem: %s)", stats.ProblemCount, stats.LastProblem)
+	}
+	if err := cs.Prime(context.Background()); err != nil {
+		t.Fatalf("Prime: %v", err)
+	}
+
+	got, err := cs.ListOpen()
+	if err != nil {
+		t.Fatalf("ListOpen: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != created.ID {
+		t.Fatalf("ListOpen = %#v, want only %s", got, created.ID)
+	}
+	if backing.listCalls == 0 {
+		t.Fatal("Prime did not delegate List to non-BdStore backing")
+	}
+}
+
+func TestNewCachingStoreRecordsProblemForInvalidBackings(t *testing.T) {
+	t.Parallel()
+
+	t.Run("typed nil BdStore", func(t *testing.T) {
+		t.Parallel()
+		var backing *beads.BdStore
+		cs := beads.NewCachingStore(backing, nil)
+
+		stats := cs.Stats()
+		if stats.ProblemCount != 1 {
+			t.Fatalf("ProblemCount = %d, want 1", stats.ProblemCount)
+		}
+		if !strings.Contains(stats.LastProblem, "nil *BdStore backing") {
+			t.Fatalf("LastProblem = %q, want nil *BdStore backing", stats.LastProblem)
+		}
+	})
+
+	t.Run("nil Store interface", func(t *testing.T) {
+		t.Parallel()
+		cs := beads.NewCachingStore(nil, nil)
+
+		stats := cs.Stats()
+		if stats.ProblemCount != 1 {
+			t.Fatalf("ProblemCount = %d, want 1", stats.ProblemCount)
+		}
+		if !strings.Contains(stats.LastProblem, "nil store backing") {
+			t.Fatalf("LastProblem = %q, want nil store backing", stats.LastProblem)
+		}
+	})
+}
+
 func TestCachingStoreApplyEventRefreshesPartialHookPayload(t *testing.T) {
 	t.Parallel()
 	mem := beads.NewMemStore()
@@ -2289,7 +2362,7 @@ func TestCachingStoreReconcilerStopsOnCancel(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cs.StartReconciler(ctx)
+	cs.StartReconciler(ctx, beads.WithStaggerOff(), "")
 	time.Sleep(100 * time.Millisecond)
 	cancel()
 	time.Sleep(100 * time.Millisecond)
@@ -2484,6 +2557,123 @@ func dependencySnapshotUpdatePayload(t *testing.T, b beads.Bead, deps []beads.De
 		t.Fatalf("Marshal event payload: %v", err)
 	}
 	return payload
+}
+
+func TestStartReconcilerStaggerOff(t *testing.T) {
+	t.Parallel()
+	mem := beads.NewMemStore()
+	cs := beads.NewCachingStoreForTest(mem, nil)
+	if err := cs.Prime(context.Background()); err != nil {
+		t.Fatalf("Prime: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cs.StartReconciler(ctx, beads.WithStaggerOff(), "any-agent-name")
+
+	if got := cs.Stats().StaggerOffsetMs; got != 0 {
+		t.Fatalf("StaggerOffsetMs = %d, want 0 with WithStaggerOff()", got)
+	}
+}
+
+func TestStartReconcilerStaggerFixed(t *testing.T) {
+	t.Parallel()
+	mem := beads.NewMemStore()
+	cs := beads.NewCachingStoreForTest(mem, nil)
+	if err := cs.Prime(context.Background()); err != nil {
+		t.Fatalf("Prime: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cs.StartReconciler(ctx, beads.WithStaggerFixed(5*time.Second), "any-agent-name")
+
+	if got := cs.Stats().StaggerOffsetMs; got != 5000 {
+		t.Fatalf("StaggerOffsetMs = %d, want 5000 with WithStaggerFixed(5s)", got)
+	}
+}
+
+func TestStartReconcilerStaggerFixedNegativeClampsToZero(t *testing.T) {
+	t.Parallel()
+	mem := beads.NewMemStore()
+	cs := beads.NewCachingStoreForTest(mem, nil)
+	if err := cs.Prime(context.Background()); err != nil {
+		t.Fatalf("Prime: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cs.StartReconciler(ctx, beads.WithStaggerFixed(-1*time.Second), "")
+
+	if got := cs.Stats().StaggerOffsetMs; got != 0 {
+		t.Fatalf("StaggerOffsetMs = %d, want 0 for negative WithStaggerFixed", got)
+	}
+}
+
+func TestStartReconcilerStaggerAutoIsDeterministic(t *testing.T) {
+	t.Parallel()
+
+	// Acceptance criterion 2: pinned FNV-32a-derived offset for a known agent_id.
+	cases := []struct {
+		agentID      string
+		wantOffsetMs int64
+	}{
+		{"beads/builder-1", 20616},
+		{"beads/builder-2", 13473},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.agentID, func(t *testing.T) {
+			t.Parallel()
+			mem := beads.NewMemStore()
+			cs := beads.NewCachingStoreForTest(mem, nil)
+			if err := cs.Prime(context.Background()); err != nil {
+				t.Fatalf("Prime: %v", err)
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			cs.StartReconciler(ctx, beads.WithStaggerAuto(), tc.agentID)
+
+			got := cs.Stats().StaggerOffsetMs
+			if got != tc.wantOffsetMs {
+				t.Fatalf("StaggerOffsetMs for %q = %d, want %d (FNV-32a pin)", tc.agentID, got, tc.wantOffsetMs)
+			}
+			if got < 0 || got >= 30000 {
+				t.Fatalf("StaggerOffsetMs for %q = %d outside [0, 30000) bound", tc.agentID, got)
+			}
+		})
+	}
+}
+
+func TestStartReconcilerStaggerAutoDifferentAgentsDiffer(t *testing.T) {
+	t.Parallel()
+
+	// Acceptance criterion 1: two agents started with WithStaggerAuto produce
+	// measurably different stagger offsets.
+	mem1 := beads.NewMemStore()
+	cs1 := beads.NewCachingStoreForTest(mem1, nil)
+	if err := cs1.Prime(context.Background()); err != nil {
+		t.Fatalf("Prime cs1: %v", err)
+	}
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	defer cancel1()
+	cs1.StartReconciler(ctx1, beads.WithStaggerAuto(), "beads/builder-1")
+
+	mem2 := beads.NewMemStore()
+	cs2 := beads.NewCachingStoreForTest(mem2, nil)
+	if err := cs2.Prime(context.Background()); err != nil {
+		t.Fatalf("Prime cs2: %v", err)
+	}
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	cs2.StartReconciler(ctx2, beads.WithStaggerAuto(), "beads/builder-2")
+
+	off1 := cs1.Stats().StaggerOffsetMs
+	off2 := cs2.Stats().StaggerOffsetMs
+	if off1 == off2 {
+		t.Fatalf("expected different stagger offsets for distinct agents; both got %d", off1)
+	}
 }
 
 func findTestBead(items []beads.Bead, id string) (beads.Bead, bool) {

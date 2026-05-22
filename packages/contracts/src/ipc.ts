@@ -85,6 +85,7 @@ import type {
   GcGetConfigInput,
   GcGetThreadContextInput,
   GcSessionActionResult,
+  GcSetControllerRunningInput,
   GcSetAgentMaxActiveSessionsInput,
   GcSetAgentMinActiveSessionsInput,
   GcSetAgentSessionModeInput,
@@ -92,6 +93,7 @@ import type {
   GcSetAgentWakeModeInput,
   GcSetCitySuspendedInput,
   GcSetRigSuspendedInput,
+  GcSetSupervisorRunningInput,
   GcThreadContextResult,
   GcConfigResult,
   GcWakeSessionInput,
@@ -512,6 +514,8 @@ export interface LocalApi {
     findThreadBinding: (input: GcFindThreadBindingInput) => Promise<GcFindThreadBindingResult>;
     getThreadContext: (input: GcGetThreadContextInput) => Promise<GcThreadContextResult>;
     wakeSession: (input: GcWakeSessionInput) => Promise<GcSessionActionResult>;
+    setSupervisorRunning: (input: GcSetSupervisorRunningInput) => Promise<GcSessionActionResult>;
+    setControllerRunning: (input: GcSetControllerRunningInput) => Promise<GcSessionActionResult>;
     setAgentSuspended: (input: GcSetAgentSuspendedInput) => Promise<GcSessionActionResult>;
     setAgentMaxActiveSessions: (
       input: GcSetAgentMaxActiveSessionsInput,

@@ -78,12 +78,12 @@ needs = ["review"]
 
 ## Formula Types
 
-| Type        | Description                                 |
-| ----------- | ------------------------------------------- |
-| `workflow`  | Standard step sequence                      |
-| `expansion` | Template for expansion operator             |
-| `aspect`    | Cross-cutting concerns                      |
-| `convoy`    | Multi-agent coordination (parallel workers) |
+| Type | Description |
+|------|-------------|
+| `workflow` | Standard step sequence |
+| `expansion` | Template for expansion operator |
+| `aspect` | Cross-cutting concerns |
+| `convoy` | Multi-agent coordination (parallel workers) |
 
 ### Convoy Formulas
 
@@ -135,11 +135,11 @@ title = "Deploy {{version}} to {{environment}}"
 
 ## Step Types
 
-| Type    | Description                |
-| ------- | -------------------------- |
-| `task`  | Normal work step (default) |
-| `human` | Requires human action      |
-| `gate`  | Async coordination point   |
+| Type | Description |
+|------|-------------|
+| `task` | Normal work step (default) |
+| `human` | Requires human action |
+| `gate` | Async coordination point |
 
 ## Dependencies
 
@@ -194,7 +194,6 @@ condition = "{{environment}} == production"
 ```
 
 Condition formats:
-
 - `"{{var}}"` - truthy (non-empty, non-false)
 - `"!{{var}}"` - negated
 - `"{{var}} == value"` - equality
@@ -375,7 +374,6 @@ aspects = ["security-scan", "logging"]
 ## Formula Locations
 
 Formulas are searched in order:
-
 1. `.beads/formulas/` (project-level)
 2. `~/.beads/formulas/` (user-level)
 

@@ -36,9 +36,8 @@ export async function renderIssues(): Promise<void> {
   }
 
   allIssues = sortIssues(
-    [...(openR.data?.items ?? []), ...(progressR.data?.items ?? [])].filter(
-      (bead) => !isInternalBead(bead),
-    ),
+    [...(openR.data?.items ?? []), ...(progressR.data?.items ?? [])]
+      .filter((bead) => !isInternalBead(bead)),
   );
   byId("issues-count")!.textContent = String(allIssues.length);
 
@@ -64,9 +63,7 @@ export function resetIssuesNoCity(): void {
   issuesList.style.display = "block";
   clearIssueDetailContent();
   clear(issuesList);
-  issuesList.append(
-    el("div", { class: "empty-state" }, [el("p", {}, ["Select a city to view beads"])]),
-  );
+  issuesList.append(el("div", { class: "empty-state" }, [el("p", {}, ["Select a city to view beads"])]));
   clear(rigTabs);
   currentRig = "all";
   currentIssueID = "";
@@ -121,32 +118,24 @@ function renderIssueTable(): void {
 
   const tbody = el("tbody");
   filtered.forEach((issue) => {
-    const row = el(
-      "tr",
-      {
-        class: `issue-row priority-${beadPriority(issue.priority)}`,
-        "data-issue-id": issue.id ?? "",
-        "data-status": issue.assignee ? "progress" : "ready",
-        "data-rig": inferRig(issue),
-      },
-      [
-        el("td", {}, [
-          el("span", { class: `badge ${priorityBadgeClass(issue.priority)}` }, [
-            `P${beadPriority(issue.priority)}`,
-          ]),
-        ]),
-        el("td", {}, [el("span", { class: "issue-id" }, [issue.id ?? ""])]),
-        el("td", { class: "issue-title" }, [truncate(issue.title ?? issue.id ?? "", 80)]),
-        el("td", { class: "issue-rig" }, [inferRig(issue)]),
-        el("td", { class: "issue-status" }, [
-          issue.assignee
-            ? el("span", { class: "badge badge-blue", title: issue.assignee }, [issue.assignee])
-            : el("span", { class: "badge badge-green" }, ["Ready"]),
-        ]),
-        el("td", { class: "issue-age" }, [formatTimestamp(issue.created_at)]),
-        el("td", {}, [slingButton(issue.id ?? "")]),
-      ],
-    );
+    const row = el("tr", {
+      class: `issue-row priority-${beadPriority(issue.priority)}`,
+      "data-issue-id": issue.id ?? "",
+      "data-status": issue.assignee ? "progress" : "ready",
+      "data-rig": inferRig(issue),
+    }, [
+      el("td", {}, [el("span", { class: `badge ${priorityBadgeClass(issue.priority)}` }, [`P${beadPriority(issue.priority)}`])]),
+      el("td", {}, [el("span", { class: "issue-id" }, [issue.id ?? ""])]),
+      el("td", { class: "issue-title" }, [truncate(issue.title ?? issue.id ?? "", 80)]),
+      el("td", { class: "issue-rig" }, [inferRig(issue)]),
+      el("td", { class: "issue-status" }, [
+        issue.assignee
+          ? el("span", { class: "badge badge-blue", title: issue.assignee }, [issue.assignee])
+          : el("span", { class: "badge badge-green" }, ["Ready"]),
+      ]),
+      el("td", { class: "issue-age" }, [formatTimestamp(issue.created_at)]),
+      el("td", {}, [slingButton(issue.id ?? "")]),
+    ]);
     row.addEventListener("click", (event) => {
       const target = event.target as HTMLElement;
       if (target.closest(".sling-btn")) return;
@@ -155,28 +144,22 @@ function renderIssueTable(): void {
     tbody.append(row);
   });
 
-  container.append(
-    el("table", { id: "work-table" }, [
-      el("thead", {}, [
-        el("tr", {}, [
-          el("th", {}, ["Pri"]),
-          el("th", {}, ["ID"]),
-          el("th", {}, ["Title"]),
-          el("th", {}, ["Rig"]),
-          el("th", {}, ["Status"]),
-          el("th", {}, ["Age"]),
-          el("th", {}, ["Actions"]),
-        ]),
-      ]),
-      tbody,
-    ]),
-  );
+  container.append(el("table", { id: "work-table" }, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", {}, ["Pri"]),
+      el("th", {}, ["ID"]),
+      el("th", {}, ["Title"]),
+      el("th", {}, ["Rig"]),
+      el("th", {}, ["Status"]),
+      el("th", {}, ["Age"]),
+      el("th", {}, ["Actions"]),
+    ])]),
+    tbody,
+  ]));
 }
 
 function rigButton(rig: string, active: boolean): HTMLElement {
-  const btn = el("button", { class: `rig-btn${active ? " active" : ""}`, "data-rig": rig }, [
-    rig === "all" ? "All" : rig,
-  ]);
+  const btn = el("button", { class: `rig-btn${active ? " active" : ""}`, "data-rig": rig }, [rig === "all" ? "All" : rig]);
   btn.addEventListener("click", () => {
     currentRig = rig;
     document.querySelectorAll(".rig-btn").forEach((node) => node.classList.remove("active"));
@@ -192,9 +175,7 @@ function inferRig(issue: BeadRecord): string {
 
 function isInternalBead(issue: BeadRecord): boolean {
   if ((issue.issue_type ?? "").toLowerCase() === "convoy") return true;
-  return (issue.labels ?? []).some(
-    (label) => label.startsWith("gc:queue") || label.startsWith("gc:message"),
-  );
+  return (issue.labels ?? []).some((label) => label.startsWith("gc:queue") || label.startsWith("gc:message"));
 }
 
 function sortIssues(issues: BeadRecord[]): BeadRecord[] {
@@ -220,9 +201,7 @@ export function installIssueInteractions(): void {
   byId("new-issue-btn")?.addEventListener("click", () => openIssueModal());
   byId("issue-modal-close-btn")?.addEventListener("click", () => closeIssueModal());
   byId("issue-modal-cancel-btn")?.addEventListener("click", () => closeIssueModal());
-  byId("issue-modal")
-    ?.querySelector(".modal-backdrop")
-    ?.addEventListener("click", () => closeIssueModal());
+  byId("issue-modal")?.querySelector(".modal-backdrop")?.addEventListener("click", () => closeIssueModal());
   byId("issue-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
     void createIssueFromModal();
@@ -283,9 +262,7 @@ async function openIssueDetail(issueID: string): Promise<void> {
 
   const [issueR, depsR, options] = await Promise.all([
     api.GET("/v0/city/{cityName}/bead/{id}", { params: { path: { cityName: city, id: issueID } } }),
-    api.GET("/v0/city/{cityName}/bead/{id}/deps", {
-      params: { path: { cityName: city, id: issueID } },
-    }),
+    api.GET("/v0/city/{cityName}/bead/{id}/deps", { params: { path: { cityName: city, id: issueID } } }),
     getOptions(),
   ]);
   if (issueR.error || !issueR.data) {
@@ -302,12 +279,8 @@ async function openIssueDetail(issueID: string): Promise<void> {
   byId("issue-detail-status")!.textContent = issue.status ?? "open";
   byId("issue-detail-status")!.className = `issue-status ${issue.status ?? "open"}`;
   byId("issue-detail-type")!.textContent = issue.issue_type ? `Type: ${issue.issue_type}` : "";
-  byId("issue-detail-owner")!.textContent = issue.assignee
-    ? `Owner: ${issue.assignee}`
-    : "Owner: unassigned";
-  byId("issue-detail-created")!.textContent = issue.created_at
-    ? `Created: ${formatTimestamp(issue.created_at)}`
-    : "";
+  byId("issue-detail-owner")!.textContent = issue.assignee ? `Owner: ${issue.assignee}` : "Owner: unassigned";
+  byId("issue-detail-created")!.textContent = issue.created_at ? `Created: ${formatTimestamp(issue.created_at)}` : "";
 
   renderIssueActions(issue, options.agents);
   renderDependencies(depsR.data?.children ?? []);
@@ -328,9 +301,7 @@ function renderDependencies(children: BeadRecord[]): void {
   }
   depsSection.style.display = "block";
   children.forEach((child) => {
-    const pill = el("span", { class: "issue-dep-item", "data-issue-id": child.id ?? "" }, [
-      `→ ${child.id ?? ""}`,
-    ]);
+    const pill = el("span", { class: "issue-dep-item", "data-issue-id": child.id ?? "" }, [`→ ${child.id ?? ""}`]);
     pill.addEventListener("click", () => {
       if (child.id) void openIssueDetail(child.id);
     });
@@ -345,10 +316,9 @@ function renderIssueActions(issue: BeadRecord, agents: string[]): void {
   clear(actions);
 
   const bar = el("div", { class: "issue-actions-bar" });
-  const primary =
-    issue.status === "closed"
-      ? actionButton("↺ Reopen", "reopen", () => void reopenIssue(issue.id!))
-      : actionButton("✓ Close", "close", () => void closeIssue(issue.id!));
+  const primary = issue.status === "closed"
+    ? actionButton("↺ Reopen", "reopen", () => void reopenIssue(issue.id!))
+    : actionButton("✓ Close", "close", () => void closeIssue(issue.id!));
   bar.append(primary);
   if (issue.status !== "closed") {
     bar.append(actionButton("🚚 Sling", "sling", () => void slingIssue(issue.id!)));
@@ -373,15 +343,9 @@ function actionButton(label: string, klass: string, onClick: () => void): HTMLEl
 }
 
 function prioritySelect(issueID: string, current: number | undefined): HTMLElement {
-  const select = el("select", {
-    class: "issue-action-select",
-    id: "issue-action-priority",
-    "aria-label": "Priority",
-  }) as HTMLSelectElement;
+  const select = el("select", { class: "issue-action-select", id: "issue-action-priority", "aria-label": "Priority" }) as HTMLSelectElement;
   [1, 2, 3, 4].forEach((priority) => {
-    const option = el("option", { value: priority, selected: beadPriority(current) === priority }, [
-      `P${priority}`,
-    ]) as HTMLOptionElement;
+    const option = el("option", { value: priority, selected: beadPriority(current) === priority }, [`P${priority}`]) as HTMLOptionElement;
     select.append(option);
   });
   select.addEventListener("change", () => {
@@ -390,16 +354,8 @@ function prioritySelect(issueID: string, current: number | undefined): HTMLEleme
   return select;
 }
 
-function assigneeSelect(
-  issueID: string,
-  current: string | undefined,
-  agents: string[],
-): HTMLElement {
-  const select = el("select", {
-    class: "issue-action-select",
-    id: "issue-action-assignee",
-    "aria-label": "Assignee",
-  }) as HTMLSelectElement;
+function assigneeSelect(issueID: string, current: string | undefined, agents: string[]): HTMLElement {
+  const select = el("select", { class: "issue-action-select", id: "issue-action-assignee", "aria-label": "Assignee" }) as HTMLSelectElement;
   select.append(el("option", { value: "" }, ["Unassigned"]));
   agents.forEach((agent) => {
     select.append(el("option", { value: agent, selected: current === agent }, [agent]));
@@ -507,9 +463,7 @@ async function slingIssue(issueID: string): Promise<void> {
 }
 
 function slingButton(issueID: string): HTMLElement {
-  const btn = el("button", { class: "sling-btn", type: "button", "data-bead-id": issueID }, [
-    "Sling",
-  ]);
+  const btn = el("button", { class: "sling-btn", type: "button", "data-bead-id": issueID }, ["Sling"]);
   btn.addEventListener("click", (event) => {
     event.stopPropagation();
     void slingIssue(issueID);

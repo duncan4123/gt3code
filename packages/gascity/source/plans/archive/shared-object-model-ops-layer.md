@@ -25,7 +25,6 @@ cmd/gc/cmd_*.go               internal/api/handler_*.go
 ### internal/sling/ -- work routing
 
 **Intent-based API** (new):
-
 ```go
 s, _ := sling.New(deps)           // validate once
 s.RouteBead(ctx, beadID, target, opts)
@@ -38,13 +37,11 @@ Each method takes exactly the params it needs via focused option
 structs (`RouteOpts`, `FormulaOpts`). No flag bag.
 
 **Typed routing** (new):
-
 ```go
 type BeadRouter interface {
     Route(ctx, RouteRequest) error
 }
 ```
-
 Domain says "route this bead to this target." Implementation decides
 how (shell command, direct store, API call).
 

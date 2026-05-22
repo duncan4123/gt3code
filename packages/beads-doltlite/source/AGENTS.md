@@ -1,21 +1,41 @@
 # Agent Instructions
 
+<!-- bd-doctor-divergence: ok -->
+
 See [AGENT_INSTRUCTIONS.md](AGENT_INSTRUCTIONS.md) for full instructions.
 
 This file exists for compatibility with tools that look for AGENTS.md.
+
+The marker above tells `bd doctor` that the intentional divergence between
+this file and `CLAUDE.md` (different audiences, different reading orders) is
+expected and should not be flagged.
 
 ## Key Sections
 
 - **Issue Tracking** - How to use bd for work management
 - **Development Guidelines** - Code standards and testing
+- **Project Scope** - Read [docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md) before adding new feature surface area
 - **Visual Design System** - Status icons, colors, and semantic styling for CLI output
 - **Contributor Protection** - Read [CONTRIBUTING.md](CONTRIBUTING.md) before handling external PRs
+- **Maintainer PR Guidelines** - Read [PR_MAINTAINER_GUIDELINES.md](PR_MAINTAINER_GUIDELINES.md) before triaging, landing, or closing PRs
+
+## Project Scope
+
+Before adding new feature surface area, read
+[docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md). Beads owns issue tracking
+primitives and should not encode orchestration-layer policy, become a storage
+engine, or casually expand the database schema when metadata would work.
 
 ## PR Safety for Agents
 
+Before triaging, reviewing, landing, closing, or otherwise maintaining PRs, read
+[PR_MAINTAINER_GUIDELINES.md](PR_MAINTAINER_GUIDELINES.md). The maintainer
+policy is to maximize community throughput: find useful contributor value,
+absorb or transform it locally when practical, preserve attribution, and use
+request-changes only as a last resort.
+
 Before implementing work, opening a PR, or merging/closing a PR, run the PR
 preflight:
-
 ```bash
 scripts/pr-preflight.sh --search "<topic keywords>" --repo gastownhall/beads
 scripts/pr-preflight.sh <pr-number> --repo gastownhall/beads
@@ -31,18 +51,26 @@ and credit their design/tests.
 **NEVER use emoji-style icons** (🔴🟠🟡🔵⚪) in CLI output. They cause cognitive overload.
 
 **ALWAYS use small Unicode symbols** with semantic colors:
-
 - Status: `○ ◐ ● ✓ ❄`
 - Priority: `● P0` (filled circle with color)
 
 See [AGENT_INSTRUCTIONS.md](AGENT_INSTRUCTIONS.md) for full development guidelines.
+
+## Storage Boundary
+
+The canonical storage boundary is in
+[docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md#storage-boundary). In short:
+Beads talks to storage through a driver interface (`dolthub/driver` for Dolt).
+Do not add beads-side flocks, engine introspection, storage-specific retry or
+crash-recovery logic, or public SDK return types that leak driver internals.
+If the boundary is too narrow, widen the interface or route the issue to the
+driver instead of patching around it in beads.
 
 ## Agent Warning: Interactive Commands
 
 **DO NOT use `bd edit`** - it opens an interactive editor ($EDITOR) which AI agents cannot use.
 
 Use `bd update` with flags instead:
-
 ```bash
 bd update <id> --description "new description"
 bd update <id> --title "new title"
@@ -61,7 +89,6 @@ echo 'Updated text' | bd update <id> --description=-
 - Opt-in ICU regex path: `make test-icu-path` (or `./scripts/test-icu-path.sh ./...`).
 - This ICU path is maintainer-only and not part of normal validation; `make test-full-cgo` and `./scripts/test-cgo.sh` are deprecated aliases.
 - For package- or test-scoped shipped-config CGO runs, prefer:
-
 ```bash
 CGO_ENABLED=1 go test -tags gms_pure_go ./cmd/bd/...
 CGO_ENABLED=1 go test -tags gms_pure_go -run '^TestName$' ./cmd/bd/...
@@ -74,7 +101,6 @@ CGO_ENABLED=1 go test -tags gms_pure_go -run '^TestName$' ./cmd/bd/...
 Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
 
 **Use these forms instead:**
-
 ```bash
 # Force overwrite without prompting
 cp -f source dest           # NOT: cp source dest
@@ -87,7 +113,6 @@ cp -rf source dest          # NOT: cp -r source dest
 ```
 
 **Other commands that may prompt:**
-
 - `scp` - use `-o BatchMode=yes` for non-interactive
 - `ssh` - use `-o BatchMode=yes` to fail instead of prompting
 - `apt-get` - use `-y` flag
@@ -113,14 +138,12 @@ cp -rf source dest          # NOT: cp -r source dest
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
-
 - Work is NOT complete until `git push` succeeds
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 
 <!-- BEGIN BEADS INTEGRATION -->
-
 ## Issue Tracking with bd (beads)
 
 **IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
@@ -193,14 +216,13 @@ bd close bd-42 --reason "Completed" --json
    - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
 6. **Complete**: `bd close <id> --reason "Done"`
 
-### Sync
+### Auto-Sync
 
-This workspace's `.beads/metadata.json` selects the `doltlite` backend.
+bd automatically syncs via Dolt:
 
-- Use normal `bd` commands for issue tracking.
-- Do **not** run `bd dolt push` or `bd dolt pull` here; those are for
-  server-mode Dolt stores and will target the wrong backend.
-- Code handoff is via Git: commit code changes and `git push`.
+- Each write auto-commits to Dolt history
+- Use `bd dolt push`/`bd dolt pull` for remote sync
+- No manual export/import needed!
 
 ### Important Rules
 

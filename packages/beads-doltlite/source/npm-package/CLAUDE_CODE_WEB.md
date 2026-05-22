@@ -9,14 +9,12 @@ Claude Code for Web provides full Linux VM sandboxes with npm support. Each sess
 ## Why npm Package Instead of Direct Binary?
 
 Claude Code for Web environments:
-
 - ✅ Have npm pre-installed and configured
 - ✅ Can install global npm packages easily
 - ❌ May have restrictions on direct binary downloads
 - ❌ Don't persist installations between sessions
 
 The `@beads/bd` npm package solves this by:
-
 1. Installing via npm (which is always available)
 2. Downloading the native binary during postinstall
 3. Providing a CLI wrapper that "just works"
@@ -232,7 +230,6 @@ Should output something like: `linux x64`
 The binary download may be slow depending on network conditions. The native binary is ~17MB, which should download in a few seconds on most connections.
 
 If it's consistently slow, consider:
-
 1. Using a different npm registry mirror
 2. Caching the installation (if Claude Code for Web supports it)
 

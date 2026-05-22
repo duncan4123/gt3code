@@ -11,6 +11,8 @@ interface GcSidebarGlobalSectionProps {
   renderThreadRows: (threadIds: readonly string[], indentClassName?: string) => ReactNode;
   gcAgentMutationsInFlight: ReadonlySet<string>;
   gcAgentStartsInFlight: ReadonlySet<string>;
+  gcSupervisorMutationInFlight: boolean;
+  gcCityControllerMutationsInFlight: ReadonlySet<string>;
   gcRigMutationsInFlight: ReadonlySet<string>;
   gcCityMutationInFlight: boolean;
   gcAgentActionStateByAgent: ReadonlyMap<string, GcAgentActionState>;
@@ -32,9 +34,11 @@ interface GcSidebarGlobalSectionProps {
   ) => void;
   onAdjustAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
-  onWakeAgentSession: (agent: string) => void;
+  onWakeAgentSession: (agent: string, sessionName?: string) => void;
   onToggleAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
+  onSetSupervisorRunning: (city: string, running: boolean) => void;
+  onSetControllerRunning: (city: string, running: boolean) => void;
 }
 
 export const GcSidebarGlobalSection = memo(function GcSidebarGlobalSection(
@@ -74,6 +78,8 @@ export const GcSidebarGlobalSection = memo(function GcSidebarGlobalSection(
               : {})}
             gcAgentMutationsInFlight={props.gcAgentMutationsInFlight}
             gcAgentStartsInFlight={props.gcAgentStartsInFlight}
+            gcSupervisorMutationInFlight={props.gcSupervisorMutationInFlight}
+            gcCityControllerMutationsInFlight={props.gcCityControllerMutationsInFlight}
             gcRigMutationsInFlight={props.gcRigMutationsInFlight}
             gcCityMutationInFlight={props.gcCityMutationInFlight}
             gcThreadGroupingMode="agent"
@@ -88,6 +94,8 @@ export const GcSidebarGlobalSection = memo(function GcSidebarGlobalSection(
             onWakeAgentSession={props.onWakeAgentSession}
             onToggleAgentWakeMode={props.onToggleAgentWakeMode}
             onToggleAgentSessionMode={props.onToggleAgentSessionMode}
+            onSetSupervisorRunning={props.onSetSupervisorRunning}
+            onSetControllerRunning={props.onSetControllerRunning}
             renderThreadRows={props.renderThreadRows}
           />
         </SidebarMenuSub>

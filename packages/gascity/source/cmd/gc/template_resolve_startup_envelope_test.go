@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestBuildStartupEnvelope_UsesTemplateForGroupingAgent(t *testing.T) {
+func TestBuildT3BridgeStartupEnvelope_UsesTemplateForGroupingAgent(t *testing.T) {
 	tp := TemplateParams{
 		TemplateName:             "t3code/polecat",
 		InstanceName:             "t3code/polecat-1",
@@ -22,7 +22,7 @@ func TestBuildStartupEnvelope_UsesTemplateForGroupingAgent(t *testing.T) {
 		},
 	}
 
-	raw := buildStartupEnvelope(tp, "prime")
+	raw := buildT3BridgeStartupEnvelope(tp, "prime")
 	var envelope map[string]any
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		t.Fatalf("unmarshal envelope: %v", err)
@@ -43,7 +43,7 @@ func TestBuildStartupEnvelope_UsesTemplateForGroupingAgent(t *testing.T) {
 	}
 }
 
-func TestBuildStartupEnvelope_NamedSessionPublishesTemplatePatchIdentity(t *testing.T) {
+func TestBuildT3BridgeStartupEnvelope_NamedSessionPublishesTemplatePatchIdentity(t *testing.T) {
 	tp := TemplateParams{
 		TemplateName:             "crew",
 		InstanceName:             "t3code/gastown.crew",
@@ -61,7 +61,7 @@ func TestBuildStartupEnvelope_NamedSessionPublishesTemplatePatchIdentity(t *test
 		},
 	}
 
-	raw := buildStartupEnvelope(tp, "prime")
+	raw := buildT3BridgeStartupEnvelope(tp, "prime")
 	var envelope map[string]any
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		t.Fatalf("unmarshal envelope: %v", err)

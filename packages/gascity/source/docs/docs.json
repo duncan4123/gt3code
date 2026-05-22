@@ -64,6 +64,12 @@
   "metadata": {
     "timestamp": true
   },
+  "redirects": [
+    {
+      "source": "/packv2/migration",
+      "destination": "/guides/migrating-to-pack-vnext"
+    }
+  ],
   "navigation": {
     "groups": [
       {
@@ -92,11 +98,19 @@
       },
       {
         "group": "Guides",
-        "pages": ["guides/index", "guides/migrating-to-pack-vnext", "guides/shareable-packs"]
+        "pages": [
+          "guides/index",
+          "guides/migrating-to-pack-vnext",
+          "guides/shareable-packs",
+          "guides/using-json-from-gc"
+        ]
       },
       {
         "group": "Troubleshooting",
-        "pages": ["troubleshooting/dolt-bloat-recovery"]
+        "pages": [
+          "troubleshooting/gc-start-walkthrough",
+          "troubleshooting/dolt-bloat-recovery"
+        ]
       },
       {
         "group": "Reference",
@@ -104,7 +118,6 @@
           "reference/index",
           "reference/cli",
           "reference/config",
-          "reference/beads-backends",
           "reference/formula",
           "reference/trust-boundaries",
           "reference/api",
@@ -112,6 +125,13 @@
           "schema/index",
           "reference/exec-session-provider",
           "reference/exec-beads-provider"
+        ]
+      },
+      {
+        "group": "Internals",
+        "pages": [
+          "internals/index",
+          "internals/beads-topology"
         ]
       }
     ]

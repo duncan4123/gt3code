@@ -89,20 +89,16 @@ Add release notes to CHANGELOG.md:
 ## [0.22.0] - 2025-11-04
 
 ### Added
-
 - New feature X
 - New command Y
 
 ### Changed
-
 - Improved performance of Z
 
 ### Fixed
-
 - Bug in component A
 
 ### Breaking Changes
-
 - Changed behavior of B (migration guide)
 ```
 
@@ -128,24 +124,24 @@ Use the version bump script to update all version references and create the rele
 
 **Available flags:**
 
-| Flag                | Description                                             |
-| ------------------- | ------------------------------------------------------- |
-| `--commit`          | Create a git commit with version changes                |
-| `--tag`             | Create annotated git tag (requires --commit)            |
-| `--push`            | Push commit and tag to origin (requires --tag)          |
-| `--install`         | Build and install bd to `~/go/bin` AND `~/.local/bin`   |
-| `--mcp-local`       | Install beads-mcp from local source via uv/pip          |
-| `--upgrade-mcp`     | Upgrade beads-mcp from PyPI (after PyPI publish)        |
-| `--restart-servers` | Restart all Dolt servers to pick up new version         |
-| `--all`             | Shorthand for `--install --mcp-local --restart-servers` |
+| Flag | Description |
+|------|-------------|
+| `--commit` | Create a git commit with version changes |
+| `--tag` | Create annotated git tag (requires --commit) |
+| `--push` | Push commit and tag to origin (requires --tag) |
+| `--install` | Build and install bd to `~/go/bin` AND `~/.local/bin` |
+| `--mcp-local` | Install beads-mcp from local source via uv/pip |
+| `--upgrade-mcp` | Upgrade beads-mcp from PyPI (after PyPI publish) |
+| `--restart-servers` | Restart all Dolt servers to pick up new version |
+| `--all` | Shorthand for `--install --mcp-local --restart-servers` |
 
 This updates:
-
 - `cmd/bd/version.go` - CLI version constant
 - `integrations/beads-mcp/pyproject.toml` - MCP server version
 - `integrations/beads-mcp/src/beads_mcp/__init__.py` - MCP Python version
-- `claude-plugin/.claude-plugin/plugin.json` - Plugin version
-- `.claude-plugin/marketplace.json` - Marketplace version
+- `plugins/beads/.claude-plugin/plugin.json` - Claude plugin version
+- `plugins/beads/.codex-plugin/plugin.json` - Codex plugin version
+- `.claude-plugin/marketplace.json` - Claude marketplace version
 - `npm-package/package.json` - npm package version
 - `cmd/bd/templates/hooks/*` - Git hook versions
 - `README.md` - Documentation version
@@ -153,7 +149,6 @@ This updates:
 - `CHANGELOG.md` - Creates release entry from [Unreleased]
 
 The `--commit --tag --push` flags will:
-
 1. Create a git commit with all version changes
 2. Create an annotated tag `v0.22.0`
 3. Push both commit and tag to origin
@@ -209,7 +204,6 @@ gh auth token | goreleaser release --clean
 ```
 
 This will:
-
 - Build binaries for all platforms (macOS, Linux, Windows - amd64/arm64)
 - Create checksums
 - Generate release notes from CHANGELOG.md
@@ -317,24 +311,27 @@ pip install beads-mcp==0.22.0
 python -m beads_mcp --version
 ```
 
-## 5. Claude Code Marketplace Update
+## 5. Plugin Marketplace Update
 
-Update the Claude Code marketplace metadata files:
+Update the plugin marketplace metadata files:
 
 ```bash
 # Update .claude-plugin/marketplace.json
 # Change version to match current release
 vim .claude-plugin/marketplace.json
 
-# Update claude-plugin/.claude-plugin/plugin.json if needed
-vim claude-plugin/.claude-plugin/plugin.json
+# Update plugins/beads/.claude-plugin/plugin.json if needed
+vim plugins/beads/.claude-plugin/plugin.json
+
+# Update plugins/beads/.codex-plugin/plugin.json if needed
+vim plugins/beads/.codex-plugin/plugin.json
 
 # Commit changes
-git add .claude-plugin/ claude-plugin/.claude-plugin/
-git commit -m "chore: Update Claude Code marketplace to v0.22.0"
+git add .claude-plugin/ plugins/beads/.claude-plugin/ plugins/beads/.codex-plugin/
+git commit -m "chore: Update plugin marketplaces to v0.22.0"
 ```
 
-**Note:** These files define how beads appears in Claude Code's plugin marketplace. Version should match the release version.
+**Note:** These files define how beads appears in Claude Code and Codex plugin marketplaces. Version should match the release version.
 
 ## 6. npm Package Release
 
@@ -531,7 +528,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
 
 jobs:
   goreleaser:
@@ -553,8 +550,8 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: "18"
-          registry-url: "https://registry.npmjs.org"
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
       - run: cd npm-package && npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -580,7 +577,6 @@ jobs:
 After a successful release:
 
 1. **Upgrade local beads-mcp installation** to the new version:
-
    ```bash
    # Option 1: Use the bump-version.sh script (recommended during version bump)
    ./scripts/bump-version.sh <version> --upgrade-mcp
@@ -599,14 +595,12 @@ After a successful release:
    ```
 
    **Note:** The `--upgrade-mcp` flag can be combined with other flags:
-
    ```bash
    # Update versions, commit, install bd binary, and upgrade beads-mcp all at once
    ./scripts/bump-version.sh 0.24.3 --commit --install --upgrade-mcp
    ```
 
 2. **Verify the upgraded CLI**:
-
    ```bash
    bd version
    bd doctor quick
@@ -667,7 +661,6 @@ Beads follows [Semantic Versioning](https://semver.org/):
 - **PATCH** (0.0.x): Bug fixes, backwards compatible
 
 Examples:
-
 - `0.21.5` → `0.22.0`: New features (minor bump)
 - `0.22.0` → `0.22.1`: Bug fix (patch bump)
 - `0.22.1` → `1.0.0`: Stable release (major bump)

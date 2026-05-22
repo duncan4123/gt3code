@@ -107,6 +107,16 @@ function readExitCause(exit: unknown): string {
   return toStringValue(exit.cause)?.trim() ?? "Failure";
 }
 
+function isOptionalSourceControlCliProbeFailure(name: string, cause: string): boolean {
+  if (name !== "VcsProcess.run" && name !== "processRunner.runProcessCore") {
+    return false;
+  }
+
+  const optionalCliProbe = /\b(?:az|glab) --version\b/u.test(cause);
+  const missingOptionalCli = /\bspawn (?:az|glab) ENOENT\b/u.test(cause);
+  return optionalCliProbe && missingOptionalCli;
+}
+
 function isTraceEvent(value: unknown): value is TraceEventLike {
   return typeof value === "object" && value !== null;
 }
@@ -253,7 +263,9 @@ export function aggregateTraceDiagnostics(
       const exitTag = readExitTag(parsed.exit);
       const isFailure = exitTag === "Failure";
       const isInterrupted = exitTag === "Interrupted";
-      if (isFailure) failureCount += 1;
+      const cause = isFailure ? readExitCause(parsed.exit) : "";
+      const suppressFailure = isFailure && isOptionalSourceControlCliProbeFailure(name, cause);
+      if (isFailure && !suppressFailure) failureCount += 1;
       if (isInterrupted) interruptionCount += 1;
 
       const spanSummary = spansByName.get(name) ?? {
@@ -265,7 +277,7 @@ export function aggregateTraceDiagnostics(
       spanSummary.count += 1;
       spanSummary.totalDurationMs += durationMs;
       spanSummary.maxDurationMs = Math.max(spanSummary.maxDurationMs, durationMs);
-      if (isFailure) spanSummary.failureCount += 1;
+      if (isFailure && !suppressFailure) spanSummary.failureCount += 1;
       spansByName.set(name, spanSummary);
 
       const spanItem = { name, durationMs, endedAt, traceId, spanId };
@@ -274,8 +286,7 @@ export function aggregateTraceDiagnostics(
       }
       insertBoundedSlowestSpan(slowestSpans, spanItem);
 
-      if (isFailure) {
-        const cause = readExitCause(parsed.exit);
+      if (isFailure && !suppressFailure) {
         latestFailures.push({ ...spanItem, cause });
 
         const failureKey = `${name}\0${cause}`;

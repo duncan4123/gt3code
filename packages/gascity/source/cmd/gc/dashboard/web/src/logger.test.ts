@@ -20,14 +20,11 @@ describe("dashboard logger", () => {
     installDashboardLogging();
     logError("mail", "Compose failed", { reason: "missing recipient" });
 
-    expect(fetch).toHaveBeenCalledWith(
-      "/__client-log",
-      expect.objectContaining({
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        method: "POST",
-      }),
-    );
+    expect(fetch).toHaveBeenCalledWith("/__client-log", expect.objectContaining({
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      method: "POST",
+    }));
 
     const [, request] = vi.mocked(fetch).mock.calls[0] ?? [];
     const parsed = JSON.parse(String(request?.body));
@@ -64,13 +61,10 @@ describe("dashboard logger", () => {
     installDashboardLogging();
     logDebug("api", "Request start", { url: "http://127.0.0.1:8372/v0/cities" });
 
-    expect(fetch).toHaveBeenCalledWith(
-      "/__client-log",
-      expect.objectContaining({
-        keepalive: true,
-        method: "POST",
-      }),
-    );
+    expect(fetch).toHaveBeenCalledWith("/__client-log", expect.objectContaining({
+      keepalive: true,
+      method: "POST",
+    }));
   });
 
   it("emits info logs when explicitly enabled", async () => {
@@ -82,13 +76,10 @@ describe("dashboard logger", () => {
     logInfo("dashboard", "Boot complete", { city: "mc-city" });
 
     expect(info).toHaveBeenCalledWith("[dashboard][dashboard] Boot complete", { city: "mc-city" });
-    expect(fetch).toHaveBeenCalledWith(
-      "/__client-log",
-      expect.objectContaining({
-        keepalive: true,
-        method: "POST",
-      }),
-    );
+    expect(fetch).toHaveBeenCalledWith("/__client-log", expect.objectContaining({
+      keepalive: true,
+      method: "POST",
+    }));
   });
 
   it("still emits warnings by default", async () => {
@@ -98,15 +89,10 @@ describe("dashboard logger", () => {
     installDashboardLogging();
     logWarn("status", "City status dependency timed out", { city: "mc-city" });
 
-    expect(warn).toHaveBeenCalledWith("[dashboard][status] City status dependency timed out", {
-      city: "mc-city",
-    });
-    expect(fetch).toHaveBeenCalledWith(
-      "/__client-log",
-      expect.objectContaining({
-        keepalive: true,
-        method: "POST",
-      }),
-    );
+    expect(warn).toHaveBeenCalledWith("[dashboard][status] City status dependency timed out", { city: "mc-city" });
+    expect(fetch).toHaveBeenCalledWith("/__client-log", expect.objectContaining({
+      keepalive: true,
+      method: "POST",
+    }));
   });
 });

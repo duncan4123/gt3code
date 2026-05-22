@@ -74,16 +74,6 @@ func readyWorkFilterFromIssueFilter(filter types.IssueFilter) types.WorkFilter {
 	return wf
 }
 
-func labelsFromIssues(issues []*types.Issue) map[string][]string {
-	labels := make(map[string][]string, len(issues))
-	for _, issue := range issues {
-		if len(issue.Labels) > 0 {
-			labels[issue.ID] = issue.Labels
-		}
-	}
-	return labels
-}
-
 // getHierarchicalChildren handles the --tree --parent combination logic.
 // baseFilter carries CLI filters (--type, --status, etc.) through the recursive walk.
 func getHierarchicalChildren(ctx context.Context, store storage.DoltStorage, dbPath string, parentID string, baseFilter types.IssueFilter) ([]*types.Issue, error) {
@@ -975,14 +965,13 @@ var listCmd = &cobra.Command{
 		}
 
 		if jsonOutput {
-			// SearchIssues/GetReadyWork already hydrate labels in bulk. Reuse
-			// them so doltlite avoids a second read transaction for the same rows.
+			// Get labels and dependency counts in bulk (single query instead of N queries)
 			issueIDs := make([]string, len(issues))
 			for i, issue := range issues {
 				issueIDs[i] = issue.ID
 			}
 			// Best effort: display gracefully degrades with empty data
-			labelsMap := labelsFromIssues(issues)
+			labelsMap, _ := activeStore.GetLabelsForIssues(ctx, issueIDs)
 			depCounts, _ := activeStore.GetDependencyCounts(ctx, issueIDs)
 			allDeps, _ := activeStore.GetDependencyRecordsForIssues(ctx, issueIDs)
 			commentCounts, _ := activeStore.GetCommentCounts(ctx, issueIDs)
@@ -1024,13 +1013,13 @@ var listCmd = &cobra.Command{
 		// Show upgrade notification if needed
 		maybeShowUpgradeNotification()
 
-		// SearchIssues/GetReadyWork already hydrate labels in bulk.
+		// Load labels in bulk for display
 		issueIDs := make([]string, len(issues))
 		for i, issue := range issues {
 			issueIDs[i] = issue.ID
 		}
 		// Best effort: display gracefully degrades with empty data
-		labelsMap := labelsFromIssues(issues)
+		labelsMap, _ := activeStore.GetLabelsForIssues(ctx, issueIDs)
 
 		// Load blocking info for displayed issues only (bd-7di).
 		// Previously loaded ALL dependency records which was O(total_issues) and took 2-4s.

@@ -1,4 +1,4 @@
-//go:build cgo && libsqlite3
+//go:build cgo && libsqlite3 && gascity_native_beads
 
 package beads
 
@@ -56,7 +56,7 @@ func TestDoltliteReadStoreSkipLabels(t *testing.T) {
 	}
 }
 
-func TestDoltliteReadStoreSkipParent(t *testing.T) {
+func TestDoltliteReadStoreHydratesParent(t *testing.T) {
 	store, closeStore := newTestDoltliteReadStore(t)
 	defer closeStore()
 
@@ -68,19 +68,6 @@ func TestDoltliteReadStoreSkipParent(t *testing.T) {
 	if child.ParentID != "gc-parent" {
 		t.Fatalf("child parent = %q, want gc-parent", child.ParentID)
 	}
-
-	withoutParent, err := store.List(ListQuery{
-		Type:       "task",
-		SkipParent: true,
-		Sort:       SortCreatedAsc,
-	})
-	if err != nil {
-		t.Fatalf("List tasks without parent: %v", err)
-	}
-	child = findTestBead(t, withoutParent, "gc-child")
-	if child.ParentID != "" {
-		t.Fatalf("child parent hydrated with SkipParent=true: %q", child.ParentID)
-	}
 }
 
 func TestDoltliteReadStoreTypeFallbackCanSkipLabels(t *testing.T) {
@@ -90,7 +77,6 @@ func TestDoltliteReadStoreTypeFallbackCanSkipLabels(t *testing.T) {
 	rows, err := store.List(ListQuery{
 		Type:       "session",
 		SkipLabels: true,
-		SkipParent: true,
 	})
 	if err != nil {
 		t.Fatalf("List type=session: %v", err)
@@ -101,8 +87,8 @@ func TestDoltliteReadStoreTypeFallbackCanSkipLabels(t *testing.T) {
 	if rows[0].ID != "gc-session" {
 		t.Fatalf("type=session row = %s, want gc-session", rows[0].ID)
 	}
-	if len(rows[0].Labels) != 0 || rows[0].ParentID != "" {
-		t.Fatalf("unexpected hydrated fields: labels=%v parent=%q", rows[0].Labels, rows[0].ParentID)
+	if len(rows[0].Labels) != 0 {
+		t.Fatalf("unexpected hydrated labels: %v", rows[0].Labels)
 	}
 }
 
@@ -244,8 +230,7 @@ func TestDoltliteReadStoreListsQueuedNudgeBeads(t *testing.T) {
 	defer closeStore()
 
 	rows, err := store.List(ListQuery{
-		Label:      "gc:nudge",
-		SkipParent: true,
+		Label: "gc:nudge",
 	})
 	if err != nil {
 		t.Fatalf("List queued nudge beads: %v", err)
@@ -276,7 +261,6 @@ func TestDoltliteReadStoreFiltersNudgesByMetadata(t *testing.T) {
 			"state":          "queued",
 		},
 		SkipLabels: true,
-		SkipParent: true,
 	})
 	if err != nil {
 		t.Fatalf("List nudge by metadata: %v", err)
@@ -326,7 +310,7 @@ func TestDoltliteReadStoreDefaultWorkQueryHasReadyWork(t *testing.T) {
 	}
 }
 
-func TestDoltliteCachingStoreSkipParentDoesNotEraseDependencyCache(t *testing.T) {
+func TestDoltliteCachingStoreLiveFastReadDoesNotEraseDependencyCache(t *testing.T) {
 	store, closeStore := newTestDoltliteReadStore(t)
 	defer closeStore()
 
@@ -346,7 +330,6 @@ func TestDoltliteCachingStoreSkipParentDoesNotEraseDependencyCache(t *testing.T)
 		Type:       "task",
 		Live:       true,
 		SkipLabels: true,
-		SkipParent: true,
 	}); err != nil {
 		t.Fatalf("fast live List: %v", err)
 	}

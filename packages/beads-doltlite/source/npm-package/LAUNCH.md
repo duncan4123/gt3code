@@ -130,7 +130,6 @@ Create `.github/workflows/publish-npm.yml` to auto-publish on GitHub releases.
 ## 📈 Package Stats
 
 Initial publish:
-
 - **Tarball**: beads-bd-0.21.5.tgz
 - **Shasum**: 6f3e7d808a67e975ca6781e340fa66777aa194b3
 - **Integrity**: sha512-8fAwa9JFKaczn...U3frQIXmrWnxQ==

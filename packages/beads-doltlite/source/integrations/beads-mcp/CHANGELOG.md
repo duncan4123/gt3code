@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-
 - `mcp__beads__show()` no longer crashes with `pydantic literal_error` when an
   issue has dependency types beyond the original four (`blocks`, `related`,
   `parent-child`, `discovered-from`). `DependencyType` is now `str`, matching
@@ -18,7 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.41.0] - 2024-12-30
 
 ### Changed
-
 - Minor maintenance release
 
 ## [0.24.0] - 2024-01-15
@@ -30,24 +28,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 The `ready()` and `list()` MCP tools now return `list[IssueMinimal]` or `CompactedResult` instead of `list[Issue]`. This **breaking change** reduces context window usage by ~80%.
 
 **What changed:**
-
 - `ready()` returns `list[IssueMinimal] | CompactedResult` (was `list[Issue]`)
 - `list()` returns `list[IssueMinimal] | CompactedResult` (was `list[Issue]`)
 - `show()` still returns full `Issue` (unchanged)
 
 **IssueMinimal includes:**
-
 - `id`, `title`, `status`, `priority`, `issue_type`
 - `assignee`, `labels`, `dependency_count`, `dependent_count`
 
 **IssueMinimal excludes (use show() for these):**
-
 - `description`, `design`, `acceptance_criteria`, `notes`
 - `created_at`, `updated_at`, `closed_at`
 - `dependencies`, `dependents` (full objects)
 
 **CompactedResult (returned when >20 results):**
-
 ```python
 {
     "compacted": True,
@@ -61,7 +55,6 @@ The `ready()` and `list()` MCP tools now return `list[IssueMinimal]` or `Compact
 **Migration guide:**
 
 1. Check for compacted results:
-
    ```python
    if isinstance(response, dict) and response.get("compacted"):
        issues = response["preview"]
@@ -70,7 +63,6 @@ The `ready()` and `list()` MCP tools now return `list[IssueMinimal]` or `Compact
    ```
 
 2. Use `show()` for full details:
-
    ```python
    for issue in issues:
        full_issue = show(issue_id=issue.id)
@@ -83,7 +75,6 @@ The `ready()` and `list()` MCP tools now return `list[IssueMinimal]` or `Compact
    - `max_description_length=100` - Truncate descriptions
 
 **Rationale:**
-
 - Reduces context usage from ~400 bytes/issue to ~80 bytes/issue
 - Prevents context overflow for large issue lists (>20 items)
 - Encourages efficient "list then show" pattern for AI agents
@@ -91,7 +82,6 @@ The `ready()` and `list()` MCP tools now return `list[IssueMinimal]` or `Compact
 See [CONTEXT_ENGINEERING.md](./CONTEXT_ENGINEERING.md) for full migration guide.
 
 ### Added
-
 - `discover_tools()` - Lightweight tool catalog for lazy schema loading
 - `get_tool_info(tool_name)` - On-demand tool details
 - `CompactedResult` model for large result sets

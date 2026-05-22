@@ -1,11 +1,9 @@
 # Convert Plan to Beads Tasks
 
 ## description:
-
 Convert a Claude Code plan file into beads epic + tasks for cross-session tracking.
 
 ## Arguments
-
 $ARGUMENTS (optional - path to plan file, defaults to most recent in ~/.claude/plans/)
 
 ---
@@ -27,7 +25,6 @@ The agent should:
    - File list: Include in epic description
 
 3. **Create the epic**
-
    ```bash
    bd create "[Plan Title]" -t epic -p 1 -d "[summary]. Files: N to modify." --json
    ```
@@ -35,7 +32,6 @@ The agent should:
 4. **Create tasks from phases**
    - Each phase becomes a task
    - Use first paragraph of phase content as description
-
    ```bash
    bd create "[Phase title]" -t task -p 2 -d "[description]" --json
    ```
@@ -47,7 +43,6 @@ The agent should:
    - `bd dep add <epic> <task>` for each task
 
 7. **Return a concise summary** (not raw output):
-
    ```
    Created from: [filename]
 

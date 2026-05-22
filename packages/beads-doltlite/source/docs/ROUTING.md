@@ -13,7 +13,6 @@ Auto-routing solves the OSS contributor problem: contributors want to plan work 
 The routing system detects user role via:
 
 1. **Explicit git config** (highest priority):
-
    ```bash
    git config beads.role maintainer
    # or
@@ -22,7 +21,7 @@ The routing system detects user role via:
 
 2. **Push URL inspection** (automatic):
    - SSH URLs (`git@github.com:user/repo.git`) → Maintainer
-   - HTTPS with credentials → Maintainer
+   - HTTPS with credentials → Maintainer  
    - HTTPS without credentials → Contributor
    - No remote → Contributor (fallback)
 
@@ -206,7 +205,6 @@ bd doctor
 ## Implementation
 
 **Key Files:**
-
 - `internal/routing/routing.go` - Role detection and routing logic
 - `internal/routing/routing_test.go` - Unit tests
 - `cmd/bd/create.go` - Integration with create command
@@ -239,7 +237,6 @@ go test -v -run TestRouting
 ## Future Enhancements
 
 See [bd-k58](https://github.com/gastownhall/beads/issues/k58) for proposal workflow:
-
 - `bd propose <id>` - Move issue from planning to upstream
 - `bd withdraw <id>` - Un-propose
 - `bd accept <id>` - Maintainer accepts proposal

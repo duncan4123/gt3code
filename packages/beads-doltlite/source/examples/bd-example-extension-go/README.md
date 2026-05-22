@@ -1,6 +1,8 @@
 # BD Extension Example (Go)
 
-This example demonstrates how to extend bd with custom tables for application-specific orchestration, following the patterns described in [EXTENDING.md](../../docs/EXTENDING.md).
+This legacy example demonstrates how to extend SQLite-backed bd databases with custom tables for application-specific orchestration.
+
+> **Note:** Custom SQLite table extensions are a legacy pattern. Current Dolt-backed beads workflows should prefer standalone integration tools that call `bd --json` commands or use `bd query` for SQL access. See [Extensible Database](../../docs/ADVANCED.md#extensible-database) for the current guidance.
 
 ## What This Example Shows
 
@@ -86,7 +88,6 @@ bd-example-extension-go -db .beads/demo.db
 ```
 
 **Output:**
-
 ```
 Claiming: demo-5
   ✓ assess
@@ -107,7 +108,6 @@ Status:
 - **schema.sql** (23 lines): Extension tables (`example_executions`, `example_checkpoints`) with foreign keys and indexes
 
 Demonstrates:
-
 1. Auto-discover database (`beads.FindDatabasePath`)
 2. Dual-layer access (bd API + direct SQL)
 3. Execution tracking with checkpoints
@@ -196,13 +196,11 @@ rows, err := db.Query("SELECT * FROM example_executions WHERE status = ?", "runn
 ## Testing the Example
 
 1. **Initialize bd:**
-
    ```bash
    bd init --prefix demo
    ```
 
 2. **Create some test issues:**
-
    ```bash
    bd create "Implement authentication" -p 1 -t feature
    bd create "Add API documentation" -p 1 -t task
@@ -210,7 +208,6 @@ rows, err := db.Query("SELECT * FROM example_executions WHERE status = ?", "runn
    ```
 
 3. **Run the demo:**
-
    ```bash
    bd-example-extension-go -cmd demo
    ```
@@ -229,8 +226,6 @@ This pattern is used in production by:
 - **CI/CD Systems**: Build tracking and artifact management
 - **Task Runners**: Parallel execution with dependency resolution
 
-See [EXTENDING.md](../../EXTENDING.md) for more patterns and the VC implementation example.
-
 ## Next Steps
 
 1. **Add Your Own Tables**: Extend the schema with application-specific tables
@@ -241,6 +236,5 @@ See [EXTENDING.md](../../EXTENDING.md) for more patterns and the VC implementati
 
 ## See Also
 
-- [EXTENDING.md](../../EXTENDING.md) - Complete extension guide
 - [../../README.md](../../README.md) - bd documentation
 - [QUICKSTART.md](../../docs/QUICKSTART.md) - Quick start tutorial

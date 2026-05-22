@@ -1,6 +1,9 @@
 # Integration Charter
 
-This document defines the scope boundary for beads tracker integrations. It exists to keep the project focused on its core value — dependency-aware issue tracking for AI agents — and to prevent scope creep into platform territory.
+This document specializes the project scope boundary from
+[Project Charter](PROJECT_CHARTER.md) for tracker integrations. It exists to
+keep the project focused on its core value - dependency-aware issue tracking
+for AI agents - and to prevent scope creep into platform territory.
 
 ## Core Principle
 
@@ -74,15 +77,16 @@ When adding support for a new tracker or extending an existing one:
 
 ## Decision Log
 
-| Date       | Decision                                      | Rationale                                                            |
-| ---------- | --------------------------------------------- | -------------------------------------------------------------------- |
-| 2026-03-24 | Integrations are adoption bridge, not product | Prevent scope creep; focus on dependency graph as differentiator     |
-| 2026-03-24 | No webhooks, ever                             | Operational complexity disproportionate to value for polled use case |
-| 2026-03-24 | No cross-tracker orchestration                | Workflow automation is a different problem domain                    |
-| 2026-03-24 | Fail loudly on sync errors                    | Silent failures cause data inconsistency and erode trust             |
+| Date | Decision | Rationale |
+|------|----------|-----------|
+| 2026-03-24 | Integrations are adoption bridge, not product | Prevent scope creep; focus on dependency graph as differentiator |
+| 2026-03-24 | No webhooks, ever | Operational complexity disproportionate to value for polled use case |
+| 2026-03-24 | No cross-tracker orchestration | Workflow automation is a different problem domain |
+| 2026-03-24 | Fail loudly on sync errors | Silent failures cause data inconsistency and erode trust |
 
 ## Related Documents
 
+- [Project Charter](PROJECT_CHARTER.md) - Overall product scope and boundaries
 - [CLI Reference](CLI_REFERENCE.md) — Full command documentation
 - [SECURITY.md](../SECURITY.md) — Security considerations for tracker tokens
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — How to contribute new integrations

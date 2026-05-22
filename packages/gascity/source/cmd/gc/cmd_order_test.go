@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -17,6 +19,25 @@ import (
 	"github.com/gastownhall/gascity/internal/events"
 	"github.com/gastownhall/gascity/internal/orders"
 )
+
+func readFileString(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+type partialListStore struct {
+	beads.Store
+	rows []beads.Bead
+	err  error
+}
+
+func (s *partialListStore) List(_ beads.ListQuery) ([]beads.Bead, error) {
+	return s.rows, s.err
+}
 
 // --- gc order list ---
 
@@ -51,6 +72,46 @@ func TestOrderList(t *testing.T) {
 	}
 }
 
+func TestOrderListJSON(t *testing.T) {
+	aa := []orders.Order{
+		{Name: "digest", Trigger: "cooldown", Interval: "24h", Pool: "dog", Formula: "mol-digest", Source: "/city/orders/digest.toml"},
+		{Name: "poll", Trigger: "condition", Check: "bd ready --json", Exec: "scripts/poll.sh", Rig: "frontend"},
+	}
+
+	var stdout bytes.Buffer
+	code := doOrderListJSON("/city", &config.City{Workspace: config.Workspace{Name: "bright-lights"}}, aa, &stdout)
+	if code != 0 {
+		t.Fatalf("doOrderListJSON = %d, want 0", code)
+	}
+
+	var got struct {
+		SchemaVersion string `json:"schema_version"`
+		CityName      string `json:"city_name"`
+		Orders        []struct {
+			Name       string `json:"name"`
+			ScopedName string `json:"scoped_name"`
+			Type       string `json:"type"`
+			Target     string `json:"target"`
+			Enabled    bool   `json:"enabled"`
+		} `json:"orders"`
+		Summary struct {
+			Count int `json:"count"`
+		} `json:"summary"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("order list JSON invalid: %v\n%s", err, stdout.String())
+	}
+	if got.SchemaVersion != "1" || got.CityName != "bright-lights" || got.Summary.Count != 2 {
+		t.Fatalf("payload = %+v", got)
+	}
+	if got.Orders[0].Name != "digest" || got.Orders[0].Type != "formula" || got.Orders[0].Target != "dog" || !got.Orders[0].Enabled {
+		t.Fatalf("first order = %+v", got.Orders[0])
+	}
+	if got.Orders[1].ScopedName != "poll:rig:frontend" || got.Orders[1].Type != "exec" {
+		t.Fatalf("second order = %+v", got.Orders[1])
+	}
+}
+
 func TestOrderListExecType(t *testing.T) {
 	aa := []orders.Order{
 		{Name: "poll", Trigger: "cooldown", Interval: "2m", Exec: "scripts/poll.sh"},
@@ -68,6 +129,61 @@ func TestOrderListExecType(t *testing.T) {
 	}
 	if !strings.Contains(out, "formula") {
 		t.Errorf("stdout missing 'formula' type:\n%s", out)
+	}
+}
+
+func TestOrderShowJSON(t *testing.T) {
+	aa := []orders.Order{{
+		Name:         "digest",
+		Description:  "nightly digest",
+		Formula:      "mol-digest",
+		Trigger:      "cron",
+		Schedule:     "0 3 * * *",
+		Pool:         "dog",
+		Source:       "/city/orders/digest.toml",
+		FormulaLayer: "/city/formulas",
+	}}
+
+	var stdout, stderr bytes.Buffer
+	code := doOrderShowJSON("/city", &config.City{Workspace: config.Workspace{Name: "bright-lights"}}, aa, "digest", "", &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("doOrderShowJSON = %d, want 0; stderr=%s", code, stderr.String())
+	}
+
+	var got struct {
+		SchemaVersion string `json:"schema_version"`
+		Order         struct {
+			Name         string `json:"name"`
+			Description  string `json:"description"`
+			Formula      string `json:"formula"`
+			Trigger      string `json:"trigger"`
+			Schedule     string `json:"schedule"`
+			Target       string `json:"target"`
+			FormulaLayer string `json:"formula_layer"`
+		} `json:"order"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("order show JSON invalid: %v\n%s", err, stdout.String())
+	}
+	if got.SchemaVersion != "1" || got.Order.Name != "digest" || got.Order.Target != "dog" || got.Order.FormulaLayer != "/city/formulas" {
+		t.Fatalf("payload = %+v", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestOrderShowJSONMissingOrderKeepsHumanError(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := doOrderShowJSON("/city", nil, nil, "missing", "", &stdout, &stderr)
+	if code == 0 {
+		t.Fatal("doOrderShowJSON missing order = 0, want nonzero")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty before global JSON failure wrapper", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), `order "missing" not found`) {
+		t.Fatalf("stderr = %q, want missing order diagnostic", stderr.String())
 	}
 }
 
@@ -291,14 +407,21 @@ fetched = "2026-04-10T00:00:00Z"
 	if err != nil {
 		t.Fatalf("scanAllOrders: %v", err)
 	}
-	if len(aa) != 1 {
-		t.Fatalf("got %d orders, want 1", len(aa))
+	var imported *orders.Order
+	for i := range aa {
+		if aa[i].Name == "health-check" {
+			imported = &aa[i]
+			break
+		}
 	}
-	if aa[0].Name != "health-check" {
-		t.Fatalf("Name = %q, want %q", aa[0].Name, "health-check")
+	if imported == nil {
+		t.Fatalf("scanAllOrders() missing imported health-check order: %#v", aa)
 	}
-	if aa[0].Source != filepath.Join(cacheDir, "orders", "health-check.order.toml") {
-		t.Fatalf("Source = %q, want %q", aa[0].Source, filepath.Join(cacheDir, "orders", "health-check.order.toml"))
+	if imported.Name != "health-check" {
+		t.Fatalf("Name = %q, want %q", imported.Name, "health-check")
+	}
+	if imported.Source != filepath.Join(cacheDir, "orders", "health-check.order.toml") {
+		t.Fatalf("Source = %q, want %q", imported.Source, filepath.Join(cacheDir, "orders", "health-check.order.toml"))
 	}
 }
 
@@ -461,6 +584,26 @@ func TestOrderCheckNoneDue(t *testing.T) {
 	code := doOrderCheck(aa, now, neverRan, &stdout)
 	if code != 1 {
 		t.Fatalf("doOrderCheck = %d, want 1 (none due)", code)
+	}
+}
+
+func TestOrderCheckJSONNoneDuePreservesSemanticExit(t *testing.T) {
+	aa := []orders.Order{
+		{Name: "deploy", Trigger: "manual", Formula: "mol-deploy"},
+	}
+	now := time.Date(2026, 2, 27, 12, 0, 0, 0, time.UTC)
+	neverRan := func(_ string) (time.Time, error) { return time.Time{}, nil }
+
+	var stdout bytes.Buffer
+	code := doOrderCheckJSON(aa, now, neverRan, true, &stdout, io.Discard)
+	if code != 1 {
+		t.Fatalf("doOrderCheckJSON = %d, want 1 (none due)", code)
+	}
+	got := stdout.String()
+	for _, want := range []string{`"schema_version":"1"`, `"ok":true`, `"any_due":false`, `"orders_total":1`, `"due_total":0`, `"name":"deploy"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout = %q, missing %s", got, want)
+		}
 	}
 }
 
@@ -721,7 +864,48 @@ func TestOrderRun(t *testing.T) {
 	}
 }
 
+func TestOrderRunJSONFormulaSummary(t *testing.T) {
+	aa := []orders.Order{
+		{Name: "digest", Formula: "mol-digest", Trigger: "cooldown", Interval: "24h", Pool: "dog", FormulaLayer: sharedTestFormulaDir},
+	}
+
+	store := beads.NewMemStore()
+
+	var stdout, stderr bytes.Buffer
+	code := doOrderRunWithJSON(aa, "digest", "", "/city", store, nil, true, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("doOrderRunWithJSON = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	got := stdout.String()
+	for _, want := range []string{`"schema_version":"1"`, `"ok":true`, `"order":"digest"`, `"scoped_name":"digest"`, `"action":"formula"`, `"wisp_id":`, `"routed_to":"dog"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout = %q, missing %s", got, want)
+		}
+	}
+}
+
+func TestOrderRunJSONRejectsExecWithoutRunning(t *testing.T) {
+	aa := []orders.Order{
+		{Name: "release-exec", Trigger: "manual", Exec: "printf unsafe"},
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := doOrderRunWithJSON(aa, "release-exec", "", "/city", beads.NewMemStore(), nil, true, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("doOrderRunWithJSON exec = %d, want 1", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty stdout on unsupported exec JSON", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "--json is not supported for exec orders") {
+		t.Fatalf("stderr = %q, want unsupported exec message", stderr.String())
+	}
+}
+
 func TestOrderRunEventExecAdvancesCursor(t *testing.T) {
+	t.Setenv("GC_BEADS", "file")
+	t.Setenv("GC_BEADS_SCOPE_ROOT", "")
+
 	cityDir := t.TempDir()
 	writeFile(t, filepath.Join(cityDir, "city.toml"), `[workspace]
 name = "test-city"
@@ -746,12 +930,15 @@ name = "test-city"
 		t.Fatalf("doOrderRun = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
-	results, err := store.ListByLabel("order-run:release-exec", 0, beads.IncludeClosed)
+	results, err := store.ListByLabel("order-run:release-exec", 0, beads.IncludeClosed, beads.WithBothTiers)
 	if err != nil {
 		t.Fatalf("store.ListByLabel(): %v", err)
 	}
 	if len(results) != 1 {
 		t.Fatalf("store.ListByLabel() len = %d, want 1 (%#v)", len(results), results)
+	}
+	if !results[0].Ephemeral {
+		t.Fatalf("tracking bead Ephemeral = false, want true")
 	}
 	for _, want := range []string{"order:release-exec", fmt.Sprintf("seq:%d", headSeq), "exec"} {
 		if !slicesContain(results[0].Labels, want) {
@@ -798,7 +985,7 @@ on = "bead.closed"
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := cmdOrderRun("release-exec", "", &stdout, &stderr)
+	code := cmdOrderRun("release-exec", "", false, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("cmdOrderRun = %d, want 0; stderr: %s", code, stderr.String())
 	}
@@ -807,12 +994,15 @@ on = "bead.closed"
 	if err != nil {
 		t.Fatalf("openStoreAtForCity(): %v", err)
 	}
-	results, err := store.ListByLabel("order-run:release-exec", 0, beads.IncludeClosed)
+	results, err := store.ListByLabel("order-run:release-exec", 0, beads.IncludeClosed, beads.WithBothTiers)
 	if err != nil {
 		t.Fatalf("store.ListByLabel(): %v", err)
 	}
 	if len(results) != 1 {
 		t.Fatalf("store.ListByLabel() len = %d, want 1 (%#v)", len(results), results)
+	}
+	if !results[0].Ephemeral {
+		t.Fatalf("tracking bead Ephemeral = false, want true")
 	}
 	for _, want := range []string{"order:release-exec", fmt.Sprintf("seq:%d", headSeq), "exec"} {
 		if !slicesContain(results[0].Labels, want) {
@@ -1198,6 +1388,8 @@ func TestOrderRunNotFound(t *testing.T) {
 }
 
 func TestOrderRunExecRigUsesScopedWorkdirAndStoreEnv(t *testing.T) {
+	disableManagedDoltRecoveryForTest(t)
+
 	cityDir := t.TempDir()
 	rigDir := filepath.Join(cityDir, "frontend")
 	if err := os.MkdirAll(rigDir, 0o755); err != nil {
@@ -1439,7 +1631,7 @@ prefix = "ct"
 
 	outPath := filepath.Join(cityDir, "exec-managed-marker.txt")
 	a := orders.Order{
-		Name:     "dolt-gc-nudge",
+		Name:     "dolt-test-cooldown",
 		Trigger:  "cooldown",
 		Interval: "1m",
 		Exec:     fmt.Sprintf(`printf 'managed=<%%s>\nhost=<%%s>\nport=<%%s>\npack_state=<%%s>\ndata=<%%s>\nconfig=<%%s>\nstate=<%%s>\n' "$GC_DOLT_MANAGED_LOCAL" "$GC_DOLT_HOST" "$GC_DOLT_PORT" "$GC_PACK_STATE_DIR" "$GC_DOLT_DATA_DIR" "$GC_DOLT_CONFIG_FILE" "$GC_DOLT_STATE_FILE" > %q`, outPath),
@@ -1467,6 +1659,8 @@ prefix = "ct"
 }
 
 func TestOrderRunExecPropagatesManagedDoltLayout(t *testing.T) {
+	clearGCEnv(t)
+	t.Setenv("GC_DOLT", "skip")
 	cityDir := t.TempDir()
 	dataDir := filepath.Join(t.TempDir(), "managed-dolt")
 	configFile := filepath.Join(cityDir, ".gc", "runtime", "packs", "dolt", "dolt-config.yaml")
@@ -1518,7 +1712,7 @@ prefix = "ct"
 	t.Setenv("GC_DOLT_STATE_FILE", filepath.Join(t.TempDir(), "poison-state.json"))
 	outPath := filepath.Join(cityDir, "exec-managed-layout.txt")
 	a := orders.Order{
-		Name:     "dolt-gc-nudge",
+		Name:     "dolt-test-cooldown",
 		Trigger:  "cooldown",
 		Interval: "1m",
 		Exec:     fmt.Sprintf(`printf 'managed=<%%s>\nport=<%%s>\ndata=<%%s>\nconfig=<%%s>\n' "$GC_DOLT_MANAGED_LOCAL" "$GC_DOLT_PORT" "$GC_DOLT_DATA_DIR" "$GC_DOLT_CONFIG_FILE" > %q`, outPath),
@@ -1568,6 +1762,75 @@ func TestOrderRunExecHonorsOrdersMaxTimeout(t *testing.T) {
 	}
 }
 
+func TestOrderRunExecTrackedLabelsEnvBuildFailure(t *testing.T) {
+	clearAmbientPostgresEnv(t)
+	t.Setenv("GC_BEADS", "bd")
+
+	cityDir := t.TempDir()
+	writePGScopeFixture(t, cityDir, "")
+	if err := os.WriteFile(filepath.Join(cityDir, ".beads", "config.yaml"), []byte(`issue_prefix: city
+gc.endpoint_origin: managed_city
+gc.endpoint_status: verified
+dolt.auto-start: false
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	store := beads.NewMemStore()
+	eventLog := events.NewFake()
+	eventLog.Record(events.Event{Type: events.BeadClosed, Actor: "test"})
+	a := orders.Order{Name: "pg-env", Trigger: "event", On: events.BeadClosed, Exec: "true"}
+
+	var stdout, stderr bytes.Buffer
+	code := doOrderRunExecTracked(a, cityDir, nil, store, eventLog, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("doOrderRunExecTracked = 0, want env failure; stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+
+	all := trackingBeads(t, store, "order-run:pg-env")
+	if len(all) != 1 {
+		t.Fatalf("tracking bead count = %d, want 1", len(all))
+	}
+	if !slicesContain(all[0].Labels, "exec-env-failed") {
+		t.Fatalf("tracking bead labels = %v, want exec-env-failed", all[0].Labels)
+	}
+	if slicesContain(all[0].Labels, "exec-failed") {
+		t.Fatalf("tracking bead labels = %v, want no exec-failed for env-build failure", all[0].Labels)
+	}
+}
+
+func TestOrderRunExecEnvBuildFailureRedactsProcessSecrets(t *testing.T) {
+	clearAmbientPostgresEnv(t)
+	t.Setenv("GC_BEADS", "bd")
+	t.Setenv("GC_ORDER_SECRET", "db.example.test")
+
+	cityDir := t.TempDir()
+	writePGScopeFixture(t, cityDir, "")
+	if err := os.WriteFile(filepath.Join(cityDir, ".beads", "config.yaml"), []byte(`issue_prefix: city
+gc.endpoint_origin: managed_city
+gc.endpoint_status: verified
+dolt.auto-start: false
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := orders.Order{Name: "pg-env", Trigger: "cooldown", Interval: "1m", Exec: "true"}
+	var stdout, stderr bytes.Buffer
+	result := doOrderRunExecResult(a, cityDir, nil, &stdout, &stderr)
+	if result.code == 0 {
+		t.Fatalf("doOrderRunExecResult = 0, want env failure; stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if result.failureLabel != "exec-env-failed" {
+		t.Fatalf("failureLabel = %q, want exec-env-failed", result.failureLabel)
+	}
+	if strings.Contains(stderr.String(), "db.example.test") {
+		t.Fatalf("stderr leaked process secret: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "[redacted]") {
+		t.Fatalf("stderr = %q, want redaction marker", stderr.String())
+	}
+}
+
 // --- gc order history ---
 
 func TestOrderHistory(t *testing.T) {
@@ -1612,6 +1875,39 @@ func TestOrderHistory(t *testing.T) {
 	}
 	if !strings.Contains(out, "WP-99") {
 		t.Errorf("stdout missing 'WP-99':\n%s", out)
+	}
+}
+
+func TestOrderHistoryJSON(t *testing.T) {
+	store := beads.NewBdStore(t.TempDir(), func(_, _ string, args ...string) ([]byte, error) {
+		if strings.Contains(strings.Join(args, " "), "--label=order-run:digest") {
+			return []byte(`[{"id":"WP-42","title":"digest wisp","status":"closed","issue_type":"task","created_at":"2026-02-27T10:00:00Z","labels":["order-run:digest"]}]`), nil
+		}
+		return []byte(`[]`), nil
+	})
+	aa := []orders.Order{{Name: "digest", Formula: "mol-digest"}}
+	resolver := func(orders.Order) ([]beads.Store, error) {
+		return []beads.Store{store}, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := doOrderHistoryWithStoresResolverJSON("digest", "", aa, resolver, true, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("doOrderHistoryWithStoresResolverJSON = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	lines := strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("stdout lines = %d, want 1: %q", len(lines), stdout.String())
+	}
+	var payload orderHistoryJSONResult
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout.String())
+	}
+	if payload.SchemaVersion != "1" || !payload.OK || payload.Summary.Total != 1 {
+		t.Fatalf("payload = %+v, want ok schema v1 with one entry", payload)
+	}
+	if len(payload.Entries) != 1 || payload.Entries[0].Order != "digest" || payload.Entries[0].BeadID != "WP-42" {
+		t.Fatalf("entries = %+v, want digest WP-42", payload.Entries)
 	}
 }
 
@@ -1774,6 +2070,25 @@ func TestOrderHistoryWithStoresResolverFailsUnreadablePrimaryStore(t *testing.T)
 	}
 	if !strings.Contains(stderr.String(), "list failed") {
 		t.Fatalf("stderr missing primary list error:\n%s", stderr.String())
+	}
+}
+
+func TestBdCursorUsesRowsFromPartialTierError(t *testing.T) {
+	store := &partialListStore{
+		Store: beads.NewMemStore(),
+		rows: []beads.Bead{{
+			ID:     "cursor-1",
+			Labels: []string{"order:digest", "seq:42"},
+		}},
+		err: fmt.Errorf("wisps tier unavailable"),
+	}
+
+	got, err := bdCursor(store, "digest")
+	if err != nil {
+		t.Fatalf("bdCursor: %v", err)
+	}
+	if got != 42 {
+		t.Fatalf("bdCursor() = %d, want 42 from surviving rows", got)
 	}
 }
 

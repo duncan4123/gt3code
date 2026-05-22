@@ -2,7 +2,7 @@ package main
 
 import "testing"
 
-func TestStartupEnvelopeModel_PrefersResolvedEnvModel(t *testing.T) {
+func TestT3BridgeStartupEnvelopeModel_PrefersResolvedEnvModel(t *testing.T) {
 	tp := TemplateParams{
 		Env: map[string]string{
 			"GC_PROVIDER": "codex",
@@ -10,12 +10,12 @@ func TestStartupEnvelopeModel_PrefersResolvedEnvModel(t *testing.T) {
 		},
 	}
 
-	if got := startupEnvelopeModel(tp); got != "gpt-5.4-mini" {
-		t.Fatalf("startupEnvelopeModel() = %q, want gpt-5.4-mini", got)
+	if got := t3BridgeStartupEnvelopeModel(tp.Env["GC_PROVIDER"], tp); got != "gpt-5-codex" {
+		t.Fatalf("startupEnvelopeModel() = %q, want gpt-5-codex", got)
 	}
 }
 
-func TestStartupEnvelopeModel_UsesCurrentProviderDefaults(t *testing.T) {
+func TestT3BridgeStartupEnvelopeModel_UsesCurrentProviderDefaults(t *testing.T) {
 	tests := []struct {
 		name string
 		tp   TemplateParams
@@ -24,23 +24,23 @@ func TestStartupEnvelopeModel_UsesCurrentProviderDefaults(t *testing.T) {
 		{
 			name: "codex",
 			tp:   TemplateParams{Env: map[string]string{"GC_PROVIDER": "codex"}},
-			want: "gpt-5.4",
+			want: "gpt-5-codex",
 		},
 		{
 			name: "codex-mini",
 			tp:   TemplateParams{Env: map[string]string{"GC_PROVIDER": "codex-mini"}},
-			want: "gpt-5.4-mini",
+			want: "claude-opus-4-6",
 		},
 		{
 			name: "claude",
 			tp:   TemplateParams{Env: map[string]string{"GC_PROVIDER": "claude"}},
-			want: "claude-sonnet-4-6",
+			want: "claude-opus-4-6",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := startupEnvelopeModel(tt.tp); got != tt.want {
+			if got := t3BridgeStartupEnvelopeModel(tt.tp.Env["GC_PROVIDER"], tt.tp); got != tt.want {
 				t.Fatalf("startupEnvelopeModel() = %q, want %q", got, tt.want)
 			}
 		})
@@ -108,7 +108,7 @@ func TestTemplateParamsToConfigDoesNotInjectGCAliasForNonT3Provider(t *testing.T
 	}
 }
 
-func TestBuildStartupEnvelopeOnlyForT3Provider(t *testing.T) {
+func TestBuildT3BridgeStartupEnvelopeOnlyForT3Provider(t *testing.T) {
 	nonT3 := TemplateParams{
 		Command:                  "codex",
 		TemplateName:             "deacon",
@@ -119,13 +119,13 @@ func TestBuildStartupEnvelopeOnlyForT3Provider(t *testing.T) {
 			"GC_PROVIDER":  "codex",
 		},
 	}
-	if got := buildStartupEnvelope(nonT3, "prompt"); got != nil {
-		t.Fatalf("buildStartupEnvelope(nonT3) = %q, want nil", string(got))
+	if got := buildT3BridgeStartupEnvelope(nonT3, "prompt"); got != nil {
+		t.Fatalf("buildT3BridgeStartupEnvelope(nonT3) = %q, want nil", string(got))
 	}
 
 	t3 := nonT3
 	t3.EffectiveSessionProvider = "t3bridge"
-	if got := buildStartupEnvelope(t3, "prompt"); len(got) == 0 {
-		t.Fatal("buildStartupEnvelope(t3) = empty, want envelope")
+	if got := buildT3BridgeStartupEnvelope(t3, "prompt"); len(got) == 0 {
+		t.Fatal("buildT3BridgeStartupEnvelope(t3) = empty, want envelope")
 	}
 }

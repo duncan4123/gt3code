@@ -32,6 +32,7 @@ func withSupervisorTestHooks(t *testing.T, ensure func(stdout, stderr io.Writer)
 	oldRunning := supervisorCityRunningHook
 	oldError := supervisorCityErrorHook
 	oldWaitForStop := waitForSupervisorControllerStopHook
+	oldWaitForCity := waitForSupervisorCityHook
 	oldRegister := registerCityWithSupervisorTestHook
 	oldTimeout := supervisorCityReadyTimeout
 	oldPoll := supervisorCityPollInterval
@@ -42,6 +43,7 @@ func withSupervisorTestHooks(t *testing.T, ensure func(stdout, stderr io.Writer)
 	supervisorCityRunningHook = running
 	supervisorCityErrorHook = supervisorCityError
 	waitForSupervisorControllerStopHook = waitForStandaloneControllerStop
+	waitForSupervisorCityHook = waitForSupervisorCity
 	registerCityWithSupervisorTestHook = nil
 	supervisorCityReadyTimeout = timeout
 	supervisorCityPollInterval = poll
@@ -53,6 +55,7 @@ func withSupervisorTestHooks(t *testing.T, ensure func(stdout, stderr io.Writer)
 		supervisorCityRunningHook = oldRunning
 		supervisorCityErrorHook = oldError
 		waitForSupervisorControllerStopHook = oldWaitForStop
+		waitForSupervisorCityHook = oldWaitForCity
 		registerCityWithSupervisorTestHook = oldRegister
 		supervisorCityReadyTimeout = oldTimeout
 		supervisorCityPollInterval = oldPoll
@@ -314,7 +317,18 @@ func TestRegisterCityWithSupervisorFailsFastWhenSupervisorStopsDuringWait(t *tes
 	if waitStarted.IsZero() {
 		t.Fatal("supervisor wait path was not reached")
 	}
-	if elapsed := time.Since(waitStarted); elapsed > 250*time.Millisecond {
+	// The fast-failure budget is intentionally generous (well under the test's
+	// 5s startup_timeout but well above the wait-loop's logical exit time).
+	// waitStarted is captured inside the first alive-hook callback, so the
+	// elapsed window measures everything from that point onward: the
+	// remaining ensureLegacyNamedPacksCached / MaterializeBuiltinPacks work,
+	// the wait-loop's first iteration, the error formatting, the
+	// keepRegisteredCity stderr writes, and the assertion itself. Under CPU
+	// contention or a GC pause these can balloon to several hundred ms on
+	// CI hosts (ga-q42 flake observations: up to 715ms). 2s preserves the
+	// "fails fast vs. polls until 5s startup_timeout" regression guard while
+	// no longer flaking on slow hosts.
+	if elapsed := time.Since(waitStarted); elapsed > 2*time.Second {
 		t.Fatalf("registerCityWithSupervisor took %v, want fast failure when supervisor stops", elapsed)
 	}
 	if !strings.Contains(stderr.String(), "keeping registration") {
@@ -515,6 +529,37 @@ func TestLoadStartCityConfigMaterializesBuiltinPackImportsBeforeLoad(t *testing.
 	}
 	if _, err := os.Stat(filepath.Join(cityPath, citylayout.SystemPacksRoot, "gastown", "pack.toml")); err != nil {
 		t.Fatalf("expected gastown builtin pack to be materialized before start config load: %v", err)
+	}
+}
+
+func TestLoadStartCityConfigBuiltinGastownMayorHasNoStartupNudge(t *testing.T) {
+	cityPath := writeCityWithUnmaterializedGastownImport(t)
+
+	cfg, _, err := loadStartCityConfig(cityPath)
+	if err != nil {
+		t.Fatalf("loadStartCityConfig returned error: %v", err)
+	}
+
+	var mayor *config.Agent
+	for i := range cfg.Agents {
+		if cfg.Agents[i].Name == "mayor" {
+			mayor = &cfg.Agents[i]
+			break
+		}
+	}
+	if mayor == nil {
+		t.Fatal("expected builtin gastown mayor agent to be present")
+	}
+	if mayor.Nudge != "" {
+		t.Fatalf("builtin gastown mayor nudge = %q, want empty for always-on resident coordinator", mayor.Nudge)
+	}
+
+	data, err := os.ReadFile(filepath.Join(cityPath, citylayout.SystemPacksRoot, "gastown", "agents", "mayor", "agent.toml"))
+	if err != nil {
+		t.Fatalf("read materialized mayor agent.toml: %v", err)
+	}
+	if strings.Contains(string(data), "nudge =") {
+		t.Fatalf("materialized builtin mayor agent.toml should not contain a startup nudge:\n%s", string(data))
 	}
 }
 
@@ -940,7 +985,7 @@ func TestUnregisterCityFromSupervisorRestoresRegistrationOnReloadFailure(t *test
 	)
 
 	var stdout, stderr bytes.Buffer
-	handled, code := unregisterCityFromSupervisor(cityPath, &stdout, &stderr, "gc unregister")
+	handled, code := unregisterCityFromSupervisor(cityPath, &stdout, &stderr)
 	if !handled || code != 1 {
 		t.Fatalf("unregisterCityFromSupervisor = (%t, %d), want (true, 1)", handled, code)
 	}
@@ -996,7 +1041,7 @@ func TestUnregisterCityFromSupervisorWaitsForControllerStop(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	handled, code := unregisterCityFromSupervisor(cityPath, &stdout, &stderr, "gc unregister")
+	handled, code := unregisterCityFromSupervisor(cityPath, &stdout, &stderr)
 	if !handled || code != 0 {
 		t.Fatalf("unregisterCityFromSupervisor = (%t, %d), want (true, 0)", handled, code)
 	}
@@ -1005,6 +1050,148 @@ func TestUnregisterCityFromSupervisorWaitsForControllerStop(t *testing.T) {
 	}
 	if waitedTimeout != supervisorCityStopTimeout(cityPath) {
 		t.Fatalf("wait timeout = %s, want %s", waitedTimeout, supervisorCityStopTimeout(cityPath))
+	}
+}
+
+func TestUnregisterCityFromSupervisorUsesStopTimeoutForSupervisorCityStopWait(t *testing.T) {
+	gcHome := t.TempDir()
+	t.Setenv("GC_HOME", gcHome)
+
+	cityPath := filepath.Join(t.TempDir(), "bright-lights")
+	if err := os.MkdirAll(cityPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte(`
+[workspace]
+name = "bright-lights"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reg := supervisor.NewRegistry(supervisor.RegistryPath())
+	if err := reg.Register(cityPath, "bright-lights"); err != nil {
+		t.Fatal(err)
+	}
+
+	withSupervisorTestHooks(
+		t,
+		func(_, _ io.Writer) int { return 0 },
+		func(_, _ io.Writer) int { return 0 },
+		func() int { return 4242 },
+		func(string) (bool, string, bool) { return false, "", false },
+		20*time.Millisecond,
+		time.Millisecond,
+	)
+
+	var waitedPath string
+	var waitedWantRunning bool
+	var waitedTimeout time.Duration
+	waitForSupervisorCityHook = func(path string, wantRunning bool, timeout time.Duration, _ io.Writer) error {
+		waitedPath = path
+		waitedWantRunning = wantRunning
+		waitedTimeout = timeout
+		return nil
+	}
+	waitForSupervisorControllerStopHook = func(string, time.Duration) error {
+		return nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	handled, code := unregisterCityFromSupervisor(cityPath, &stdout, &stderr)
+	if !handled || code != 0 {
+		t.Fatalf("unregisterCityFromSupervisor = (%t, %d), want (true, 0); stderr=%q", handled, code, stderr.String())
+	}
+	if canonicalTestPath(waitedPath) != canonicalTestPath(cityPath) {
+		t.Fatalf("waited for %q, want %q", waitedPath, cityPath)
+	}
+	if waitedWantRunning {
+		t.Fatalf("waitForSupervisorCityHook wantRunning = true, want false")
+	}
+	if waitedTimeout != supervisorCityStopTimeout(cityPath) {
+		t.Fatalf("wait timeout = %s, want %s", waitedTimeout, supervisorCityStopTimeout(cityPath))
+	}
+}
+
+func TestUnregisterCityFromSupervisorWithForceSendsForceStop(t *testing.T) {
+	gcHome := t.TempDir()
+	t.Setenv("GC_HOME", gcHome)
+
+	cityPath := filepath.Join(t.TempDir(), "force-city")
+	if err := os.MkdirAll(filepath.Join(cityPath, ".gc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte("[workspace]\nname = \"force-city\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reg := supervisor.NewRegistry(supervisor.RegistryPath())
+	if err := reg.Register(cityPath, "force-city"); err != nil {
+		t.Fatal(err)
+	}
+
+	sockPath := controllerSocketPath(cityPath)
+	if err := os.MkdirAll(filepath.Dir(sockPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lis, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lis.Close()         //nolint:errcheck
+	defer os.Remove(sockPath) //nolint:errcheck
+
+	type observedForceCommand struct {
+		command                 string
+		registeredBeforeCommand bool
+	}
+	commands := make(chan observedForceCommand, 1)
+	go func() {
+		conn, acceptErr := lis.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close() //nolint:errcheck
+		buf := make([]byte, 64)
+		n, _ := conn.Read(buf)
+		entries, listErr := reg.List()
+		if listErr != nil {
+			commands <- observedForceCommand{command: "list-error:" + listErr.Error()}
+		} else {
+			commands <- observedForceCommand{
+				command:                 strings.TrimSpace(string(buf[:n])),
+				registeredBeforeCommand: len(entries) == 1 && samePath(entries[0].Path, cityPath),
+			}
+		}
+		conn.Write([]byte("ok\n")) //nolint:errcheck
+	}()
+
+	withSupervisorTestHooks(
+		t,
+		func(_, _ io.Writer) int { return 0 },
+		func(_, _ io.Writer) int { return 0 },
+		func() int { return 4242 },
+		func(string) (bool, string, bool) { return false, "", false },
+		20*time.Millisecond,
+		time.Millisecond,
+	)
+	waitForSupervisorControllerStopHook = func(string, time.Duration) error { return nil }
+
+	var stdout, stderr bytes.Buffer
+	handled, code := unregisterCityFromSupervisorWithForce(cityPath, &stdout, &stderr, "gc stop", true)
+	if !handled || code != 0 {
+		t.Fatalf("unregisterCityFromSupervisorWithForce = (%t, %d), want (true, 0); stderr=%q", handled, code, stderr.String())
+	}
+
+	select {
+	case got := <-commands:
+		if got.command != "stop-force" {
+			t.Fatalf("controller command = %q, want stop-force", got.command)
+		}
+		if !got.registeredBeforeCommand {
+			t.Fatal("force stop reached controller after supervisor registry entry was removed")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for force controller command")
 	}
 }
 
@@ -1053,7 +1240,7 @@ func TestUnregisterCityFromSupervisorSkipsProbesWhenCityDirMissing(t *testing.T)
 	}
 
 	var stdout, stderr bytes.Buffer
-	handled, code := unregisterCityFromSupervisor(cityPath, &stdout, &stderr, "gc unregister")
+	handled, code := unregisterCityFromSupervisor(cityPath, &stdout, &stderr)
 	if !handled || code != 0 {
 		t.Fatalf("unregisterCityFromSupervisor = (%t, %d), want (true, 0)", handled, code)
 	}
@@ -1118,7 +1305,7 @@ func TestUnregisterCityFromSupervisorReturnsReloadFailureWhenCityDirMissing(t *t
 	}
 
 	var stdout, stderr bytes.Buffer
-	handled, code := unregisterCityFromSupervisor(cityPath, &stdout, &stderr, "gc unregister")
+	handled, code := unregisterCityFromSupervisor(cityPath, &stdout, &stderr)
 	if !handled || code != 1 {
 		t.Fatalf("unregisterCityFromSupervisor = (%t, %d), want (true, 1)", handled, code)
 	}
@@ -1344,7 +1531,7 @@ func TestUnregisterCityFromSupervisorRestoresRegistrationWhenControllerStopWaitF
 	}
 
 	var stdout, stderr bytes.Buffer
-	handled, code := unregisterCityFromSupervisor(cityPath, &stdout, &stderr, "gc unregister")
+	handled, code := unregisterCityFromSupervisor(cityPath, &stdout, &stderr)
 	if !handled || code != 1 {
 		t.Fatalf("unregisterCityFromSupervisor = (%t, %d), want (true, 1)", handled, code)
 	}
@@ -1480,7 +1667,7 @@ func TestCmdStopSupervisorManagedCityReliesOnSupervisorCleanup(t *testing.T) {
 	}()
 
 	var stdout, stderr bytes.Buffer
-	code := cmdStop([]string{cityPath}, &stdout, &stderr)
+	code := cmdStop([]string{cityPath}, &stdout, &stderr, 0, false)
 	if code != 0 {
 		t.Fatalf("cmdStop code = %d, want 0: %s", code, stderr.String())
 	}
@@ -1969,6 +2156,169 @@ func TestPublishManagedCityWaitsForInitialReconcileBeforeRunning(t *testing.T) {
 			t.Fatalf("initFailures[%s] still present after publish", cityPath)
 		}
 	})
+}
+
+func TestSupervisorCityStartTimeoutHonorsDaemonStartReadyTimeout(t *testing.T) {
+	cityPath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte(`
+[workspace]
+name = "big-city"
+
+[daemon]
+start_ready_timeout = "9m"
+
+[[agent]]
+name = "mayor"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldTimeout := supervisorCityReadyTimeout
+	supervisorCityReadyTimeout = 60 * time.Second
+	t.Cleanup(func() { supervisorCityReadyTimeout = oldTimeout })
+
+	got := supervisorCityStartTimeout(cityPath)
+	if got != 9*time.Minute {
+		t.Errorf("supervisorCityStartTimeout = %v, want 9m (daemon.start_ready_timeout override)", got)
+	}
+}
+
+func TestSupervisorCityStartTimeoutSessionTimeoutCanExtend(t *testing.T) {
+	cityPath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte(`
+[workspace]
+name = "patient-city"
+
+[session]
+startup_timeout = "12m"
+
+[[agent]]
+name = "mayor"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldTimeout := supervisorCityReadyTimeout
+	supervisorCityReadyTimeout = 60 * time.Second
+	t.Cleanup(func() { supervisorCityReadyTimeout = oldTimeout })
+
+	got := supervisorCityStartTimeout(cityPath)
+	if got != 12*time.Minute {
+		t.Errorf("supervisorCityStartTimeout = %v, want 12m (session.startup_timeout override)", got)
+	}
+}
+
+func TestSupervisorCityStartTimeoutHonorsExplicitDaemonTimeoutBelowPackageDefault(t *testing.T) {
+	cityPath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte(`
+[workspace]
+name = "small-ci-city"
+
+[daemon]
+start_ready_timeout = "30s"
+
+[session]
+startup_timeout = "1s"
+
+[[agent]]
+name = "worker"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldTimeout := supervisorCityReadyTimeout
+	supervisorCityReadyTimeout = 5 * time.Minute
+	t.Cleanup(func() { supervisorCityReadyTimeout = oldTimeout })
+
+	got := supervisorCityStartTimeout(cityPath)
+	if got != 30*time.Second {
+		t.Errorf("supervisorCityStartTimeout = %v, want 30s (explicit daemon.start_ready_timeout)", got)
+	}
+}
+
+func TestSupervisorCityStartTimeoutSessionTimeoutExtendsDaemonTimeout(t *testing.T) {
+	cityPath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte(`
+[workspace]
+name = "patient-big-city"
+
+[daemon]
+start_ready_timeout = "6m"
+
+[session]
+startup_timeout = "12m"
+
+[[agent]]
+name = "worker"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldTimeout := supervisorCityReadyTimeout
+	supervisorCityReadyTimeout = 60 * time.Second
+	t.Cleanup(func() { supervisorCityReadyTimeout = oldTimeout })
+
+	got := supervisorCityStartTimeout(cityPath)
+	if got != 12*time.Minute {
+		t.Errorf("supervisorCityStartTimeout = %v, want 12m (session.startup_timeout extends daemon.start_ready_timeout)", got)
+	}
+}
+
+func TestSupervisorCityStartTimeoutWithoutExplicitKnobUsesPackageDefault(t *testing.T) {
+	cityPath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte(`
+[workspace]
+name = "default-city"
+
+[session]
+startup_timeout = "1s"
+
+[[agent]]
+name = "mayor"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldTimeout := supervisorCityReadyTimeout
+	supervisorCityReadyTimeout = 4 * time.Minute
+	t.Cleanup(func() { supervisorCityReadyTimeout = oldTimeout })
+
+	got := supervisorCityStartTimeout(cityPath)
+	if got != 4*time.Minute {
+		t.Errorf("supervisorCityStartTimeout = %v, want 4m (package default, no daemon override)", got)
+	}
+}
+
+func TestSupervisorCityStopTimeoutUsesStopFloorIndependentOfStartReadyDefault(t *testing.T) {
+	cityPath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte(`
+[workspace]
+name = "stop-city"
+
+[[agent]]
+name = "worker"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldTimeout := supervisorCityReadyTimeout
+	supervisorCityReadyTimeout = 5 * time.Minute
+	t.Cleanup(func() { supervisorCityReadyTimeout = oldTimeout })
+
+	got := supervisorCityStopTimeout(cityPath)
+	if got != supervisorCityStopTimeoutFloor {
+		t.Errorf("supervisorCityStopTimeout = %v, want stop floor %v", got, supervisorCityStopTimeoutFloor)
+	}
+}
+
+func TestSupervisorCityReadyTimeoutDefaultMatchesConfigDefault(t *testing.T) {
+	// The package-level default must track config.DefaultStartReadyTimeout
+	// so production cities get the configured budget when no explicit
+	// override is set.
+	if supervisorCityReadyTimeout != config.DefaultStartReadyTimeout {
+		t.Errorf("supervisorCityReadyTimeout = %v, want %v (config.DefaultStartReadyTimeout)",
+			supervisorCityReadyTimeout, config.DefaultStartReadyTimeout)
+	}
 }
 
 func TestStartupSessionComputationsDoNotQueryBeadStore(t *testing.T) {

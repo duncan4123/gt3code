@@ -1,6 +1,8 @@
-# GitHub Copilot Integration Guide
+# GitHub Copilot VS Code MCP Integration Guide
 
-This guide explains how to use beads with GitHub Copilot in VS Code.
+This guide explains how to use beads with GitHub Copilot in **VS Code via MCP**.
+
+For the **GitHub Copilot CLI** integration installed by `bd setup copilot`, see [COPILOT_CLI_INTEGRATION.md](COPILOT_CLI_INTEGRATION.md).
 
 ## Overview
 
@@ -46,11 +48,11 @@ Create or edit `.vscode/mcp.json` in your project:
 
 **For all projects:** Add to VS Code user-level MCP config:
 
-| Platform | Path                                               |
-| -------- | -------------------------------------------------- |
-| macOS    | `~/Library/Application Support/Code/User/mcp.json` |
-| Linux    | `~/.config/Code/User/mcp.json`                     |
-| Windows  | `%APPDATA%\Code\User\mcp.json`                     |
+| Platform | Path |
+|----------|------|
+| macOS | `~/Library/Application Support/Code/User/mcp.json` |
+| Linux | `~/.config/Code/User/mcp.json` |
+| Windows | `%APPDATA%\Code\User\mcp.json` |
 
 ```json
 {
@@ -83,7 +85,6 @@ This project uses **bd (beads)** for issue tracking.
 Run `bd prime` for workflow context.
 
 **Quick reference:**
-
 - `bd ready` - Find unblocked work
 - `bd create "Title" --type task --priority 2` - Create issue
 - `bd close <id>` - Complete work
@@ -100,27 +101,27 @@ Reload the VS Code window for MCP configuration to take effect.
 
 With MCP configured, ask Copilot Chat:
 
-| You say                              | Copilot does                       |
-| ------------------------------------ | ---------------------------------- |
-| "What issues are ready to work on?"  | Calls `beads_ready`                |
+| You say | Copilot does |
+|---------|--------------|
+| "What issues are ready to work on?" | Calls `beads_ready` |
 | "Create a bug for the login timeout" | Calls `beads_create` with type=bug |
-| "Show me issue bd-42"                | Calls `beads_show`                 |
-| "Mark bd-42 as complete"             | Calls `beads_close`                |
-| "What's blocking bd-15?"             | Calls `beads_dep_tree`             |
+| "Show me issue bd-42" | Calls `beads_show` |
+| "Mark bd-42 as complete" | Calls `beads_close` |
+| "What's blocking bd-15?" | Calls `beads_dep_tree` |
 
 ### MCP Tools Reference
 
-| Tool              | Description              | Example                         |
-| ----------------- | ------------------------ | ------------------------------- |
-| `beads_ready`     | List unblocked issues    | "What can I work on?"           |
-| `beads_list`      | List issues with filters | "Show all open bugs"            |
-| `beads_create`    | Create new issue         | "Create a task for refactoring" |
-| `beads_show`      | Show issue details       | "Show bd-42 details"            |
-| `beads_update`    | Update issue fields      | "Set bd-42 to in progress"      |
-| `beads_close`     | Close an issue           | "Complete bd-42"                |
-| `beads_dolt_push` | Push changes to remote   | "Push my changes"               |
-| `beads_dep_add`   | Add dependency           | "bd-99 blocks bd-42"            |
-| `beads_dep_tree`  | Show dependency tree     | "What depends on bd-42?"        |
+| Tool | Description | Example |
+|------|-------------|---------|
+| `beads_ready` | List unblocked issues | "What can I work on?" |
+| `beads_list` | List issues with filters | "Show all open bugs" |
+| `beads_create` | Create new issue | "Create a task for refactoring" |
+| `beads_show` | Show issue details | "Show bd-42 details" |
+| `beads_update` | Update issue fields | "Set bd-42 to in progress" |
+| `beads_close` | Close an issue | "Complete bd-42" |
+| `beads_dolt_push` | Push changes to remote | "Push my changes" |
+| `beads_dep_add` | Add dependency | "bd-99 blocks bd-42" |
+| `beads_dep_tree` | Show dependency tree | "What depends on bd-42?" |
 
 ### Example Workflow
 
@@ -160,10 +161,10 @@ Pushed: 2 issues updated, synced to Dolt remote.
 
 ## CLI vs MCP: When to Use Each
 
-| Approach               | Best For                    | Trade-offs                |
-| ---------------------- | --------------------------- | ------------------------- |
-| **MCP (Copilot Chat)** | Natural language, discovery | Higher token overhead     |
-| **CLI (Terminal)**     | Scripting, precision, speed | Requires terminal context |
+| Approach | Best For | Trade-offs |
+|----------|----------|------------|
+| **MCP (Copilot Chat)** | Natural language, discovery | Higher token overhead |
+| **CLI (Terminal)** | Scripting, precision, speed | Requires terminal context |
 
 You can use both! MCP for conversational work, CLI for quick commands.
 
@@ -228,7 +229,6 @@ For Copilot Enterprise, your organization must enable "MCP servers in Copilot" p
 ### What are the git hooks and are they safe?
 
 When you run `bd init`, beads can install git hooks that:
-
 - **post-merge**: Import issues when you pull
 - **pre-push**: Sync issues before you push
 
@@ -237,7 +237,6 @@ These hooks are safe—they only read/write the `.beads/` directory and never mo
 ### Can I use beads without Copilot?
 
 Yes! Beads works with:
-
 - Terminal (direct CLI)
 - Claude Code
 - Cursor
@@ -254,7 +253,6 @@ Both approaches work with the same database—use whichever fits your workflow.
 ### Does this work with Copilot in other editors?
 
 This guide is for VS Code. For other editors:
-
 - **JetBrains IDEs**: Check if MCP is supported, config may differ
 - **Neovim**: Use CLI integration instead
 

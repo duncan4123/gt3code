@@ -89,7 +89,7 @@ func BuildIssueFilterClausesWithDialect(query string, filter types.IssueFilter, 
 	}
 
 	if filter.IssueType != nil {
-		whereClauses = append(whereClauses, fmt.Sprintf("id IN (SELECT id FROM %s WHERE issue_type = ?)", tables.Main))
+		whereClauses = append(whereClauses, "issue_type = ?")
 		args = append(args, *filter.IssueType)
 	}
 	if len(filter.ExcludeTypes) > 0 {
@@ -138,7 +138,7 @@ func BuildIssueFilterClausesWithDialect(query string, filter types.IssueFilter, 
 
 	if filter.ParentID != nil {
 		parentID := *filter.ParentID
-		whereClauses = append(whereClauses, fmt.Sprintf("(id IN (SELECT issue_id FROM %s WHERE type = 'parent-child' AND depends_on_id = ?) OR (id LIKE CONCAT(?, '.%%') AND id NOT IN (SELECT issue_id FROM %s WHERE type = 'parent-child')))", tables.Dependencies, tables.Dependencies))
+		whereClauses = append(whereClauses, fmt.Sprintf("(id IN (SELECT issue_id FROM %s WHERE type = 'parent-child' AND %s = ?) OR (id LIKE CONCAT(?, '.%%') AND id NOT IN (SELECT issue_id FROM %s WHERE type = 'parent-child')))", tables.Dependencies, DepTargetExpr, tables.Dependencies))
 		args = append(args, parentID, parentID)
 	}
 	if filter.NoParent {
@@ -263,7 +263,8 @@ func BuildIssueFilterClausesWithDialect(query string, filter types.IssueFilter, 
 	}
 
 	if filter.Deferred {
-		whereClauses = append(whereClauses, "defer_until IS NOT NULL")
+		whereClauses = append(whereClauses, "(defer_until IS NOT NULL OR status = ?)")
+		args = append(args, types.StatusDeferred)
 	}
 	if filter.Overdue {
 		whereClauses = append(whereClauses, "due_at IS NOT NULL AND due_at < ? AND status != ?")

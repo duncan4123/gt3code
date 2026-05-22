@@ -1,14 +1,13 @@
 // session_reconcile.go contains pure functions for the bead-driven session
 // reconciler. Functions in this file assume single-threaded execution
 // within one reconciler tick, with one intentional exception:
-// computeWorkSet parallelizes its per-agent scale_check runner calls
-// under a bounded semaphore (see bdProbeConcurrency in pool.go) so bd
-// subprocess latency doesn't serialize the whole cycle. Any ScaleCheckRunner
-// passed to computeWorkSet must therefore be safe to invoke from multiple
-// goroutines concurrently — shellScaleCheck (the production implementation)
-// is safe because it only reads its arguments and spawns an independent
-// subprocess. Map mutations on beads.Bead.Metadata are visible to callers
-// by design (maps are reference types).
+// computeWorkSet is the legacy controller-side work_query helper. It
+// parallelizes runner calls under a bounded semaphore (see bdProbeConcurrency
+// in pool.go), so any ScaleCheckRunner passed to it must be safe to invoke
+// from multiple goroutines concurrently. shellScaleCheck is safe because it
+// only reads its arguments and spawns an independent subprocess. Map mutations
+// on beads.Bead.Metadata are visible to callers by design (maps are reference
+// types).
 package main
 
 import (
@@ -34,7 +33,10 @@ type wakeEvaluation struct {
 	Reason           string
 	Policy           resolvedSessionSleepPolicy
 	ConfigSuppressed bool
+	HasAssignedWork  bool
 }
+
+const sleepReasonRuntimeMissing = "runtime-missing"
 
 // Deprecated: evaluateWakeReasons and wakeReasons are legacy functions
 // superseded by ComputeAwakeSet (compute_awake_set.go). The production
@@ -385,17 +387,16 @@ func hasDependencyWakeRoot(reasons []WakeReason) bool {
 		containsWakeReason(reasons, WakePin)
 }
 
-// computeWorkSet runs each agent's work_query command and returns the set
-// of template names that have pending work. Called once per reconciler tick.
-// Controller-side queries run from the canonical city/rig root so pack
-// commands continue to operate on the real repo even when agent sessions use
-// isolated work_dir sandboxes. Non-empty output means work exists. Agents
-// without a work_query produce no WakeWork reason.
+// computeWorkSet runs legacy controller-side work_query commands and returns
+// the set of template names that have pending work. The current CityRuntime
+// demand snapshot keeps WorkSet empty and uses assigned-work scans plus
+// scale_check for controller wake demand; keep this helper suspension-aware
+// until the legacy WakeWork fallback is removed. Controller-side queries run
+// from the canonical city/rig root so pack commands continue to operate on the
+// real repo even when agent sessions use isolated work_dir sandboxes. Non-empty
+// output means work exists. Agents without a work_query produce no WakeWork
+// reason.
 func computeWorkSet(cfg *config.City, runner ScaleCheckRunner, cityName, cityDir string, store beads.Store, sessionBeads *sessionBeadSnapshot, stderr io.Writer) map[string]bool { //nolint:unparam // cityName varies at runtime; tests use a fixed value
-	return computeWorkSetWithStores(cfg, runner, cityName, cityDir, store, nil, sessionBeads, stderr)
-}
-
-func computeWorkSetWithStores(cfg *config.City, runner ScaleCheckRunner, cityName, cityDir string, store beads.Store, rigStores map[string]beads.Store, sessionBeads *sessionBeadSnapshot, stderr io.Writer) map[string]bool { //nolint:unparam // cityName varies at runtime; tests use a fixed value
 	if cfg == nil || runner == nil {
 		return nil
 	}
@@ -420,17 +421,14 @@ func computeWorkSetWithStores(cfg *config.City, runner ScaleCheckRunner, cityNam
 			continue
 		}
 		seen[qn] = true
-		queryStore := workQueryStoreForAgent(cityDir, cfg, a, store, rigStores)
-		if strings.TrimSpace(a.WorkQuery) == "" {
-			ok, handled := defaultWorkQueryHasReadyWork(cfg, cityDir, cityName, queryStore, sessionBeads, a)
-			if handled {
-				if ok {
-					work[qn] = true
-				}
-				continue
-			}
+		if isAgentEffectivelySuspended(cfg, a) {
+			continue
 		}
-		probeEnv := controllerQueryRuntimeEnv(cityDir, cfg, a)
+		probeEnv, err := controllerQueryRuntimeEnv(cityDir, cfg, a)
+		if err != nil {
+			fmt.Fprintf(stderr, "session reconcile: building probe env for %s: %v\n", qn, err) //nolint:errcheck
+			continue
+		}
 		wq := prefixedWorkQueryForProbeWithEnv(controllerQueryPrefixEnv(probeEnv), cfg, cityDir, cityName, store, sessionBeads, a, stderr)
 		if wq == "" {
 			continue
@@ -464,96 +462,6 @@ func computeWorkSetWithStores(cfg *config.City, runner ScaleCheckRunner, cityNam
 		}
 	}
 	return work
-}
-
-type defaultWorkQueryStore interface {
-	DefaultWorkQueryHasReadyWork(targets []string, identities []string, includeRouted bool) (bool, error)
-}
-
-func workQueryStoreForAgent(cityPath string, cfg *config.City, a *config.Agent, cityStore beads.Store, rigStores map[string]beads.Store) beads.Store {
-	if cfg == nil || a == nil {
-		return cityStore
-	}
-	if rigName := configuredRigName(cityPath, a, cfg.Rigs); rigName != "" {
-		if rigStore := rigStores[rigName]; rigStore != nil {
-			return rigStore
-		}
-	}
-	return cityStore
-}
-
-func defaultWorkQueryHasReadyWork(
-	cfg *config.City,
-	cityPath string,
-	cityName string,
-	store beads.Store,
-	sessionBeads *sessionBeadSnapshot,
-	a *config.Agent,
-) (bool, bool) {
-	direct, ok := store.(defaultWorkQueryStore)
-	if !ok || a == nil {
-		return false, false
-	}
-	target := a.QualifiedName()
-	if strings.TrimSpace(a.PoolName) != "" {
-		target = strings.TrimSpace(a.PoolName)
-	}
-	targets := []string{target}
-	if legacy := legacyControlDispatcherTarget(target); legacy != "" {
-		targets = append(targets, legacy)
-	}
-	identities := defaultWorkQueryIdentities(cfg, cityName, store, sessionBeads, a)
-	for _, identity := range append([]string{}, identities...) {
-		if legacy := legacyControlDispatcherIdentity(identity); legacy != "" {
-			identities = append(identities, legacy)
-		}
-	}
-	includeRouted := true
-	found, err := direct.DefaultWorkQueryHasReadyWork(targets, identities, includeRouted)
-	if err != nil {
-		return false, true
-	}
-	return found, true
-}
-
-func defaultWorkQueryIdentities(cfg *config.City, cityName string, store beads.Store, sessionBeads *sessionBeadSnapshot, a *config.Agent) []string {
-	if a == nil || a.SupportsMultipleSessions() {
-		return nil
-	}
-	sessionName := probeSessionNameForTemplate(cfg, cityName, store, sessionBeads, a.QualifiedName())
-	if sessionName == "" {
-		return nil
-	}
-	ids := []string{sessionName}
-	if sessionBeads != nil {
-		for _, bead := range sessionBeads.Open() {
-			if strings.TrimSpace(bead.Metadata["session_name"]) == sessionName {
-				ids = append(ids, bead.ID)
-				break
-			}
-		}
-	}
-	return ids
-}
-
-func legacyControlDispatcherTarget(target string) string {
-	target = strings.TrimSpace(target)
-	if target == config.ControlDispatcherAgentName {
-		return "workflow-control"
-	}
-	const suffix = "/" + config.ControlDispatcherAgentName
-	if strings.HasSuffix(target, suffix) {
-		return strings.TrimSuffix(target, suffix) + "/workflow-control"
-	}
-	return ""
-}
-
-func legacyControlDispatcherIdentity(identity string) string {
-	identity = strings.TrimSpace(identity)
-	if strings.HasSuffix(identity, config.ControlDispatcherAgentName) {
-		return strings.TrimSuffix(identity, config.ControlDispatcherAgentName) + "workflow-control"
-	}
-	return ""
 }
 
 // findAgentByTemplate looks up a config agent by template name.
@@ -809,6 +717,12 @@ func checkChurn(session *beads.Bead, cfg *config.City, alive bool, dt *drainTrac
 	if alive {
 		return false
 	}
+	// Pending-create sessions have not completed startup yet. A stale create
+	// lease should trigger a retried wake, not a churn increment that blocks
+	// the retry before start execution.
+	if session != nil && strings.TrimSpace(session.Metadata["pending_create_claim"]) == "true" {
+		return false
+	}
 	// Subprocess sessions exit intentionally — not churn.
 	if cfg != nil && cfg.Session.Provider == "subprocess" {
 		return false
@@ -853,7 +767,7 @@ func checkChurn(session *beads.Bead, cfg *config.City, alive bool, dt *drainTrac
 func isDeliberateSleepReason(reason string) bool {
 	switch strings.TrimSpace(reason) {
 	case "idle", "idle-timeout", "no-wake-reason", "config-drift", "drained",
-		sleepReasonCityStop, "user-hold", "wait-hold", "rate_limit":
+		sleepReasonCityStop, "user-hold", "wait-hold", "rate_limit", "failed-create":
 		return true
 	default:
 		return false
@@ -973,12 +887,32 @@ func isPoolExcess(session beads.Bead, cfg *config.City, poolDesired map[string]i
 
 // healState updates advisory state metadata only when changed (dirty check).
 func healState(session *beads.Bead, alive bool, store beads.Store, clk clock.Clock) {
+	healStateWithRollback(session, alive, store, clk, 0, true)
+}
+
+// healStateWithRollback is the explicit-control variant of healState. When
+// rollbackAvailable is false (e.g. the reconciler short-circuited the
+// stale-pending-create rollback because storeQueryPartial=true) the heal path
+// preserves pending_create_claim so the next non-partial tick can do the
+// proper rollback. When true (default), healState clears the stale claim
+// in-line after startupTimeout has elapsed to break the state=creating ↔
+// state=asleep oscillation described in ga-mf1.
+func healStateWithRollback(session *beads.Bead, alive bool, store beads.Store, clk clock.Clock, startupTimeout time.Duration, rollbackAvailable bool) map[string]string {
 	if session == nil {
-		return
+		return nil
 	}
-	batch := healStatePatch(*session, alive, clk)
+	// healState is the third writer in the closed-bead flap cycle. The
+	// lifecycle projection still resolves to BaseStateDrained for closed
+	// beads, so without this guard healState writes state=asleep on
+	// every reconciler tick of a terminal bead — alternating with the
+	// gc_swept / orphaned writes from the closeBead path. Closed beads
+	// are terminal; their advisory state metadata should not move.
+	if session.Status == "closed" {
+		return nil
+	}
+	batch := healStatePatchWithRollback(*session, alive, clk, startupTimeout, rollbackAvailable)
 	if len(batch) == 0 {
-		return
+		return nil
 	}
 	if session.Metadata == nil {
 		session.Metadata = make(map[string]string, len(batch))
@@ -989,9 +923,14 @@ func healState(session *beads.Bead, alive bool, store beads.Store, clk clock.Clo
 	for k, v := range batch {
 		session.Metadata[k] = v
 	}
+	return batch
 }
 
 func healStatePatch(session beads.Bead, alive bool, clk clock.Clock) map[string]string {
+	return healStatePatchWithRollback(session, alive, clk, 0, true)
+}
+
+func healStatePatchWithRollback(session beads.Bead, alive bool, clk clock.Clock, startupTimeout time.Duration, rollbackAvailable bool) map[string]string {
 	meta := session.Metadata
 	if meta == nil {
 		meta = map[string]string{}
@@ -1031,18 +970,79 @@ func healStatePatch(session beads.Bead, alive bool, clk clock.Clock) map[string]
 			target = string(sessionpkg.StateCreating)
 		}
 	}
+	// failed-create is a terminal rollback marker written by
+	// rollbackPendingCreate when a start attempt failed. A bead in this state
+	// whose runtime is not alive must heal toward asleep, even if
+	// pending_create_claim is still set from the failed attempt — otherwise
+	// sessionStartRequested pulls the bead back to creating and the
+	// reconciler ping-pongs forever. Clearing the stale claim in the same
+	// batch finishes the rollback the lifecycle path started.
+	if !alive && strings.TrimSpace(meta["state"]) == "failed-create" {
+		if strings.TrimSpace(meta["pending_create_claim"]) == "true" && pendingCreateLeaseActive(session, clk, 0) {
+			return nil
+		}
+		target = string(sessionpkg.StateAsleep)
+		clearPendingCreateLease(meta, batch)
+	}
+	// ga-mf1: stale-creating projects to ReconciledState=asleep once the
+	// pending_create lease has expired (creatingStateIsStale → true). Same
+	// reasoning as failed-create above: if we leave pending_create_claim=true
+	// in metadata, the next tick's projectWakeCauses re-emits
+	// WakeCausePendingCreate and projectRuntimeProjection's post-creating
+	// branch flips the projection back to StateCreating, ping-ponging the
+	// bead forever between creating and asleep+runtime-missing. Clearing the
+	// expired lease in the same heal batch lets the bead settle in asleep.
+	//
+	// Gate the clear on pendingCreateLeaseExpiredForRollback — the same
+	// predicate the orphan rollback path uses — so we honor the longer
+	// never-started lease (10 min) for beads that haven't yet had
+	// last_woke_at recorded. creatingStateIsStale alone fires at 60s and
+	// would race the rollback path's reservation.
+	//
+	// rollbackAvailable=false means the caller deferred the formal rollback
+	// (e.g. storeQueryPartial); preserve the claim so the next complete tick
+	// can drive attemptRollbackPendingCreate properly.
+	if rollbackAvailable && !alive && view.RuntimeProjection == sessionpkg.RuntimeProjectionStaleCreating {
+		if pendingCreateLeaseExpiredForRollback(session, clk, startupTimeout) {
+			clearPendingCreateLease(meta, batch)
+		}
+	}
 	if target == "" {
 		return nil
 	}
 	if meta["state"] != target {
 		batch["state"] = target
+		if target == string(sessionpkg.StateAsleep) && view.ResetContinuation && strings.TrimSpace(meta["sleep_reason"]) == "" {
+			batch["sleep_reason"] = sleepReasonRuntimeMissing
+		}
 	}
-	if target == string(sessionpkg.StateAsleep) && view.ResetContinuation {
-		batch["session_key"] = ""
-		batch["started_config_hash"] = ""
-		batch["continuation_reset_pending"] = "true"
+	if target == string(sessionpkg.StateAsleep) {
+		if strings.TrimSpace(meta["sleep_reason"]) == "" && strings.TrimSpace(meta["state"]) == "failed-create" {
+			batch["sleep_reason"] = "failed-create"
+		}
+		if view.ResetContinuation {
+			if !isNamedSessionBead(session) || namedSessionMode(session) != "always" {
+				batch["session_key"] = ""
+				batch["started_config_hash"] = ""
+				batch["continuation_reset_pending"] = "true"
+			}
+		}
 	}
 	return emptyNil(batch)
+}
+
+// clearPendingCreateLease writes empty-string clears for pending_create_claim
+// and pending_create_started_at into the heal batch when the metadata
+// currently carries a claim. Shared between the failed-create rollback path
+// and the stale-creating heal path so both finish the rollback the lifecycle
+// projection started, instead of letting the stale claim re-emit
+// WakeCausePendingCreate on the next tick and re-enter state=creating.
+func clearPendingCreateLease(meta, batch map[string]string) {
+	if strings.TrimSpace(meta["pending_create_claim"]) != "true" {
+		return
+	}
+	batch["pending_create_claim"] = ""
+	batch["pending_create_started_at"] = ""
 }
 
 func emptyNil(batch map[string]string) map[string]string {
@@ -1190,17 +1190,18 @@ func topoOrder(sessions []beads.Bead, deps map[string][]string) []beads.Bead {
 // during reconciliation to allow forward-compatible rollback from newer
 // versions that add states like "draining" or "archived".
 var knownSessionStates = map[string]bool{
-	"active":      true,
-	"asleep":      true,
-	"awake":       true,
-	"stopped":     true,
-	"suspended":   true,
-	"orphaned":    true,
-	"closed":      true,
-	"quarantined": true,
-	"creating":    true,
-	"drained":     true,
-	"":            true, // empty state is valid (legacy beads)
+	"active":                             true,
+	"asleep":                             true,
+	"awake":                              true,
+	"stopped":                            true,
+	"suspended":                          true,
+	"orphaned":                           true,
+	"closed":                             true,
+	"quarantined":                        true,
+	"creating":                           true,
+	"drained":                            true,
+	string(sessionpkg.StateFailedCreate): true, // processed so skip/orphan-close can release the slot
+	"":                                   true, // empty state is valid (legacy beads)
 }
 
 // isKnownState returns true if the bead's metadata state is recognized by

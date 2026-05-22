@@ -38,7 +38,6 @@ bd todo list --json     # JSON output
 ```
 
 **Output:**
-
 ```
   ○ test-yxg  Fix the login bug                         ● P1  open
   ○ test-ryl  Update documentation                      ● P3  open
@@ -57,7 +56,6 @@ bd todo add "Critical fix" --priority 0 --description "ASAP"  # P0 task
 ```
 
 **Flags:**
-
 - `-p, --priority <0-4>`: Priority (default: 2)
 - `-d, --description <text>`: Description
 
@@ -72,7 +70,6 @@ bd todo done test-abc --reason "Fixed in PR #42"  # With reason
 ```
 
 **Flags:**
-
 - `--reason <text>`: Reason for closing (default: "Completed")
 
 ## Converting TODOs
@@ -162,7 +159,6 @@ The TODO command follows beads' philosophy of **minimal surface area**:
 4. **Fully compatible**: Works with all bd features and commands
 
 This ensures:
-
 - No duplicate tracking systems
 - No migration needed between TODOs and tasks
 - Works with all existing bd tooling (federation, compaction, routing)

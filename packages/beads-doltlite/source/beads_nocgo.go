@@ -8,7 +8,6 @@ import (
 
 	"github.com/steveyegge/beads/internal/configfile"
 	"github.com/steveyegge/beads/internal/storage/dolt"
-	"github.com/steveyegge/beads/internal/storage/embeddeddolt"
 )
 
 // OpenBestAvailable opens a beads database using the best available backend
@@ -16,7 +15,7 @@ import (
 // supported; embedded mode returns an error directing the user to server mode.
 //
 // beadsDir is the path to the .beads directory.
-func OpenBestAvailable(ctx context.Context, beadsDir string) (Storage, embeddeddolt.Unlocker, error) {
+func OpenBestAvailable(ctx context.Context, beadsDir string) (Storage, error) {
 	cfg, err := configfile.Load(beadsDir)
 	if err == nil && cfg != nil && cfg.IsDoltliteBackend() {
 		return nil, nil, fmt.Errorf("doltlite requires a CGO build")
@@ -24,9 +23,9 @@ func OpenBestAvailable(ctx context.Context, beadsDir string) (Storage, embeddedd
 	if err == nil && cfg != nil && cfg.IsDoltServerMode() {
 		store, err := dolt.NewFromConfig(ctx, beadsDir)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		return store, embeddeddolt.NoopLock{}, nil
+		return store, nil
 	}
-	return nil, nil, fmt.Errorf("embedded Dolt requires CGO; use server mode (bd init --server)")
+	return nil, fmt.Errorf("embedded Dolt requires CGO; use server mode (bd init --server)")
 }

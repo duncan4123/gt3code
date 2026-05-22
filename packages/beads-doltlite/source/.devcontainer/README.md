@@ -60,17 +60,14 @@ git config --global user.email "your.email@example.com"
 ## Troubleshooting
 
 **bd command not found:**
-
 - The setup script should install bd automatically
 - Manually run: `bash .devcontainer/setup.sh`
 
 **Git hooks not working:**
-
 - Check if hooks are installed: `ls -la .git/hooks/`
 - Manually install: `bash examples/git-hooks/install.sh`
 
 **Container fails to build:**
-
 - Check the container logs for specific errors
 - Ensure Docker/Podman is running and has sufficient resources
 - Try rebuilding: Command Palette → "Remote-Containers: Rebuild Container"

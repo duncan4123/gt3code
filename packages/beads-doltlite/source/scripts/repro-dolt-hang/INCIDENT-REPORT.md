@@ -89,7 +89,6 @@ ops with both old (with tx.Commit) and new (without) patterns on Dolt 1.82.4:
 
 The simple repro doesn't trigger the hang. Suspected additional factors in
 production:
-
 - Multiple databases (~15) on one server
 - Idle-monitor process checking/restarting server concurrently
 - Separate OS processes (not goroutines) — each with its own connection pool

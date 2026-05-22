@@ -11,10 +11,6 @@ import (
 // humaHandleConfigGet is the Huma-typed handler for GET /v0/config.
 func (s *Server) humaHandleConfigGet(_ context.Context, _ *ConfigGetInput) (*IndexOutput[configResponse], error) {
 	cfg := s.state.Config()
-	namedSessionModes := make(map[string]string, len(cfg.NamedSessions))
-	for _, ns := range cfg.NamedSessions {
-		namedSessionModes[ns.QualifiedName()] = ns.ModeOrDefault()
-	}
 	name := strings.TrimSpace(s.state.CityName())
 	if name == "" {
 		name = config.EffectiveCityName(cfg, "")
@@ -24,13 +20,12 @@ func (s *Server) humaHandleConfigGet(_ context.Context, _ *ConfigGetInput) (*Ind
 	agents := make([]configAgentResponse, 0, len(cfg.Agents))
 	for _, a := range cfg.Agents {
 		agents = append(agents, configAgentResponse{
-			Name:             a.BindingQualifiedName(),
-			Dir:              a.Dir,
-			Provider:         a.Provider,
-			IsPool:           isMultiSessionAgent(a),
-			Scope:            a.Scope,
-			Suspended:        a.Suspended,
-			NamedSessionMode: configAgentNamedSessionMode(a, namedSessionModes),
+			Name:      a.BindingQualifiedName(),
+			Dir:       a.Dir,
+			Provider:  a.Provider,
+			IsPool:    isMultiSessionAgent(a),
+			Scope:     a.Scope,
+			Suspended: a.Suspended,
 		})
 	}
 

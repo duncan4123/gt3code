@@ -18,6 +18,7 @@ import type { SidebarGcThreadGroupingMode } from "@t3tools/contracts/settings";
 import {
   type GcAgentActionState,
   type GcWakeMode,
+  gcSessionNameForQualifiedAgent,
   summarizeGcRuntimeStates,
 } from "./sidebar/gcSidebarControls";
 import {
@@ -110,7 +111,7 @@ interface SidebarGcFoldersProps {
   ) => void;
   onAdjustAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
-  onWakeAgentSession?: (agent: string) => void;
+  onWakeAgentSession?: (agent: string, sessionName?: string) => void;
   onToggleAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
   onSetSupervisorRunning?: (city: string, running: boolean) => void;
@@ -380,6 +381,12 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
       !actionState &&
       !props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName);
     const fragmentKey = `${options.keyPrefix ?? ""}${agentGroup.qualifiedName}`;
+    const wakeSessionName =
+      rigGroup.kind === "workspace"
+        ? gcSessionNameForQualifiedAgent(agentGroup.qualifiedName, {
+            cityWorkspaceId: rigGroup.id,
+          })
+        : gcSessionNameForQualifiedAgent(agentGroup.qualifiedName);
     const groupedThreadIds = new Set(
       (agentGroup.threadGroups ?? []).flatMap((threadGroup) => threadGroup.threadIds),
     );
@@ -432,7 +439,7 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
-                          props.onWakeAgentSession?.(agentGroup.qualifiedName);
+                          props.onWakeAgentSession?.(agentGroup.qualifiedName, wakeSessionName);
                         }}
                       >
                         {actionState?.kind === "wake" ||
