@@ -11,7 +11,6 @@ Understanding beads' collision-resistant ID system.
 ## The Problem
 
 Traditional sequential IDs (`#1`, `#2`, `#3`) break when:
-
 - Multiple agents create issues simultaneously
 - Different branches have independent numbering
 - Forks diverge and later merge
@@ -27,7 +26,6 @@ bd-a3f8e9.1  # Hierarchical (child of bd-a3f8e9)
 ```
 
 **Properties:**
-
 - Globally unique (content-based hash)
 - No coordination needed between creators
 - Merge-friendly across branches
@@ -36,7 +34,6 @@ bd-a3f8e9.1  # Hierarchical (child of bd-a3f8e9)
 ## How Hashes Work
 
 IDs are generated from:
-
 - Issue title
 - Creation timestamp
 - Random salt
@@ -65,7 +62,6 @@ bd create "Tests" --parent bd-a3f8e9        # bd-a3f8e9.3
 ```
 
 Benefits:
-
 - Clear parent-child relationship
 - No namespace collision (parent hash is unique)
 - Up to 3 levels of nesting

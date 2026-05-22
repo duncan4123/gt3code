@@ -1,5 +1,10 @@
 # Error Handling Guidelines
 
+Last reviewed: 2026-05-08
+
+Freshness source: `cmd/bd/*.go`, especially command error exits and JSON error
+helpers in `cmd/bd/errors.go`.
+
 This document describes the error handling patterns used throughout the beads codebase and provides guidelines for when each pattern should be applied.
 
 ## Overview
@@ -11,14 +16,12 @@ The beads codebase currently uses **three distinct error handling patterns** acr
 ### Pattern A: Exit Immediately (`os.Exit(1)`)
 
 **When to use:**
-
 - **Fatal errors** that prevent the command from completing its core function
 - **User input validation failures** (invalid flags, malformed arguments)
 - **Critical preconditions** not met (missing database, corrupted state)
 - **Unrecoverable system errors** (filesystem failures, permission denied)
 
 **Example:**
-
 ```go
 if err := store.CreateIssue(ctx, issue, actor); err != nil {
     fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -27,14 +30,12 @@ if err := store.CreateIssue(ctx, issue, actor); err != nil {
 ```
 
 **Characteristics:**
-
 - Writes `Error:` prefix to stderr
 - Returns exit code 1 immediately
 - Command makes no further progress
 - Database/JSONL may be left in partial state (should be transactional)
 
 **Files using this pattern:**
-
 - `cmd/bd/create.go` (lines 31-32, 46-49, 57-58, 74-75, 107-108, etc.)
 - `cmd/bd/init.go` (lines 77-78, 96-97, 104-105, 112-115, 209-210, 225-227)
 - `cmd/bd/sync.go` (lines 52-54, 59-60, 82-83, etc.)
@@ -44,14 +45,12 @@ if err := store.CreateIssue(ctx, issue, actor); err != nil {
 ### Pattern B: Warn and Continue (`fmt.Fprintf` + continue)
 
 **When to use:**
-
 - **Optional operations** that enhance functionality but aren't required
 - **Metadata operations** (config updates, analytics, logging)
 - **Cleanup operations** (removing temp files, closing resources)
 - **Auxiliary features** (git hooks installation, merge driver setup)
 
 **Example:**
-
 ```go
 if err := createConfigYaml(beadsDir, false); err != nil {
     fmt.Fprintf(os.Stderr, "Warning: failed to create config.yaml: %v\n", err)
@@ -60,48 +59,42 @@ if err := createConfigYaml(beadsDir, false); err != nil {
 ```
 
 **Characteristics:**
-
 - Writes `Warning:` prefix to stderr
 - Includes context about what failed
 - Command continues execution
 - Core functionality still works
 
 **Files using this pattern:**
-
 - `cmd/bd/init.go` (lines 155-157, 161-163, 167-169, 188-190, 236-238, 272-274, etc.)
 - `cmd/bd/sync.go` (lines 156, 257, 281, 329, 335, 720-722, 740, 743, 752, 762)
 - `cmd/bd/create.go` (lines 333-334, 340-341)
-- `cmd/bd/sync.go` _(handles Dolt sync operations)_
+- `cmd/bd/sync.go` *(handles Dolt sync operations)*
 
 ---
 
 ### Pattern C: Silent Ignore (`_ = operation()`)
 
 **When to use:**
-
 - **Resource cleanup** where failure doesn't matter (closing files, removing temps)
 - **Idempotent operations** in error paths (already logging primary error)
 - **Best-effort operations** with no user-visible impact
 
 **Example:**
-
 ```go
 _ = store.Close()
 _ = os.Remove(tempPath)
 ```
 
 **Characteristics:**
-
 - No output to user
 - Typically in `defer` statements or error paths
 - Operation failure has no material impact
 - Primary error already reported
 
 **Files using this pattern:**
-
 - `cmd/bd/init.go` (line 209, 326-327)
 - `cmd/bd/sync.go` (lines 696-698)
-- `cmd/bd/sync.go` _(sync cleanup)_
+- `cmd/bd/sync.go` *(sync cleanup)*
 - Dozens of other locations throughout the codebase
 
 ---
@@ -286,7 +279,6 @@ if err := syncbranch.Set(ctx, store, branch); err != nil {
 ```
 
 **Examples:**
-
 - `issue_prefix` - Defines how all issue IDs are generated
 - `sync.branch` - Critical for git synchronization workflow
 
@@ -313,7 +305,6 @@ if err := store.SetMetadata(ctx, "last_import_hash", hash); err != nil {
 ```
 
 **Examples:**
-
 - `bd_version` - Enables version mismatch warnings on upgrades
 - `repo_id` / `clone_id` - Helps with collision detection across clones
 - `last_import_hash` - Optimizes staleness detection (falls back to mtime if unavailable)

@@ -2,14 +2,15 @@
 
 ## Overview
 
-The beads project has a comprehensive test suite with **~41,000 lines of code** across **205 files** in `cmd/bd` alone.
+The beads project uses Go tests plus repository wrapper scripts. Prefer the
+wrapper scripts for local validation because they apply the same skip and
+timeout policy as CI.
 
 ## Test Performance
 
-- **Total test time:** ~3 minutes (excluding broken tests)
-- **Package count:** 20+ packages with tests
-- **Compilation overhead:** ~180 seconds (most of the total time)
-- **Individual test time:** Only ~3.8 seconds combined for all 313 tests in cmd/bd
+- Go compilation dominates full-suite runtime.
+- Target package/test runs are usually the fastest way to validate focused changes.
+- Docker-backed Dolt integration tests auto-detect prerequisites and skip when unavailable.
 
 ## Running Tests
 
@@ -84,7 +85,7 @@ BEADS_TEST_SKIP=dolt,slow ./scripts/test.sh
 
 ```bash
 # Pull the exact Dolt image to enable integration tests
-docker pull dolthub/dolt-sql-server:1.43.0
+docker pull dolthub/dolt-sql-server:1.88.1
 
 # Point tests at an existing Dolt server (skips container startup)
 BEADS_DOLT_PORT=3308 ./scripts/test.sh
@@ -108,12 +109,12 @@ starting a container. Port 3307 is hardcoded as production and always rejected.
 
 ## Known Broken Tests
 
-Tests in `.test-skip` are automatically skipped. Current broken tests:
+Tests in `.test-skip` are automatically skipped by `scripts/test.sh`.
 
-1. **TestFallbackToDirectModeEnablesFlush** (GH #355)
-   - Location: `cmd/bd/direct_mode_test.go:14`
-   - Issue: Database deadlock, hangs for 5 minutes
-   - Impact: Makes test suite extremely slow
+At the time of this review, `.test-skip` contains only comments and no active
+test-name patterns. Treat any new skip as a temporary exception: file the
+upstream issue first, record it in `.test-skip`, and remove the skip when the
+test is fixed.
 
 ## For Claude Code / AI Agents
 
@@ -128,7 +129,6 @@ When running tests during development:
    - Only if intentionally exercising the ICU regex path, use `./scripts/test-icu-path.sh` (or deprecated `make test-full-cgo`)
 
 2. **Target specific tests when possible:**
-
    ```bash
    # Instead of running everything:
    ./scripts/test.sh
@@ -165,7 +165,6 @@ If you discover a broken test:
 ### Slowest Tests (>0.05s)
 
 The top slow tests in cmd/bd:
-
 - `TestDoctorWithBeadsDir` (1.68s) - Only significantly slow test
 - `TestFlushManagerDebouncing` (0.21s)
 - `TestDebouncer_*` tests (0.06-0.12s each) - Intentional sleeps for concurrency testing
@@ -196,25 +195,21 @@ The test script is designed to work seamlessly with CI/CD:
 ## Debugging Test Failures
 
 ### Get detailed output
-
 ```bash
 ./scripts/test.sh -v ./path/to/package/...
 ```
 
 ### Run a single test
-
 ```bash
 ./scripts/test.sh -run '^TestExactName$' ./cmd/bd/...
 ```
 
 ### Check which tests are being skipped
-
 ```bash
 ./scripts/test.sh 2>&1 | head -5
 ```
 
 Output shows:
-
 ```
 Running: go test -timeout 3m -skip TestFoo|TestBar ./...
 Skipping: TestFoo|TestBar

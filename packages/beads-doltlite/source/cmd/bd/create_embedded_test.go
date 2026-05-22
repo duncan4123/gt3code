@@ -86,17 +86,17 @@ func bdShow(t *testing.T, bd, dir, id string) *types.Issue {
 	cmd := exec.Command(bd, "show", id, "--json")
 	cmd.Dir = dir
 	cmd.Env = bdEnv(dir)
-	out, err := cmd.CombinedOutput()
+	stdout, stderr, err := runCommandBuffers(t, cmd)
 	if err != nil {
-		t.Fatalf("bd show %s --json failed: %v\n%s", id, err, out)
+		t.Fatalf("bd show %s --json failed: %v\nstdout:\n%s\nstderr:\n%s", id, err, stdout.String(), stderr.String())
 	}
-	return parseIssueJSON(t, out)
+	return parseIssueJSON(t, stdout.Bytes())
 }
 
 // openStore opens an EmbeddedDoltStore for direct verification queries.
 func openStore(t *testing.T, beadsDir, database string) *embeddeddolt.EmbeddedDoltStore {
 	t.Helper()
-	store, err := embeddeddolt.New(t.Context(), beadsDir, database, "main")
+	store, err := embeddeddolt.Open(t.Context(), beadsDir, database, "main")
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}
@@ -115,13 +115,34 @@ func assertDepExists(t *testing.T, beadsDir, database, issueID, dependsOnID stri
 	defer cleanup()
 	var count int
 	err = db.QueryRowContext(t.Context(),
-		"SELECT COUNT(*) FROM dependencies WHERE issue_id = ? AND depends_on_id = ?",
+		"SELECT COUNT(*) FROM dependencies WHERE issue_id = ? AND COALESCE(depends_on_issue_id, depends_on_wisp_id, depends_on_external) = ?",
 		issueID, dependsOnID).Scan(&count)
 	if err != nil {
 		t.Fatalf("query dependencies: %v", err)
 	}
 	if count == 0 {
 		t.Errorf("expected dependency %s -> %s, not found", issueID, dependsOnID)
+	}
+}
+
+func assertDepExistsWithType(t *testing.T, beadsDir, database, issueID, dependsOnID, expectedType string) {
+	t.Helper()
+	dataDir := filepath.Join(beadsDir, "embeddeddolt")
+	db, cleanup, err := embeddeddolt.OpenSQL(t.Context(), dataDir, database, "main")
+	if err != nil {
+		t.Fatalf("OpenSQL: %v", err)
+	}
+	defer cleanup()
+
+	var depType string
+	err = db.QueryRowContext(t.Context(),
+		"SELECT type FROM dependencies WHERE issue_id = ? AND COALESCE(depends_on_issue_id, depends_on_wisp_id, depends_on_external) = ?",
+		issueID, dependsOnID).Scan(&depType)
+	if err != nil {
+		t.Fatalf("query dependencies for %s -> %s: %v", issueID, dependsOnID, err)
+	}
+	if depType != expectedType {
+		t.Errorf("dependency %s -> %s: got type %q, want %q", issueID, dependsOnID, depType, expectedType)
 	}
 }
 
@@ -270,6 +291,34 @@ func TestEmbeddedCreate(t *testing.T) {
 
 		// "blocks:X" reverses direction: X depends on new issue (parent.ID -> child.ID)
 		assertDepExists(t, beadsDir, "dp", parent.ID, child.ID)
+	})
+
+	t.Run("blocked_by_alias", func(t *testing.T) {
+		dir, beadsDir, _ := bdInit(t, bd, "--prefix", "bb")
+		blocker := bdCreate(t, bd, dir, "Blocker issue")
+		blocked := bdCreate(t, bd, dir, "Blocked issue", "--deps", "blocked-by:"+blocker.ID)
+
+		assertDepExistsWithType(t, beadsDir, "bb", blocked.ID, blocker.ID, "blocks")
+	})
+
+	t.Run("depends_on_alias", func(t *testing.T) {
+		dir, beadsDir, _ := bdInit(t, bd, "--prefix", "do")
+		prereq := bdCreate(t, bd, dir, "Prerequisite")
+		dependent := bdCreate(t, bd, dir, "Dependent issue", "--deps", "depends-on:"+prereq.ID)
+
+		assertDepExistsWithType(t, beadsDir, "do", dependent.ID, prereq.ID, "blocks")
+	})
+
+	t.Run("unknown_dep_type_rejected", func(t *testing.T) {
+		dir, _, _ := bdInit(t, bd, "--prefix", "ud")
+		blocker := bdCreate(t, bd, dir, "Blocker")
+		out := bdCreateFail(t, bd, dir, "Bad dep type", "--deps", "bogus-type:"+blocker.ID)
+		if !strings.Contains(out, "unknown dependency type") {
+			t.Errorf("expected 'unknown dependency type' error, got:\n%s", out)
+		}
+		if !strings.Contains(out, "blocked-by") || !strings.Contains(out, "depends-on") {
+			t.Errorf("expected accepted dependency aliases in error, got:\n%s", out)
+		}
 	})
 
 	t.Run("multiple_dependencies", func(t *testing.T) {
@@ -454,15 +503,15 @@ func TestEmbeddedCreate(t *testing.T) {
 		cmd := exec.Command(bd, "create", "--dry-run", "Dry run issue", "--json")
 		cmd.Dir = dir
 		cmd.Env = bdEnv(dir)
-		out, err := cmd.CombinedOutput()
+		stdout, stderr, err := runCommandBuffers(t, cmd)
 		if err != nil {
-			t.Fatalf("bd create --dry-run failed: %v\n%s", err, out)
+			t.Fatalf("bd create --dry-run failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 		}
 
 		// Dry run should not persist anything. Create a real issue and verify
 		// the dry-run issue doesn't exist.
-		if strings.Contains(string(out), "error") {
-			t.Errorf("dry-run produced error output: %s", out)
+		if strings.Contains(stdout.String(), "error") {
+			t.Errorf("dry-run produced error output: %s", stdout.String())
 		}
 	})
 
@@ -529,9 +578,9 @@ A new feature
 		cmd := exec.Command(bd, "create", "-f", mdFile, "--json")
 		cmd.Dir = dir
 		cmd.Env = bdEnv(dir)
-		out, err := cmd.CombinedOutput()
+		stdout, stderr, err := runCommandBuffers(t, cmd)
 		if err != nil {
-			t.Fatalf("bd create -f failed: %v\n%s", err, out)
+			t.Fatalf("bd create -f failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 		}
 
 		// Verify both issues were created
@@ -893,10 +942,7 @@ func TestEmbeddedCreateConcurrent(t *testing.T) {
 			var ids []string
 			for i := 0; i < issuesPerWorker; i++ {
 				title := fmt.Sprintf("worker-%d-issue-%d", worker, i)
-				cmd := exec.Command(bd, "create", "--silent", title)
-				cmd.Dir = dir
-				cmd.Env = bdEnv(dir)
-				out, err := cmd.CombinedOutput()
+				out, err := bdRunWithFlockRetry(t, bd, dir, "create", "--silent", title)
 				if err != nil {
 					results[worker] = result{worker: worker, err: fmt.Errorf("issue %d: %v\n%s", i, err, out)}
 					return

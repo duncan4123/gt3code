@@ -189,6 +189,14 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
         rpcClient
           ? rpcClient.gc.wakeSession(input)
           : Promise.reject(unavailableLocalBackendError()),
+      setSupervisorRunning: (input) =>
+        rpcClient
+          ? rpcClient.gc.setSupervisorRunning(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      setControllerRunning: (input) =>
+        rpcClient
+          ? rpcClient.gc.setControllerRunning(input)
+          : Promise.reject(unavailableLocalBackendError()),
       setAgentSuspended: (input) =>
         rpcClient
           ? rpcClient.gc.setAgentSuspended(input)

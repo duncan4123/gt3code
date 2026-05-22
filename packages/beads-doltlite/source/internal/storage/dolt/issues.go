@@ -229,6 +229,38 @@ func (s *DoltStore) ClaimIssue(ctx context.Context, id string, actor string) err
 	return nil
 }
 
+// ClaimReadyIssue atomically claims the first ready issue matching filter.
+func (s *DoltStore) ClaimReadyIssue(ctx context.Context, filter types.WorkFilter, actor string) (*types.Issue, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	claimed, err := issueops.ClaimReadyIssueInTx(ctx, tx, filter, actor, s.computeBlockedIDsForReadyWork)
+	if err != nil {
+		return nil, err
+	}
+	if claimed == nil {
+		return nil, nil
+	}
+
+	for _, table := range []string{"issues", "events"} {
+		_, _ = tx.ExecContext(ctx, "CALL DOLT_ADD(?)", table)
+	}
+	commitMsg := fmt.Sprintf("bd: claim ready %s", claimed.ID)
+	if _, err := tx.ExecContext(ctx, "CALL DOLT_COMMIT('-m', ?, '--author', ?)",
+		commitMsg, s.commitAuthorString()); err != nil && !isDoltNothingToCommit(err) {
+		return nil, fmt.Errorf("dolt commit: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, wrapTransactionError("commit claim ready issue", err)
+	}
+	s.invalidateBlockedIDsCache()
+	return claimed, nil
+}
+
 // ReopenIssue reopens a closed issue, setting status to open and clearing
 // closed_at and defer_until. If reason is non-empty, it is recorded as a comment.
 // Wraps UpdateIssue for Dolt-specific concerns (wisp routing, DOLT_COMMIT, etc.).
@@ -300,27 +332,21 @@ func (s *DoltStore) DeleteIssue(ctx context.Context, id string) error {
 		return s.deleteWisp(ctx, id)
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }() // No-op after successful commit
+	if err := s.withWriteTx(ctx, func(tx *sql.Tx) error {
+		if err := issueops.DeleteIssueInTx(ctx, tx, id); err != nil {
+			return err
+		}
 
-	if err := issueops.DeleteIssueInTx(ctx, tx, id); err != nil {
-		return err
-	}
-
-	// GH#2455: Stage only the tables we modified, then commit without -A.
-	for _, table := range []string{"issues", "dependencies", "labels", "comments", "events", "child_counters", "issue_snapshots", "compaction_snapshots"} {
-		_, _ = tx.ExecContext(ctx, "CALL DOLT_ADD(?)", table)
-	}
-	commitMsg := fmt.Sprintf("bd: delete %s", id)
-	if _, err := tx.ExecContext(ctx, "CALL DOLT_COMMIT('-m', ?, '--author', ?)",
-		commitMsg, s.commitAuthorString()); err != nil && !isDoltNothingToCommit(err) {
-		return fmt.Errorf("dolt commit: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
+		for _, table := range []string{"issues", "dependencies", "labels", "comments", "events", "child_counters", "issue_snapshots", "compaction_snapshots"} {
+			_, _ = tx.ExecContext(ctx, "CALL DOLT_ADD(?)", table)
+		}
+		commitMsg := fmt.Sprintf("bd: delete %s", id)
+		if _, err := tx.ExecContext(ctx, "CALL DOLT_COMMIT('-m', ?, '--author', ?)",
+			commitMsg, s.commitAuthorString()); err != nil && !isDoltNothingToCommit(err) {
+			return fmt.Errorf("dolt commit: %w", err)
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 	s.invalidateBlockedIDsCache()
@@ -377,15 +403,28 @@ func (s *DoltStore) DeleteIssues(ctx context.Context, ids []string, cascade bool
 		return &types.DeleteIssuesResult{DeletedCount: wispDeleteCount}, nil
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	var result *types.DeleteIssuesResult
+	if err := s.withWriteTx(ctx, func(tx *sql.Tx) error {
+		r, err := issueops.DeleteIssuesInTx(ctx, tx, ids, cascade, force, dryRun)
+		if err != nil {
+			result = r
+			return err
+		}
+		result = r
+		if dryRun {
+			return nil
+		}
 
-	// Delegate core logic (cascade/force/dryRun, stats, batch deletion) to issueops.
-	result, err := issueops.DeleteIssuesInTx(ctx, tx, ids, cascade, force, dryRun)
-	if err != nil {
+		for _, table := range []string{"issues", "dependencies", "labels", "comments", "events", "child_counters", "issue_snapshots", "compaction_snapshots"} {
+			_, _ = tx.ExecContext(ctx, "CALL DOLT_ADD(?)", table)
+		}
+		commitMsg := fmt.Sprintf("bd: delete %d issue(s)", result.DeletedCount)
+		if _, err := tx.ExecContext(ctx, "CALL DOLT_COMMIT('-m', ?, '--author', ?)",
+			commitMsg, s.commitAuthorString()); err != nil && !isDoltNothingToCommit(err) {
+			return fmt.Errorf("dolt commit: %w", err)
+		}
+		return nil
+	}); err != nil {
 		// Preserve partial result (e.g., OrphanedIssues) on error.
 		if result != nil {
 			result.DeletedCount += wispDeleteCount
@@ -396,21 +435,6 @@ func (s *DoltStore) DeleteIssues(ctx context.Context, ids []string, cascade bool
 
 	if dryRun {
 		return result, nil
-	}
-
-	// GH#2455: Stage only the tables this operation modified, then commit
-	// without -A.
-	for _, table := range []string{"issues", "dependencies", "labels", "comments", "events", "child_counters", "issue_snapshots", "compaction_snapshots"} {
-		_, _ = tx.ExecContext(ctx, "CALL DOLT_ADD(?)", table)
-	}
-	commitMsg := fmt.Sprintf("bd: delete %d issue(s)", result.DeletedCount-wispDeleteCount)
-	if _, err := tx.ExecContext(ctx, "CALL DOLT_COMMIT('-m', ?, '--author', ?)",
-		commitMsg, s.commitAuthorString()); err != nil && !isDoltNothingToCommit(err) {
-		return nil, fmt.Errorf("dolt commit: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	s.invalidateBlockedIDsCache()

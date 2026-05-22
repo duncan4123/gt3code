@@ -19,7 +19,6 @@ Beads already tracks issues, specs, skills, and comments. Rules are the missing 
 ### Motivating Example
 
 A real production project with 40+ rules had:
-
 - 4 rules touching "agent discipline" (spawn, efficiency, token usage, verification) — all overlapping
 - 2 rules with direct contradictions: one enforcing a strict blocking workflow, another allowing flexible parallel execution
 - 8 rules that could merge into 3 composites, saving ~3K tokens per session
@@ -154,7 +153,6 @@ jaccard(A, B) = |keywords(A) ∩ keywords(B)| / |keywords(A) ∪ keywords(B)|
 If `jaccard(A, B) >= threshold` (default 0.6), they're a merge candidate.
 
 **Grouping:** Build merge groups using single-linkage clustering:
-
 - Start with all pairs above threshold
 - If A overlaps B and B overlaps C, group {A, B, C}
 - Label each group by the most frequent keyword
@@ -166,13 +164,11 @@ Two rules contradict when they share scope but give opposing directives.
 **Scope overlap:** `jaccard(A, B) >= 0.3` (lower than merge threshold — contradictions can exist between loosely related rules)
 
 **Opposing directives check:**
-
 1. Extract action verbs from Do blocks of rule A
 2. Extract action verbs from Don't blocks of rule B
 3. If the same verb appears in A's Do and B's Don't (or vice versa) on overlapping keyword scope → contradiction
 
 **Antonym pairs** (hardcoded for MVP):
-
 - `block` / `proceed`, `parallel`
 - `verbose` / `minimize`, `concise`
 - `always` / `never`
@@ -196,7 +192,6 @@ Given a group of rules to merge:
 
 ```markdown
 # {Group Label}
-
 **Do:** {deduplicated do entries, newline-separated}
 **Don't:** {deduplicated don't entries, newline-separated}
 ```
@@ -330,7 +325,6 @@ func init() {
 ### Human-Readable (default)
 
 See the CLI Interface section above. Uses:
-
 - `tabwriter` for the contradiction table
 - Indented groups for merge candidates
 - Color via `internal/ui` package (green for OK, yellow for warnings, red for contradictions)
@@ -372,25 +366,25 @@ See the CLI Interface section above. Uses:
 
 ### Unit Tests (`cmd/bd/rules_test.go`)
 
-| Test                                       | What it verifies                                     |
-| ------------------------------------------ | ---------------------------------------------------- |
-| `TestParseRuleFile_Basic`                  | Extracts title, Do/Don't lines from well-formed rule |
-| `TestParseRuleFile_NoDoBlocks`             | Falls back to body keywords when no Do/Don't         |
-| `TestParseRuleFile_MultilineDo`            | Handles continuation lines after `**Do:**`           |
-| `TestExtractKeywords`                      | Stop word removal, lowercasing, dedup                |
-| `TestJaccardSimilarity_Identical`          | Returns 1.0 for same keyword sets                    |
-| `TestJaccardSimilarity_Disjoint`           | Returns 0.0 for no overlap                           |
-| `TestJaccardSimilarity_Partial`            | Returns correct score for partial overlap            |
-| `TestDetectContradictions_Direct`          | Finds "Do X" vs "Don't X" across rules               |
-| `TestDetectContradictions_Antonym`         | Finds "block" vs "proceed" antonym pair              |
-| `TestDetectContradictions_NoFalsePositive` | Unrelated rules don't trigger contradiction          |
-| `TestFindMergeCandidates_Grouping`         | Clusters overlapping rules into groups               |
-| `TestFindMergeCandidates_Threshold`        | Respects --threshold flag                            |
-| `TestCompactRules_Dedup`                   | Removes identical Do lines from merged output        |
-| `TestCompactRules_PreservesOrder`          | Merged output keeps stable ordering                  |
-| `TestRunAudit_EmptyDir`                    | Handles directory with no .md files                  |
-| `TestRunAudit_SingleRule`                  | No contradictions or merge candidates with 1 rule    |
-| `TestRunAudit_JSON`                        | JSON output matches expected schema                  |
+| Test | What it verifies |
+|------|-----------------|
+| `TestParseRuleFile_Basic` | Extracts title, Do/Don't lines from well-formed rule |
+| `TestParseRuleFile_NoDoBlocks` | Falls back to body keywords when no Do/Don't |
+| `TestParseRuleFile_MultilineDo` | Handles continuation lines after `**Do:**` |
+| `TestExtractKeywords` | Stop word removal, lowercasing, dedup |
+| `TestJaccardSimilarity_Identical` | Returns 1.0 for same keyword sets |
+| `TestJaccardSimilarity_Disjoint` | Returns 0.0 for no overlap |
+| `TestJaccardSimilarity_Partial` | Returns correct score for partial overlap |
+| `TestDetectContradictions_Direct` | Finds "Do X" vs "Don't X" across rules |
+| `TestDetectContradictions_Antonym` | Finds "block" vs "proceed" antonym pair |
+| `TestDetectContradictions_NoFalsePositive` | Unrelated rules don't trigger contradiction |
+| `TestFindMergeCandidates_Grouping` | Clusters overlapping rules into groups |
+| `TestFindMergeCandidates_Threshold` | Respects --threshold flag |
+| `TestCompactRules_Dedup` | Removes identical Do lines from merged output |
+| `TestCompactRules_PreservesOrder` | Merged output keeps stable ordering |
+| `TestRunAudit_EmptyDir` | Handles directory with no .md files |
+| `TestRunAudit_SingleRule` | No contradictions or merge candidates with 1 rule |
+| `TestRunAudit_JSON` | JSON output matches expected schema |
 
 ### Edge Cases
 
@@ -413,12 +407,12 @@ See the CLI Interface section above. Uses:
 
 ## Files to Create/Modify
 
-| File                   | Action             | Lines (est.) |
-| ---------------------- | ------------------ | ------------ |
-| `cmd/bd/rules.go`      | Create             | ~450         |
-| `cmd/bd/rules_test.go` | Create             | ~350         |
-| `docs/RULES_AUDIT.md`  | Create (user docs) | ~80          |
-| `CHANGELOG.md`         | Update             | +5           |
+| File | Action | Lines (est.) |
+|------|--------|-------------|
+| `cmd/bd/rules.go` | Create | ~450 |
+| `cmd/bd/rules_test.go` | Create | ~350 |
+| `docs/RULES_AUDIT.md` | Create (user docs) | ~80 |
+| `CHANGELOG.md` | Update | +5 |
 
 No new packages needed. No database changes. No daemon integration. Pure file analysis.
 

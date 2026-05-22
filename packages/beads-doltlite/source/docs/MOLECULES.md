@@ -29,12 +29,12 @@ epic-root (assigned to agent)
 
 ### Dependency Types That Block
 
-| Type                 | Semantics                           | Use Case                                 |
-| -------------------- | ----------------------------------- | ---------------------------------------- |
-| `blocks`             | B can't start until A closes        | Sequencing work                          |
-| `parent-child`       | If parent blocked, children blocked | Hierarchy (children parallel by default) |
-| `conditional-blocks` | B runs only if A fails              | Error handling paths                     |
-| `waits-for`          | B waits for all of A's children     | Fanout gates                             |
+| Type | Semantics | Use Case |
+|------|-----------|----------|
+| `blocks` | B can't start until A closes | Sequencing work |
+| `parent-child` | If parent blocked, children blocked | Hierarchy (children parallel by default) |
+| `conditional-blocks` | B runs only if A fails | Error handling paths |
+| `waits-for` | B waits for all of A's children | Fanout gates |
 
 **Non-blocking types:** `related`, `discovered-from`, `replies-to` - these link issues without affecting execution.
 
@@ -55,7 +55,6 @@ bd dep add <B-id> <A-id>   # B depends on A (B needs A)
 ### Multi-Day Execution
 
 An agent works through a molecule by:
-
 1. Getting ready work (`bd ready`)
 2. Claiming it (`bd update <id> --claim`)
 3. Doing the work
@@ -63,7 +62,6 @@ An agent works through a molecule by:
 5. Repeat until molecule is done
 
 If the molecule is blocked by another molecule:
-
 - Agent either waits, or
 - Agent continues into the blocking molecule (compound execution)
 
@@ -73,11 +71,11 @@ If the molecule is blocked by another molecule:
 
 **They're the same thing.** A molecule is just an epic (parent + children) with workflow semantics.
 
-| Term         | Meaning                    | When to Use                        |
-| ------------ | -------------------------- | ---------------------------------- |
-| **Epic**     | Parent issue with children | General term for hierarchical work |
+| Term | Meaning | When to Use |
+|------|---------|-------------|
+| **Epic** | Parent issue with children | General term for hierarchical work |
 | **Molecule** | Epic with execution intent | When discussing workflow traversal |
-| **Proto**    | Epic with `template` label | Reusable pattern (optional)        |
+| **Proto** | Epic with `template` label | Reusable pattern (optional) |
 
 You can create molecules without protos - just create an epic and add children:
 
@@ -102,16 +100,15 @@ bd mol bond A B --type conditional # B runs only if A fails
 
 ### What Bonding Does
 
-| Operands      | What Happens                                 |
-| ------------- | -------------------------------------------- |
-| epic + epic   | Creates dependency edge between them         |
-| proto + epic  | Spawns proto as new issues, attaches to epic |
-| proto + proto | Creates compound template                    |
+| Operands | What Happens |
+|----------|--------------|
+| epic + epic | Creates dependency edge between them |
+| proto + epic | Spawns proto as new issues, attaches to epic |
+| proto + proto | Creates compound template |
 
 ### The Key Insight
 
 **Bonding lets agents traverse compound workflows.** When A blocks B:
-
 - Completing A unblocks B
 - Agent can continue from A into B seamlessly
 - The compound work graph can span days
@@ -125,11 +122,11 @@ work that can be closed explicitly once the parent outcome is actually done.
 
 For reusable workflows, beads uses a chemistry metaphor:
 
-| Phase      | Name  | Storage               | Synced | Purpose                |
-| ---------- | ----- | --------------------- | ------ | ---------------------- |
-| **Solid**  | Proto | `.beads/`             | Yes    | Frozen template        |
-| **Liquid** | Mol   | `.beads/`             | Yes    | Active persistent work |
-| **Vapor**  | Wisp  | `.beads/` (Wisp=true) | No     | Ephemeral operations   |
+| Phase | Name | Storage | Synced | Purpose |
+|-------|------|---------|--------|---------|
+| **Solid** | Proto | `.beads/` | Yes | Frozen template |
+| **Liquid** | Mol | `.beads/` | Yes | Active persistent work |
+| **Vapor** | Wisp | `.beads/` (Wisp=true) | No | Ephemeral operations |
 
 ### Phase Commands
 
@@ -142,12 +139,12 @@ bd mol burn <id>                 # Wisp → nothing (discard)
 
 ### When to Use Each Phase
 
-| Use Case                        | Phase        | Why                                   |
-| ------------------------------- | ------------ | ------------------------------------- |
-| Feature work                    | Mol (pour)   | Persists across sessions, audit trail |
-| Patrol cycles                   | Wisp         | Routine, no audit value               |
-| One-shot ops                    | Wisp         | Scaffolding, not the work itself      |
-| Important discovery during wisp | Mol (--pour) | "This matters, save it"               |
+| Use Case | Phase | Why |
+|----------|-------|-----|
+| Feature work | Mol (pour) | Persists across sessions, audit trail |
+| Patrol cycles | Wisp | Routine, no audit value |
+| One-shot ops | Wisp | Scaffolding, not the work itself |
+| Important discovery during wisp | Mol (--pour) | "This matters, save it" |
 
 ## Common Patterns
 
@@ -186,7 +183,6 @@ done
 ```
 
 Creates:
-
 ```
 patrol-x7k (wisp)
 ├── preflight

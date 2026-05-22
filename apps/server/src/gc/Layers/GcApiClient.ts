@@ -1073,88 +1073,6 @@ function replaceOrInsertSuspendedLine(
   lines.splice(end, 0, suspendedLine);
 }
 
-function updateRigOverrideSuspended(
-  cityTomlContent: string,
-  rigName: string,
-  agentName: string,
-  suspended: boolean,
-): string {
-  const lines = cityTomlContent.split("\n");
-  let rigStart = -1;
-  let rigEnd = -1;
-
-  for (let index = 0; index < lines.length; index += 1) {
-    if (lines[index]?.trim() !== "[[rigs]]") continue;
-    let blockEnd = index + 1;
-    let foundRigName: string | null = null;
-    while (blockEnd < lines.length) {
-      const trimmed = lines[blockEnd]?.trim() ?? "";
-      if (trimmed === "[[rigs]]") break;
-      if (trimmed.startsWith("[") && trimmed !== "[[rigs.overrides]]") break;
-      foundRigName ??= parseQuotedTomlString(lines[blockEnd] ?? "", "name");
-      blockEnd += 1;
-    }
-    if (foundRigName === rigName) {
-      rigStart = index;
-      rigEnd = blockEnd;
-      break;
-    }
-    index = blockEnd - 1;
-  }
-
-  if (rigStart < 0 || rigEnd < 0) {
-    throw new Error(`GC rig "${rigName}" not found in city.toml`);
-  }
-
-  for (let index = rigStart + 1; index < rigEnd; index += 1) {
-    if (lines[index]?.trim() !== "[[rigs.overrides]]") continue;
-    let overrideEnd = index + 1;
-    let foundAgentName: string | null = null;
-    while (overrideEnd < rigEnd) {
-      const trimmed = lines[overrideEnd]?.trim() ?? "";
-      if (trimmed === "[[rigs.overrides]]") break;
-      foundAgentName ??= parseQuotedTomlString(lines[overrideEnd] ?? "", "agent");
-      overrideEnd += 1;
-    }
-    if (foundAgentName === agentName) {
-      replaceOrInsertSuspendedLine(lines, index + 1, overrideEnd, suspended);
-      return lines.join("\n");
-    }
-    index = overrideEnd - 1;
-  }
-
-  const insertionIndex = rigEnd;
-  const blockLines = [
-    "",
-    "[[rigs.overrides]]",
-    `agent = "${agentName}"`,
-    `suspended = ${suspended ? "true" : "false"}`,
-  ];
-  lines.splice(insertionIndex, 0, ...blockLines);
-  return lines.join("\n");
-}
-
-function writeRigAgentSuspendedToCityToml(
-  cityPath: string,
-  qualifiedAgentName: string,
-  suspended: boolean,
-): void {
-  const separatorIndex = qualifiedAgentName.indexOf("/");
-  if (separatorIndex <= 0 || separatorIndex === qualifiedAgentName.length - 1) {
-    throw new Error(`Expected qualified GC agent name, received "${qualifiedAgentName}"`);
-  }
-  const rigName = qualifiedAgentName.slice(0, separatorIndex);
-  const agentName = qualifiedAgentName.slice(separatorIndex + 1);
-  const cityTomlPath = path.join(cityPath, "city.toml");
-  const nextContent = updateRigOverrideSuspended(
-    readFileSync(cityTomlPath, "utf8"),
-    rigName,
-    agentName,
-    suspended,
-  );
-  writeFileSync(cityTomlPath, nextContent, "utf8");
-}
-
 function replaceOrInsertNamedSessionModeLine(
   lines: string[],
   start: number,
@@ -1317,18 +1235,6 @@ function updateAgentPatchInCityToml(
   return lines.join("\n");
 }
 
-function writeAgentSuspendedToCityToml(
-  cityPath: string,
-  identity: { readonly dir: string; readonly template: string },
-  suspended: boolean,
-): void {
-  const cityTomlPath = path.join(cityPath, "city.toml");
-  const nextContent = updateAgentPatchInCityToml(readFileSync(cityTomlPath, "utf8"), identity, {
-    suspended,
-  });
-  writeFileSync(cityTomlPath, nextContent, "utf8");
-}
-
 function replaceOrInsertQuotedLine(
   lines: string[],
   start: number,
@@ -1482,8 +1388,18 @@ function runGcCli(
   cityPath: string,
   args: string[],
 ): { readonly stdout: string; readonly stderr: string; readonly exitCode: number } {
+  const cwd = process.cwd();
+  const managedGcHome =
+    process.env.T3CODE_GASCITY_HOME?.trim() || path.join(cwd, ".t3-dev", "gascity");
+  const gcApiUrl = discoverGcApiBaseUrl(cwd) ?? process.env.GC_API_URL;
   const result = spawnSync(resolveGcCliBinary(), ["--city", cityPath, ...args], {
     encoding: "utf8",
+    env: {
+      ...process.env,
+      GC_HOME: managedGcHome,
+      T3CODE_GASCITY_HOME: managedGcHome,
+      ...(gcApiUrl ? { GC_API_URL: gcApiUrl } : {}),
+    },
     timeout: GC_CLI_REQUEST_TIMEOUT_MS,
   });
   return {
@@ -1776,6 +1692,54 @@ const makeGcApiClient = Effect.gen(function* () {
     return cityName;
   };
 
+  const resolveCityLifecycleTarget = async (
+    requestedCityName: string | undefined,
+  ): Promise<{
+    readonly cityName: string;
+    readonly cityPath: string;
+  }> => {
+    const normalizedCityName = requestedCityName?.trim();
+    if (normalizedCityName) {
+      const configuredCity = resolveConfiguredCityRoot(normalizedCityName);
+      if (configuredCity?.cityPath) {
+        return {
+          cityName: configuredCity.cityName,
+          cityPath: configuredCity.cityPath,
+        };
+      }
+
+      const supervisorCity = (await fetchSupervisorCities()).find(
+        (city) => city.name === normalizedCityName,
+      );
+      if (supervisorCity?.path) {
+        return {
+          cityName: supervisorCity.name,
+          cityPath: supervisorCity.path,
+        };
+      }
+
+      throw new Error(`GC city "${normalizedCityName}" not found in current config`);
+    }
+
+    const inferredCityName = await requireGcCityName();
+    if (cityPath) {
+      return {
+        cityName: inferredCityName,
+        cityPath,
+      };
+    }
+
+    const configuredCity = resolveConfiguredCityRoot(inferredCityName);
+    if (configuredCity?.cityPath) {
+      return {
+        cityName: configuredCity.cityName,
+        cityPath: configuredCity.cityPath,
+      };
+    }
+
+    throw new Error(`GC city path unavailable for "${inferredCityName}"`);
+  };
+
   const resolveSessionMutationTarget = async (
     normalizedSessionName: string,
   ): Promise<{
@@ -1797,6 +1761,32 @@ const makeGcApiClient = Effect.gen(function* () {
           localName: normalizedSessionName.slice(sessionPrefix.length),
         };
       }
+    }
+    const rigMatches: Array<{ readonly cityName: string; readonly localName: string }> = [];
+    for (const rig of lastKnownConfig?.rigs ?? []) {
+      const rigName = rig.name.trim();
+      if (!rigName || (rig.path && isGcCityRoot(rig.path))) {
+        continue;
+      }
+      const [citySegment, ...rigSegments] = rigName.split("/").filter(Boolean);
+      const localRigName = rigSegments.length > 0 ? rigSegments.join("/") : rigName;
+      if (!localRigName || !normalizedSessionName.startsWith(`${localRigName}--`)) {
+        continue;
+      }
+      if (rigSegments.length > 0 && citySegment) {
+        rigMatches.push({
+          cityName: citySegment,
+          localName: normalizedSessionName,
+        });
+      } else {
+        rigMatches.push({
+          cityName: await resolveGcCityName(),
+          localName: normalizedSessionName,
+        });
+      }
+    }
+    if (rigMatches.length === 1) {
+      return rigMatches[0];
     }
     return {
       cityName: await resolveGcCityName(),
@@ -2100,7 +2090,10 @@ const makeGcApiClient = Effect.gen(function* () {
             normalizedRemote && cityPath
               ? mergeCliExpandedConfig(normalizedRemote, loadExpandedCliConfig(cityPath))
               : (normalizedRemote ?? remote);
-          cachedCityName = lastKnownConfig.workspace.name?.trim() || cachedCityName;
+          const workspaceName = lastKnownConfig.workspace.name?.trim();
+          if (workspaceName && workspaceName !== "cities") {
+            cachedCityName = workspaceName;
+          }
           return lastKnownConfig;
         }
         if (cityPath) {
@@ -2185,6 +2178,55 @@ const makeGcApiClient = Effect.gen(function* () {
       );
     });
 
+  const setSupervisorRunning: GcApiClientShape["setSupervisorRunning"] = (
+    requestedCityName,
+    running,
+  ) =>
+    Effect.promise(async () =>
+      runLoggedGcMutation(
+        "supervisor-running",
+        requestedCityName?.trim() || "supervisor",
+        { running },
+        async () => {
+          const target = await resolveCityLifecycleTarget(requestedCityName);
+          const args = running ? ["supervisor", "start"] : ["supervisor", "stop", "--wait"];
+          const cli = runGcCli(target.cityPath, args);
+          const alreadyStopped =
+            !running && cli.exitCode !== 0 && cli.stderr.includes("supervisor is not running");
+          if (cli.exitCode !== 0 && !alreadyStopped) {
+            throw new Error(
+              cli.stderr.trim() || cli.stdout.trim() || "GC supervisor command failed",
+            );
+          }
+          lastKnownConfig = null;
+          return { result: undefined, path: "gc-cli" };
+        },
+      ),
+    );
+
+  const setControllerRunning: GcApiClientShape["setControllerRunning"] = (
+    requestedCityName,
+    running,
+  ) =>
+    Effect.promise(async () =>
+      runLoggedGcMutation(
+        "controller-running",
+        requestedCityName?.trim() || "controller",
+        { running },
+        async () => {
+          const target = await resolveCityLifecycleTarget(requestedCityName);
+          const cli = runGcCli(target.cityPath, [running ? "start" : "stop"]);
+          if (cli.exitCode !== 0) {
+            throw new Error(
+              cli.stderr.trim() || cli.stdout.trim() || "GC controller command failed",
+            );
+          }
+          lastKnownConfig = null;
+          return { result: undefined, path: "gc-cli" };
+        },
+      ),
+    );
+
   const setAgentSuspended: GcApiClientShape["setAgentSuspended"] = (name, suspended) =>
     Effect.promise(async () =>
       runLoggedGcMutation("agent-suspended", sanitizeKey(name), { suspended }, async () => {
@@ -2200,52 +2242,7 @@ const makeGcApiClient = Effect.gen(function* () {
           lastKnownConfig = updateCachedAgentSuspended(lastKnownConfig, normalizedName, suspended);
           return { result: undefined, path: "gc-api" };
         } catch (error) {
-          if (target.localName.includes("/")) {
-            if (!target.cityPath) {
-              throw error;
-            }
-            logGcWarning("routing rig-scoped agent mutation via city.toml", {
-              baseUrl,
-              cityPath: target.cityPath,
-              agent: normalizedName,
-              suspended,
-            });
-            writeRigAgentSuspendedToCityToml(target.cityPath, target.localName, suspended);
-            lastKnownConfig = updateCachedAgentSuspended(
-              lastKnownConfig,
-              normalizedName,
-              suspended,
-            );
-            return { result: undefined, path: "city.toml" };
-          }
-          if (!target.cityPath) {
-            throw error;
-          }
-          try {
-            writeAgentSuspendedToCityToml(target.cityPath, target.identity, suspended);
-            lastKnownConfig = updateCachedAgentSuspended(
-              lastKnownConfig,
-              normalizedName,
-              suspended,
-            );
-            return { result: undefined, path: "city.toml" };
-          } catch (cityTomlError) {
-            const cli = runGcCli(target.cityPath, ["agent", action, target.localName]);
-            if (cli.exitCode === 0) {
-              lastKnownConfig = updateCachedAgentSuspended(
-                lastKnownConfig,
-                normalizedName,
-                suspended,
-              );
-              return { result: undefined, path: "gc-cli" };
-            }
-            throw new Error(
-              cli.stderr.trim() || cli.stdout.trim() || String(cityTomlError) || String(error),
-              {
-                cause: cityTomlError,
-              },
-            );
-          }
+          throw error;
         }
       }),
     );
@@ -2504,6 +2501,8 @@ const makeGcApiClient = Effect.gen(function* () {
     stopSession,
     wakeSession,
     respondToPending,
+    setSupervisorRunning,
+    setControllerRunning,
     setAgentSuspended,
     setAgentMaxActiveSessions,
     setAgentMinActiveSessions,

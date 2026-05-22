@@ -5,9 +5,7 @@ Beads CLI follows Tufte-inspired design principles for terminal output, using se
 ## Core Principles
 
 ### 1. Maximize Data-Ink Ratio (Tufte)
-
 Only color what demands attention. Every colored element should serve a purpose:
-
 - Navigation landmarks (section headers, group titles)
 - Scan targets (command names, flag names)
 - Semantic states (success, warning, error, blocked)
@@ -15,20 +13,18 @@ Only color what demands attention. Every colored element should serve a purpose:
 **Anti-pattern**: Coloring everything defeats the purpose and creates cognitive overload.
 
 ### 2. Semantic Color Tokens
-
 Use meaning-based tokens, not raw colors:
 
-| Token     | Semantic Meaning           | Use Cases                                    |
-| --------- | -------------------------- | -------------------------------------------- |
-| `Pass`    | Success, completion, ready | Checkmarks, completed items, healthy status  |
-| `Warn`    | Attention needed, caution  | Warnings, in-progress items, action required |
-| `Fail`    | Error, blocked, critical   | Errors, blocked items, failures              |
-| `Accent`  | Navigation, emphasis       | Headers, links, key information              |
-| `Muted`   | De-emphasized, secondary   | Defaults, closed items, metadata             |
-| `Command` | Interactive elements       | Command names, flags                         |
+| Token | Semantic Meaning | Use Cases |
+|-------|-----------------|-----------|
+| `Pass` | Success, completion, ready | Checkmarks, completed items, healthy status |
+| `Warn` | Attention needed, caution | Warnings, in-progress items, action required |
+| `Fail` | Error, blocked, critical | Errors, blocked items, failures |
+| `Accent` | Navigation, emphasis | Headers, links, key information |
+| `Muted` | De-emphasized, secondary | Defaults, closed items, metadata |
+| `Command` | Interactive elements | Command names, flags |
 
 ### 3. Perceptual Optimization (Light/Dark Modes)
-
 Lipgloss `AdaptiveColor` ensures optimal contrast in both terminal modes:
 
 ```go
@@ -39,15 +35,12 @@ ColorPass = lipgloss.AdaptiveColor{
 ```
 
 **Why this matters**:
-
 - Light terminals need darker colors for contrast
 - Dark terminals need brighter colors for visibility
 - Same semantic meaning, optimized perception
 
 ### 4. Respect Cognitive Load
-
 Let whitespace and position do most of the work:
-
 - Group related information visually
 - Use indentation for hierarchy
 - Reserve color for exceptional states
@@ -56,16 +49,16 @@ Let whitespace and position do most of the work:
 
 ### When to Color
 
-| Situation             | Style          | Rationale                          |
-| --------------------- | -------------- | ---------------------------------- |
-| Navigation landmarks  | Accent         | Helps users orient in output       |
-| Command/flag names    | Bold           | Creates vertical scan targets      |
-| Success indicators    | Pass (green)   | Immediate positive feedback        |
-| Warnings              | Warn (yellow)  | Draws attention without alarm      |
-| Errors                | Fail (red)     | Demands immediate attention        |
-| Closed/done items     | Muted          | Visually recedes, "done"           |
-| High priority (P0/P1) | Semantic color | Only urgent items deserve color    |
-| Normal priority (P2+) | Plain          | Most items don't need highlighting |
+| Situation | Style | Rationale |
+|-----------|-------|-----------|
+| Navigation landmarks | Accent | Helps users orient in output |
+| Command/flag names | Bold | Creates vertical scan targets |
+| Success indicators | Pass (green) | Immediate positive feedback |
+| Warnings | Warn (yellow) | Draws attention without alarm |
+| Errors | Fail (red) | Demands immediate attention |
+| Closed/done items | Muted | Visually recedes, "done" |
+| High priority (P0/P1) | Semantic color | Only urgent items deserve color |
+| Normal priority (P2+) | Plain | Most items don't need highlighting |
 
 ### When NOT to Color
 
@@ -115,7 +108,7 @@ Following Tufte's principle of layered information:
 
 ## References
 
-- Tufte, E. (2001). _The Visual Display of Quantitative Information_
+- Tufte, E. (2001). *The Visual Display of Quantitative Information*
 - [Ayu Theme Colors](https://github.com/ayu-theme/ayu-colors)
 - [Lipgloss - Terminal Styling](https://github.com/charmbracelet/lipgloss)
 - [WCAG Color Contrast Guidelines](https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html)

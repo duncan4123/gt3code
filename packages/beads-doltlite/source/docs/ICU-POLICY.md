@@ -16,12 +16,12 @@ through `go-mysql-server` (the embedded Dolt SQL engine). `bd` does not
 use SQL `REGEXP` functions, so ICU provides zero functional value while
 creating significant portability problems:
 
-| Platform     | Problem without `gms_pure_go`                                                                                  |
-| ------------ | -------------------------------------------------------------------------------------------------------------- |
-| Linux        | Binaries dynamically link a specific `libicui18n.so.NN` version; crash on distros with a different ICU version |
-| macOS        | ICU is keg-only in Homebrew; `go install` fails without manual `CGO_CFLAGS`/`CGO_LDFLAGS`                      |
-| Windows      | ICU C headers (`unicode/uregex.h`) not available; `go install` and CGO builds fail                             |
-| `go install` | The module cannot make plain `go install pkg@latest` use `-tags gms_pure_go` automatically                     |
+| Platform | Problem without `gms_pure_go` |
+|----------|-------------------------------|
+| Linux | Binaries dynamically link a specific `libicui18n.so.NN` version; crash on distros with a different ICU version |
+| macOS | ICU is keg-only in Homebrew; `go install` fails without manual `CGO_CFLAGS`/`CGO_LDFLAGS` |
+| Windows | ICU C headers (`unicode/uregex.h`) not available; `go install` and CGO builds fail |
+| `go install` | The module cannot make plain `go install pkg@latest` use `-tags gms_pure_go` automatically |
 
 ## How It Works
 
@@ -46,18 +46,18 @@ dependency at the binary level.
 
 Every build path that produces a binary for users must include `-tags gms_pure_go`:
 
-| Location            | File                                               |
-| ------------------- | -------------------------------------------------- |
-| Local builds        | `Makefile` (`BUILD_TAGS := gms_pure_go`)           |
-| Release builds      | `.goreleaser.yml` (all build targets)              |
-| Install script      | `scripts/install.sh`                               |
-| Windows installer   | `install.ps1`                                      |
-| CI test matrix      | `.github/workflows/ci.yml` (Linux, macOS, Windows) |
-| macOS release       | `.github/workflows/release.yml`                    |
-| Migration tests     | `.github/workflows/migration-test.yml`             |
-| Nightly tests       | `.github/workflows/nightly.yml`                    |
-| Cross-version smoke | `.github/workflows/cross-version-smoke.yml`        |
-| Regression tests    | `.github/workflows/regression.yml`                 |
+| Location | File |
+|----------|------|
+| Local builds | `Makefile` (`BUILD_TAGS := gms_pure_go`) |
+| Release builds | `.goreleaser.yml` (all build targets) |
+| Install script | `scripts/install.sh` |
+| Windows installer | `install.ps1` |
+| CI test matrix | `.github/workflows/ci.yml` (Linux, macOS, Windows) |
+| macOS release | `.github/workflows/release.yml` |
+| Migration tests | `.github/workflows/migration-test.yml` |
+| Nightly tests | `.github/workflows/nightly.yml` |
+| Cross-version smoke | `.github/workflows/cross-version-smoke.yml` |
+| Regression tests | `.github/workflows/regression.yml` |
 
 ### Canonical pattern: source `.buildflags`
 
@@ -129,7 +129,7 @@ Beads used to carry a `replace github.com/dolthub/go-mysql-server => github.com/
 Upstream PR (closed, declined): https://github.com/dolthub/go-mysql-server/pull/3504
 Upstream issue (closed, declined): https://github.com/dolthub/go-mysql-server/issues/3506
 
-The dolthub maintainers have made clear the upstream default will not flip: _"We want our software to work as intended with the default settings. If users want to circumvent certain features with build tags or other build-time or run-time configuration, that's fine. Changing the default is not aligned with what we are actually trying to do."_
+The dolthub maintainers have made clear the upstream default will not flip: *"We want our software to work as intended with the default settings. If users want to circumvent certain features with build tags or other build-time or run-time configuration, that's fine. Changing the default is not aligned with what we are actually trying to do."*
 
 ### How `go install` is handled now
 
@@ -172,5 +172,5 @@ No fork, no replace directive, no upstream patch required. The tradeoff is that 
 ## See Also
 
 - [INSTALLING.md](INSTALLING.md) -- user-facing build dependency docs
-- [DOLT-BACKEND.md](DOLT-BACKEND.md) -- embedded Dolt architecture
+- [DOLT.md](DOLT.md) -- embedded Dolt architecture
 - [CONTRIBUTING.md](../CONTRIBUTING.md) -- contributor guidelines

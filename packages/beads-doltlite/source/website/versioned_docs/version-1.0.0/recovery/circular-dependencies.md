@@ -30,13 +30,11 @@ bd dep tree
 ## Solution
 
 **Step 1:** Identify the cycle
-
 ```bash
 bd blocked --verbose
 ```
 
 **Step 2:** Map the dependency chain
-
 ```bash
 bd show <issue-a>
 bd show <issue-b>
@@ -47,13 +45,11 @@ bd show <issue-b>
 Consider: Which dependency is least critical to the workflow?
 
 **Step 4:** Remove the problematic dependency
-
 ```bash
 bd dep remove <dependent-issue> <blocking-issue>
 ```
 
 **Step 5:** Verify the cycle is broken
-
 ```bash
 bd blocked
 bd ready

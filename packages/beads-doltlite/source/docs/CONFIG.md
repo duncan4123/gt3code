@@ -1,9 +1,14 @@
 # Configuration System
 
+Last reviewed: 2026-05-08
+
+Freshness source: `cmd/bd/main.go`, `cmd/bd/config.go`, and
+`internal/configfile/`.
+
 bd has two complementary configuration systems:
 
-1. **Tool-level configuration** (Viper): User preferences for tool behavior (flags, output format)
-2. **Project-level configuration** (`bd config`): Integration data and project-specific settings
+1. **Tool-level configuration** (Viper): startup settings, flags, output format, and other CLI behaviour
+2. **Project-level configuration** (`bd config`): integration data and project-specific settings; startup-sensitive keys are routed to `config.yaml`
 
 ## Tool-Level Configuration (Viper)
 
@@ -12,46 +17,49 @@ bd has two complementary configuration systems:
 Tool preferences control how `bd` behaves globally or per-user. These are stored in config files or environment variables and managed by [Viper](https://github.com/spf13/viper).
 
 **Configuration precedence** (highest to lowest):
-
 1. Command-line flags (`--json`, `--dolt-auto-commit`, etc.)
 2. Environment variables (`BD_JSON`, `BD_DOLT_AUTO_COMMIT`, etc.)
-3. Config file (`~/.config/bd/config.yaml` or `.beads/config.yaml`)
+3. Merged config files (`~/.beads/config.yaml`, `~/.config/bd/config.yaml`, `.beads/config.yaml`, and `BEADS_DIR/config.yaml`)
 4. Defaults
 
 ### Config File Locations
 
-Viper searches for `config.yaml` in these locations (in order):
+Config files are merged from lowest to highest priority:
 
-1. `.beads/config.yaml` - Project-specific tool settings (version-controlled)
-2. `~/.config/bd/config.yaml` - User-specific tool settings
-3. `~/.beads/config.yaml` - Legacy user settings
+1. `~/.beads/config.yaml` - legacy user settings
+2. `~/.config/bd/config.yaml` - user settings; this path is checked explicitly even on platforms whose native user-config directory differs
+3. `.beads/config.yaml` - project-specific tool settings, discovered by walking up from the current directory
+4. `BEADS_DIR/config.yaml` - highest-priority runtime workspace override when `BEADS_DIR` points at a different `.beads` directory
+
+When a project config exists, `.beads/config.local.yaml` is merged last for
+machine-specific overrides that should not be committed.
 
 ### Supported Settings
 
-Tool-level settings you can configure:
+Common tool-level settings you can configure:
 
-| Setting                      | Flag                 | Environment Variable            | Default                | Description                                                                       |
-| ---------------------------- | -------------------- | ------------------------------- | ---------------------- | --------------------------------------------------------------------------------- |
-| `json`                       | `--json`             | `BD_JSON`                       | `false`                | Output in JSON format                                                             |
-| `no-push`                    | `--no-push`          | `BD_NO_PUSH`                    | `false`                | Skip pushing to remote in `bd dolt push`                                          |
-| `federation.remote`          | -                    | `BD_FEDERATION_REMOTE`          | (none)                 | Dolt remote URL for federation                                                    |
-| `federation.sovereignty`     | -                    | `BD_FEDERATION_SOVEREIGNTY`     | (none)                 | Data sovereignty tier: `T1`, `T2`, `T3`, `T4`                                     |
-| `dolt.auto-commit`           | `--dolt-auto-commit` | `BD_DOLT_AUTO_COMMIT`           | `on`                   | (Dolt backend) Automatically create a Dolt commit after successful write commands |
-| `create.require-description` | -                    | `BD_CREATE_REQUIRE_DESCRIPTION` | `false`                | Require description when creating issues                                          |
-| `validation.on-create`       | -                    | `BD_VALIDATION_ON_CREATE`       | `none`                 | Template validation on create: `none`, `warn`, `error`                            |
-| `validation.on-sync`         | -                    | `BD_VALIDATION_ON_SYNC`         | `none`                 | Template validation before sync: `none`, `warn`, `error`                          |
-| `git.author`                 | -                    | `BD_GIT_AUTHOR`                 | (none)                 | Override commit author for beads commits                                          |
-| `git.no-gpg-sign`            | -                    | `BD_GIT_NO_GPG_SIGN`            | `false`                | Disable GPG signing for beads commits                                             |
-| `directory.labels`           | -                    | -                               | (none)                 | Map directories to labels for automatic filtering                                 |
-| `external_projects`          | -                    | -                               | (none)                 | Map project names to paths for cross-project deps                                 |
-| `backup.enabled`             | -                    | `BD_BACKUP_ENABLED`             | `false`                | Enable periodic Dolt-native backup to `.beads/backup/`                            |
-| `backup.interval`            | -                    | `BD_BACKUP_INTERVAL`            | `15m`                  | Minimum time between auto-backups                                                 |
-| `dolt.auto-push`             | -                    | `BD_DOLT_AUTO_PUSH`             | `false`                | Auto-push to Dolt remote after writes (explicit opt-in)                           |
-| `dolt.auto-push-interval`    | -                    | `BD_DOLT_AUTO_PUSH_INTERVAL`    | `5m`                   | Minimum time between auto-pushes                                                  |
-| `dolt.shared-server`         | `--shared-server`    | `BEADS_DOLT_SHARED_SERVER`      | `false`                | Share a single Dolt server across all projects at `~/.beads/shared-server/`       |
-| `dolt.idle-timeout`          | -                    | -                               | `30m`                  | Idle auto-stop timeout (`"0"` disables)                                           |
-| `db`                         | `--db`               | `BD_DB`                         | (auto-discover)        | Database path                                                                     |
-| `actor`                      | `--actor`            | `BEADS_ACTOR`                   | `git config user.name` | Actor name for audit trail (see below)                                            |
+| Setting | Flag | Environment Variable | Default | Description |
+|---------|------|---------------------|---------|-------------|
+| `json` | `--json` | `BD_JSON` | `false` | Output in JSON format |
+| `no-push` | `--no-push` | `BD_NO_PUSH` | `false` | Skip pushing to remote in `bd dolt push` |
+| `federation.remote` | - | `BD_FEDERATION_REMOTE` | (none) | Dolt remote URL for federation |
+| `federation.sovereignty` | - | `BD_FEDERATION_SOVEREIGNTY` | (none) | Data sovereignty tier: `T1`, `T2`, `T3`, `T4` |
+| `dolt.auto-commit` | `--dolt-auto-commit` | `BD_DOLT_AUTO_COMMIT` | `on` | (Dolt backend) Automatically create a Dolt commit after successful write commands |
+| `create.require-description` | - | `BD_CREATE_REQUIRE_DESCRIPTION` | `false` | Require description when creating issues |
+| `validation.on-create` | - | `BD_VALIDATION_ON_CREATE` | `none` | Template validation on create: `none`, `warn`, `error` |
+| `validation.on-sync` | - | `BD_VALIDATION_ON_SYNC` | `none` | Template validation before sync: `none`, `warn`, `error` |
+| `git.author` | - | `BD_GIT_AUTHOR` | (none) | Override commit author for beads commits |
+| `git.no-gpg-sign` | - | `BD_GIT_NO_GPG_SIGN` | `false` | Disable GPG signing for beads commits |
+| `directory.labels` | - | - | (none) | Map directories to labels for automatic filtering |
+| `external_projects` | - | - | (none) | Map project names to paths for cross-project deps |
+| `backup.enabled` | - | `BD_BACKUP_ENABLED` | `false` | Enable periodic Dolt-native backup to `.beads/backup/` |
+| `backup.interval` | - | `BD_BACKUP_INTERVAL` | `15m` | Minimum time between auto-backups |
+| `dolt.auto-push` | - | `BD_DOLT_AUTO_PUSH` | `false` | Auto-push to Dolt remote after writes (explicit opt-in) |
+| `dolt.auto-push-interval` | - | `BD_DOLT_AUTO_PUSH_INTERVAL` | `5m` | Minimum time between auto-pushes |
+| `dolt.auto-push-timeout` | - | `BD_DOLT_AUTO_PUSH_TIMEOUT` | `30s` | Timeout for a single auto-push attempt |
+| `dolt.shared-server` | `--shared-server` | `BEADS_DOLT_SHARED_SERVER` | `false` | Share a single Dolt server across all projects at `~/.beads/shared-server/` |
+| `db` | `--db` | `BD_DB` | (auto-discover) | Database path |
+| `actor` | `--actor` | `BEADS_ACTOR` | `git config user.name` | Actor name for audit trail (see below) |
 
 **Backend note:** Dolt is the only storage backend. By default, Dolt runs in embedded mode (in-process, no server). Use `bd init --server` or `BEADS_DOLT_SERVER_MODE=1` for server mode. See [DOLT.md](DOLT.md) for details.
 
@@ -59,8 +67,8 @@ Tool-level settings you can configure:
 
 When using the **Dolt backend**, there are two different kinds of “commit”:
 
-- **SQL transaction commit**: what happens when a `bd` command updates tables successfully (durable in the Dolt _working set_).
-- **Dolt version-control commit**: what records those changes into Dolt’s _history_ (visible in `bd vc log`, push/pull/merge workflows).
+- **SQL transaction commit**: what happens when a `bd` command updates tables successfully (durable in the Dolt *working set*).
+- **Dolt version-control commit**: what records those changes into Dolt’s *history* (visible in `bd vc log`, push/pull/merge workflows).
 
 By default, `bd` is configured to **auto-commit Dolt history after each successful write command**:
 
@@ -84,21 +92,23 @@ dolt:
 
 Periodic Dolt-native backup to `.beads/backup/` provides an off-machine recovery path. Local Dolt snapshots (via `dolt.auto-commit`) remain the primary safety net; backup is a secondary layer.
 
+This is a full database backup, unlike `bd export` or `.beads/issues.jsonl`.
+It preserves Dolt state such as tables, branches, commit history, and
+working-set data.
+
 ```yaml
 backup:
-  enabled: true # Enable auto-backup after write commands
-  interval: 15m # Minimum time between auto-backups
+  enabled: true    # Enable auto-backup after write commands
+  interval: 15m    # Minimum time between auto-backups
 ```
 
 **How it works:**
-
 - After each write command (in PersistentPostRun), `bd` checks the Dolt HEAD commit hash against the last backup state
 - If data changed and the throttle interval has passed, a Dolt-native backup is synced to `.beads/backup/`
-- Full commit history is preserved in the backup
+- Full database state and commit history are preserved in the backup
 - State is tracked in `.beads/backup/backup_state.json`
 
 **Manual commands:**
-
 - `bd backup init <path>` — register a backup destination (filesystem or DoltHub URL)
 - `bd backup sync` — push to the configured backup destination
 - `bd backup restore [path]` — restore from a backup (`--force` to overwrite)
@@ -111,12 +121,12 @@ By default, `bd` does not push automatically after write commands. Auto-push is 
 
 ```yaml
 dolt:
-  auto-push: false # Explicit opt-in only; set true for single-writer setups
-  auto-push-interval: 5m # Minimum time between auto-pushes
+  auto-push: false      # Explicit opt-in only; set true for single-writer setups
+  auto-push-interval: 5m  # Minimum time between auto-pushes
+  auto-push-timeout: 30s  # Bound one push attempt when the remote is unreachable
 ```
 
 **How it works:**
-
 - After each write command (in PersistentPostRun, after auto-commit and auto-backup), `bd` checks whether a push is due
 - Pushes are debounced: skipped if the last push was less than `dolt.auto-push-interval` ago
 - Change detection: skipped if the Dolt HEAD commit hasn't changed since last push
@@ -124,7 +134,6 @@ dolt:
 - Last push time and commit are tracked in the metadata table
 
 **Opt in:**
-
 ```yaml
 dolt:
   auto-push: true
@@ -144,7 +153,6 @@ The actor name (used for `created_by` in issues and audit trails) is resolved in
 For most developers, no configuration is needed - beads will use your git identity automatically. This ensures your issue authorship matches your commit authorship.
 
 To override, set `BEADS_ACTOR` in your shell profile:
-
 ```bash
 export BEADS_ACTOR="my-github-handle"
 ```
@@ -179,7 +187,6 @@ federation:
 ### Example Config File
 
 `~/.config/bd/config.yaml`:
-
 ```yaml
 # Default to JSON output for scripting
 json: true
@@ -190,7 +197,6 @@ dolt:
 ```
 
 `.beads/config.yaml` (project-specific):
-
 ```yaml
 # Require descriptions on all issues (enforces context for future work)
 create:
@@ -200,14 +206,14 @@ create:
 # Validates that issues include required sections based on issue type
 # Values: none (default), warn (print warning), error (block operation)
 validation:
-  on-create: warn # Warn when creating issues missing sections
-  on-sync: none # No validation on sync (backwards compatible)
+  on-create: warn   # Warn when creating issues missing sections
+  on-sync: none     # No validation on sync (backwards compatible)
 
 # Git commit signing options (GH#600)
 # Useful when you have Touch ID commit signing that prompts for each commit
 git:
-  author: "beads-bot <beads@example.com>" # Override commit author
-  no-gpg-sign: true # Disable GPG signing
+  author: "beads-bot <beads@example.com>"  # Override commit author
+  no-gpg-sign: true                         # Disable GPG signing
 
 # Directory-aware label scoping for monorepos (GH#541)
 # When running bd ready/list from a matching directory, issues with
@@ -234,13 +240,11 @@ external_projects:
 ### Why Two Systems?
 
 **Tool settings (Viper)** are user preferences:
-
 - How should I see output? (`--json`)
 - Should Dolt auto-commit? (`--dolt-auto-commit`)
 - How should the CLI behave?
 
 **Project config (`bd config`)** is project data:
-
 - What's our Jira URL?
 - What are our Linear tokens?
 - How do we map statuses?
@@ -254,7 +258,6 @@ Agents benefit from `bd config`'s structured CLI interface over manual YAML edit
 ### Overview
 
 Project configuration is:
-
 - **Per-project**: Isolated to each `.beads/` database
 - **Version-control-friendly**: Stored in the database, queryable and scriptable
 - **Machine-readable**: JSON output for automation
@@ -270,7 +273,6 @@ bd config set --json <key> <value>  # JSON output
 ```
 
 Examples:
-
 ```bash
 bd config set jira.url "https://company.atlassian.net"
 bd config set jira.project "PROJ"
@@ -285,7 +287,6 @@ bd config get --json <key>  # JSON output
 ```
 
 Examples:
-
 ```bash
 bd config get jira.url
 # Output: https://company.atlassian.net
@@ -302,7 +303,6 @@ bd config list --json  # JSON output
 ```
 
 Example output:
-
 ```
 Configuration:
   compact_tier1_days = 90
@@ -312,7 +312,6 @@ Configuration:
 ```
 
 JSON output:
-
 ```json
 {
   "compact_tier1_days": "90",
@@ -330,7 +329,6 @@ bd config unset --json <key>  # JSON output
 ```
 
 Example:
-
 ```bash
 bd config unset jira.url
 ```
@@ -341,25 +339,40 @@ Configuration keys use dot-notation namespaces to organize settings:
 
 ### Core Namespaces
 
-- `compact_*` - Compaction settings (see EXTENDING.md)
+- `compact_*` - Compaction settings (used by `bd admin compact`)
 - `issue_prefix` - Issue ID prefix (managed by `bd init`)
 - `issue_id_mode` - ID generation mode: `hash` (default) or `counter` (sequential integers)
 - `max_collision_prob` - Maximum collision probability for adaptive hash IDs (default: 0.25)
 - `min_hash_length` - Minimum hash ID length (default: 4)
 - `max_hash_length` - Maximum hash ID length (default: 8)
 - `import.orphan_handling` - How to handle hierarchical issues with missing parents during import (default: `allow`)
-- `export.auto` - Refresh the git-tracked JSONL file after every write command (default: `true`)
+- `export.auto` - Refresh the JSONL export after every write command (default: `false`). This is for viewers, interchange, and issue-level migration; it is not cross-machine sync and not a full database backup.
 - `export.path` - Output filename relative to `.beads/` (default: `issues.jsonl`)
 - `export.interval` - Minimum time between auto-exports (default: `60s`)
-- `export.git-add` - Run `git add` on the export file after writing (default: `true`)
+- `export.git-add` - Run `git add` on the export file after writing (default: `false`)
 - `export.error_policy` - Error handling strategy for exports (default: `strict`)
 - `export.retry_attempts` - Number of retry attempts for transient errors (default: 3)
 - `export.retry_backoff_ms` - Initial backoff in milliseconds for retries (default: 100)
 - `export.skip_encoding_errors` - Skip issues that fail JSON encoding (default: false)
 - `export.write_manifest` - Write .manifest.json with export metadata (default: false)
 - `auto_export.error_policy` - Override error policy for auto-exports (default: `best-effort`)
+- `import.auto` - Legacy hook fallback that imports JSONL after git merge/checkout only when no Dolt remote is configured (default: `true`)
 - `sync.branch` - Name of the dedicated sync branch for beads data (see docs/PROTECTED_BRANCHES.md)
 - `sync.require_confirmation_on_mass_delete` - Require interactive confirmation before pushing when >50% of issues vanish during a merge AND more than 5 issues existed before (default: `false`)
+
+**Upgrade note:** `export.auto` and `export.git-add` are opt-in. Older releases
+briefly made `.beads/issues.jsonl` look like the default git-tracked source of
+truth; current releases treat it as an optional export for viewers,
+interchange, and issue-level migration. If your workflow depends on fresh JSONL
+or on the pre-commit hook staging that file, set both values explicitly:
+
+```bash
+bd config set export.auto true
+bd config set export.git-add true
+```
+
+Use `bd dolt push` / `bd dolt pull` for cross-machine sync and `bd backup` for
+restorable database backups.
 
 ### Integration Namespaces
 
@@ -409,13 +422,12 @@ bd config set issue_id_mode counter
 
 **Valid values:**
 
-| Value     | Behavior                                                    |
-| --------- | ----------------------------------------------------------- |
-| `hash`    | (default) Hash-based IDs, adaptive length, collision-safe   |
+| Value | Behavior |
+|-------|----------|
+| `hash` | (default) Hash-based IDs, adaptive length, collision-safe |
 | `counter` | Sequential integers per prefix: `bd-1`, `bd-2`, `bd-3`, ... |
 
 **Counter mode behavior:**
-
 - Each prefix (`bd`, `plug`, etc.) has its own independent counter
 - Counter is stored atomically in the database; concurrent creates within a single Dolt session are safe
 - Explicit `--id` flag always overrides counter mode (the counter is not incremented)
@@ -463,12 +475,12 @@ bd create "Plugin task" -p 1        # → plug-1 (if prefix is "plug")
 
 **Tradeoff — hash vs. counter:**
 
-|                               | Hash IDs                                   | Counter IDs                                            |
-| ----------------------------- | ------------------------------------------ | ------------------------------------------------------ |
-| Human readability             | Lower (e.g., `bd-a3f2`)                    | Higher (e.g., `bd-1`)                                  |
+| | Hash IDs | Counter IDs |
+|---|---|---|
+| Human readability | Lower (e.g., `bd-a3f2`) | Higher (e.g., `bd-1`) |
 | Distributed/concurrent safety | Excellent (collision-free across branches) | Needs care (counters can diverge on parallel branches) |
-| Predictability                | Unpredictable                              | Sequential                                             |
-| Best for                      | Multi-agent, multi-branch workflows        | Single-writer or project-management UIs                |
+| Predictability | Unpredictable | Sequential |
+| Best for | Multi-agent, multi-branch workflows | Single-writer or project-management UIs |
 
 Counter IDs are well-suited for linear project-management workflows and human-facing issue tracking.
 Hash IDs are safer when multiple agents or branches create issues concurrently, since each hash is
@@ -659,8 +671,8 @@ Linear integration provides bidirectional sync between bd and Linear via GraphQL
 **Required configuration:**
 
 ```bash
-# API Key (can also use LINEAR_API_KEY environment variable)
-bd config set linear.api_key "lin_api_YOUR_API_KEY"
+# API Key (recommended: use environment variable to avoid git exposure)
+export LINEAR_API_KEY="lin_api_YOUR_API_KEY"  # add to ~/.secrets or ~/.zshrc
 
 # Team ID (find in Linear team settings or URL)
 bd config set linear.team_id "team-uuid-here"
@@ -682,7 +694,6 @@ compatibility.
 **Priority mapping (Linear 0-4 → Beads 0-4):**
 
 Linear and Beads both use 0-4 priority scales, but with different semantics:
-
 - Linear: 0=no priority, 1=urgent, 2=high, 3=medium, 4=low
 - Beads: 0=critical, 1=high, 2=medium, 3=low, 4=backlog
 
@@ -752,8 +763,17 @@ bd linear sync
 # Pull only (import from Linear)
 bd linear sync --pull
 
+# Pull only if data is stale (skip if fresh)
+bd linear sync --pull-if-stale
+
+# Pull with custom staleness threshold (default 20m)
+bd linear sync --pull-if-stale --threshold 5m
+
 # Pull issues and Linear relations as bd dependencies
 bd linear sync --pull --relations
+
+# Pull and rebuild Linear project milestones as local epic parents
+bd linear sync --pull --milestones
 
 # Push only (export to Linear)
 bd linear sync --push
@@ -769,6 +789,16 @@ bd linear sync --prefer-linear   # Linear version wins on conflicts
 # Check sync status
 bd linear status
 ```
+
+**Staleness detection:**
+
+After each successful pull, `bd` writes the current timestamp to `.beads/last_pull`. This enables ambient staleness detection:
+
+- **`--pull-if-stale`**: Only pull if data is older than the threshold (default 20m). When data is fresh, prints "Linear data is fresh" and exits. In `--json` mode, includes `"is_fresh": true/false`.
+- **`--threshold`**: Override the default 20-minute staleness threshold (e.g., `--threshold 5m`).
+- **Debounce**: A 5-minute debounce prevents agent loops — if a pull completed within the last 5 minutes, data is always treated as fresh regardless of the threshold.
+- **`bd prime` auto-pull**: When `LINEAR_API_KEY` is set and data is stale, `bd prime` automatically pulls from Linear before emitting orientation output.
+- **Per-session warning**: On any `bd` command, if data is stale, a one-time warning is emitted to stderr: `⚠ Linear data is 45m stale — run 'bd linear sync --pull' to refresh`. Suppressed in subsequent commands within the same shell session.
 
 **Automatic sync tracking:**
 
@@ -870,7 +900,6 @@ bd config set ado.type_map.chore "Task"
 **Priority mapping (ADO 1-4 → Beads 0-4):**
 
 ADO uses a 1-4 scale; Beads uses 0-4. The mapping is:
-
 - ADO 1 (Critical) → Beads 0 (Critical)
 - ADO 2 (High) → Beads 1 (High)
 - ADO 3 (Medium) → Beads 2 (Medium)
@@ -883,13 +912,13 @@ Priority mapping is not configurable — it is handled automatically.
 
 All ADO config keys have environment variable equivalents:
 
-| Config Key     | Environment Variable    |
-| -------------- | ----------------------- |
-| `ado.pat`      | `AZURE_DEVOPS_PAT`      |
-| `ado.org`      | `AZURE_DEVOPS_ORG`      |
-| `ado.project`  | `AZURE_DEVOPS_PROJECT`  |
-| `ado.projects` | `AZURE_DEVOPS_PROJECTS` |
-| `ado.url`      | `AZURE_DEVOPS_URL`      |
+| Config Key     | Environment Variable     |
+|----------------|--------------------------|
+| `ado.pat`      | `AZURE_DEVOPS_PAT`       |
+| `ado.org`      | `AZURE_DEVOPS_ORG`       |
+| `ado.project`  | `AZURE_DEVOPS_PROJECT`   |
+| `ado.projects` | `AZURE_DEVOPS_PROJECTS`  |
+| `ado.url`      | `AZURE_DEVOPS_URL`       |
 
 Environment variables take effect when the corresponding `bd config` key is not set.
 
@@ -939,7 +968,6 @@ bd config list --json | jq -r '.["jira.project"]'
 ```
 
 Example Python script:
-
 ```python
 import json
 import subprocess
@@ -986,4 +1014,4 @@ External integration scripts can read configuration to sync with Jira, Linear, G
 ## See Also
 
 - [README.md](../README.md) - Main documentation
-- [EXTENDING.md](EXTENDING.md) - Database schema and compaction config
+- [ADVANCED.md](ADVANCED.md) - Extensible Database section and other advanced topics

@@ -33,11 +33,11 @@ output, err := cmd.Output()
 
 ## When to Use Each Method
 
-| Method        | Use Case                               | Example                            |
-| ------------- | -------------------------------------- | ---------------------------------- |
-| `GitCmd()`    | Git commands for beads operations      | `git add .beads/`, `git push`      |
-| `GitCmdCWD()` | Git commands for user's working repo   | `git status` (show user's changes) |
-| `RelPath()`   | Convert absolute path to repo-relative | Display paths in output            |
+| Method | Use Case | Example |
+|--------|----------|---------|
+| `GitCmd()` | Git commands for beads operations | `git add .beads/`, `git push` |
+| `GitCmdCWD()` | Git commands for user's working repo | `git status` (show user's changes) |
+| `RelPath()` | Convert absolute path to repo-relative | Display paths in output |
 
 ### GitCmd() vs GitCmdCWD()
 
@@ -84,7 +84,6 @@ $ bd dolt push
 ```
 
 This pattern is common for:
-
 - Fork contribution tracking (your tracker in separate repo)
 - Shared team databases
 - Monorepo setups
@@ -118,13 +117,13 @@ $ bd dolt push
 
 ## RepoContext Fields
 
-| Field          | Description                                            |
-| -------------- | ------------------------------------------------------ |
-| `BeadsDir`     | Actual `.beads/` directory (after following redirects) |
-| `RepoRoot`     | Repository root containing `BeadsDir`                  |
-| `CWDRepoRoot`  | Repository root containing user's CWD (may differ)     |
-| `IsRedirected` | True if BEADS_DIR points to different repo than CWD    |
-| `IsWorktree`   | True if CWD is in a git worktree                       |
+| Field | Description |
+|-------|-------------|
+| `BeadsDir` | Actual `.beads/` directory (after following redirects) |
+| `RepoRoot` | Repository root containing `BeadsDir` |
+| `CWDRepoRoot` | Repository root containing user's CWD (may differ) |
+| `IsRedirected` | True if BEADS_DIR points to different repo than CWD |
+| `IsWorktree` | True if CWD is in a git worktree |
 
 ## Security
 
@@ -160,13 +159,11 @@ for test environments.
 ### CLI vs Server Context
 
 For CLI commands, `GetRepoContext()` caches the result via `sync.Once` because:
-
 - CWD doesn't change during command execution
 - BEADS_DIR doesn't change during command execution
 - Repeated filesystem access would be wasteful
 
 For the Dolt server (long-running process), this caching is inappropriate:
-
 - User may create new worktrees
 - BEADS_DIR may change via direnv
 - Multiple workspaces may be active simultaneously
@@ -186,7 +183,6 @@ if err := rc.Validate(); err != nil {
 ```
 
 This function:
-
 - Does NOT cache results
 - Does NOT respect BEADS_DIR (workspace path is explicit)
 - Resolves worktree relationships correctly

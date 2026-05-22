@@ -29,6 +29,9 @@ import {
 } from "@t3tools/gascity-config";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const gastownGascityRepoRoot = resolve(
+  process.env.T3CODE_GASCITY_REPO_DIR ?? join(repoRoot, "..", "gascity"),
+);
 const defaultT3Home = join(repoRoot, ".t3-dev");
 const defaultRuntimeRoot = join(defaultT3Home, "gascity");
 const defaultCityRoot = getBundledGascityConfigLayout("gascity-br").rootDir;
@@ -690,7 +693,7 @@ function bundledRigPath(cityPath: string, rigName: string): string | null {
     },
     gastown: {
       "beads-doltlite": join(repoRoot, "packages", "beads-doltlite"),
-      gascity: join(repoRoot, "packages", "gascity"),
+      gascity: gastownGascityRepoRoot,
       t3code: repoRoot,
       "test-rig": join(cityPath, "rigs", "test-rig"),
     },

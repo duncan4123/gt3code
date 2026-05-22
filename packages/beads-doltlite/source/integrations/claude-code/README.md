@@ -34,7 +34,6 @@ Converts a Claude Code plan file into a beads epic with tasks.
 ```
 
 **What it does:**
-
 - Parses plan structure (title, summary, phases)
 - Creates an epic for the plan
 - Creates tasks from each phase
@@ -42,7 +41,6 @@ Converts a Claude Code plan file into a beads epic with tasks.
 - Uses Task agent delegation for context efficiency
 
 **Example output:**
-
 ```
 Created from: peaceful-munching-spark.md
 

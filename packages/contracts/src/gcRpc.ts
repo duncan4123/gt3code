@@ -12,6 +12,8 @@ import {
   GcRespondToPendingError,
   GcRespondToPendingInput,
   GcSessionActionResult,
+  GcSetControllerRunningError,
+  GcSetControllerRunningInput,
   GcSetAgentMaxActiveSessionsError,
   GcSetAgentMaxActiveSessionsInput,
   GcSetAgentMinActiveSessionsError,
@@ -26,6 +28,8 @@ import {
   GcSetCitySuspendedInput,
   GcSetRigSuspendedError,
   GcSetRigSuspendedInput,
+  GcSetSupervisorRunningError,
+  GcSetSupervisorRunningInput,
   GcStopSessionError,
   GcStopSessionInput,
   GcSubmitSessionError,
@@ -44,6 +48,8 @@ export const GC_WS_METHODS = {
   gcStopSession: "gc.stopSession",
   gcWakeSession: "gc.wakeSession",
   gcRespondToPending: "gc.respondToPending",
+  gcSetSupervisorRunning: "gc.setSupervisorRunning",
+  gcSetControllerRunning: "gc.setControllerRunning",
   gcSetAgentSuspended: "gc.setAgentSuspended",
   gcSetAgentMaxActiveSessions: "gc.setAgentMaxActiveSessions",
   gcSetAgentMinActiveSessions: "gc.setAgentMinActiveSessions",
@@ -93,6 +99,18 @@ export const WsGcRespondToPendingRpc = Rpc.make(GC_WS_METHODS.gcRespondToPending
   payload: GcRespondToPendingInput,
   success: GcSessionActionResult,
   error: GcRespondToPendingError,
+});
+
+export const WsGcSetSupervisorRunningRpc = Rpc.make(GC_WS_METHODS.gcSetSupervisorRunning, {
+  payload: GcSetSupervisorRunningInput,
+  success: GcSessionActionResult,
+  error: GcSetSupervisorRunningError,
+});
+
+export const WsGcSetControllerRunningRpc = Rpc.make(GC_WS_METHODS.gcSetControllerRunning, {
+  payload: GcSetControllerRunningInput,
+  success: GcSessionActionResult,
+  error: GcSetControllerRunningError,
 });
 
 export const WsGcSetAgentSuspendedRpc = Rpc.make(GC_WS_METHODS.gcSetAgentSuspended, {

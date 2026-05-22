@@ -7,7 +7,6 @@ Beads supports messaging as a first-class issue type, enabling inter-agent and h
 Mail commands (`bd mail`) delegate to an external mail provider (typically `gt mail` in an orchestrator). Beads stores messages as issues with `type: message`, threading via `replies_to` dependencies, and ephemeral lifecycle via the `ephemeral` flag.
 
 This design separates concerns:
-
 - **Beads** = data plane (stores messages as issues)
 - **Orchestrator** = control plane (routing, delivery, notifications)
 
@@ -43,15 +42,15 @@ bd mail reply msg-123 -m "Reviewed and approved"
 
 Messages are issues with `type: message`:
 
-| Field         | Purpose                            |
-| ------------- | ---------------------------------- |
-| `type`        | `message`                          |
-| `sender`      | Who sent the message               |
-| `assignee`    | Recipient                          |
-| `title`       | Subject line                       |
-| `description` | Message body                       |
-| `status`      | `open` (unread) / `closed` (read)  |
-| `ephemeral`   | If true, eligible for bulk cleanup |
+| Field | Purpose |
+|-------|---------|
+| `type` | `message` |
+| `sender` | Who sent the message |
+| `assignee` | Recipient |
+| `title` | Subject line |
+| `description` | Message body |
+| `status` | `open` (unread) / `closed` (read) |
+| `ephemeral` | If true, eligible for bulk cleanup |
 
 ## Threading
 
@@ -64,7 +63,6 @@ bd show msg-123 --thread
 This traces the `replies_to` chain to find the root message, then collects all replies via BFS, displaying the conversation with proper indentation.
 
 Thread display shows:
-
 - Sender and recipient
 - Timestamp
 - Subject and body
@@ -86,7 +84,6 @@ bd cleanup --ephemeral --older-than 7 --force
 ```
 
 Ephemeral messages are:
-
 - Excluded from `bd ready` by default
 - Not synced to remotes (transient)
 - Eligible for bulk deletion when closed
@@ -106,11 +103,11 @@ The actor identity (used for `sender` on messages) is resolved in order:
 
 Scripts in `.beads/hooks/` run after certain events:
 
-| Hook        | Trigger           |
-| ----------- | ----------------- |
+| Hook | Trigger |
+|------|---------|
 | `on_create` | After `bd create` |
 | `on_update` | After `bd update` |
-| `on_close`  | After `bd close`  |
+| `on_close` | After `bd close` |
 
 Hooks receive event data as JSON on stdin. This enables orchestrator integration (e.g., notifying services of new messages) without beads knowing about the orchestrator.
 

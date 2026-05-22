@@ -11,7 +11,6 @@ Use beads in MCP-only environments.
 ## When to Use MCP
 
 Use MCP server when CLI is unavailable:
-
 - Claude Desktop (no shell access)
 - Sourcegraph Amp without shell
 - Other MCP-only environments
@@ -91,11 +90,11 @@ Create `.vscode/mcp.json` in your project:
 
 **For all projects:** Add to VS Code user-level MCP config:
 
-| Platform | Path                                               |
-| -------- | -------------------------------------------------- |
-| macOS    | `~/Library/Application Support/Code/User/mcp.json` |
-| Linux    | `~/.config/Code/User/mcp.json`                     |
-| Windows  | `%APPDATA%\Code\User\mcp.json`                     |
+| Platform | Path |
+|----------|------|
+| macOS | `~/Library/Application Support/Code/User/mcp.json` |
+| Linux | `~/.config/Code/User/mcp.json` |
+| Windows | `%APPDATA%\Code\User\mcp.json` |
 
 ```json
 {
@@ -116,16 +115,16 @@ See [GitHub Copilot Integration](/integrations/github-copilot) for complete setu
 
 The MCP server exposes these tools:
 
-| Tool             | Description          |
-| ---------------- | -------------------- |
-| `beads_create`   | Create new issue     |
-| `beads_list`     | List issues          |
-| `beads_show`     | Show issue details   |
-| `beads_update`   | Update issue         |
-| `beads_close`    | Close issue          |
-| `beads_ready`    | Show ready work      |
-| `beads_sync`     | Sync to git          |
-| `beads_dep_add`  | Add dependency       |
+| Tool | Description |
+|------|-------------|
+| `beads_create` | Create new issue |
+| `beads_list` | List issues |
+| `beads_show` | Show issue details |
+| `beads_update` | Update issue |
+| `beads_close` | Close issue |
+| `beads_ready` | Show ready work |
+| `beads_sync` | Sync to git |
+| `beads_dep_add` | Add dependency |
 | `beads_dep_tree` | Show dependency tree |
 
 ## Usage
@@ -140,12 +139,12 @@ The MCP server translates to appropriate `bd` commands.
 
 ## Trade-offs
 
-| Aspect           | CLI + Hooks    | MCP Server       |
-| ---------------- | -------------- | ---------------- |
-| Context overhead | ~1-2k tokens   | 10-50k tokens    |
-| Latency          | Direct calls   | MCP protocol     |
-| Setup            | Hooks config   | MCP config       |
-| Availability     | Shell required | MCP environments |
+| Aspect | CLI + Hooks | MCP Server |
+|--------|-------------|------------|
+| Context overhead | ~1-2k tokens | 10-50k tokens |
+| Latency | Direct calls | MCP protocol |
+| Setup | Hooks config | MCP config |
+| Availability | Shell required | MCP environments |
 
 ## Troubleshooting
 

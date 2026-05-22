@@ -112,10 +112,6 @@ func atomicWriteFile(path string, data []byte) error {
 // runBackupExport performs a Dolt-native backup to .beads/backup/.
 // Returns the updated state.
 func runBackupExport(ctx context.Context, force bool) (*backupState, error) {
-	if isDoltliteStore(store) {
-		return nil, fmt.Errorf("backup export is disabled for the doltlite backend during migration")
-	}
-
 	dir, err := backupDir()
 	if err != nil {
 		return nil, err

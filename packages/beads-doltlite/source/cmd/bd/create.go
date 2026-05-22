@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -57,7 +58,8 @@ var createCmd = &cobra.Command{
 			if len(args) > 0 {
 				FatalError("cannot specify both title and --graph flag")
 			}
-			createIssuesFromGraph(graphFile)
+			graphDryRun, _ := cmd.Flags().GetBool("dry-run")
+			createIssuesFromGraph(graphFile, graphDryRun)
 			return
 		}
 
@@ -393,8 +395,11 @@ var createCmd = &cobra.Command{
 				_ = store.Close() // Best effort cleanup on error path
 			}
 
-			// Replace store for remainder of create operation
-			store = targetStore
+			// Replace store for remainder of create operation.
+			// Must use setStore to sync cmdCtx.Store — a bare `store = targetStore`
+			// leaves cmdCtx.Store pointing at the closed original, which causes
+			// "store is closed" in PostRun tip auto-commit (GH#tip-closed-bug).
+			setStore(targetStore)
 		}
 
 		// Check for conflicting flags
@@ -524,15 +529,28 @@ var createCmd = &cobra.Command{
 			// If error getting parent or parent has no source_repo, continue with default
 		}
 
+		if err := store.CreateIssue(ctx, issue, actor); err != nil {
+			FatalError("%v", err)
+		}
+
+		// Track whether any post-create writes occurred. CreateIssue commits
+		// the issue to Dolt internally, but subsequent AddDependency/AddLabel
+		// calls only write to the working set. A follow-up Dolt commit is
+		// needed to persist them (GH#2009).
+		postCreateWrites := false
+
 		// If parent was specified, add parent-child dependency
-		var createDependencies []*types.Dependency
 		if parentID != "" {
 			dep := &types.Dependency{
 				IssueID:     issue.ID,
 				DependsOnID: parentID,
 				Type:        types.DepParentChild,
 			}
-			createDependencies = append(createDependencies, dep)
+			if err := store.AddDependency(ctx, dep, actor); err != nil {
+				WarnError("failed to add parent-child dependency %s -> %s: %v", issue.ID, parentID, err)
+			} else {
+				postCreateWrites = true
+			}
 		}
 
 		// Merge inherited parent labels with user-specified labels (GH#2100)
@@ -548,9 +566,17 @@ var createCmd = &cobra.Command{
 			}
 		}
 
+		// Add labels if specified
+		for _, label := range labels {
+			if err := store.AddLabel(ctx, issue.ID, label, actor); err != nil {
+				WarnError("failed to add label %s: %v", label, err)
+			} else {
+				postCreateWrites = true
+			}
+		}
+
 		// Add dependencies if specified (format: type:id or just id for default "blocks" type)
 		for _, depSpec := range deps {
-			// Skip empty specs (e.g., from trailing commas)
 			depSpec = strings.TrimSpace(depSpec)
 			if depSpec == "" {
 				continue
@@ -558,45 +584,54 @@ var createCmd = &cobra.Command{
 
 			var depType types.DependencyType
 			var dependsOnID string
+			swapDirection := false
 
-			// Parse format: "type:id" or just "id" (defaults to "blocks")
 			if strings.Contains(depSpec, ":") {
 				parts := strings.SplitN(depSpec, ":", 2)
 				if len(parts) != 2 {
 					WarnError("invalid dependency format '%s', expected 'type:id' or 'id'", depSpec)
 					continue
 				}
-				depType = types.DependencyType(strings.TrimSpace(parts[0]))
-				// "depends-on" is an alias — keep default direction (new issue depends on target)
-				if depType == "depends-on" {
-					depType = types.DepBlocks
-				}
+				rawType := types.DependencyType(strings.TrimSpace(parts[0]))
 				dependsOnID = strings.TrimSpace(parts[1])
+
+				switch rawType {
+				case "depends-on", "blocked-by":
+					// Alias: the new issue depends on the target. Store as a blocks edge.
+					depType = types.DepBlocks
+				case types.DepBlocks:
+					// Explicit "blocks:X" means the new issue blocks X, so store X -> new issue.
+					depType = types.DepBlocks
+					swapDirection = true
+				default:
+					depType = rawType
+				}
 			} else {
-				// Default to "blocks" if no type specified
 				depType = types.DepBlocks
 				dependsOnID = depSpec
 			}
 
-			// Validate dependency type
 			if !depType.IsValid() {
-				WarnError("invalid dependency type '%s' (valid: blocks, related, parent-child, discovered-from)", depType)
-				continue
+				FatalErrorRespectJSON("invalid dependency type %q (must be non-empty, max 50 chars); valid types: %s", depType, createDepsAcceptedTypeList())
+			}
+			if !depType.IsWellKnown() {
+				FatalErrorRespectJSON("unknown dependency type %q; valid types: %s", depType, createDepsAcceptedTypeList())
 			}
 
-			// Add the dependency
 			dep := &types.Dependency{
 				IssueID:     issue.ID,
 				DependsOnID: dependsOnID,
 				Type:        depType,
 			}
-			// When user explicitly says "blocks:X", they mean "new issue blocks X"
-			// So X depends on the new issue — swap direction
-			if depType == types.DepBlocks && strings.Contains(depSpec, ":") {
+			if swapDirection {
 				dep.IssueID = dependsOnID
 				dep.DependsOnID = issue.ID
 			}
-			createDependencies = append(createDependencies, dep)
+			if err := store.AddDependency(ctx, dep, actor); err != nil {
+				WarnError("failed to add dependency %s -> %s: %v", issue.ID, dependsOnID, err)
+			} else {
+				postCreateWrites = true
+			}
 		}
 
 		// Add waits-for dependency if specified
@@ -625,42 +660,11 @@ var createCmd = &cobra.Command{
 				Type:        types.DepWaitsFor,
 				Metadata:    string(metaJSON),
 			}
-			createDependencies = append(createDependencies, dep)
-		}
-
-		// Create plus labels/dependencies must be atomic. The old flow created
-		// the issue first, then added labels in separate write transactions; when
-		// concurrent bd processes hit SQLite/doltlite locks this left partially
-		// labelled issues. Use one storage transaction for every create-side
-		// write so lock retries cover the complete operation.
-		atomicCreate := len(labels) > 0 || len(createDependencies) > 0
-		if atomicCreate {
-			if err := store.RunInTransaction(ctx, "bd: create issue", func(tx storage.Transaction) error {
-				if err := tx.CreateIssue(ctx, issue, actor); err != nil {
-					return err
-				}
-				for _, label := range labels {
-					if err := tx.AddLabel(ctx, issue.ID, label, actor); err != nil {
-						return fmt.Errorf("add label %s: %w", label, err)
-					}
-				}
-				for _, dep := range createDependencies {
-					if dep.IssueID == "" {
-						dep.IssueID = issue.ID
-					}
-					if dep.DependsOnID == "" {
-						dep.DependsOnID = issue.ID
-					}
-					if err := tx.AddDependency(ctx, dep, actor); err != nil {
-						return fmt.Errorf("add dependency %s -> %s: %w", dep.IssueID, dep.DependsOnID, err)
-					}
-				}
-				return nil
-			}); err != nil {
-				FatalError("%v", err)
+			if err := store.AddDependency(ctx, dep, actor); err != nil {
+				WarnError("failed to add waits-for dependency %s -> %s: %v", issue.ID, waitsFor, err)
+			} else {
+				postCreateWrites = true
 			}
-		} else if err := store.CreateIssue(ctx, issue, actor); err != nil {
-			FatalError("%v", err)
 		}
 
 		// Commit to Dolt. In DoltStore mode, CreateIssue commits the issue
@@ -668,7 +672,7 @@ var createCmd = &cobra.Command{
 		// a separate commit. In EmbeddedDoltStore mode, CreateIssue writes
 		// to the working set without a Dolt commit, so we always commit
 		// everything together at the end.
-		if !atomicCreate && isEmbeddedMode() {
+		if !usesSQLServer() || postCreateWrites {
 			commitMsg := fmt.Sprintf("bd: create %s", issue.ID)
 			if err := store.Commit(ctx, commitMsg); err != nil && !isDoltNothingToCommit(err) {
 				WarnError("failed to commit: %v", err)
@@ -680,7 +684,7 @@ var createCmd = &cobra.Command{
 		// DoltHub remotes. Per-create pushes caused 22GB of git-remote-cache
 		// bloat with dozens of agents creating wisps constantly (hq-glw).
 		if repoPath != "." && targetStore != nil {
-			if _, err := targetStore.CommitPending(ctx, actor); err != nil {
+			if err := targetStore.Commit(ctx, fmt.Sprintf("bd: create (auto-commit) by %s", actor)); err != nil && !isDoltNothingToCommit(err) {
 				debug.Logf("warning: failed to commit routed repo: %v", err)
 			}
 		}
@@ -802,6 +806,15 @@ func renderCreateDryRunPreview(issue *types.Issue, labels, deps []string) {
 	if issue.EventKind != "" {
 		fmt.Printf("  Event category: %s\n", issue.EventKind)
 	}
+}
+
+func createDepsAcceptedTypeList() string {
+	names := []string{"blocked-by", "depends-on"}
+	for _, depType := range types.WellKnownDependencyTypes() {
+		names = append(names, string(depType))
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 func init() {

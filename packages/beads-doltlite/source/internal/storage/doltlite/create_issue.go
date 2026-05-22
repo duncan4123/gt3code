@@ -76,7 +76,7 @@ func createIssueSQLite(ctx context.Context, tx *sql.Tx, bc *issueops.BatchContex
 			prefix = bc.ConfigPrefix + "-wisp"
 		}
 		var err error
-		issue.ID, err = issueops.GenerateIssueIDInTableFixedLength(ctx, tx, issueTable, prefix, issue, actor, 8)
+		issue.ID, err = issueops.GenerateIssueIDInTable(ctx, tx, issueTable, prefix, issue, actor)
 		if err != nil {
 			return fmt.Errorf("failed to generate issue ID: %w", err)
 		}

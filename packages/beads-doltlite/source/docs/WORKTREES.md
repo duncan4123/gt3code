@@ -21,7 +21,6 @@ Beads now provides **enhanced Git worktree support** with a shared database arch
 When a **sync branch** was configured (via `bd config set sync.branch <name>`), beads needed to commit issue updates to that branch without switching your working directory away from your current branch.
 
 **Solution:** Beads creates a lightweight worktree that:
-
 - Contains only the `.beads/` directory (sparse checkout)
 - Lives in `.git/beads-worktrees/<sync-branch>/`
 - Commits issue changes to the sync branch automatically
@@ -51,14 +50,12 @@ If you see worktrees pointing to `main` and can't switch branches normally, this
 3. Git worktrees lock branches they're checked out to
 
 **Symptoms:**
-
 ```bash
 $ git checkout main
 fatal: 'main' is already checked out at '/path/to/.git/beads-worktrees/beads-sync'
 ```
 
 **Quick Fix:**
-
 ```bash
 # Remove the beads worktree
 rm -rf .git/beads-worktrees
@@ -121,7 +118,6 @@ Main Repository
 ```
 
 **Key points:**
-
 - ✅ **One database** - All worktrees share the same `.beads` directory in main repo
 - ✅ **Automatic discovery** - Database found regardless of which worktree you're in
 - ✅ **Concurrent access** - Database locking prevents corruption
@@ -132,12 +128,10 @@ Main Repository
 bd automatically detects when you're in a git worktree:
 
 **Default behavior (no sync-branch configured):**
-
 - Uses embedded mode for safety (single-writer, no server needed)
 - All commands work correctly without additional setup
 
 **With sync-branch configured:**
-
 - Commits go to dedicated sync branch (e.g., `beads-sync`)
 - Server mode available across all worktrees for concurrent access
 
@@ -243,7 +237,6 @@ bd create "Fix password validation" -t bug -p 0
 ### Issue: "Branch already checked out" error
 
 **Symptoms:**
-
 ```bash
 $ git checkout main
 fatal: 'main' is already checked out at '/path/to/.git/beads-worktrees/beads-sync'
@@ -252,7 +245,6 @@ fatal: 'main' is already checked out at '/path/to/.git/beads-worktrees/beads-syn
 **Cause:** Beads created a worktree for its sync branch feature, and that worktree has your target branch checked out. Git doesn't allow the same branch to be checked out in multiple worktrees.
 
 **Solution:**
-
 ```bash
 # Remove beads worktrees
 rm -rf .git/beads-worktrees
@@ -266,7 +258,6 @@ git checkout main
 ```
 
 **Prevention:** If you use trunk-based development and don't need a separate sync branch, disable it:
-
 ```bash
 bd config set sync.branch ""
 ```
@@ -286,7 +277,6 @@ bd config set sync.branch ""
 **Note:** This issue should no longer occur with the worktree safety feature. Worktrees use embedded mode automatically unless sync-branch is configured.
 
 **Solution (if still occurring):**
-
 ```bash
 # Configure sync-branch (recommended)
 bd config set sync-branch beads-sync
@@ -297,7 +287,6 @@ bd config set sync-branch beads-sync
 **Symptoms:** `bd: database not found` error
 
 **Solutions:**
-
 ```bash
 # Ensure main repo has .beads directory
 cd main-repo
@@ -316,7 +305,6 @@ bd info  # Should show database path in main repo
 **Symptoms:** Warning about multiple `.beads` directories
 
 **Solution:**
-
 ```bash
 # bd shows warning with database locations
 # Typically, the closest database (in main repo) is correct
@@ -433,7 +421,6 @@ For users who want complete separation between code history and issue tracking, 
 ### Setup
 
 **Option A: Initialize with BEADS_DIR (simplest)**
-
 ```bash
 # 1. Create the directory structure
 mkdir -p ~/my-project-beads/.beads
@@ -447,7 +434,6 @@ cd ~/my-project-beads && git init
 ```
 
 **Option B: Traditional approach**
-
 ```bash
 # 1. Create a dedicated beads repository (one-time)
 mkdir ~/my-project-beads
@@ -477,21 +463,18 @@ bd dolt push  # commits to ~/my-project-beads, pushes there
 ### Making It Permanent
 
 **Option 1: Shell profile**
-
 ```bash
 # Add to ~/.bashrc or ~/.zshrc
 export BEADS_DIR=~/my-project-beads/.beads
 ```
 
 **Option 2: direnv (per-project)**
-
 ```bash
 # In ~/my-project/.envrc
 export BEADS_DIR=~/my-project-beads/.beads
 ```
 
 **Option 3: Wrapper script**
-
 ```bash
 # ~/bin/bd-myproj
 #!/bin/bash

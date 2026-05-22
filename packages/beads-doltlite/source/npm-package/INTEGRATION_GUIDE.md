@@ -45,7 +45,7 @@ chmod +x .claude/hooks/session-start.sh
 
 Add bd usage instructions to your AGENTS.md file:
 
-````markdown
+```markdown
 ## Issue Tracking with bd
 
 This project uses bd (beads) for issue tracking. It's automatically installed in each session via SessionStart hook.
@@ -59,7 +59,6 @@ bd ready --json | jq '.[0]'
 # Get issue details
 bd show <issue-id> --json
 ```
-````
 
 ### Creating Issues
 
@@ -101,8 +100,7 @@ bd dep tree <issue-id>
 3. **Link discovered work**: Use `bd dep add --type discovered-from`
 4. **Close with context**: Always provide --reason when closing
 5. **Sync changes**: Run `bd dolt push` to push changes to the Dolt remote
-
-````
+```
 
 ### Step 4: Commit and Push
 
@@ -110,7 +108,7 @@ bd dep tree <issue-id>
 git add .claude/hooks/session-start.sh AGENTS.md
 git commit -m "Add bd auto-install for Claude Code for Web"
 git push
-````
+```
 
 ## 🎬 How It Works
 
@@ -128,7 +126,6 @@ git push
 ### Subsequent Sessions
 
 Same process, but:
-
 - `bd init --quiet` sets up Dolt and syncs existing data
 - Agent picks up right where it left off
 
@@ -240,15 +237,15 @@ bd init --quiet 2>&1 | grep -v "already initialized"
 
 ### vs Markdown TODOs
 
-| Feature              | bd Issues      | Markdown TODOs      |
-| -------------------- | -------------- | ------------------- |
-| Dependencies         | ✅ 4 types     | ❌ None             |
-| Ready work detection | ✅ Automatic   | ❌ Manual           |
-| Status tracking      | ✅ Built-in    | ❌ Manual           |
-| History/audit        | ✅ Full trail  | ❌ Git only         |
-| Queries              | ✅ SQL-backed  | ❌ Text search      |
-| Cross-session        | ✅ Persistent  | ⚠️ Markdown only    |
-| Agent-friendly       | ✅ JSON output | ⚠️ Parsing required |
+| Feature | bd Issues | Markdown TODOs |
+|---------|-----------|----------------|
+| Dependencies | ✅ 4 types | ❌ None |
+| Ready work detection | ✅ Automatic | ❌ Manual |
+| Status tracking | ✅ Built-in | ❌ Manual |
+| History/audit | ✅ Full trail | ❌ Git only |
+| Queries | ✅ SQL-backed | ❌ Text search |
+| Cross-session | ✅ Persistent | ⚠️ Markdown only |
+| Agent-friendly | ✅ JSON output | ⚠️ Parsing required |
 
 ## 🐛 Troubleshooting
 
@@ -257,7 +254,6 @@ bd init --quiet 2>&1 | grep -v "already initialized"
 **Cause**: SessionStart hook didn't run or installation failed
 
 **Fix**:
-
 ```bash
 # Manually install
 npm install -g @beads/bd
@@ -271,7 +267,6 @@ bd version
 **Cause**: `bd init` wasn't run
 
 **Fix**:
-
 ```bash
 bd init
 ```
@@ -287,7 +282,6 @@ bd init
 **Cause**: Network latency downloading binary
 
 **Optimize**:
-
 ```bash
 # Use npm cache
 npm config set cache ~/.npm-cache

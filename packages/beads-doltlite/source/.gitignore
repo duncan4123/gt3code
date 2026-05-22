@@ -128,12 +128,13 @@ bd_test
 
 # Orchestrator (added by gt)
 .logs/
+.beads/*
+!.beads/formulas/
+!.beads/formulas/**
 .opencode/
 
 # Beads / Dolt files (added by bd init)
 .beads-credential-key
 
-# Gas City
-.beads/*
-!.beads/config.yaml
-!.beads/metadata.json
+# Beads / Dolt files (added by bd init)
+.beads/proxieddb/

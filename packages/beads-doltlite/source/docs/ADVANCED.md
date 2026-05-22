@@ -29,14 +29,12 @@ bd rename-prefix kw- --json
 ```
 
 The rename operation:
-
 - Updates all issue IDs (e.g., `knowledge-work-1` → `kw-1`)
 - Updates all text references in titles, descriptions, design notes, etc.
 - Updates dependencies and labels
 - Updates the counter table and config
 
 **Prefix validation rules:**
-
 - Max length: 8 characters
 - Allowed characters: lowercase letters, numbers, hyphens
 - Must start with a letter
@@ -44,7 +42,6 @@ The rename operation:
 - Cannot be empty or just a hyphen
 
 Example workflow:
-
 ```bash
 # You have issues like knowledge-work-1, knowledge-work-2, etc.
 bd list  # Shows knowledge-work-* issues
@@ -81,7 +78,6 @@ bd init --from-jsonl  # then: bd duplicates
 ```
 
 **How it works:**
-
 - Groups issues by content hash (title, description, design, acceptance criteria)
 - Only groups issues with matching status (open with open, closed with closed)
 - Chooses merge target by reference count (most referenced) or smallest ID
@@ -126,7 +122,6 @@ bd merge bd-42 bd-43 --into bd-41 --json
 ```
 
 **What the merge command does:**
-
 1. **Validates** all issues exist and prevents self-merge
 2. **Closes** source issues with reason `Merged into bd-X`
 3. **Migrates** all dependencies from source issues to target
@@ -151,15 +146,13 @@ bd dep tree bd-41  # Shows unified dependency tree
 ```
 
 **Important notes:**
-
 - Source issues are permanently closed (status: `closed`)
 - All dependencies pointing to source issues are redirected to target
 - Text references like "see bd-42" are automatically rewritten to "see bd-41"
 - Operation cannot be undone (but git history preserves the original state)
-  **AI Agent Workflow:**
+**AI Agent Workflow:**
 
 When agents discover duplicate issues, they should:
-
 1. Search for similar issues: `bd list --json | grep "similar text"`
 2. Compare issue details: `bd show bd-41 bd-42 --json`
 3. Merge duplicates: `bd merge bd-42 --into bd-41`
@@ -176,7 +169,6 @@ Git worktrees work with bd. Each worktree can have its own `.beads` directory, o
 ## Database Redirects
 
 Multiple git clones can share a single beads database using redirect files. This is useful for:
-
 - Multi-agent setups where several clones work on the same issues
 - Development environments with multiple checkout directories
 - Avoiding duplicate databases across clones
@@ -197,7 +189,6 @@ echo "/path/to/shared/.beads" > .beads/redirect
 The redirect file should contain a single path (relative or absolute) to the target `.beads` directory.
 
 **Example setup:**
-
 ```
 repo/
 ├── main-clone/
@@ -234,13 +225,11 @@ bd where --json
 ### When to Use Redirects
 
 **Good use cases:**
-
 - Multiple AI agents working on the same project
 - Parallel development clones (feature work, bug fixes)
 - Testing clones that should see production issues
 
 **Not recommended for:**
-
 - Separate projects (use separate databases)
 - Long-lived forks (they should have their own issues)
 - Git worktrees (each should have its own `.beads` directory)
@@ -273,7 +262,6 @@ When you encounter the same ID during a Dolt pull or database bootstrap, it's an
 - Dolt's cell-level merge resolves updates automatically
 
 **Bootstrapping from an export:**
-
 ```bash
 # Export from one database
 bd export -o data.jsonl
@@ -300,7 +288,7 @@ See [DOLT.md](DOLT.md) for details on how the Dolt backend handles sync natively
 
 > **Note:** Custom table extensions via `UnderlyingDB()` are a **SQLite-only** pattern.
 > With the Dolt backend, build standalone integration tools using bd's CLI with `--json`
-> flags, or use `bd query` for direct SQL access. See [EXTENDING.md](EXTENDING.md) for details.
+> flags, or use `bd query` for direct SQL access.
 
 For SQLite-backend users, you can extend bd with your own tables and queries:
 
@@ -309,14 +297,13 @@ For SQLite-backend users, you can extend bd with your own tables and queries:
 - Implement custom workflows
 - Create reports and analytics
 
-**See [EXTENDING.md](EXTENDING.md) for complete documentation.**
+See [examples/bd-example-extension-go](../examples/bd-example-extension-go/README.md) for a working extension example.
 
 ## Architecture: Storage, RPC, and MCP
 
 Understanding the role of each component:
 
 ### Beads (Core)
-
 - **Dolt database** (primary) — Version-controlled SQL, the source of truth for all issues, dependencies, labels
 - **SQLite database** (legacy) — Still supported for simple single-user setups
 - **Storage layer** — Interface-based CRUD operations, dependency resolution, collision detection
@@ -324,13 +311,11 @@ Understanding the role of each component:
 - **CLI commands** — Direct database access via `bd` command
 
 ### RPC Layer (Server Mode)
-
 - **Multi-writer access** — Connects to a running Dolt server (`bd dolt start`) for concurrent clients
 - **Used in multi-agent setups** — orchestrator environments where multiple agents write simultaneously
 - **Not needed for single-user** — embedded mode handles all local operations without a server
 
 ### MCP Server (Optional)
-
 - **Protocol adapter** — Translates MCP calls to direct CLI invocations
 - **Workspace routing** — Finds correct `.beads` directory based on working directory
 - **Stateless** — Doesn't cache or store any issue data itself
@@ -344,4 +329,4 @@ Understanding the role of each component:
 - **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
 - **[FAQ.md](FAQ.md)** - Frequently asked questions
 - **[CONFIG.md](CONFIG.md)** - Configuration system guide
-- **[EXTENDING.md](EXTENDING.md)** - Database extension patterns
+- **[examples/bd-example-extension-go](../examples/bd-example-extension-go/README.md)** - Working SQLite extension example

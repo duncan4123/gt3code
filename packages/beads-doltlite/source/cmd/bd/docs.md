@@ -47,50 +47,42 @@ The CLI is built on the Cobra framework and consists of command implementations 
 5. **Server Version Checking** (lines 63-109): The `--server` flag shows server/client compatibility by calling health RPC endpoints
 
 **Command Structure**:
-
 - All commands follow the Cobra pattern with `Command` structs and run functions
 - Commands register themselves via `init()` functions that add them to `rootCmd`
 - The server connection state is managed via PersistentPreRun hooks, allowing most commands to transparently work in server or embedded mode
 
 **Key Data Paths**:
-
 - User input → Cobra command parsing → Internal beads library calls → Storage layer → Git operations
 - Responses flow back through storage → RPC (if server) or direct return → formatted output
 
 ### Things to Know
 
 **Why Both Commit and Branch Are Needed**:
-
 - The `Commit` variable allows tracing the exact code version
 - The `Branch` variable provides context for CI/CD systems, build automation, and helps users understand which development line they're running
 
 **The Problem This Solves** (Issue #503):
-
 - `go install` from source doesn't automatically embed VCS info like `go build` does (Go 1.18+ feature)
 - Without explicit ldflags, users running `bd version` would only see semantic version and build type, not which commit they had
 - This made it impossible to debug issues or understand build provenance
 - The fix ensures both `make install` and raw `go install` produce binaries with full version info by setting ldflags explicitly
 
 **Fallback Resolution Chain** (important for development):
-
 - The `resolveCommitHash()` function first checks the ldflag, then checks runtime build info, returning empty if neither is available
 - This allows the version command to work even in development environments where ldflags aren't set (useful for testing)
 
 **Testing Coverage** (`@/cmd/bd/version_test.go`):
-
 - `TestResolveCommitHash`: Verifies ldflag values are used when set
 - `TestResolveBranch`: Verifies ldflag values are used when set
 - `TestVersionOutputWithCommitAndBranch`: Verifies text and JSON output formats correctly include commit and branch information
 - Existing `TestVersionCommand` and `TestVersionFlag` tests verify basic version output
 
 **Build System Dependencies**:
-
 - The Makefile must have bash and git available at install time
 - Goreleaser relies on git tags being present for version metadata
 - Scripts/install.sh is designed for local development from source clones
 
 **Platform-Specific Considerations**:
-
 - The git extraction in Makefile uses POSIX shell constructs compatible with bash on all platforms
 - Windows builds via goreleaser set ldflags identically to Unix platforms
 - The `symbolic-ref` fallback in resolveBranch works reliably even in fresh repos with no commits

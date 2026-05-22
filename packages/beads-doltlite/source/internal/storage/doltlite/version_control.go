@@ -39,18 +39,7 @@ func (s *DoltliteStore) withDBConn(ctx context.Context, fn func(db versioncontro
 func (s *DoltliteStore) withDBWrite(ctx context.Context, fn func(db versioncontrolops.DBConn) error) error {
 	return s.withExclusiveLock(ctx, func() error {
 		return s.withRetry(ctx, func() error {
-			if s.closed.Load() {
-				return errClosed
-			}
-			db, cleanup, err := OpenSQL(ctx, s.dataDir, s.database, s.branch)
-			if err != nil {
-				return err
-			}
-			defer func() {
-				_ = cleanup()
-				s.cleanGitRemoteCacheGarbage()
-			}()
-			return fn(db)
+			return s.withDBConn(ctx, fn)
 		})
 	})
 }
@@ -63,6 +52,9 @@ func commitAllNative(ctx context.Context, db versioncontrolops.DBConn, message s
 		message = "doltlite: snapshot"
 	}
 	_, err := db.ExecContext(ctx, "SELECT dolt_commit('-A', '-m', ?, '--author', ?)", message, commitAuthor)
+	if isMissingDoltFunction(err) {
+		return nil
+	}
 	if err != nil && !issueops.IsNothingToCommitError(err) {
 		return fmt.Errorf("doltlite commit: %w", err)
 	}

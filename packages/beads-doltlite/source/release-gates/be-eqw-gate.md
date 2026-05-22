@@ -18,25 +18,25 @@ un-reviewed D3 change does not ride along.
 
 ## Gate criteria
 
-| #   | Criterion                             | Verdict  | Evidence                                                                                                                                                                                                                                                                                                                                 |
-| --- | ------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Review PASS present                   | **PASS** | reviewer-1 recorded `Verdict: PASS` in be-eqw notes (single-pass; gemini second-pass currently disabled). Findings F1 (medium scope-completeness), F2 (low benchmark-numbers) are advisory/follow-up, not blockers.                                                                                                                      |
-| 2   | Acceptance criteria met               | **PASS** | Reviewer trace table: hot-path callers make one wisp-id query per invocation ✓; mixed-ID routing hard gate ✓; `IsActiveWispInTx` retained for single-ID paths ✓; benchmark code at 1K/10K/50K with ≥25% wisp share ✓; no correlated EXISTS / recursive CTEs / UNION ALL ✓. Full-audit gap tracked as explicit follow-up (see §F1 below). |
-| 3   | Tests pass                            | **PASS** | See "Tests run on release branch" below.                                                                                                                                                                                                                                                                                                 |
-| 4   | No high-severity review findings open | **PASS** | 0 HIGH findings. F1=medium, F2=low.                                                                                                                                                                                                                                                                                                      |
-| 5   | Final branch is clean                 | **PASS** | `git status` on `release/be-eqw` shows nothing except worktree-scaffolding untracked paths (`.gc/`, `.gitkeep`) that are never staged.                                                                                                                                                                                                   |
-| 6   | Branch diverges cleanly from main     | **PASS** | Branch cut fresh from `origin/main` via `git checkout -B release/be-eqw origin/main`; `git cherry-pick 61cfc45c` applied with zero conflicts.                                                                                                                                                                                            |
+| # | Criterion | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 1 | Review PASS present | **PASS** | reviewer-1 recorded `Verdict: PASS` in be-eqw notes (single-pass; gemini second-pass currently disabled). Findings F1 (medium scope-completeness), F2 (low benchmark-numbers) are advisory/follow-up, not blockers. |
+| 2 | Acceptance criteria met | **PASS** | Reviewer trace table: hot-path callers make one wisp-id query per invocation ✓; mixed-ID routing hard gate ✓; `IsActiveWispInTx` retained for single-ID paths ✓; benchmark code at 1K/10K/50K with ≥25% wisp share ✓; no correlated EXISTS / recursive CTEs / UNION ALL ✓. Full-audit gap tracked as explicit follow-up (see §F1 below). |
+| 3 | Tests pass | **PASS** | See "Tests run on release branch" below. |
+| 4 | No high-severity review findings open | **PASS** | 0 HIGH findings. F1=medium, F2=low. |
+| 5 | Final branch is clean | **PASS** | `git status` on `release/be-eqw` shows nothing except worktree-scaffolding untracked paths (`.gc/`, `.gitkeep`) that are never staged. |
+| 6 | Branch diverges cleanly from main | **PASS** | Branch cut fresh from `origin/main` via `git checkout -B release/be-eqw origin/main`; `git cherry-pick 61cfc45c` applied with zero conflicts. |
 
 ## Tests run on release branch
 
-| Test                                                                                                               | Result      | Notes                                                                                                                            |
-| ------------------------------------------------------------------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `go build ./...`                                                                                                   | PASS        | Go 1.26.2 via `GOTOOLCHAIN=auto`.                                                                                                |
-| `go vet ./...`                                                                                                     | clean       | No output.                                                                                                                       |
-| `gofmt -l` on 6 changed files                                                                                      | clean       | No output.                                                                                                                       |
-| `TestPartitionByWispSet` (pure-fn, authoritative gate per design bead)                                             | PASS 0.006s | 6 subcases: all_permanent, all_wisps, mixed, empty_input, nil_wisp_set_treats_all_as_permanent, explicit-id_wisp_routes_as_wisp. |
-| `TestWispIDSetInTx_HardGate` + `TestWispIDSetInTx_Empty` (Dolt testcontainer, `TESTCONTAINERS_RYUK_DISABLED=true`) | PASS 2.94s  | Container flakiness builder reported did not reproduce on deployer pass; matches reviewer's observation.                         |
-| `go test ./internal/storage/issueops/... ./internal/types/... ./internal/ui/...`                                   | PASS        | All container-free packages clean.                                                                                               |
+| Test | Result | Notes |
+|------|--------|-------|
+| `go build ./...` | PASS | Go 1.26.2 via `GOTOOLCHAIN=auto`. |
+| `go vet ./...` | clean | No output. |
+| `gofmt -l` on 6 changed files | clean | No output. |
+| `TestPartitionByWispSet` (pure-fn, authoritative gate per design bead) | PASS 0.006s | 6 subcases: all_permanent, all_wisps, mixed, empty_input, nil_wisp_set_treats_all_as_permanent, explicit-id_wisp_routes_as_wisp. |
+| `TestWispIDSetInTx_HardGate` + `TestWispIDSetInTx_Empty` (Dolt testcontainer, `TESTCONTAINERS_RYUK_DISABLED=true`) | PASS 2.94s | Container flakiness builder reported did not reproduce on deployer pass; matches reviewer's observation. |
+| `go test ./internal/storage/issueops/... ./internal/types/... ./internal/ui/...` | PASS | All container-free packages clean. |
 
 ## Findings tracked from review
 

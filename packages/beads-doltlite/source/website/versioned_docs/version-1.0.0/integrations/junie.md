@@ -17,7 +17,6 @@ bd setup junie
 ```
 
 This creates:
-
 - **`.junie/guidelines.md`** - Agent instructions for beads workflow
 - **`.junie/mcp/mcp.json`** - MCP server configuration
 
@@ -39,7 +38,6 @@ bd setup junie --check
 ### Guidelines (`.junie/guidelines.md`)
 
 Contains workflow instructions that Junie reads automatically:
-
 - Core workflow rules
 - Command reference
 - Issue types and priorities
@@ -64,17 +62,17 @@ Configures the beads MCP server:
 
 With MCP configured, Junie can use these tools directly:
 
-| Tool                | Description                  |
-| ------------------- | ---------------------------- |
-| `mcp_beads_ready`   | Find tasks ready for work    |
-| `mcp_beads_list`    | List issues with filters     |
-| `mcp_beads_show`    | Show issue details           |
-| `mcp_beads_create`  | Create new issues            |
-| `mcp_beads_update`  | Update issue status/priority |
-| `mcp_beads_close`   | Close completed issues       |
-| `mcp_beads_dep`     | Manage dependencies          |
-| `mcp_beads_blocked` | Show blocked issues          |
-| `mcp_beads_stats`   | Get issue statistics         |
+| Tool | Description |
+| --- | --- |
+| `mcp_beads_ready` | Find tasks ready for work |
+| `mcp_beads_list` | List issues with filters |
+| `mcp_beads_show` | Show issue details |
+| `mcp_beads_create` | Create new issues |
+| `mcp_beads_update` | Update issue status/priority |
+| `mcp_beads_close` | Close completed issues |
+| `mcp_beads_dep` | Manage dependencies |
+| `mcp_beads_blocked` | Show blocked issues |
+| `mcp_beads_stats` | Get issue statistics |
 
 ## CLI Commands
 
@@ -210,7 +208,6 @@ bd setup junie --remove
 ```
 
 This removes:
-
 - `.junie/guidelines.md`
 - `.junie/mcp/mcp.json`
 - Empty `.junie/mcp/` and `.junie/` directories

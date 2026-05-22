@@ -45,7 +45,6 @@ echo "Use 'bd' commands for issue tracking instead of markdown TODOs" >> AGENTS.
 ```
 
 Your agent will automatically:
-
 - Create and track issues during work
 - Manage dependencies between tasks
 - Find ready work with `bd ready`

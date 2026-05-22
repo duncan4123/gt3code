@@ -20,13 +20,11 @@ This guide covers how to build and publish the beads-mcp package to the Python P
 ## Building the Package
 
 1. **Clean previous builds** (if any):
-
    ```bash
    rm -rf dist/ build/ src/*.egg-info
    ```
 
 2. **Build the distribution packages**:
-
    ```bash
    python -m build
    ```
@@ -36,7 +34,6 @@ This guide covers how to build and publish the beads-mcp package to the Python P
    - `dist/beads-mcp-0.9.4.tar.gz` (source distribution)
 
 3. **Verify the build**:
-
    ```bash
    tar -tzf dist/beads-mcp-0.9.4.tar.gz
    ```
@@ -52,7 +49,6 @@ This guide covers how to build and publish the beads-mcp package to the Python P
 ### Test on Test PyPI First
 
 1. **Upload to Test PyPI**:
-
    ```bash
    python -m twine upload --repository testpypi dist/*
    ```
@@ -62,7 +58,6 @@ This guide covers how to build and publish the beads-mcp package to the Python P
    - Password: Your Test PyPI API token (including the `pypi-` prefix)
 
 2. **Install from Test PyPI**:
-
    ```bash
    # In a fresh virtual environment
    uv venv test-env
@@ -85,7 +80,6 @@ This guide covers how to build and publish the beads-mcp package to the Python P
 Once you've verified the package works on Test PyPI:
 
 1. **Upload to PyPI**:
-
    ```bash
    python -m twine upload dist/*
    ```
@@ -141,14 +135,12 @@ When releasing a new version:
 ### Package Already Exists
 
 PyPI doesn't allow re-uploading the same version. If you need to fix something:
-
 1. Increment the version number (even for minor fixes)
 2. Rebuild and re-upload
 
 ### Missing Files in Distribution
 
 If files are missing from the built package, create a `MANIFEST.in`:
-
 ```
 include README.md
 include LICENSE
@@ -164,7 +156,6 @@ recursive-include src/beads_mcp *.py
 ### Test PyPI vs Production
 
 Test PyPI is completely separate from production PyPI:
-
 - Different accounts
 - Different tokens
 - Different package versions (can have different versions on each)
@@ -174,7 +165,6 @@ Always test on Test PyPI first!
 ## Continuous Deployment (Future)
 
 Consider setting up GitHub Actions to automate this:
-
 1. On tag push (e.g., `v0.9.5`)
 2. Run tests
 3. Build package

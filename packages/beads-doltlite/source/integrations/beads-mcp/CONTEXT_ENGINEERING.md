@@ -7,12 +7,10 @@ This document describes the context engineering optimizations added to beads-mcp
 ## The Problem
 
 MCP servers load all tool schemas at startup, consuming significant context:
-
 - **Before:** ~10-50k tokens for full beads tool schemas
 - **After:** ~2-5k tokens with lazy loading and compaction
 
 For coding agents operating in limited context windows (100k-200k tokens), this overhead leaves less room for:
-
 - Code files and diffs
 - Conversation history
 - Task planning and reasoning
@@ -166,7 +164,7 @@ import json
 
 def handle_issue_list(response):
     """Handle both list and compacted responses."""
-
+    
     if isinstance(response, dict) and response.get("compacted"):
         # Compacted response
         total = response["total_count"]
@@ -210,7 +208,7 @@ from typing import Union
 
 def handle_response(response: Union[list, dict]):
     """Properly typed response handling."""
-
+    
     if isinstance(response, dict) and response.get("compacted"):
         # Handle CompactedResult
         for issue in response["preview"]:
@@ -229,25 +227,25 @@ Here's a complete example handling both response types:
 ```python
 class BeadsClient:
     """Example client with proper compaction handling."""
-
+    
     def get_all_ready_work(self):
         """Safely get ready work, handling compaction."""
         response = self.ready(limit=10, priority=1)
-
+        
         # Check if compacted
         if isinstance(response, dict) and response.get("compacted"):
             print(f"Warning: Showing {response['preview_count']} "
                   f"of {response['total_count']} ready items")
             print(f"Hint: {response['hint']}")
             return response["preview"]
-
+        
         # Full list returned
         return response
-
+    
     def list_with_fallback(self, **filters):
         """List issues, with automatic filter refinement on compaction."""
         response = self.list(**filters)
-
+        
         if isinstance(response, dict) and response.get("compacted"):
             # Too many results - add priority filter to narrow down
             if "priority" not in filters:
@@ -258,9 +256,9 @@ class BeadsClient:
             else:
                 # Can't narrow further, return preview
                 return response["preview"]
-
+        
         return response
-
+    
     def show_full_issue(self, issue_id: str):
         """Always get full issue details (never compacted)."""
         return self.show(issue_id=issue_id)
@@ -289,7 +287,7 @@ def process_issues(response: IssueListOrCompacted) -> None:
         print(f"Note: Only showing preview of {response['total_count']} total")
     else:
         issues = response
-
+    
     for issue in issues:
         print(f"{issue.id}: {issue.title}")  # Works with IssueMinimal
 ```
@@ -343,10 +341,10 @@ export BEADS_MCP_PREVIEW_COUNT=10
 
 **Environment Variables:**
 
-| Variable                         | Default | Purpose                                 | Constraints                 |
-| -------------------------------- | ------- | --------------------------------------- | --------------------------- |
-| `BEADS_MCP_COMPACTION_THRESHOLD` | 20      | Compact results with more than N issues | Must be ≥ 1                 |
-| `BEADS_MCP_PREVIEW_COUNT`        | 5       | Show first N issues in preview          | Must be ≥ 1 and ≤ threshold |
+| Variable | Default | Purpose | Constraints |
+|----------|---------|---------|-------------|
+| `BEADS_MCP_COMPACTION_THRESHOLD` | 20 | Compact results with more than N issues | Must be ≥ 1 |
+| `BEADS_MCP_PREVIEW_COUNT` | 5 | Show first N issues in preview | Must be ≥ 1 and ≤ threshold |
 
 **Examples:**
 
@@ -373,13 +371,11 @@ PREVIEW_COUNT = 5          # Show first 5 issues in preview
 **Use Cases:**
 
 - **Tight context windows (100k tokens):** Reduce threshold and preview count
-
   ```bash
   BEADS_MCP_COMPACTION_THRESHOLD=10 BEADS_MCP_PREVIEW_COUNT=3
   ```
 
 - **Plenty of context (200k+ tokens):** Increase both settings or disable compaction
-
   ```bash
   BEADS_MCP_COMPACTION_THRESHOLD=1000 BEADS_MCP_PREVIEW_COUNT=20
   ```
@@ -391,12 +387,12 @@ PREVIEW_COUNT = 5          # Show first 5 issues in preview
 
 ## Comparison
 
-| Scenario           | Before        | After        | Savings           |
-| ------------------ | ------------- | ------------ | ----------------- |
-| Tool schemas (all) | ~15,000 bytes | ~500 bytes   | 97%               |
-| List 50 issues     | ~20,000 bytes | ~4,000 bytes | 80%               |
-| Ready work (10)    | ~4,000 bytes  | ~800 bytes   | 80%               |
-| Single show()      | ~400 bytes    | ~400 bytes   | 0% (full details) |
+| Scenario | Before | After | Savings |
+|----------|--------|-------|---------|
+| Tool schemas (all) | ~15,000 bytes | ~500 bytes | 97% |
+| List 50 issues | ~20,000 bytes | ~4,000 bytes | 80% |
+| Ready work (10) | ~4,000 bytes | ~800 bytes | 80% |
+| Single show() | ~400 bytes | ~400 bytes | 0% (full details) |
 
 ## Design Principles
 
@@ -409,7 +405,6 @@ PREVIEW_COUNT = 5          # Show first 5 issues in preview
 ## Credits
 
 Inspired by:
-
 - [MCP Bridge](https://github.com/mahawi1992/mwilliams_mcpbridge) - Context engineering for MCP servers
 - [Manus Context Engineering](https://rlancemartin.github.io/2025/10/15/manus/) - Compaction and offloading patterns
 - [Anthropic's Context Engineering Guide](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)

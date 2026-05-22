@@ -7,7 +7,6 @@ This guide explains how to integrate [Aider](https://aider.chat/) with Beads for
 Aider is an AI pair programming tool that works in your terminal. Unlike autonomous AI agents like Claude Code, **Aider requires explicit user confirmation** to run commands via the `/run` command.
 
 The beads integration for Aider:
-
 - Creates `.aider.conf.yml` with bd workflow instructions
 - Provides `.aider/README.md` with quick reference
 - Instructs the AI to **suggest** bd commands (not run them automatically)
@@ -37,7 +36,6 @@ bd setup aider --check
 ```
 
 This creates:
-
 - `.aider.conf.yml` - Instructions for the AI about bd workflow
 - `.aider/README.md` - Quick reference guide
 
@@ -56,14 +54,12 @@ pipx install aider-chat
 ### Starting a Session
 
 1. **Start aider in your project:**
-
    ```bash
    cd your-project
    aider
    ```
 
 2. **Ask the AI about available work:**
-
    ```
    You: What issues are ready to work on?
 
@@ -72,13 +68,11 @@ pipx install aider-chat
    ```
 
 3. **Run the suggested command:**
-
    ```
    /run bd ready
    ```
 
 4. **Choose an issue and ask AI to claim it:**
-
    ```
    You: Let's work on bd-42
 
@@ -91,7 +85,6 @@ pipx install aider-chat
 The AI will suggest appropriate bd commands as you work:
 
 - **Create issues for bugs you find:**
-
   ```
   You: I found a bug in the auth code
 
@@ -100,7 +93,6 @@ The AI will suggest appropriate bd commands as you work:
   ```
 
 - **Link discovered work:**
-
   ```
   Aider: Since we found this while working on bd-42, run:
   /run bd create "Fix auth bug" --description="..." -p 1 --deps discovered-from:bd-42
@@ -145,13 +137,11 @@ You can customize this file to add project-specific instructions.
 ### Aider Commands vs bd Commands
 
 **Aider commands** start with `/` and control aider itself:
-
 - `/run <command>` - Run a shell command
 - `/add <file>` - Add file to context
 - `/help` - Show aider help
 
 **bd commands** are run via `/run`:
-
 - `/run bd ready` - Check available work
 - `/run bd create "..."` - Create an issue
 - `/run bd show bd-42` - View issue details
@@ -224,7 +214,6 @@ You can customize this file to add project-specific instructions.
 ### 1. Ask for Suggestions
 
 Instead of running commands yourself, ask the AI:
-
 ```
 You: How do I check what work is available?
 Aider: Run `/run bd ready` to see all unblocked issues
@@ -233,7 +222,6 @@ Aider: Run `/run bd ready` to see all unblocked issues
 ### 2. Let the AI Track Work
 
 The AI knows the bd workflow and will suggest appropriate commands:
-
 ```
 You: I'm starting work on the login feature
 Aider: First, let's claim it. Run:
@@ -243,7 +231,6 @@ Aider: First, let's claim it. Run:
 ### 3. Use bd prime for Context
 
 Get the full workflow guide:
-
 ```bash
 /run bd prime
 ```
@@ -253,7 +240,6 @@ The AI will read this and have complete context about bd commands.
 ### 4. Create Aliases
 
 Add to your shell config for faster commands:
-
 ```bash
 alias bdr='/run bd ready'
 alias bdc='/run bd create'
@@ -261,7 +247,6 @@ alias bds='/run bd dolt push'
 ```
 
 Then in aider:
-
 ```
 bdr                    # Instead of /run bd ready
 bdc "Fix bug" -t bug  # Instead of /run bd create "Fix bug" -t bug
@@ -272,13 +257,11 @@ bdc "Fix bug" -t bug  # Instead of /run bd create "Fix bug" -t bug
 ### "The AI isn't suggesting bd commands"
 
 1. Check that `.aider.conf.yml` exists:
-
    ```bash
    bd setup aider --check
    ```
 
 2. Reload aider to pick up the config:
-
    ```bash
    # Exit aider (Ctrl-D or /exit)
    # Restart aider
@@ -294,13 +277,11 @@ bdc "Fix bug" -t bug  # Instead of /run bd create "Fix bug" -t bug
 ### "Commands are failing"
 
 Make sure you're in a beads-initialized directory:
-
 ```bash
 /run bd doctor
 ```
 
 If not initialized:
-
 ```bash
 /run bd init --quiet
 ```
@@ -329,7 +310,6 @@ You: Add the auth files to context and check for related issues
 ### Batch Operations
 
 Run multiple bd commands in sequence:
-
 ```bash
 # In your shell (not aider)
 bd ready && bd show bd-42 && bd update bd-42 --claim

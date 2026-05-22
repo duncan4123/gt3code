@@ -1310,4 +1310,153 @@ describe("groupThreadsByRigAndAgent", () => {
         ?.agentGroups.find((agent) => agent.qualifiedName === "city-b/mayor")?.threads,
     ).toHaveLength(1);
   });
+
+  it("recovers legacy title-only city workspace threads from configured session names", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          title: "city-a__mayor · city-a.mayor",
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "cities",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "city-a",
+              path: "/fixtures/cities/city-a",
+              suspended: false,
+            },
+            {
+              name: "city-a/repo-main",
+              path: "/fixtures/repos/city-a/repo-main",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "mayor",
+              dir: "city-a",
+              scope: "city",
+              suspended: false,
+              named_session_mode: "always",
+            },
+          ],
+        },
+      },
+    );
+
+    expect(standaloneThreads).toEqual([]);
+    expect(
+      rigGroups
+        .find((group) => group.id === "city-a")
+        ?.agentGroups.find((agent) => agent.qualifiedName === "city-a/mayor")?.threads,
+    ).toHaveLength(1);
+  });
+
+  it("recovers legacy title-only rig threads from local t3bridge session names", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          title: "repo-main--worker · worker",
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "cities",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "city-a",
+              path: "/fixtures/cities/city-a",
+              suspended: false,
+            },
+            {
+              name: "city-a/repo-main",
+              path: "/fixtures/repos/city-a/repo-main",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "worker",
+              dir: "city-a/repo-main",
+              scope: "rig",
+              suspended: false,
+              named_session_mode: "always",
+            },
+          ],
+        },
+      },
+    );
+
+    expect(standaloneThreads).toEqual([]);
+    expect(
+      rigGroups
+        .find((group) => group.id === "city-a/repo-main")
+        ?.agentGroups.find((agent) => agent.qualifiedName === "city-a/repo-main/worker")?.threads,
+    ).toHaveLength(1);
+  });
+
+  it("repairs stale legacy GC metadata when the configured session name is more specific", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-1",
+          title: "repo-main--worker · worker",
+          customMetadata: {
+            "gc.agent": "worker",
+            "gc.agentQualified": "worker",
+            "gc.groupKind": "rig",
+            "gc.groupId": "repo-main",
+            "gc.rig": "repo-main",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "cities",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "city-a",
+              path: "/fixtures/cities/city-a",
+              suspended: false,
+            },
+            {
+              name: "city-a/repo-main",
+              path: "/fixtures/repos/city-a/repo-main",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "worker",
+              dir: "city-a/repo-main",
+              scope: "rig",
+              suspended: false,
+              named_session_mode: "always",
+            },
+          ],
+        },
+      },
+    );
+
+    expect(standaloneThreads).toEqual([]);
+    expect(
+      rigGroups
+        .find((group) => group.id === "city-a/repo-main")
+        ?.agentGroups.find((agent) => agent.qualifiedName === "city-a/repo-main/worker")?.threads,
+    ).toHaveLength(1);
+    expect(rigGroups.find((group) => group.id === "repo-main")).toBeUndefined();
+  });
 });

@@ -3,6 +3,7 @@ import {
   GcGetConfigError,
   GcGetThreadContextError,
   GcRespondToPendingError,
+  GcSetControllerRunningError,
   GcSetAgentMaxActiveSessionsError,
   GcSetAgentMinActiveSessionsError,
   GcSetAgentSessionModeError,
@@ -10,6 +11,7 @@ import {
   GcSetAgentWakeModeError,
   GcSetCitySuspendedError,
   GcSetRigSuspendedError,
+  GcSetSupervisorRunningError,
   GcStopSessionError,
   GcSubmitSessionError,
   GcWakeSessionError,
@@ -156,6 +158,44 @@ export const makeGcRpcHandlers = ({
               : new GcWakeSessionError({ message: messageFromUnknown(cause) }),
           ),
         ),
+      { "rpc.aggregate": "gc" },
+    ),
+  [WS_METHODS.gcSetSupervisorRunning]: (input: {
+    readonly running: boolean;
+    readonly city?: string | undefined;
+  }) =>
+    observeRpcEffect(
+      WS_METHODS.gcSetSupervisorRunning,
+      gcApiClient.setSupervisorRunning(input.city, input.running).pipe(
+        Effect.as({
+          id: input.city ?? "supervisor",
+          status: input.running ? "running" : "stopped",
+        }),
+        Effect.mapError((cause) =>
+          Schema.is(GcSetSupervisorRunningError)(cause)
+            ? cause
+            : new GcSetSupervisorRunningError({ message: messageFromUnknown(cause) }),
+        ),
+      ),
+      { "rpc.aggregate": "gc" },
+    ),
+  [WS_METHODS.gcSetControllerRunning]: (input: {
+    readonly running: boolean;
+    readonly city?: string | undefined;
+  }) =>
+    observeRpcEffect(
+      WS_METHODS.gcSetControllerRunning,
+      gcApiClient.setControllerRunning(input.city, input.running).pipe(
+        Effect.as({
+          id: input.city ?? "controller",
+          status: input.running ? "running" : "stopped",
+        }),
+        Effect.mapError((cause) =>
+          Schema.is(GcSetControllerRunningError)(cause)
+            ? cause
+            : new GcSetControllerRunningError({ message: messageFromUnknown(cause) }),
+        ),
+      ),
       { "rpc.aggregate": "gc" },
     ),
   [WS_METHODS.gcRespondToPending]: (input: {

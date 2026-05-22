@@ -15,7 +15,6 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
 **Features:**
-
 - Previews candidates before compaction
 - Prompts for confirmation at each tier
 - Shows final statistics
@@ -46,7 +45,6 @@ crontab -e
 ```
 
 **Features:**
-
 - Pulls latest changes before compacting
 - Logs all output
 - Auto-commits and pushes results
@@ -75,14 +73,12 @@ chmod +x auto-compact.sh
 ```
 
 **Features:**
-
 - Configurable eligibility threshold
 - Skips compaction if below threshold
 - Supports both tiers
 - Dry-run mode for testing
 
-**When to use:**
-
+**When to use:** 
 - Pre-commit hooks (if ANTHROPIC_API_KEY set)
 - CI/CD pipelines
 - Conditional automation
@@ -103,25 +99,19 @@ Additional environment variables:
 ## Recommendations
 
 ### Small Projects (<500 issues)
-
 Use `workflow.sh` manually, once or twice per year.
 
 ### Medium Projects (500-5000 issues)
-
 Use `cron-compact.sh` quarterly or `auto-compact.sh` in CI.
 
 ### Large Projects (5000+ issues)
-
 Use `cron-compact.sh` monthly with both tiers:
-
 ```bash
 # Modify cron-compact.sh to run both tiers
 ```
 
 ### High-Velocity Teams
-
 Combine approaches:
-
 - `auto-compact.sh --threshold 50` in CI (Tier 1 only)
 - `cron-compact.sh` monthly for Tier 2
 
@@ -147,7 +137,6 @@ export BD_REPO_PATH="$(pwd)"
 ### Script says "bd command not found"
 
 Ensure bd is in PATH:
-
 ```bash
 which bd
 export PATH="$PATH:/usr/local/bin"
@@ -163,7 +152,6 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 ### Cron job not running
 
 Check cron logs:
-
 ```bash
 # Linux
 grep CRON /var/log/syslog
@@ -173,7 +161,6 @@ log show --predicate 'process == "cron"' --last 1h
 ```
 
 Verify script is executable:
-
 ```bash
 chmod +x /etc/cron.monthly/bd-compact
 ```

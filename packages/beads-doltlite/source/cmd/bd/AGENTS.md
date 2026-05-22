@@ -23,7 +23,6 @@ annotations but use `bd ready`/`bd blocked` for accurate blocking status.
 **DO NOT use `bd edit`** - it opens an interactive editor ($EDITOR) which AI agents cannot use.
 
 Use `bd update` with flags instead:
-
 ```bash
 bd update <id> --description "new description"
 bd update <id> --title "new title"
@@ -52,8 +51,8 @@ bd update <id> --acceptance "acceptance criteria"
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
-
 - Work is NOT complete until `git push` succeeds
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
+

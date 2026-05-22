@@ -5,24 +5,21 @@ AI-supervised issue tracker for coding workflows. Manage tasks, discover work, a
 ## What is Beads?
 
 Beads (`bd`) is an issue tracker designed specifically for AI-supervised coding workflows. It helps AI agents and developers:
-
 - Track work with a simple CLI
 - Discover and link related tasks during development
 - Maintain context across coding sessions
-- Auto-sync issues via Dolt for distributed workflows
+- Sync issues via Dolt remotes for distributed workflows
 
 ## Installation
 
 ### Prerequisites
 
 1. Install beads CLI:
-
 ```bash
 curl -sSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
 ```
 
 2. Install Python and uv (for MCP server):
-
 ```bash
 # Install uv (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -297,7 +294,6 @@ The beads plugin has three components that may need updating:
 ### 1. Plugin Updates
 
 Check for plugin updates:
-
 ```bash
 /plugin update beads
 ```
@@ -324,20 +320,17 @@ CGO_ENABLED=1 GOFLAGS=-tags=gms_pure_go go install github.com/steveyegge/beads/c
 The MCP server **automatically checks** bd CLI version on startup and will fail with a clear error if your version is too old.
 
 Check version compatibility manually:
-
 ```bash
 /beads:version
 ```
 
 This will show:
-
 - bd CLI version
 - Plugin version
 - MCP server status
 - Compatibility warnings if versions mismatch
 
 **Recommended update workflow:**
-
 1. Check versions: `/beads:version`
 2. Update bd CLI if needed (see above)
 3. Update plugin: `/plugin update beads`
@@ -347,7 +340,6 @@ This will show:
 ### Version Numbering
 
 Beads follows semantic versioning. The plugin version tracks the bd CLI version:
-
 - Plugin 0.9.2 requires bd CLI >= 0.9.0 (checked automatically at startup)
 - Major version bumps may introduce breaking changes
 - Check CHANGELOG.md for release notes

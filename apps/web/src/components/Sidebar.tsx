@@ -914,7 +914,7 @@ interface SidebarProjectThreadListProps {
   ) => void;
   onAdjustGcAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustGcAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
-  onWakeGcAgentSession: (agent: string) => void;
+  onWakeGcAgentSession: (agent: string, sessionName?: string) => void;
   onToggleGcAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleGcAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
@@ -1190,7 +1190,7 @@ interface SidebarProjectItemProps {
   ) => void;
   onAdjustGcAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustGcAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
-  onWakeGcAgentSession: (agent: string) => void;
+  onWakeGcAgentSession: (agent: string, sessionName?: string) => void;
   onToggleGcAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleGcAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
@@ -2900,7 +2900,7 @@ interface SidebarProjectsContentProps {
   ) => void;
   onAdjustGcAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
   onAdjustGcAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
-  onWakeGcAgentSession: (agent: string) => void;
+  onWakeGcAgentSession: (agent: string, sessionName?: string) => void;
   onToggleGcAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
   onToggleGcAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
 }
@@ -3449,7 +3449,6 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
             No projects yet
           </div>
         )}
-
       </SidebarGroup>
     </SidebarContent>
   );
@@ -3514,6 +3513,10 @@ export default function Sidebar() {
     ReadonlyMap<string, "resume" | "suspend">
   >(() => new Map());
   const [gcCityActionState, setGcCityActionState] = useState<"resume" | "suspend" | null>(null);
+  const [gcSupervisorMutationInFlight, setGcSupervisorMutationInFlight] = useState(false);
+  const [gcCityControllerMutationsInFlight, setGcCityControllerMutationsInFlight] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [gcAgentStartsInFlight, setGcAgentStartsInFlight] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -3575,6 +3578,17 @@ export default function Sidebar() {
       return next;
     });
   }, []);
+  const setCityControllerMutationPending = useCallback((city: string, pending: boolean) => {
+    setGcCityControllerMutationsInFlight((current) => {
+      const next = new Set(current);
+      if (pending) {
+        next.add(city);
+      } else {
+        next.delete(city);
+      }
+      return next;
+    });
+  }, []);
   const stopWatchingGcAgentStart = useCallback(
     (agent: string) => {
       gcAgentStartAbortControllersRef.current.get(agent)?.abort();
@@ -3597,6 +3611,7 @@ export default function Sidebar() {
     async (
       agent: string,
       options?: {
+        sessionName?: string;
         onStarted?: (
           binding: NonNullable<GcFindThreadBindingResult>,
           context: { sessionName: string },
@@ -3618,6 +3633,7 @@ export default function Sidebar() {
         const result = await waitForGcAgentBinding({
           agent,
           findThreadBinding: (sessionName) => api.gc!.findThreadBinding({ sessionName }),
+          ...(options?.sessionName ? { sessionName: options.sessionName } : {}),
           signal: controller.signal,
         });
         if (controller.signal.aborted) {
@@ -4172,16 +4188,18 @@ export default function Sidebar() {
   );
 
   const handleWakeGcAgentSession = useCallback(
-    async (agent: string) => {
+    async (agent: string, sessionName?: string) => {
       const api = readLocalApi();
       if (!api?.gc?.wakeSession) {
         return;
       }
 
+      const wakeRequestSessionName = gcSessionNameForQualifiedAgent(agent);
+      const bindingSessionName = sessionName ?? wakeRequestSessionName;
       setGcAgentActionState(agent, { kind: "wake" });
       try {
-        await api.gc.wakeSession({ sessionName: gcSessionNameForQualifiedAgent(agent) });
-        void waitForAgentStart(agent);
+        await api.gc.wakeSession({ sessionName: wakeRequestSessionName });
+        void waitForAgentStart(agent, { sessionName: bindingSessionName });
       } catch (error) {
         toastManager.add({
           type: "error",
@@ -4600,6 +4618,90 @@ export default function Sidebar() {
     [filterAutoStartAgents, refreshGcConfig, stopWatchingGcAgentStart, waitForAgentStart],
   );
 
+  const handleGcSupervisorRunningChange = useCallback(
+    async (city: string, running: boolean) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setSupervisorRunning) {
+        return;
+      }
+      const toastId = toastManager.add({
+        type: "loading",
+        title: running ? "Starting Gas City supervisor" : "Stopping Gas City supervisor",
+        description: running
+          ? "Starting the shared supervisor from the bundled GC runtime."
+          : "Stopping the shared supervisor and managed city controllers.",
+        timeout: 0,
+      });
+      setGcSupervisorMutationInFlight(true);
+      try {
+        await api.gc.setSupervisorRunning({ city, running });
+        const nextConfig = await api.gc.getConfig({});
+        setGcConfig(nextConfig);
+        toastManager.update(toastId, {
+          type: "success",
+          title: running ? "Supervisor started" : "Supervisor stopped",
+          description: running
+            ? "Gas City supervisor is running."
+            : "Gas City supervisor stop was accepted.",
+          timeout: 0,
+          data: { dismissAfterVisibleMs: 6_000 },
+        });
+      } catch (error) {
+        toastManager.update(toastId, {
+          type: "error",
+          title: running ? "Failed to start supervisor" : "Failed to stop supervisor",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        setGcSupervisorMutationInFlight(false);
+      }
+    },
+    [refreshGcConfig],
+  );
+
+  const handleGcControllerRunningChange = useCallback(
+    async (city: string, running: boolean) => {
+      const api = readLocalApi();
+      if (!api?.gc?.setControllerRunning) {
+        return;
+      }
+      const toastId = toastManager.add({
+        type: "loading",
+        title: running ? `Starting ${city}` : `Stopping ${city}`,
+        description: running
+          ? "Registering the city with the supervisor and waiting for the controller."
+          : "Stopping this city controller through GC.",
+        timeout: 0,
+      });
+      setCityControllerMutationPending(city, true);
+      try {
+        await api.gc.setControllerRunning({ city, running });
+        const nextConfig = await api.gc.getConfig({});
+        setGcConfig(nextConfig);
+        toastManager.update(toastId, {
+          type: "success",
+          title: running ? `${city} started` : `${city} stopped`,
+          description: running
+            ? "The city controller is running."
+            : "The city controller stop was accepted.",
+          timeout: 0,
+          data: { dismissAfterVisibleMs: 6_000 },
+        });
+      } catch (error) {
+        toastManager.update(toastId, {
+          type: "error",
+          title: running ? `Failed to start ${city}` : `Failed to stop ${city}`,
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+        void refreshGcConfig().catch(() => undefined);
+      } finally {
+        setCityControllerMutationPending(city, false);
+      }
+    },
+    [refreshGcConfig, setCityControllerMutationPending],
+  );
+
   const projectDnDSensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
@@ -4711,90 +4813,87 @@ export default function Sidebar() {
     );
   }, [allSortedProjects, isThreadSearchActive, threadSearchState.matchingProjectIds]);
   const isManualProjectSorting = sidebarProjectSortOrder === "manual";
-  const visibleSidebarThreadKeys = useMemo(
-    () => {
-      const projectThreadKeys = sortedProjects.flatMap((project) => {
-        const projectThreads = sortThreads(
-          (threadsByProjectKey.get(project.projectKey) ?? []).filter(
-            (thread) =>
-              thread.archivedAt === null &&
-              (!isThreadSearchActive || threadSearchState.matchingThreadIds.has(thread.id)),
-          ),
-          sidebarThreadSortOrder,
-        );
-        const projectExpanded =
-          isThreadSearchActive || (projectExpandedById[project.projectKey] ?? true);
-        const activeThreadKey = routeThreadKey ?? undefined;
-        const pinnedCollapsedThread =
-          !projectExpanded && activeThreadKey
-            ? (projectThreads.find(
-                (thread) =>
-                  scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) ===
-                  activeThreadKey,
-              ) ?? null)
-            : null;
-        const shouldShowThreadPanel = projectExpanded || pinnedCollapsedThread !== null;
-        if (!shouldShowThreadPanel) {
-          return [];
-        }
-        const isThreadListExpanded = expandedThreadListsByProject.has(project.projectKey);
-        const renderedThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : projectThreads;
-        const projectRepositoryRigGroupIds = resolveProjectRepositoryRigGroupIds(project, gcConfig);
-        const { rigGroups, visibleStandaloneThreads } = partitionProjectThreadsForSidebar({
-          threads: renderedThreads,
-          activeThreadId: pinnedCollapsedThread?.id,
-          isThreadListExpanded,
-          previewLimit: THREAD_PREVIEW_LIMIT,
-          gcConfig,
-          allowedGcRigGroupIds: projectRepositoryRigGroupIds,
-          projectCwd: project.cwd,
-          projectName: project.displayName,
-          projectMembers: project.memberProjects,
-        });
-        return [
-          ...rigGroups.flatMap((rigGroup) =>
-            rigGroup.agentGroups.flatMap((agentGroup) =>
-              agentGroup.threads.map((thread) =>
-                scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-              ),
+  const visibleSidebarThreadKeys = useMemo(() => {
+    const projectThreadKeys = sortedProjects.flatMap((project) => {
+      const projectThreads = sortThreads(
+        (threadsByProjectKey.get(project.projectKey) ?? []).filter(
+          (thread) =>
+            thread.archivedAt === null &&
+            (!isThreadSearchActive || threadSearchState.matchingThreadIds.has(thread.id)),
+        ),
+        sidebarThreadSortOrder,
+      );
+      const projectExpanded =
+        isThreadSearchActive || (projectExpandedById[project.projectKey] ?? true);
+      const activeThreadKey = routeThreadKey ?? undefined;
+      const pinnedCollapsedThread =
+        !projectExpanded && activeThreadKey
+          ? (projectThreads.find(
+              (thread) =>
+                scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)) ===
+                activeThreadKey,
+            ) ?? null)
+          : null;
+      const shouldShowThreadPanel = projectExpanded || pinnedCollapsedThread !== null;
+      if (!shouldShowThreadPanel) {
+        return [];
+      }
+      const isThreadListExpanded = expandedThreadListsByProject.has(project.projectKey);
+      const renderedThreads = pinnedCollapsedThread ? [pinnedCollapsedThread] : projectThreads;
+      const projectRepositoryRigGroupIds = resolveProjectRepositoryRigGroupIds(project, gcConfig);
+      const { rigGroups, visibleStandaloneThreads } = partitionProjectThreadsForSidebar({
+        threads: renderedThreads,
+        activeThreadId: pinnedCollapsedThread?.id,
+        isThreadListExpanded,
+        previewLimit: THREAD_PREVIEW_LIMIT,
+        gcConfig,
+        allowedGcRigGroupIds: projectRepositoryRigGroupIds,
+        projectCwd: project.cwd,
+        projectName: project.displayName,
+        projectMembers: project.memberProjects,
+      });
+      return [
+        ...rigGroups.flatMap((rigGroup) =>
+          rigGroup.agentGroups.flatMap((agentGroup) =>
+            agentGroup.threads.map((thread) =>
+              scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
             ),
           ),
-          ...visibleStandaloneThreads.map((thread) =>
-            scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-          ),
-        ];
-      });
-      const globalGcThreadKeys = visibleGcGlobalRigGroups.flatMap((rigGroup) =>
-        rigGroup.agentGroups.flatMap((agentGroup) =>
-          agentGroup.threadIds.flatMap((threadId) => {
-            const thread = sidebarThreadById.get(threadId);
-            if (
-              !thread ||
-              thread.archivedAt !== null ||
-              (isThreadSearchActive && !threadSearchState.matchingThreadIds.has(thread.id))
-            ) {
-              return [];
-            }
-            return [scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))];
-          }),
         ),
-      );
-      return [...globalGcThreadKeys, ...projectThreadKeys];
-    },
-    [
-      gcConfig,
-      sidebarThreadSortOrder,
-      expandedThreadListsByProject,
-      projectExpandedById,
-      isThreadSearchActive,
-      routeThreadKey,
-      sidebarThreadById,
-      sortedProjects,
-      threadSearchState.matchingThreadIds,
-      threadsByProjectKey,
-      visibleGcGlobalRigGroups,
-    ],
-  );
+        ...visibleStandaloneThreads.map((thread) =>
+          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+        ),
+      ];
+    });
+    const globalGcThreadKeys = visibleGcGlobalRigGroups.flatMap((rigGroup) =>
+      rigGroup.agentGroups.flatMap((agentGroup) =>
+        agentGroup.threadIds.flatMap((threadId) => {
+          const thread = sidebarThreadById.get(threadId);
+          if (
+            !thread ||
+            thread.archivedAt !== null ||
+            (isThreadSearchActive && !threadSearchState.matchingThreadIds.has(thread.id))
+          ) {
+            return [];
+          }
+          return [scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))];
+        }),
+      ),
+    );
+    return [...globalGcThreadKeys, ...projectThreadKeys];
+  }, [
+    gcConfig,
+    sidebarThreadSortOrder,
+    expandedThreadListsByProject,
+    projectExpandedById,
+    isThreadSearchActive,
+    routeThreadKey,
+    sidebarThreadById,
+    sortedProjects,
+    threadSearchState.matchingThreadIds,
+    threadsByProjectKey,
+    visibleGcGlobalRigGroups,
+  ]);
   const threadJumpCommandByKey = useMemo(() => {
     const mapping = new Map<string, NonNullable<ReturnType<typeof threadJumpCommandForIndex>>>();
     for (const [visibleThreadIndex, threadKey] of visibleSidebarThreadKeys.entries()) {
@@ -5195,6 +5294,8 @@ export default function Sidebar() {
                 renderThreadRows={renderThreadRows}
                 gcAgentMutationsInFlight={gcAgentMutationsInFlight}
                 gcAgentStartsInFlight={gcAgentStartsInFlight}
+                gcSupervisorMutationInFlight={gcSupervisorMutationInFlight}
+                gcCityControllerMutationsInFlight={gcCityControllerMutationsInFlight}
                 gcRigMutationsInFlight={gcRigMutationsInFlight}
                 gcCityMutationInFlight={gcCityMutationInFlight}
                 gcAgentActionStateByAgent={gcAgentActionStateByAgent}
@@ -5208,6 +5309,8 @@ export default function Sidebar() {
                 onWakeAgentSession={handleWakeGcAgentSession}
                 onToggleAgentWakeMode={handleGcAgentWakeModeChange}
                 onToggleAgentSessionMode={handleGcAgentSessionModeChange}
+                onSetSupervisorRunning={handleGcSupervisorRunningChange}
+                onSetControllerRunning={handleGcControllerRunningChange}
               />
             )}
             attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}

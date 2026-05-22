@@ -16,24 +16,20 @@ We've added two new MCP tools to allow explicit context management:
 ### Tools
 
 #### `set_context`
-
 Sets the workspace root directory for all bd operations.
 
 **Parameters:**
-
 - `workspace_root` (string): Absolute path to workspace/project root directory
 
 **Returns:**
 Confirmation message with resolved paths (workspace root and database)
 
 **Behavior:**
-
 1. Resolves to git repo root if inside a git repository
 2. Walks up directory tree to find `.beads/*.db`
 3. Sets `BEADS_WORKING_DIR`, `BEADS_DB`, and `BEADS_CONTEXT_SET` environment variables
 
 #### `where_am_i`
-
 Shows current workspace context and database path for debugging.
 
 **Returns:**
@@ -57,13 +53,11 @@ This allows backward compatibility while adding safety for multi-repo setups.
 ## Recommended Usage
 
 ### For Single Repository (Current Default)
-
 No changes needed. The MCP server works as before with auto-discovery.
 
 ### For Multiple Repositories (Future)
 
 **Option 1: Explicit Database Path (Current Workaround)**
-
 ```json
 {
   "mcpServers": {
@@ -87,12 +81,10 @@ No changes needed. The MCP server works as before with auto-discovery.
 
 **Option 2: Client-Side Context Management (Future)**
 AI clients would need to:
-
 1. Call `set_context` at session start with workspace root
 2. MCP protocol would need to support persistent session state
 
 **Option 3: Dolt Server with RPC (Future - Path 1.5 from bd-105)**
-
 - Add `cwd` parameter to Dolt server RPC protocol
 - Server performs tree-walking per request
 - MCP server passes workspace_root via RPC
@@ -100,7 +92,6 @@ AI clients would need to:
 
 **Option 4: Advanced Routing Server (Future - Path 2 from bd-105)**
 For >50 repos:
-
 - Dedicated routing server with repo->DB mappings
 - MCP becomes thin shim
 - Enables shared connection pooling, cross-repo queries
@@ -108,12 +99,10 @@ For >50 repos:
 ## Testing
 
 The context management tools are tested in:
-
 - `tests/test_mcp_server_integration.py`: MCP tool tests
 - Manual testing: See `/tmp/test-repo-{1,2}` example
 
 Run tests:
-
 ```bash
 uv run pytest tests/test_mcp_server_integration.py -v
 ```

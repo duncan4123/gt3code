@@ -1,11 +1,10 @@
 [workspace]
-prefix = "co"
 suspended = false
 global_fragments = ["command-glossary", "operational-awareness"]
 
 [[agent]]
 name = "codex"
-suspended = true
+suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "codex"
 max_active_sessions = 5
@@ -17,7 +16,7 @@ model = "gpt-5.5"
 
 [[agent]]
 name = "kimi-for-coding"
-suspended = true
+suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "kimi-for-coding"
 max_active_sessions = 5
@@ -31,7 +30,7 @@ model = "kimi-for-coding/k2p6"
 [[agent]]
 name = "codex"
 dir = "gascity"
-suspended = true
+suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "codex"
 max_active_sessions = 5
@@ -44,7 +43,7 @@ model = "gpt-5.5"
 [[agent]]
 name = "kimi-for-coding"
 dir = "gascity"
-suspended = true
+suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "kimi-for-coding"
 max_active_sessions = 5
@@ -253,7 +252,7 @@ model = "gpt-5.5"
 [[patches.agent]]
 dir = ""
 name = "deacon"
-suspended = true
+suspended = false
 provider = "codex"
 [patches.agent.option_defaults]
 model = "gpt-5.5"
@@ -280,7 +279,7 @@ model = "gpt-5.4-mini"
 [[patches.agent]]
 dir = "gascity"
 name = "refinery"
-suspended = true
+suspended = false
 provider = "codex"
 [patches.agent.option_defaults]
 model = "gpt-5.5"
@@ -288,7 +287,7 @@ model = "gpt-5.5"
 [[patches.agent]]
 dir = "gascity"
 name = "witness"
-suspended = true
+suspended = false
 provider = "codex"
 [patches.agent.option_defaults]
 model = "gpt-5.5"
@@ -296,7 +295,7 @@ model = "gpt-5.5"
 [[patches.agent]]
 dir = "gascity"
 name = "polecat"
-suspended = true
+suspended = false
 provider = "codex"
 [patches.agent.option_defaults]
 model = "gpt-5.5"
@@ -434,19 +433,9 @@ agent = "build"
 model = "kimi-for-coding/k2p6"
 
 [[patches.agent]]
-dir = ""
-name = "gastown.mayor"
-suspended = false
-
-[[patches.agent]]
 dir = "t3code"
 name = "worker"
 wake_mode = "resume"
-
-[[patches.agent]]
-dir = ""
-name = "gastown.deacon"
-suspended = false
 
 [[patches.named_session]]
 template = "mayor"

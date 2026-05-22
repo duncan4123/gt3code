@@ -5,7 +5,7 @@ run:
   tests: false
 
 linters:
-  default: "none"
+  default: 'none'
   enable:
     - errcheck
     - gosec
@@ -72,7 +72,7 @@ linters:
       # trusted internal sources (git commands, config values, validated IDs)
       - linters:
           - gosec
-        text: "G204"
+        text: 'G204'
       # G104: Deferred file/db closes - errors are non-critical
       - path: 'cmd/bd/show\.go|cmd/bd/doctor/dolt\.go'
         linters:
@@ -126,32 +126,37 @@ linters:
       - path: 'cmd/bd/jira\.go'
         linters:
           - unparam
-        text: "reimportConflicts|resolveConflictsByTimestamp"
+        text: 'reimportConflicts|resolveConflictsByTimestamp'
       # unparam: readOnly param kept for API symmetry with fix/sqlite_open.go
       - path: 'cmd/bd/doctor/sqlite_open\.go'
         linters:
           - unparam
-        text: "readOnly"
+        text: 'readOnly'
       # unparam: childrenMap return computed for future parent-child display
       - path: 'cmd/bd/list\.go'
         linters:
           - unparam
-        text: "buildBlockingMaps.*childrenMap"
+        text: 'buildBlockingMaps.*childrenMap'
       # unparam: truncateID maxLen kept for readability
       - path: 'cmd/bd/migrate\.go'
         linters:
           - unparam
-        text: "truncateID.*maxLen"
+        text: 'truncateID.*maxLen'
       # unparam: getConfig error return kept for API consistency with store.GetConfig
       - path: 'internal/(linear|gitlab|jira)/tracker\.go'
         linters:
           - unparam
-        text: "getConfig"
+        text: 'getConfig'
+      # unparam: ctx kept for context propagation; callers currently all pass rootCtx
+      - path: 'cmd/bd/linear\.go'
+        linters:
+          - unparam
+        text: 'getLinearConfig'
       # misspell: "cancelled" is intentional - matching GitHub API response values
       - path: 'cmd/bd/gate\.go'
         linters:
           - misspell
-        text: "cancelled"
+        text: 'cancelled'
 
 issues:
   uniq-by-line: true

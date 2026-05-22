@@ -26,8 +26,8 @@ Edit `.beads/config.yaml` or `~/.config/bd/config.yaml`:
 
 ```yaml
 federation:
-  remote: dolthub://myorg/beads # Primary remote (optional)
-  sovereignty: T2 # Data sovereignty tier
+  remote: dolthub://myorg/beads          # Primary remote (optional)
+  sovereignty: T2                        # Data sovereignty tier
 ```
 
 Or via environment variables:
@@ -39,12 +39,12 @@ export BD_FEDERATION_SOVEREIGNTY="T2"
 
 ### Data Sovereignty Tiers
 
-| Tier | Description        | Use Case                    |
-| ---- | ------------------ | --------------------------- |
-| T1   | No restrictions    | Public data                 |
-| T2   | Organization-level | Regional/company compliance |
-| T3   | Pseudonymous       | Identifiers removed         |
-| T4   | Anonymous          | Maximum privacy             |
+| Tier | Description | Use Case |
+|------|-------------|----------|
+| T1 | No restrictions | Public data |
+| T2 | Organization-level | Regional/company compliance |
+| T3 | Pseudonymous | Identifiers removed |
+| T4 | Anonymous | Maximum privacy |
 
 ## Adding Federation Peers
 
@@ -62,15 +62,15 @@ bd federation add-peer <name> <endpoint>
 
 ### Supported Endpoint Formats
 
-| Format       | Example                  | Description               |
-| ------------ | ------------------------ | ------------------------- |
-| DoltHub      | `dolthub://org/repo`     | DoltHub hosted repository |
-| Google Cloud | `gs://bucket/path`       | Google Cloud Storage      |
-| Amazon S3    | `s3://bucket/path`       | Amazon S3                 |
-| Local        | `file:///path/to/backup` | Local filesystem          |
-| HTTPS        | `https://host/path`      | HTTPS remote              |
-| SSH          | `ssh://host/path`        | SSH remote                |
-| Git SSH      | `git@host:path`          | Git SSH shorthand         |
+| Format | Example | Description |
+|--------|---------|-------------|
+| DoltHub | `dolthub://org/repo` | DoltHub hosted repository |
+| Google Cloud | `gs://bucket/path` | Google Cloud Storage |
+| Amazon S3 | `s3://bucket/path` | Amazon S3 |
+| Local | `file:///path/to/backup` | Local filesystem |
+| HTTPS | `https://host/path` | HTTPS remote |
+| SSH | `ssh://host/path` | SSH remote |
+| Git SSH | `git@host:path` | Git SSH shorthand |
 
 ### Examples
 

@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/beads/internal/beads"
 	"github.com/steveyegge/beads/internal/configfile"
-	"github.com/steveyegge/beads/internal/storage/dolt/migrations"
 	"github.com/steveyegge/beads/internal/types"
 	"github.com/steveyegge/beads/internal/ui"
 	"github.com/steveyegge/beads/internal/utils"
@@ -252,11 +251,8 @@ func handleDoltMetadataUpdate(cfg *configfile.Config, dryRun bool) {
 		fmt.Printf("\nDolt database: %s (version %s)\n", cfg.Database, Version)
 	}
 
-	// Embedded mode: flush Dolt commit after metadata writes.
-	if isEmbeddedMode() && (versionUpdated || repoIDSet || cloneIDSet) && store != nil {
-		if _, err := store.CommitPending(ctx, "migrate"); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to commit: %v\n", err)
-		}
+	if versionUpdated || repoIDSet || cloneIDSet {
+		commandDidWrite.Store(true)
 	}
 }
 
@@ -388,12 +384,7 @@ func handleUpdateRepoID(dryRun bool, autoYes bool) {
 		fmt.Printf("  New: %s\n", truncateID(newRepoID, 8))
 	}
 
-	// Embedded mode: flush Dolt commit.
-	if isEmbeddedMode() && store != nil {
-		if _, err := store.CommitPending(rootCtx, "migrate"); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to commit: %v\n", err)
-		}
-	}
+	commandDidWrite.Store(true)
 }
 
 // handleInspect shows migration plan and database state for AI agent analysis
@@ -630,17 +621,16 @@ func handleToSeparateBranch(branch string, dryRun bool) {
 		fmt.Println("  3. Future issue updates are stored in Dolt directly")
 	}
 
-	// Embedded mode: flush Dolt commit.
-	if isEmbeddedMode() && !dryRun && store != nil {
-		if _, commitErr := store.CommitPending(rootCtx, "migrate"); commitErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to commit: %v\n", commitErr)
-		}
+	if !dryRun {
+		commandDidWrite.Store(true)
 	}
 }
 
-// listMigrations returns registered Dolt schema migrations.
+// listMigrations returns registered Dolt schema migrations. The compat runner
+// was retired once all historical migrations had SQL equivalents; this is
+// kept as a stable hook for `bd migrate --inspect` output.
 func listMigrations() []string {
-	return migrations.ListCompatMigrations()
+	return nil
 }
 
 // migrateSyncCmd is the "bd migrate sync <branch>" subcommand that

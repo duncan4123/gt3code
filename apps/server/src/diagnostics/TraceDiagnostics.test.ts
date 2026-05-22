@@ -184,6 +184,68 @@ describe("TraceDiagnostics", () => {
     }),
   );
 
+  it.effect("suppresses optional source-control CLI probe spawn failures", () =>
+    Effect.sync(() => {
+      const diagnostics = TraceDiagnostics.aggregateTraceDiagnostics({
+        traceFilePath: "/tmp/server.trace.ndjson",
+        readAt: DateTime.makeUnsafe("2026-05-05T10:00:00.000Z"),
+        files: [
+          {
+            path: "/tmp/server.trace.ndjson",
+            text: [
+              record({
+                name: "VcsProcess.run",
+                traceId: "trace-az",
+                spanId: "span-az",
+                startMs: 1_000,
+                durationMs: 25,
+                exit: {
+                  _tag: "Failure",
+                  cause:
+                    "VcsProcessSpawnError: VCS process failed to spawn in source-control.discovery.probe: az --version (/repo/apps/server)\n[cause]: Error: spawn az ENOENT",
+                },
+              }),
+              record({
+                name: "processRunner.runProcessCore",
+                traceId: "trace-glab",
+                spanId: "span-glab",
+                startMs: 2_000,
+                durationMs: 25,
+                exit: {
+                  _tag: "Failure",
+                  cause:
+                    "ProcessSpawnError\n[cause]: PlatformError: NotFound: ChildProcess.spawn (glab --version)\n[cause]: Error: spawn glab ENOENT",
+                },
+              }),
+              record({
+                name: "ws.rpc.gc.wakeSession",
+                traceId: "trace-gc",
+                spanId: "span-gc",
+                startMs: 3_000,
+                durationMs: 25,
+                exit: {
+                  _tag: "Failure",
+                  cause: "not_found: city not found or not running: cities",
+                },
+              }),
+            ].join("\n"),
+          },
+        ],
+      });
+
+      assert.equal(diagnostics.recordCount, 3);
+      assert.equal(diagnostics.failureCount, 1);
+      assert.deepStrictEqual(
+        diagnostics.latestFailures.map((failure) => failure.name),
+        ["ws.rpc.gc.wakeSession"],
+      );
+      assert.equal(
+        diagnostics.topSpansByCount.find((span) => span.name === "VcsProcess.run")?.failureCount,
+        0,
+      );
+    }),
+  );
+
   it.effect("keeps loaded trace data when one rotated trace file fails to read", () =>
     Effect.gen(function* () {
       const traceFilePath = "/tmp/server.trace.ndjson";

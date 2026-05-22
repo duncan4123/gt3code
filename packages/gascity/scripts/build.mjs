@@ -34,8 +34,9 @@ const stampPath = path.join(
   ".t3-gascity-build-stamp.json",
 );
 const sourceRoot = resolveSourceRoot();
+const beadsSourceRoot = path.join(repoRoot, "packages", "beads-doltlite", "source");
 const doltliteBuildDir = resolveDoltliteBuildDir();
-const goBuildTags = "libsqlite3,gascity_native_beads";
+const goBuildTags = "libsqlite3";
 const goToolchain = process.env.GOTOOLCHAIN || "go1.26.2+auto";
 
 stopBundledSupervisorsBeforeBuild();
@@ -57,6 +58,7 @@ const stamp = {
   goflags: appendFlag(process.env.GOFLAGS, `-tags=${goBuildTags}`),
   goToolchain,
   sourceRoot,
+  beadsSourceRoot,
   doltliteBuildDir,
 };
 if (
@@ -64,7 +66,7 @@ if (
     outputs: [outputPath, outputLibraryPath],
     stampPath,
     stamp,
-    inputRoots: [sourceRoot],
+    inputRoots: [sourceRoot, beadsSourceRoot],
     extraInputs: [
       import.meta.url,
       path.join(sourceRoot, "cmd", "gc", "dashboard", "web", "dist", "dashboard.css"),

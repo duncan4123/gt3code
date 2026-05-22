@@ -80,7 +80,6 @@ All flush state (`isDirty`, `needsFullExport`, `debounceTimer`) is owned by a si
 **2. Channel-Based Communication**
 
 External code communicates with FlushManager via buffered channels:
-
 - `markDirtyCh`: Request to mark DB dirty (incremental or full export)
 - `timerFiredCh`: Debounce timer expired notification
 - `flushNowCh`: Synchronous flush request (returns error)
@@ -97,26 +96,22 @@ The timer callback sends to `timerFiredCh` instead of directly manipulating stat
 #### Concurrency Guarantees
 
 **Thread-Safety:**
-
 - `MarkDirty(fullExport bool)` - Safe from any goroutine, non-blocking
 - `FlushNow() error` - Safe from any goroutine, blocks until flush completes
 - `Shutdown() error` - Idempotent, safe to call multiple times
 
 **Debouncing Guarantees:**
-
 - Multiple `MarkDirty()` calls within the debounce window → single flush
 - Timer resets on each mark, flush occurs after last modification
 - FlushNow() bypasses debounce, forces immediate flush
 
 **Shutdown Guarantees:**
-
 - Final flush performed if database is dirty
 - Background goroutine cleanly exits
 - Idempotent via `sync.Once` - safe for multiple calls
 - Subsequent operations after shutdown are no-ops
 
 **Store Lifecycle:**
-
 - FlushManager checks `storeActive` flag before every flush
 - Store closure is coordinated via `storeMutex`
 - Flush safely aborts if store closes mid-operation
@@ -171,7 +166,6 @@ Hash-based comparison (not mtime) prevents git pull false positives (issue bd-84
 ### Data Integrity
 
 `flushWithState()` validates database state before flush:
-
 - Compares stored hash with actual database state
 - If mismatch detected, forces full resync (issue bd-160)
 - Prevents staleness when database is modified outside bd
@@ -260,7 +254,6 @@ Instead of incremental updates, the cache is completely rebuilt (DELETE + INSERT
 **Transaction safety**
 
 All cache operations happen within the same transaction as the triggering change:
-
 - Uses transaction if provided, otherwise direct db connection
 - Cache can never be in an inconsistent state visible to queries
 - Foreign key CASCADE ensures cache entries deleted when issues are deleted
@@ -272,13 +265,11 @@ Only `blocks` and `parent-child` dependencies trigger rebuilds since they affect
 ### Performance Characteristics
 
 **Query performance (GetReadyWork):**
-
 - Before cache: ~752ms (recursive CTE)
 - With cache: ~29ms (NOT EXISTS)
 - Speedup: 25x
 
 **Write overhead:**
-
 - Cache rebuild: <50ms
 - Only triggered on dependency/status changes (rare operations)
 - Trade-off: slower writes for much faster reads
@@ -308,7 +299,6 @@ Only `blocks` and `parent-child` dependencies trigger rebuilds since they affect
 ### Testing
 
 Comprehensive test coverage in `blocked_cache_test.go`:
-
 - Cache invalidation on dependency add/remove
 - Cache updates on status changes
 - Multiple blockers
@@ -328,7 +318,6 @@ Run tests: `go test -v ./internal/storage/dolt -run TestCache`
 ### Future Optimizations
 
 If rebuild becomes a bottleneck in very large databases (>100K issues):
-
 - Consider incremental updates for specific dependency types
 - Add indexes to dependencies table for CTE performance
 - Implement dirty tracking to avoid rebuilds when cache is unchanged

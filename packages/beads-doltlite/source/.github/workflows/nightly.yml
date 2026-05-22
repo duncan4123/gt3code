@@ -3,7 +3,7 @@ name: Nightly Full Tests
 on:
   schedule:
     # Run at 2am UTC daily
-    - cron: "0 2 * * *"
+    - cron: '0 2 * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
@@ -12,12 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: "go.mod"
+          go-version-file: 'go.mod'
 
       - name: Install Dolt
         run: |
@@ -58,7 +58,7 @@ jobs:
           fi
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
         if: success()
         continue-on-error: true
         with:

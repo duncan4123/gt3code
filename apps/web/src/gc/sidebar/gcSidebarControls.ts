@@ -48,8 +48,19 @@ export interface GcAgentRuntimeState {
   tone: GcAgentRuntimeTone;
 }
 
-export function gcSessionNameForQualifiedAgent(agent: string): string {
-  return agent.replaceAll("/", "--").replaceAll(".", "__");
+export function gcSessionNameForQualifiedAgent(
+  agent: string,
+  options?: {
+    cityWorkspaceId?: string;
+  },
+): string {
+  const normalizedAgent = agent.trim();
+  const cityWorkspaceId = options?.cityWorkspaceId?.trim();
+  if (cityWorkspaceId) {
+    const agentBase = normalizedAgent.split("/").filter(Boolean).at(-1) ?? normalizedAgent;
+    return `${cityWorkspaceId}__${agentBase.replaceAll(".", "__")}`;
+  }
+  return normalizedAgent.replaceAll("/", "--").replaceAll(".", "__");
 }
 
 function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
@@ -78,6 +89,7 @@ function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
 export async function waitForGcAgentBinding(input: {
   agent: string;
   findThreadBinding: (sessionName: string) => Promise<GcFindThreadBindingResult>;
+  sessionName?: string;
   signal?: AbortSignal;
   intervalMs?: number;
   timeoutMs?: number;
@@ -94,7 +106,7 @@ export async function waitForGcAgentBinding(input: {
 > {
   const intervalMs = input.intervalMs ?? 1_500;
   const timeoutMs = input.timeoutMs ?? 30_000;
-  const sessionName = gcSessionNameForQualifiedAgent(input.agent);
+  const sessionName = input.sessionName ?? gcSessionNameForQualifiedAgent(input.agent);
   const startedAtMs = Date.now();
 
   while (Date.now() - startedAtMs <= timeoutMs) {

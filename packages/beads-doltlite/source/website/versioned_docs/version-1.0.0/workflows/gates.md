@@ -11,7 +11,6 @@ Gates are async coordination primitives for workflow orchestration.
 ## What are Gates?
 
 Gates block step progression until a condition is met:
-
 - Human approval
 - Timer expiration
 - External event (GitHub PR, CI, etc.)
@@ -79,11 +78,11 @@ merged = true
 
 ## Gate States
 
-| State     | Description                |
-| --------- | -------------------------- |
-| `pending` | Waiting for condition      |
-| `open`    | Condition met, can proceed |
-| `closed`  | Step completed             |
+| State | Description |
+|-------|-------------|
+| `pending` | Waiting for condition |
+| `open` | Condition met, can proceed |
+| `closed` | Step completed |
 
 ## Using Gates in Workflows
 

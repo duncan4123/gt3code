@@ -4,23 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 
 	"github.com/steveyegge/beads/internal/storage"
 )
 
-// PromoteFromEphemeralInTx promotes a wisp to a permanent issue within a transaction.
-// Copies the issue, labels, dependencies, events, and comments from wisp tables
-// to permanent tables, then deletes from wisp tables.
-//
 //nolint:gosec // G201: table names are hardcoded constants
 func PromoteFromEphemeralInTx(ctx context.Context, tx *sql.Tx, id string, actor string) error {
-	// Verify the ID is an active wisp.
 	if !IsActiveWispInTx(ctx, tx, id) {
 		return fmt.Errorf("wisp %s not found", id)
 	}
 
-	// Get the wisp issue data.
 	issue, err := GetIssueInTx(ctx, tx, id)
 	if err != nil {
 		return fmt.Errorf("get wisp for promote: %w", err)
@@ -29,10 +22,8 @@ func PromoteFromEphemeralInTx(ctx context.Context, tx *sql.Tx, id string, actor 
 		return fmt.Errorf("wisp %s not found", id)
 	}
 
-	// Clear ephemeral flag for persistent storage.
 	issue.Ephemeral = false
 
-	// Create in issues table via CreateIssueInTx.
 	bc, err := NewBatchContext(ctx, tx, storage.BatchCreateOptions{
 		SkipPrefixValidation: true,
 	})
@@ -43,41 +34,63 @@ func PromoteFromEphemeralInTx(ctx context.Context, tx *sql.Tx, id string, actor 
 		return fmt.Errorf("promote wisp to issues: %w", err)
 	}
 
-	// Copy labels: wisp_labels → labels.
 	if _, err := tx.ExecContext(ctx, `
 		INSERT IGNORE INTO labels (issue_id, label)
 		SELECT issue_id, label FROM wisp_labels WHERE issue_id = ?
 	`, id); err != nil {
-		log.Printf("promote %s: failed to copy labels: %v", id, err)
+		return fmt.Errorf("copy labels for promoted wisp %s: %w", id, err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM wisp_labels WHERE issue_id = ?`, id); err != nil {
+		return fmt.Errorf("delete copied wisp labels for promoted wisp %s: %w", id, err)
 	}
 
-	// Copy dependencies: wisp_dependencies → dependencies (best-effort).
 	if _, err := tx.ExecContext(ctx, `
-		INSERT IGNORE INTO dependencies (issue_id, depends_on_id, type, created_at, created_by, metadata, thread_id)
-		SELECT issue_id, depends_on_id, type, created_at, created_by, metadata, thread_id
+		INSERT IGNORE INTO dependencies (issue_id, depends_on_issue_id, depends_on_wisp_id, depends_on_external, type, created_at, created_by, metadata, thread_id)
+		SELECT issue_id, depends_on_issue_id, depends_on_wisp_id, depends_on_external, type, created_at, created_by, metadata, thread_id
 		FROM wisp_dependencies WHERE issue_id = ?
 	`, id); err != nil {
-		log.Printf("promote %s: failed to copy dependencies: %v", id, err)
+		return fmt.Errorf("copy dependencies for promoted wisp %s: %w", id, err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM wisp_dependencies WHERE issue_id = ?`, id); err != nil {
+		return fmt.Errorf("delete copied wisp dependencies for promoted wisp %s: %w", id, err)
 	}
 
-	// Copy events: wisp_events → events (best-effort).
 	if _, err := tx.ExecContext(ctx, `
 		INSERT IGNORE INTO events (issue_id, event_type, actor, old_value, new_value, comment, created_at)
 		SELECT issue_id, event_type, actor, old_value, new_value, comment, created_at
 		FROM wisp_events WHERE issue_id = ?
 	`, id); err != nil {
-		log.Printf("promote %s: failed to copy events: %v", id, err)
+		return fmt.Errorf("copy events for promoted wisp %s: %w", id, err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM wisp_events WHERE issue_id = ?`, id); err != nil {
+		return fmt.Errorf("delete copied wisp events for promoted wisp %s: %w", id, err)
 	}
 
-	// Copy comments: wisp_comments → comments (best-effort).
 	if _, err := tx.ExecContext(ctx, `
 		INSERT IGNORE INTO comments (issue_id, author, text, created_at)
 		SELECT issue_id, author, text, created_at
 		FROM wisp_comments WHERE issue_id = ?
 	`, id); err != nil {
-		log.Printf("promote %s: failed to copy comments: %v", id, err)
+		return fmt.Errorf("copy comments for promoted wisp %s: %w", id, err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM wisp_comments WHERE issue_id = ?`, id); err != nil {
+		return fmt.Errorf("delete copied wisp comments for promoted wisp %s: %w", id, err)
 	}
 
-	// Delete from wisp tables.
-	return DeleteIssueInTx(ctx, tx, id)
+	if err := RetargetInboundDependenciesToIssueInTx(ctx, tx, id); err != nil {
+		return err
+	}
+
+	result, err := tx.ExecContext(ctx, `DELETE FROM wisps WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete promoted wisp row %s: %w", id, err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get promoted wisp rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("wisp %s not found", id)
+	}
+	return nil
 }
