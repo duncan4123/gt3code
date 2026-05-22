@@ -1,0 +1,23 @@
+#!/bin/sh
+# gc-hook-stamp: unknown unknown
+# Installed by gc — forwards bd close events, auto-closes completed convoys,
+# and auto-closes orphaned wisps.
+# Args: $1=issue_id  $2=event_type  stdin=issue JSON
+GC_BIN="${GC_BIN:-gc}"
+HOOK_LOG="${BEADS_DIR:-.beads}/hooks.log"
+DATA=$(cat)
+PAYLOAD=$(printf '{"bead":%s}' "$DATA")
+title=$(echo "$DATA" | grep -o '"title":"[^"]*"' | head -1 | cut -d'"' -f4)
+(
+  "$GC_BIN" event emit bead.closed --subject "$1" --message "$title" --payload "$PAYLOAD" 2>>"$HOOK_LOG" \
+    || echo "[$(date -u +%FT%TZ)] on_close $1: gc event emit bead.closed failed (gc=$GC_BIN)" >>"$HOOK_LOG" 2>/dev/null \
+    || true
+  # Auto-close parent convoy if all siblings are now closed.
+  "$GC_BIN" convoy autoclose "$1" 2>>"$HOOK_LOG" \
+    || echo "[$(date -u +%FT%TZ)] on_close $1: gc convoy autoclose failed (gc=$GC_BIN)" >>"$HOOK_LOG" 2>/dev/null \
+    || true
+  # Auto-close open molecule/wisp children so they don't outlive the parent.
+  "$GC_BIN" wisp autoclose "$1" 2>>"$HOOK_LOG" \
+    || echo "[$(date -u +%FT%TZ)] on_close $1: gc wisp autoclose failed (gc=$GC_BIN)" >>"$HOOK_LOG" 2>/dev/null \
+    || true
+) </dev/null >/dev/null 2>&1 &

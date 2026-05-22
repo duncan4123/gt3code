@@ -131,7 +131,7 @@ func New(ctx context.Context, beadsDir, database, branch string, opts ...Option)
 	// After a clone or branch switch, these tables are absent because
 	// dolt_ignore prevents them from being committed. Server mode handles
 	// this in newServerMode(); embedded mode must do it here. (GH#3270)
-	if err := s.ensureIgnoredTables(ctx); err != nil {
+	if err := s.ensureIgnoredTablesLocked(ctx); err != nil {
 		return nil, fmt.Errorf("doltlite: ensure ignored tables: %w", err)
 	}
 
@@ -272,7 +272,7 @@ func (s *DoltliteStore) withConnOnce(ctx context.Context, commit bool, fn func(t
 }
 
 func (s *DoltliteStore) withRetry(ctx context.Context, fn func() error) error {
-	const maxAttempts = 5
+	const maxAttempts = 8
 	var err error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if err = fn(); err == nil {
@@ -284,7 +284,7 @@ func (s *DoltliteStore) withRetry(ctx context.Context, fn func() error) error {
 		select {
 		case <-ctx.Done():
 			return errors.Join(err, ctx.Err())
-		case <-time.After(time.Duration(50*(1<<attempt)) * time.Millisecond):
+		case <-time.After(time.Duration(100*(1<<attempt)) * time.Millisecond):
 		}
 	}
 	return err
@@ -331,7 +331,9 @@ func (s *DoltliteStore) initSchema(ctx context.Context) error {
 	}
 	defer func() { _ = cleanup() }()
 
-	if err := schema.CreateIgnoredTablesSQLite(ctx, db); err != nil {
+	if err := s.withRetry(ctx, func() error {
+		return schema.CreateIgnoredTablesSQLite(ctx, db)
+	}); err != nil {
 		return fmt.Errorf("ensure ignored tables before migration: %w", err)
 	}
 
@@ -351,8 +353,16 @@ func (s *DoltliteStore) initSchema(ctx context.Context) error {
 // ensureIgnoredTables creates dolt_ignore'd wisp tables if they don't exist.
 // Uses withConn (not withRootConn) because the database is already created.
 func (s *DoltliteStore) ensureIgnoredTables(ctx context.Context) error {
-	return s.withConn(ctx, false, func(tx *sql.Tx) error {
+	return s.withConn(ctx, true, func(tx *sql.Tx) error {
 		return schema.CreateIgnoredTablesSQLite(ctx, tx)
+	})
+}
+
+func (s *DoltliteStore) ensureIgnoredTablesLocked(ctx context.Context) error {
+	return s.withRetry(ctx, func() error {
+		return s.withConnOnce(ctx, true, func(tx *sql.Tx) error {
+			return schema.CreateIgnoredTablesSQLite(ctx, tx)
+		})
 	})
 }
 

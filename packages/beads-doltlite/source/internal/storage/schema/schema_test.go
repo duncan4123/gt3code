@@ -109,6 +109,26 @@ func TestMigrationSQLTouchesTableStatementForms(t *testing.T) {
 	}
 }
 
+func TestSQLiteTranslatesUUIDPrimaryKeyAddColumnForExistingTables(t *testing.T) {
+	got := translateSQLiteBasics(
+		"ALTER TABLE dependencies ADD COLUMN id CHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY FIRST",
+	)
+	want := "ALTER TABLE dependencies ADD COLUMN id CHAR(36)"
+	if got != want {
+		t.Fatalf("translated SQL = %q, want %q", got, want)
+	}
+}
+
+func TestSQLiteTranslatesQuotedUUIDPrimaryKeyAddColumnBeforeGenericRewrites(t *testing.T) {
+	got := translateSQLiteBasics(`SET @sql = IF(@needs_drop = 1,
+    'ALTER TABLE dependencies ADD COLUMN id CHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY FIRST',
+    'SELECT 1')`)
+	want := "ALTER TABLE dependencies ADD COLUMN id CHAR(36)"
+	if got != want {
+		t.Fatalf("translated SQL = %q, want %q", got, want)
+	}
+}
+
 func TestDirtyTableSignatureRejectsUnsafeTableName(t *testing.T) {
 	_, err := dirtyTableSignature(context.Background(), nil, "issues'); SELECT 1; --")
 	if err == nil {

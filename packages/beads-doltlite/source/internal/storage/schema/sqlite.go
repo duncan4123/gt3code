@@ -12,6 +12,7 @@ import (
 var (
 	createTableRe          = regexp.MustCompile(`(?is)^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?` + "`?" + `([A-Za-z0-9_]+)` + "`?")
 	inlineIndexRe          = regexp.MustCompile(`(?i)^\s*(UNIQUE\s+)?(?:INDEX|KEY)\s+` + "`?" + `([A-Za-z0-9_]+)` + "`?" + `\s*(\([^)]+\))\s*,?\s*$`)
+	alterAddUUIDIDColumnRe = regexp.MustCompile(`(?is)^\s*ALTER\s+TABLE\s+` + "`?" + `([A-Za-z0-9_]+)` + "`?" + `\s+ADD\s+COLUMN\s+` + "`?" + `id` + "`?" + `\s+CHAR\s*\(\s*36\s*\)\s+NOT\s+NULL\s+DEFAULT\s*\(\s*UUID\s*\(\s*\)\s*\)\s+PRIMARY\s+KEY\s+FIRST\s*$`)
 	quotedAlterAddColumnRe = regexp.MustCompile(`(?is)'(ALTER\s+TABLE\s+` + "`?" + `[A-Za-z0-9_]+` + "`?" + `\s+ADD\s+COLUMN\s+[^']+)'`)
 	quotedRenameTableRe    = regexp.MustCompile(`(?is)'(RENAME\s+TABLE\s+` + "`?" + `[A-Za-z0-9_]+` + "`?" + `\s+TO\s+` + "`?" + `[A-Za-z0-9_]+` + "`?" + `)'`)
 	renameTableRe          = regexp.MustCompile(`(?is)^\s*RENAME\s+TABLE\s+` + "`?" + `([A-Za-z0-9_]+)` + "`?" + `\s+TO\s+` + "`?" + `([A-Za-z0-9_]+)` + "`?" + `\s*$`)
@@ -81,6 +82,13 @@ func CreateIgnoredTablesSQLite(ctx context.Context, db DBConn) error {
 	if _, err := db.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS dolt_ignore (pattern TEXT NOT NULL PRIMARY KEY, ignored BOOLEAN NOT NULL)"); err != nil {
 		return fmt.Errorf("create dolt_ignore: %w", err)
 	}
+	current, err := ignoredTablesCurrentSQLite(ctx, db)
+	if err != nil {
+		return err
+	}
+	if current {
+		return nil
+	}
 	for _, mf := range ignoredSource.list() {
 		data, err := ignoredSource.files.ReadFile(ignoredSource.dir + "/" + mf.name)
 		if err != nil {
@@ -98,6 +106,55 @@ func CreateIgnoredTablesSQLite(ctx context.Context, db DBConn) error {
 		}
 	}
 	return nil
+}
+
+func ignoredTablesCurrentSQLite(ctx context.Context, db DBConn) (bool, error) {
+	for _, table := range []string{
+		"wisps",
+		"wisp_labels",
+		"wisp_dependencies",
+		"wisp_events",
+		"wisp_comments",
+		"repo_mtimes",
+		"local_metadata",
+	} {
+		var count int
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&count); err != nil {
+			return false, fmt.Errorf("check ignored table %s: %w", table, err)
+		}
+		if count == 0 {
+			return false, nil
+		}
+	}
+
+	rows, err := db.QueryContext(ctx, "PRAGMA table_info(wisp_dependencies)")
+	if err != nil {
+		return false, fmt.Errorf("check wisp_dependencies columns: %w", err)
+	}
+	defer rows.Close()
+
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var defaultValue any
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			return false, fmt.Errorf("scan wisp_dependencies columns: %w", err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("read wisp_dependencies columns: %w", err)
+	}
+
+	for _, column := range []string{"id", "depends_on_issue_id", "depends_on_wisp_id", "depends_on_external"} {
+		if !columns[column] {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func splitStatements(sqlText string) []string {
@@ -142,6 +199,20 @@ func translateSQLiteStatements(stmts []string) []string {
 
 func translateSQLiteBasics(stmt string) string {
 	stmt = stripSQLiteLineComments(stmt)
+	if regexp.MustCompile(`(?i)^SET\b`).MatchString(strings.TrimSpace(stmt)) {
+		if strings.Contains(stmt, "@needs_migration") {
+			return ""
+		}
+		if rename := extractQuotedRenameTable(stmt); rename != "" {
+			return translateSQLiteBasics(rename)
+		}
+		if alter := extractQuotedAlterAddColumn(stmt); alter != "" {
+			return translateSQLiteBasics(alter)
+		}
+	}
+	if m := alterAddUUIDIDColumnRe.FindStringSubmatch(stmt); len(m) == 2 {
+		return fmt.Sprintf("ALTER TABLE %s ADD COLUMN id CHAR(36)", m[1])
+	}
 	repls := []struct{ old, new string }{
 		{"INSERT IGNORE INTO", "INSERT OR IGNORE INTO"},
 		{"ON UPDATE CURRENT_TIMESTAMP", ""},
@@ -177,15 +248,6 @@ func translateSQLiteBasics(stmt string) string {
 		return ""
 	}
 	if regexp.MustCompile(`(?i)^SET\b`).MatchString(strings.TrimSpace(stmt)) {
-		if strings.Contains(stmt, "@needs_migration") {
-			return ""
-		}
-		if rename := extractQuotedRenameTable(stmt); rename != "" {
-			return translateSQLiteBasics(rename)
-		}
-		if alter := extractQuotedAlterAddColumn(stmt); alter != "" {
-			return translateSQLiteBasics(alter)
-		}
 		return ""
 	}
 	if regexp.MustCompile(`(?i)^(SET|PREPARE|EXECUTE|DEALLOCATE\s+PREPARE)\b`).MatchString(strings.TrimSpace(stmt)) {
