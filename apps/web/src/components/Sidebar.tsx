@@ -3546,6 +3546,23 @@ export default function Sidebar() {
       return next;
     });
   }, []);
+  const { copyToClipboard: copyGcNotificationToClipboard } = useCopyToClipboard<{
+    label: string;
+  }>({
+    onCopy: (ctx) => {
+      toastManager.add({
+        type: "success",
+        title: `${ctx.label} copied`,
+      });
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "Failed to copy notification",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
+    },
+  });
   const clearGcAgentActionState = useCallback((agent: string) => {
     setGcAgentActionStateByAgent((current) => {
       const next = new Map(current);
@@ -4634,17 +4651,33 @@ export default function Sidebar() {
       });
       setGcSupervisorMutationInFlight(true);
       try {
-        await api.gc.setSupervisorRunning({ city, running });
+        const result = await api.gc.setSupervisorRunning({ city, running });
         const nextConfig = await api.gc.getConfig({});
         setGcConfig(nextConfig);
+        const commandOutput = result.commandOutput ?? result.message;
         toastManager.update(toastId, {
           type: "success",
           title: running ? "Supervisor started" : "Supervisor stopped",
-          description: running
-            ? "Gas City supervisor is running."
-            : "Gas City supervisor stop was accepted.",
+          description:
+            commandOutput ??
+            (running
+              ? "Gas City supervisor is running."
+              : "Gas City supervisor stop was accepted."),
           timeout: 0,
-          data: { dismissAfterVisibleMs: 6_000 },
+          data: {
+            dismissAfterVisibleMs: 6_000,
+            ...(commandOutput
+              ? {
+                  secondaryActionProps: {
+                    children: "Copy",
+                    onClick: () =>
+                      copyGcNotificationToClipboard(commandOutput, {
+                        label: "Supervisor notification",
+                      }),
+                  },
+                }
+              : {}),
+          },
         });
       } catch (error) {
         toastManager.update(toastId, {
@@ -4657,7 +4690,7 @@ export default function Sidebar() {
         setGcSupervisorMutationInFlight(false);
       }
     },
-    [refreshGcConfig],
+    [copyGcNotificationToClipboard, refreshGcConfig],
   );
 
   const handleGcControllerRunningChange = useCallback(
@@ -4676,17 +4709,33 @@ export default function Sidebar() {
       });
       setCityControllerMutationPending(city, true);
       try {
-        await api.gc.setControllerRunning({ city, running });
+        const result = await api.gc.setControllerRunning({ city, running });
         const nextConfig = await api.gc.getConfig({});
         setGcConfig(nextConfig);
+        const commandOutput = result.commandOutput ?? result.message;
         toastManager.update(toastId, {
           type: "success",
           title: running ? `${city} started` : `${city} stopped`,
-          description: running
-            ? "The city controller is running."
-            : "The city controller stop was accepted.",
+          description:
+            commandOutput ??
+            (running
+              ? "The city controller is running."
+              : "The city controller stop was accepted."),
           timeout: 0,
-          data: { dismissAfterVisibleMs: 6_000 },
+          data: {
+            dismissAfterVisibleMs: 6_000,
+            ...(commandOutput
+              ? {
+                  secondaryActionProps: {
+                    children: "Copy",
+                    onClick: () =>
+                      copyGcNotificationToClipboard(commandOutput, {
+                        label: `${city} notification`,
+                      }),
+                  },
+                }
+              : {}),
+          },
         });
       } catch (error) {
         toastManager.update(toastId, {
@@ -4699,7 +4748,7 @@ export default function Sidebar() {
         setCityControllerMutationPending(city, false);
       }
     },
-    [refreshGcConfig, setCityControllerMutationPending],
+    [copyGcNotificationToClipboard, refreshGcConfig, setCityControllerMutationPending],
   );
 
   const projectDnDSensors = useSensors(

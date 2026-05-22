@@ -85,11 +85,11 @@ export interface GcApiClientShape {
   readonly setSupervisorRunning: (
     cityName: string | undefined,
     running: boolean,
-  ) => Effect.Effect<void, Error>;
+  ) => Effect.Effect<GcSessionActionResult, Error>;
   readonly setControllerRunning: (
     cityName: string | undefined,
     running: boolean,
-  ) => Effect.Effect<void, Error>;
+  ) => Effect.Effect<GcSessionActionResult, Error>;
   readonly respondToPending: (
     sessionName: string,
     response: {

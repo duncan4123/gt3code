@@ -10,7 +10,11 @@ import {
 } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipPopup,
+  TooltipTrigger,
+} from "../components/ui/tooltip";
 import { SidebarMenuSubItem } from "../components/ui/sidebar";
 import { Badge } from "../components/ui/badge";
 import type { GcLifecycleStatus, ThreadId } from "@t3tools/contracts";
@@ -109,18 +113,32 @@ interface SidebarGcFoldersProps {
     suspended: boolean,
     agentGroup: SidebarGcAgentGroup,
   ) => void;
-  onAdjustAgentMinActiveSessions: (agent: string, minActiveSessions: number) => void;
-  onAdjustAgentMaxActiveSessions: (agent: string, maxActiveSessions: number) => void;
+  onAdjustAgentMinActiveSessions: (
+    agent: string,
+    minActiveSessions: number,
+  ) => void;
+  onAdjustAgentMaxActiveSessions: (
+    agent: string,
+    maxActiveSessions: number,
+  ) => void;
   onWakeAgentSession?: (agent: string, sessionName?: string) => void;
   onToggleAgentWakeMode: (agent: string, wakeMode: GcWakeMode) => void;
-  onToggleAgentSessionMode: (agent: string, mode: "always" | "on_demand") => void;
+  onToggleAgentSessionMode: (
+    agent: string,
+    mode: "always" | "on_demand",
+  ) => void;
   onSetSupervisorRunning?: (city: string, running: boolean) => void;
   onSetControllerRunning?: (city: string, running: boolean) => void;
   renderWorkspaceRows?: (workspaceId: string) => ReactNode;
-  renderThreadRows: (threadIds: readonly ThreadId[], indentClassName?: string) => ReactNode;
+  renderThreadRows: (
+    threadIds: readonly ThreadId[],
+    indentClassName?: string,
+  ) => ReactNode;
 }
 
-function statusBadgeClassName(tone: "info" | "muted" | "success" | "warning"): string {
+function statusBadgeClassName(
+  tone: "info" | "muted" | "success" | "warning",
+): string {
   switch (tone) {
     case "success":
       return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
@@ -153,12 +171,21 @@ function gcConfigToggleLabel(
       : `Suspend ${label} in config`;
 }
 
-const NON_WAKEABLE_AGENT_RUNTIME_LABELS = new Set(["Running", "Ready", "Connecting", "Starting"]);
+const NON_WAKEABLE_AGENT_RUNTIME_LABELS = new Set([
+  "Running",
+  "Ready",
+  "Connecting",
+  "Starting",
+]);
 
 function hasVisibleAgentThreads(agentGroup: SidebarGcAgentGroup): boolean {
   return (
     agentGroup.threadIds.length > 0 ||
-    Boolean(agentGroup.threadGroups?.some((threadGroup) => threadGroup.threadIds.length > 0))
+    Boolean(
+      agentGroup.threadGroups?.some(
+        (threadGroup) => threadGroup.threadIds.length > 0,
+      ),
+    )
   );
 }
 
@@ -180,8 +207,13 @@ const CONVOY_AGENT_INDENT_CLASSES = ["px-6", "px-8", "px-10"] as const;
 const CONVOY_THREAD_GROUP_INDENT_CLASSES = ["px-8", "px-10", "px-12"] as const;
 const CONVOY_THREAD_INDENT_CLASSES = ["pl-10", "pl-12", "pl-14"] as const;
 
-function gcDepthClassName(depth: number, classNames: readonly string[]): string {
-  return classNames[Math.min(depth, classNames.length - 1)] ?? classNames[0] ?? "";
+function gcDepthClassName(
+  depth: number,
+  classNames: readonly string[],
+): string {
+  return (
+    classNames[Math.min(depth, classNames.length - 1)] ?? classNames[0] ?? ""
+  );
 }
 
 function gcNestedRigParentId(
@@ -205,7 +237,10 @@ function gcNestedRigParentId(
   return null;
 }
 
-function gcRigGroupDisplayLabel(rigGroup: SidebarGcRigGroup, parentId: string | undefined): string {
+function gcRigGroupDisplayLabel(
+  rigGroup: SidebarGcRigGroup,
+  parentId: string | undefined,
+): string {
   const label = rigGroup.label.trim();
   const fallbackLabel =
     rigGroup.id.split("/").toReversed().find(Boolean) ??
@@ -227,7 +262,11 @@ function gcAgentEffectiveRuntimeState(
   rigGroup: SidebarGcRigGroup,
   agentGroup: SidebarGcAgentGroup,
 ): SidebarGcAgentGroup["runtimeState"] {
-  if (rigGroup.kind === "rig" && rigGroup.isSuspended && !agentGroup.isExplicitlySuspended) {
+  if (
+    rigGroup.kind === "rig" &&
+    rigGroup.isSuspended &&
+    !agentGroup.isExplicitlySuspended
+  ) {
     return {
       label: "Rig suspended",
       tone: "muted",
@@ -266,8 +305,12 @@ function GcThreadGroupBadges({
 }
 
 export function SidebarGcFolders(props: SidebarGcFoldersProps) {
-  const folderExpandedById = useGcSidebarUiStateStore((state) => state.folderExpandedById);
-  const toggleFolderExpanded = useGcSidebarUiStateStore((state) => state.toggleFolderExpanded);
+  const folderExpandedById = useGcSidebarUiStateStore(
+    (state) => state.folderExpandedById,
+  );
+  const toggleFolderExpanded = useGcSidebarUiStateStore(
+    (state) => state.toggleFolderExpanded,
+  );
   const workspaceSuspensionHint =
     "Workspace is suspended. Gas City will not start or reconcile agents until GC is resumed.";
   const indentDepth = props.indentDepth ?? 0;
@@ -284,7 +327,11 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
   const nestedRigIds = new Set<string>();
   const childRigGroupsByWorkspaceId = new Map<string, SidebarGcRigGroup[]>();
   for (const rigGroup of props.rigGroups) {
-    const parentId = gcNestedRigParentId(rigGroup, workspaceGroupIds, singleWorkspaceGroupId);
+    const parentId = gcNestedRigParentId(
+      rigGroup,
+      workspaceGroupIds,
+      singleWorkspaceGroupId,
+    );
     if (!parentId) {
       continue;
     }
@@ -300,15 +347,29 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
     props.flattenRootRigFolders &&
     !props.nestedParentId &&
     visibleRigGroups.length === 1 &&
-    (visibleRigGroups[0]?.kind === "rig" || visibleRigGroups[0]?.kind === "workspace")
+    (visibleRigGroups[0]?.kind === "rig" ||
+      visibleRigGroups[0]?.kind === "workspace")
       ? visibleRigGroups[0]
       : null;
-  const isConfiguredRigActionDisabled = (rigGroup: SidebarGcRigGroup): boolean =>
-    rigGroup.kind === "rig" && rigGroup.isConfigured === false;
-  const rigFolderIndentClassName = gcDepthClassName(indentDepth, RIG_FOLDER_INDENT_CLASSES);
-  const agentFolderIndentClassName = gcDepthClassName(indentDepth, AGENT_FOLDER_INDENT_CLASSES);
-  const threadGroupIndentClassName = gcDepthClassName(indentDepth, THREAD_GROUP_INDENT_CLASSES);
-  const threadIndentClassName = gcDepthClassName(indentDepth, THREAD_INDENT_CLASSES);
+  const isConfiguredRigActionDisabled = (
+    rigGroup: SidebarGcRigGroup,
+  ): boolean => rigGroup.kind === "rig" && rigGroup.isConfigured === false;
+  const rigFolderIndentClassName = gcDepthClassName(
+    indentDepth,
+    RIG_FOLDER_INDENT_CLASSES,
+  );
+  const agentFolderIndentClassName = gcDepthClassName(
+    indentDepth,
+    AGENT_FOLDER_INDENT_CLASSES,
+  );
+  const threadGroupIndentClassName = gcDepthClassName(
+    indentDepth,
+    THREAD_GROUP_INDENT_CLASSES,
+  );
+  const threadIndentClassName = gcDepthClassName(
+    indentDepth,
+    THREAD_INDENT_CLASSES,
+  );
 
   const rigFolderKey = (rigId: string) => `rig:${rigId}`;
   const workspaceFolderKey = (rigId: string) => `workspace:${rigId}`;
@@ -327,9 +388,16 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
       readonly keyPrefix?: string;
     },
   ) => {
-    const isMutating = props.gcAgentMutationsInFlight.has(agentGroup.qualifiedName);
-    const actionState = props.gcAgentActionStateByAgent.get(agentGroup.qualifiedName);
-    const displayRuntimeState = gcAgentEffectiveRuntimeState(rigGroup, agentGroup);
+    const isMutating = props.gcAgentMutationsInFlight.has(
+      agentGroup.qualifiedName,
+    );
+    const actionState = props.gcAgentActionStateByAgent.get(
+      agentGroup.qualifiedName,
+    );
+    const displayRuntimeState = gcAgentEffectiveRuntimeState(
+      rigGroup,
+      agentGroup,
+    );
     const actionLabel = gcConfigToggleLabel(
       "agent",
       agentGroup.qualifiedName,
@@ -367,12 +435,14 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
       canAdjustPoolSize &&
       typeof agentGroup.minActiveSessions === "number" &&
       agentGroup.minActiveSessions > 0;
-    const canAdjustPoolMaximum = canAdjustPoolSize && typeof maxActiveSessions === "number";
+    const canAdjustPoolMaximum =
+      canAdjustPoolSize && typeof maxActiveSessions === "number";
     const canIncreasePoolMaximum = canAdjustPoolMaximum;
     const canDecreasePoolMaximum =
       canAdjustPoolMaximum &&
       (maxActiveSessions ?? 0) > Math.max(0, agentGroup.minActiveSessions ?? 0);
-    const canShowWakeSession = Boolean(props.onWakeAgentSession) && canWakeAgentSession(agentGroup);
+    const canShowWakeSession =
+      Boolean(props.onWakeAgentSession) && canWakeAgentSession(agentGroup);
     const canWakeSession =
       canShowWakeSession &&
       canWakeAgentSession(agentGroup) &&
@@ -388,7 +458,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
           })
         : gcSessionNameForQualifiedAgent(agentGroup.qualifiedName);
     const groupedThreadIds = new Set(
-      (agentGroup.threadGroups ?? []).flatMap((threadGroup) => threadGroup.threadIds),
+      (agentGroup.threadGroups ?? []).flatMap(
+        (threadGroup) => threadGroup.threadIds,
+      ),
     );
     const ungroupedThreadIds = agentGroup.threadIds.filter(
       (threadId) => !groupedThreadIds.has(threadId),
@@ -417,13 +489,20 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
             >
               <ChevronRightIcon
                 className={`size-3 shrink-0 transition-transform ${
-                  isFolderExpanded(agentFolderKey(fragmentKey)) ? "rotate-90" : ""
+                  isFolderExpanded(agentFolderKey(fragmentKey))
+                    ? "rotate-90"
+                    : ""
                 }`}
               />
               <FolderIcon className="size-3 shrink-0" />
-              <span className="truncate text-xs font-medium leading-none">{agentGroup.label}</span>
+              <span className="truncate text-xs font-medium leading-none">
+                {agentGroup.label}
+              </span>
             </button>
-            <div className="ml-auto flex items-center gap-1" data-thread-selection-safe>
+            <div
+              className="ml-auto flex items-center gap-1"
+              data-thread-selection-safe
+            >
               {canShowWakeSession ? (
                 <Tooltip>
                   <TooltipTrigger
@@ -439,11 +518,16 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
-                          props.onWakeAgentSession?.(agentGroup.qualifiedName, wakeSessionName);
+                          props.onWakeAgentSession?.(
+                            agentGroup.qualifiedName,
+                            wakeSessionName,
+                          );
                         }}
                       >
                         {actionState?.kind === "wake" ||
-                        props.gcAgentStartsInFlight?.has(agentGroup.qualifiedName) ? (
+                        props.gcAgentStartsInFlight?.has(
+                          agentGroup.qualifiedName,
+                        ) ? (
                           <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
                         ) : (
                           <RotateCcwIcon className="size-3.5 shrink-0" />
@@ -472,7 +556,10 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                             event.stopPropagation();
                             props.onAdjustAgentMinActiveSessions(
                               agentGroup.qualifiedName,
-                              Math.max(0, (agentGroup.minActiveSessions ?? 0) - 1),
+                              Math.max(
+                                0,
+                                (agentGroup.minActiveSessions ?? 0) - 1,
+                              ),
                             );
                           }}
                         >
@@ -480,7 +567,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         </button>
                       }
                     />
-                    <TooltipPopup side="top">Decrease minimum active sessions</TooltipPopup>
+                    <TooltipPopup side="top">
+                      Decrease minimum active sessions
+                    </TooltipPopup>
                   </Tooltip>
                   <Badge
                     size="sm"
@@ -514,7 +603,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         </button>
                       }
                     />
-                    <TooltipPopup side="top">Increase minimum active sessions</TooltipPopup>
+                    <TooltipPopup side="top">
+                      Increase minimum active sessions
+                    </TooltipPopup>
                   </Tooltip>
                 </div>
               ) : null}
@@ -547,7 +638,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         </button>
                       }
                     />
-                    <TooltipPopup side="top">Decrease maximum active sessions</TooltipPopup>
+                    <TooltipPopup side="top">
+                      Decrease maximum active sessions
+                    </TooltipPopup>
                   </Tooltip>
                   <Badge
                     size="sm"
@@ -581,7 +674,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         </button>
                       }
                     />
-                    <TooltipPopup side="top">Increase maximum active sessions</TooltipPopup>
+                    <TooltipPopup side="top">
+                      Increase maximum active sessions
+                    </TooltipPopup>
                   </Tooltip>
                 </div>
               ) : null}
@@ -610,7 +705,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                       </button>
                     }
                   />
-                  <TooltipPopup side="top">Switch named session mode</TooltipPopup>
+                  <TooltipPopup side="top">
+                    Switch named session mode
+                  </TooltipPopup>
                 </Tooltip>
               ) : null}
               {agentGroup.wakeMode ? (
@@ -630,7 +727,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           event.stopPropagation();
                           props.onToggleAgentWakeMode(
                             agentGroup.qualifiedName,
-                            agentGroup.wakeMode === "resume" ? "fresh" : "resume",
+                            agentGroup.wakeMode === "resume"
+                              ? "fresh"
+                              : "resume",
                           );
                         }}
                       >
@@ -661,7 +760,11 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                       data-gc-agent-action={gcControlTestIdSuffix(fragmentKey)}
                       data-gc-agent={agentGroup.qualifiedName}
                       data-gc-action-icon={
-                        isMutating ? "loading" : agentGroup.isExplicitlySuspended ? "play" : "stop"
+                        isMutating
+                          ? "loading"
+                          : agentGroup.isExplicitlySuspended
+                            ? "play"
+                            : "stop"
                       }
                       aria-label={actionLabel}
                       disabled={isMutating}
@@ -696,7 +799,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
             <>
               {agentGroup.threadGroups.map((threadGroup) => {
                 const groupKey = `${fragmentKey}:${threadGroup.id}`;
-                const groupExpanded = isFolderExpanded(threadGroupFolderKey(groupKey));
+                const groupExpanded = isFolderExpanded(
+                  threadGroupFolderKey(groupKey),
+                );
                 return (
                   <Fragment key={groupKey}>
                     <SidebarMenuSubItem
@@ -716,7 +821,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           onClick={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
-                            toggleFolderExpanded(threadGroupFolderKey(groupKey));
+                            toggleFolderExpanded(
+                              threadGroupFolderKey(groupKey),
+                            );
                           }}
                         >
                           <ChevronRightIcon
@@ -728,7 +835,10 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           <span className="truncate text-[11px] font-medium leading-none">
                             {threadGroup.label}
                           </span>
-                          <GcThreadGroupBadges threadGroup={threadGroup} primary={false} />
+                          <GcThreadGroupBadges
+                            threadGroup={threadGroup}
+                            primary={false}
+                          />
                           {threadGroup.progressLabel ? (
                             <span className="text-[.625rem] text-muted-foreground/55">
                               {threadGroup.progressLabel}
@@ -743,16 +853,25 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                       </div>
                     </SidebarMenuSubItem>
                     {groupExpanded &&
-                      props.renderThreadRows(threadGroup.threadIds, options.threadIndentClassName)}
+                      props.renderThreadRows(
+                        threadGroup.threadIds,
+                        options.threadIndentClassName,
+                      )}
                   </Fragment>
                 );
               })}
               {ungroupedThreadIds.length > 0
-                ? props.renderThreadRows(ungroupedThreadIds, options.threadIndentClassName)
+                ? props.renderThreadRows(
+                    ungroupedThreadIds,
+                    options.threadIndentClassName,
+                  )
                 : null}
             </>
           ) : (
-            props.renderThreadRows(agentGroup.threadIds, options.threadIndentClassName)
+            props.renderThreadRows(
+              agentGroup.threadIds,
+              options.threadIndentClassName,
+            )
           ))}
       </Fragment>
     );
@@ -786,7 +905,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
         )}
         {rigGroup.threadGroups.map((threadGroup) => {
           const groupKey = `${rigGroup.id}:${threadGroup.id}`;
-          const groupExpanded = isFolderExpanded(threadGroupFolderKey(groupKey));
+          const groupExpanded = isFolderExpanded(
+            threadGroupFolderKey(groupKey),
+          );
           return (
             <Fragment key={groupKey}>
               <SidebarMenuSubItem
@@ -882,7 +1003,8 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
             threadGroupIndentClassName: agentFolderIndentClassName,
             threadIndentClassName,
           })}
-          {isFolderExpanded(rigFolderKey(rigGroup.id)) && childRigGroups.length > 0 ? (
+          {isFolderExpanded(rigFolderKey(rigGroup.id)) &&
+          childRigGroups.length > 0 ? (
             <SidebarGcFolders
               {...props}
               rigGroups={childRigGroups}
@@ -897,7 +1019,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
     const displayLabel = gcRigGroupDisplayLabel(rigGroup, props.nestedParentId);
     const isCityFolder = rigGroup.kind === "workspace";
     const lifecycle = isCityFolder ? rigGroup.lifecycle : undefined;
-    const supervisorMutationInFlight = Boolean(props.gcSupervisorMutationInFlight && lifecycle);
+    const supervisorMutationInFlight = Boolean(
+      props.gcSupervisorMutationInFlight && lifecycle,
+    );
     const controllerMutationInFlight = Boolean(
       lifecycle &&
       (props.gcControllerMutationInFlight ||
@@ -906,10 +1030,23 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
     const supervisorActionLabel = lifecycle?.supervisorRunning
       ? `Stop shared Gas City supervisor from ${displayLabel}`
       : `Start shared Gas City supervisor from ${displayLabel}`;
-    const controllerActionLabel = lifecycle?.controllerRunning
+    const controllerActive =
+      Boolean(lifecycle?.controllerRunning) ||
+      Boolean(
+        lifecycle?.controllerStatus &&
+        !/\b(stopped|not running|absent)\b/i.test(lifecycle.controllerStatus),
+      );
+    const controllerTransitional = Boolean(
+      lifecycle?.controllerDetail &&
+      /\b(opening|adopting|starting|stopping)\b/i.test(
+        lifecycle.controllerDetail,
+      ),
+    );
+    const controllerActionLabel = controllerActive
       ? `Suspend city controller for ${displayLabel}`
       : `Resume city controller for ${displayLabel}`;
-    const cityFolderUsesRigAction = isCityFolder && workspaceActionScope === "rig";
+    const cityFolderUsesRigAction =
+      isCityFolder && workspaceActionScope === "rig";
     const workspaceActionState = cityFolderUsesRigAction
       ? props.gcRigActionStateByRig.get(rigGroup.id)
       : props.gcCityActionState;
@@ -923,7 +1060,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
           : workspaceActionState === "suspend"
             ? "Suspending"
             : summarizeGcRuntimeStates(
-                rigGroup.agentGroups.map((agentGroup) => agentGroup.runtimeState),
+                rigGroup.agentGroups.map(
+                  (agentGroup) => agentGroup.runtimeState,
+                ),
                 { suspended: rigGroup.isSuspended },
               )
         : props.gcRigActionStateByRig.get(rigGroup.id) === "resume"
@@ -931,7 +1070,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
           : props.gcRigActionStateByRig.get(rigGroup.id) === "suspend"
             ? "Suspending"
             : summarizeGcRuntimeStates(
-                rigGroup.agentGroups.map((agentGroup) => agentGroup.runtimeState),
+                rigGroup.agentGroups.map(
+                  (agentGroup) => agentGroup.runtimeState,
+                ),
                 { suspended: rigGroup.isSuspended },
               );
     const renderDirectAgentGroups = (keyPrefix?: string) =>
@@ -972,7 +1113,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                   }`}
                 />
                 <FolderIcon className="size-3 shrink-0" />
-                <span className="truncate text-[11px] font-medium leading-none">workspace</span>
+                <span className="truncate text-[11px] font-medium leading-none">
+                  workspace
+                </span>
               </button>
               <Tooltip>
                 <TooltipTrigger
@@ -1006,7 +1149,10 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           );
                           return;
                         }
-                        props.onToggleCitySuspended(!rigGroup.isSuspended, rigGroup.agentGroups);
+                        props.onToggleCitySuspended(
+                          !rigGroup.isSuspended,
+                          rigGroup.agentGroups,
+                        );
                       }}
                     >
                       {workspaceMutationInFlight ? (
@@ -1038,7 +1184,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               </Tooltip>
             </div>
           </SidebarMenuSubItem>
-          {workspaceExpanded ? renderDirectAgentGroups(`${rigGroup.id}:workspace:`) : null}
+          {workspaceExpanded
+            ? renderDirectAgentGroups(`${rigGroup.id}:workspace:`)
+            : null}
         </Fragment>
       );
     };
@@ -1098,6 +1246,40 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               <span className="min-w-0 truncate text-[.625rem] font-medium tracking-normal text-muted-foreground/60 lowercase sm:text-[.625rem]">
                 {rigStateSummary}
               </span>
+              {lifecycle ? (
+                <span
+                  className={`hidden min-w-0 max-w-44 truncate text-[.625rem] font-medium tracking-normal sm:inline ${
+                    lifecycle.issue
+                      ? "text-destructive"
+                      : controllerTransitional
+                        ? "text-amber-600 dark:text-amber-300"
+                        : "text-muted-foreground/60"
+                  }`}
+                  title={[
+                    lifecycle.issue,
+                    lifecycle.controllerStatus
+                      ? `Controller: ${lifecycle.controllerStatus}${
+                          lifecycle.controllerDetail
+                            ? ` (${lifecycle.controllerDetail})`
+                            : ""
+                        }`
+                      : undefined,
+                    lifecycle.authority
+                      ? `Authority: ${lifecycle.authority}`
+                      : undefined,
+                    lifecycle.nextAction
+                      ? `Next: ${lifecycle.nextAction}`
+                      : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
+                >
+                  {lifecycle.issue ??
+                    lifecycle.controllerDetail ??
+                    lifecycle.controllerStatus ??
+                    "controller status unknown"}
+                </span>
+              ) : null}
             </button>
             {lifecycle && props.onSetSupervisorRunning ? (
               <Tooltip>
@@ -1114,7 +1296,10 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
-                        props.onSetSupervisorRunning?.(rigGroup.id, !lifecycle.supervisorRunning);
+                        props.onSetSupervisorRunning?.(
+                          rigGroup.id,
+                          !lifecycle.supervisorRunning,
+                        );
                       }}
                     >
                       {supervisorMutationInFlight ? (
@@ -1133,6 +1318,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                     <div>{supervisorActionLabel}</div>
                     <div className="max-w-56 text-[10px] text-muted-foreground">
                       Shared supervisor. Stopping it affects all cities.
+                      {typeof lifecycle.supervisorPid === "number"
+                        ? ` PID ${lifecycle.supervisorPid}.`
+                        : ""}
                       {typeof lifecycle.supervisorPort === "number"
                         ? ` Port ${lifecycle.supervisorPort}.`
                         : lifecycle.supervisorUrl
@@ -1153,19 +1341,26 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                       data-testid={`gc-city-controller-${gcControlTestIdSuffix(rigGroup.id)}`}
                       data-gc-city={rigGroup.id}
                       aria-label={controllerActionLabel}
-                      disabled={controllerMutationInFlight}
+                      disabled={
+                        controllerMutationInFlight || controllerTransitional
+                      }
                       className={`inline-flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[.55rem] font-medium text-sky-700 transition-colors hover:bg-sky-500/10 hover:text-sky-800 disabled:cursor-wait disabled:opacity-60 dark:text-sky-300 ${
                         props.onSetSupervisorRunning ? "" : "ml-auto"
                       }`}
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
-                        props.onSetControllerRunning?.(rigGroup.id, !lifecycle.controllerRunning);
+                        props.onSetControllerRunning?.(
+                          rigGroup.id,
+                          !controllerActive,
+                        );
                       }}
                     >
                       {controllerMutationInFlight ? (
                         <LoaderCircleIcon className="size-3 shrink-0 animate-spin" />
-                      ) : lifecycle.controllerRunning ? (
+                      ) : controllerTransitional ? (
+                        <LoaderCircleIcon className="size-3 shrink-0 animate-spin" />
+                      ) : controllerActive ? (
                         <SquareIcon className="size-3 shrink-0" />
                       ) : (
                         <PlayIcon className="size-3 shrink-0" />
@@ -1174,7 +1369,33 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                     </button>
                   }
                 />
-                <TooltipPopup side="top">{controllerActionLabel}</TooltipPopup>
+                <TooltipPopup side="top">
+                  <div className="space-y-1">
+                    <div>{controllerActionLabel}</div>
+                    <div className="max-w-72 whitespace-pre-line text-[10px] text-muted-foreground">
+                      {[
+                        lifecycle.controllerStatus
+                          ? `Controller: ${lifecycle.controllerStatus}`
+                          : undefined,
+                        lifecycle.controllerDetail,
+                        typeof lifecycle.controllerPid === "number"
+                          ? `PID ${lifecycle.controllerPid}`
+                          : undefined,
+                        lifecycle.authority
+                          ? `Authority: ${lifecycle.authority}`
+                          : undefined,
+                        lifecycle.issue
+                          ? `Issue: ${lifecycle.issue}`
+                          : undefined,
+                        lifecycle.nextAction
+                          ? `Next: ${lifecycle.nextAction}`
+                          : undefined,
+                      ]
+                        .filter(Boolean)
+                        .join("\n")}
+                    </div>
+                  </div>
+                </TooltipPopup>
               </Tooltip>
             ) : null}
             <Tooltip>
@@ -1188,7 +1409,8 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                         ? "gc-city-action"
                         : `gc-rig-action-${gcControlTestIdSuffix(rigGroup.id)}`
                     }`}
-                    {...(rigGroup.kind === "workspace" && !cityFolderUsesRigAction
+                    {...(rigGroup.kind === "workspace" &&
+                    !cityFolderUsesRigAction
                       ? { "data-gc-city": rigGroup.id }
                       : { "data-gc-rig": rigGroup.id })}
                     data-gc-action-icon={
@@ -1230,7 +1452,10 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           );
                           return;
                         }
-                        props.onToggleCitySuspended(!rigGroup.isSuspended, rigGroup.agentGroups);
+                        props.onToggleCitySuspended(
+                          !rigGroup.isSuspended,
+                          rigGroup.agentGroups,
+                        );
                         return;
                       }
                       props.onToggleRigSuspended(
@@ -1257,7 +1482,11 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               <TooltipPopup side="top">
                 <div className="space-y-1">
                   <div>
-                    {gcConfigToggleLabel(rigGroup.kind, displayLabel, rigGroup.isSuspended)}
+                    {gcConfigToggleLabel(
+                      rigGroup.kind,
+                      displayLabel,
+                      rigGroup.isSuspended,
+                    )}
                   </div>
                   {rigGroup.kind === "workspace" && rigGroup.isSuspended ? (
                     <div className="max-w-56 text-[10px] text-muted-foreground">
@@ -1290,7 +1519,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
               )}
               {rigGroup.threadGroups.map((threadGroup) => {
                 const groupKey = `${rigGroup.id}:${threadGroup.id}`;
-                const groupExpanded = isFolderExpanded(threadGroupFolderKey(groupKey));
+                const groupExpanded = isFolderExpanded(
+                  threadGroupFolderKey(groupKey),
+                );
                 return (
                   <Fragment key={groupKey}>
                     <SidebarMenuSubItem
@@ -1310,7 +1541,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           onClick={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
-                            toggleFolderExpanded(threadGroupFolderKey(groupKey));
+                            toggleFolderExpanded(
+                              threadGroupFolderKey(groupKey),
+                            );
                           }}
                         >
                           <ChevronRightIcon
@@ -1322,7 +1555,10 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
                           <span className="truncate text-[11px] font-medium leading-none">
                             {threadGroup.label}
                           </span>
-                          <GcThreadGroupBadges threadGroup={threadGroup} primary />
+                          <GcThreadGroupBadges
+                            threadGroup={threadGroup}
+                            primary
+                          />
                           {threadGroup.progressLabel ? (
                             <span className="text-[.625rem] text-muted-foreground/55">
                               {threadGroup.progressLabel}
@@ -1363,10 +1599,12 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
           ) : (
             renderDirectAgentGroups()
           ))}
-        {isFolderExpanded(rigFolderKey(rigGroup.id)) && rigGroup.kind === "workspace"
+        {isFolderExpanded(rigFolderKey(rigGroup.id)) &&
+        rigGroup.kind === "workspace"
           ? props.renderWorkspaceRows?.(rigGroup.id)
           : null}
-        {isFolderExpanded(rigFolderKey(rigGroup.id)) && childRigGroups.length > 0 ? (
+        {isFolderExpanded(rigFolderKey(rigGroup.id)) &&
+        childRigGroups.length > 0 ? (
           <SidebarGcFolders
             {...props}
             rigGroups={childRigGroups}

@@ -166,17 +166,15 @@ export const makeGcRpcHandlers = ({
   }) =>
     observeRpcEffect(
       WS_METHODS.gcSetSupervisorRunning,
-      gcApiClient.setSupervisorRunning(input.city, input.running).pipe(
-        Effect.as({
-          id: input.city ?? "supervisor",
-          status: input.running ? "running" : "stopped",
-        }),
-        Effect.mapError((cause) =>
-          Schema.is(GcSetSupervisorRunningError)(cause)
-            ? cause
-            : new GcSetSupervisorRunningError({ message: messageFromUnknown(cause) }),
+      gcApiClient
+        .setSupervisorRunning(input.city, input.running)
+        .pipe(
+          Effect.mapError((cause) =>
+            Schema.is(GcSetSupervisorRunningError)(cause)
+              ? cause
+              : new GcSetSupervisorRunningError({ message: messageFromUnknown(cause) }),
+          ),
         ),
-      ),
       { "rpc.aggregate": "gc" },
     ),
   [WS_METHODS.gcSetControllerRunning]: (input: {
@@ -185,17 +183,15 @@ export const makeGcRpcHandlers = ({
   }) =>
     observeRpcEffect(
       WS_METHODS.gcSetControllerRunning,
-      gcApiClient.setControllerRunning(input.city, input.running).pipe(
-        Effect.as({
-          id: input.city ?? "controller",
-          status: input.running ? "running" : "stopped",
-        }),
-        Effect.mapError((cause) =>
-          Schema.is(GcSetControllerRunningError)(cause)
-            ? cause
-            : new GcSetControllerRunningError({ message: messageFromUnknown(cause) }),
+      gcApiClient
+        .setControllerRunning(input.city, input.running)
+        .pipe(
+          Effect.mapError((cause) =>
+            Schema.is(GcSetControllerRunningError)(cause)
+              ? cause
+              : new GcSetControllerRunningError({ message: messageFromUnknown(cause) }),
+          ),
         ),
-      ),
       { "rpc.aggregate": "gc" },
     ),
   [WS_METHODS.gcRespondToPending]: (input: {
