@@ -579,7 +579,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             m.text AS "text",
             bm25(messages_fts) AS "rank"
           FROM messages_fts
-          JOIN projection_thread_messages m ON m.rowid = messages_fts.rowid
+          JOIN projection_thread_messages m ON m.row_id = messages_fts.rowid
           JOIN projection_threads t ON t.thread_id = m.thread_id
           WHERE messages_fts MATCH ?
             AND t.deleted_at IS NULL

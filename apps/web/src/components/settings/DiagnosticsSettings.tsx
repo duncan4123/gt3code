@@ -20,7 +20,10 @@ import { ensureLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
 import { resolveAndPersistPreferredEditor } from "../../editorPreferences";
 import { formatRelativeTime } from "../../timestampFormat";
-import { useServerAvailableEditors, useServerObservability } from "../../rpc/serverState";
+import {
+  useServerAvailableEditors,
+  useServerObservability,
+} from "../../rpc/serverState";
 import {
   useProcessDiagnostics,
   useProcessResourceHistory,
@@ -30,7 +33,11 @@ import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
-import { SettingsPageContainer, SettingsSection, useRelativeTimeTick } from "./settingsLayout";
+import {
+  SettingsPageContainer,
+  SettingsSection,
+  useRelativeTimeTick,
+} from "./settingsLayout";
 
 const NUMBER_FORMAT = new Intl.NumberFormat();
 
@@ -58,7 +65,9 @@ function formatBytes(value: number): string {
 function formatRelative(value: DateTime.Utc | null): string {
   if (!value) return "No trace records";
   const relative = formatRelativeTime(DateTime.formatIso(value));
-  return relative.suffix ? `${relative.value} ${relative.suffix}` : relative.value;
+  return relative.suffix
+    ? `${relative.value} ${relative.suffix}`
+    : relative.value;
 }
 
 function formatRelativeNoWrap(value: DateTime.Utc | null): string {
@@ -149,7 +158,11 @@ function StatsGrid({ children }: { children: ReactNode }) {
 }
 
 function EmptyRows({ label }: { label: string }) {
-  return <div className="px-4 py-4 text-xs text-muted-foreground sm:px-5">{label}</div>;
+  return (
+    <div className="px-4 py-4 text-xs text-muted-foreground sm:px-5">
+      {label}
+    </div>
+  );
 }
 
 function ExpandableText({
@@ -208,7 +221,11 @@ function DiagnosticsTable({
       className="w-full max-w-full rounded-none"
     >
       <table
-        className={cn("w-full text-left text-xs", minTableWidth, columnWidths && "table-fixed")}
+        className={cn(
+          "w-full text-left text-xs",
+          minTableWidth,
+          columnWidths && "table-fixed",
+        )}
       >
         {columnWidths ? (
           <colgroup>
@@ -280,7 +297,9 @@ function TraceIdCell({ traceId }: { traceId: string }) {
             </button>
           }
         />
-        <TooltipPopup side="top">{copied ? "Copied" : "Copy full trace ID"}</TooltipPopup>
+        <TooltipPopup side="top">
+          {copied ? "Copied" : "Copy full trace ID"}
+        </TooltipPopup>
       </Tooltip>
     </div>
   );
@@ -296,7 +315,8 @@ function formatProcessName(command: string): string {
 
 function formatProcessType(process: ServerProcessDiagnosticsEntry): string {
   if (process.depth > 0) return "Subprocess";
-  if (/\b(codex|claude|opencode|cursor)\b/i.test(process.command)) return "Agent";
+  if (/\b(codex|claude|opencode|cursor)\b/i.test(process.command))
+    return "Agent";
   return "Process";
 }
 
@@ -333,7 +353,11 @@ function ProcessNameCell({
       <span className="size-1.5 shrink-0 rounded-full bg-emerald-500/80" />
       <Tooltip>
         <TooltipTrigger
-          render={<span className="min-w-0 truncate font-medium text-foreground">{name}</span>}
+          render={
+            <span className="min-w-0 truncate font-medium text-foreground">
+              {name}
+            </span>
+          }
         />
         <TooltipPopup
           side="top"
@@ -391,7 +415,7 @@ function ProcessSignalActions({
   );
 }
 
-function ProcessDiagnosticsTable({
+export function ProcessDiagnosticsTable({
   processes,
   signalingPid,
   onSignal,
@@ -402,7 +426,9 @@ function ProcessDiagnosticsTable({
   onSignal: (pid: number, signal: ServerProcessSignal) => void;
   emptyLabel?: string;
 }) {
-  const [collapsedPids, setCollapsedPids] = useState<ReadonlySet<number>>(() => new Set());
+  const [collapsedPids, setCollapsedPids] = useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
   const visibleProcesses = useMemo(() => {
     const visible: ServerProcessDiagnosticsEntry[] = [];
     let hiddenChildDepth: number | null = null;
@@ -441,15 +467,15 @@ function ProcessDiagnosticsTable({
       hideScrollbars
       className="max-h-[min(64vh,44rem)] w-full max-w-full rounded-none border-t border-border/60"
     >
-      <table className="w-full min-w-[1040px] table-fixed text-left text-xs">
+      <table className="w-full min-w-[1320px] table-fixed text-left text-xs">
         <colgroup>
-          <col className="w-[24%]" />
-          <col className="w-[8%]" />
-          <col className="w-[10%]" />
-          <col className="w-[33%]" />
-          <col className="w-[8%]" />
-          <col className="w-[11%]" />
+          <col className="w-[18%]" />
           <col className="w-[6%]" />
+          <col className="w-[8%]" />
+          <col className="w-[50%]" />
+          <col className="w-[7%]" />
+          <col className="w-[7%]" />
+          <col className="w-[4%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 border-b border-border/60 bg-card text-[11px] uppercase tracking-[0.08em] text-muted-foreground/70">
           <tr>
@@ -465,7 +491,10 @@ function ProcessDiagnosticsTable({
         <tbody className="divide-y divide-border/50">
           {visibleProcesses.length === 0 ? (
             <tr>
-              <td colSpan={7} className="px-4 py-4 text-xs text-muted-foreground sm:px-5">
+              <td
+                colSpan={7}
+                className="px-4 py-4 text-xs text-muted-foreground sm:px-5"
+              >
                 {emptyLabel ?? "No live descendant processes found."}
               </td>
             </tr>
@@ -485,14 +514,16 @@ function ProcessDiagnosticsTable({
               <td className="px-3 py-2 text-right align-middle font-mono tabular-nums">
                 {formatBytes(process.rssBytes)}
               </td>
-              <td className="px-3 py-2 align-middle text-muted-foreground">
+              <td className="px-3 py-2 align-middle font-mono text-[11px] text-muted-foreground">
                 <Tooltip>
                   <TooltipTrigger
-                    render={<span className="block truncate">{process.command}</span>}
+                    render={
+                      <span className="block truncate">{process.command}</span>
+                    }
                   />
                   <TooltipPopup
                     side="top"
-                    className="max-w-[min(440px,calc(100vw-2rem))] whitespace-normal break-words text-left font-mono text-[11px] leading-relaxed text-wrap"
+                    className="max-w-[min(960px,calc(100vw-2rem))] whitespace-normal break-words text-left font-mono text-[11px] leading-relaxed text-wrap"
                   >
                     {process.command}
                   </TooltipPopup>
@@ -562,7 +593,11 @@ function ResourceHistoryProcessNameCell({
       />
       <Tooltip>
         <TooltipTrigger
-          render={<span className="min-w-0 truncate font-medium text-foreground">{name}</span>}
+          render={
+            <span className="min-w-0 truncate font-medium text-foreground">
+              {name}
+            </span>
+          }
         />
         <TooltipPopup
           side="top"
@@ -584,14 +619,23 @@ function ProcessResourceHistoryChart({
     readonly maxCpuPercent: number;
   }>;
 }) {
-  const maxCpuPercent = Math.max(1, ...buckets.map((bucket) => bucket.maxCpuPercent));
+  const maxCpuPercent = Math.max(
+    1,
+    ...buckets.map((bucket) => bucket.maxCpuPercent),
+  );
 
   return (
     <div className="border-t border-border/60 px-4 py-3 sm:px-5">
       <div className="flex h-28 items-end gap-1 overflow-hidden rounded-sm bg-muted/10 p-2">
         {buckets.map((bucket) => {
-          const peakHeight = Math.max(2, (bucket.maxCpuPercent / maxCpuPercent) * 100);
-          const averageHeight = Math.max(2, (bucket.avgCpuPercent / maxCpuPercent) * 100);
+          const peakHeight = Math.max(
+            2,
+            (bucket.maxCpuPercent / maxCpuPercent) * 100,
+          );
+          const averageHeight = Math.max(
+            2,
+            (bucket.avgCpuPercent / maxCpuPercent) * 100,
+          );
           return (
             <Tooltip key={DateTime.formatIso(bucket.startedAt)}>
               <TooltipTrigger
@@ -614,7 +658,8 @@ function ProcessResourceHistoryChart({
                 }
               />
               <TooltipPopup side="top">
-                Avg {bucket.avgCpuPercent.toFixed(1)}%, peak {bucket.maxCpuPercent.toFixed(1)}%
+                Avg {bucket.avgCpuPercent.toFixed(1)}%, peak{" "}
+                {bucket.maxCpuPercent.toFixed(1)}%
               </TooltipPopup>
             </Tooltip>
           );
@@ -657,10 +702,15 @@ function ProcessResourceHistoryTable({
   processes: ReadonlyArray<ServerProcessResourceHistorySummary>;
   emptyLabel: string;
 }) {
-  const shallowestChildDepth = processes.reduce<number | null>((minDepth, process) => {
-    if (process.isServerRoot) return minDepth;
-    return minDepth === null ? process.depth : Math.min(minDepth, process.depth);
-  }, null);
+  const shallowestChildDepth = processes.reduce<number | null>(
+    (minDepth, process) => {
+      if (process.isServerRoot) return minDepth;
+      return minDepth === null
+        ? process.depth
+        : Math.min(minDepth, process.depth);
+    },
+    null,
+  );
 
   return (
     <ScrollArea
@@ -669,16 +719,16 @@ function ProcessResourceHistoryTable({
       hideScrollbars
       className="max-h-[min(64vh,44rem)] w-full max-w-full border-t border-border/60"
     >
-      <table className="w-full min-w-[980px] table-fixed text-left text-xs">
+      <table className="w-full min-w-[1320px] table-fixed text-left text-xs">
         <colgroup>
-          <col className="w-[24%]" />
-          <col className="w-[10%]" />
-          <col className="w-[10%]" />
-          <col className="w-[10%]" />
-          <col className="w-[10%]" />
-          <col className="w-[10%]" />
-          <col className="w-[16%]" />
-          <col className="w-[10%]" />
+          <col className="w-[18%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[35%]" />
+          <col className="w-[7%]" />
         </colgroup>
         <thead className="sticky top-0 z-10 border-b border-border/60 bg-card text-[11px] uppercase tracking-[0.08em] text-muted-foreground/70">
           <tr>
@@ -695,7 +745,10 @@ function ProcessResourceHistoryTable({
         <tbody className="divide-y divide-border/50">
           {processes.length === 0 ? (
             <tr>
-              <td colSpan={8} className="px-4 py-4 text-xs text-muted-foreground sm:px-5">
+              <td
+                colSpan={8}
+                className="px-4 py-4 text-xs text-muted-foreground sm:px-5"
+              >
                 {emptyLabel}
               </td>
             </tr>
@@ -727,14 +780,16 @@ function ProcessResourceHistoryTable({
               <td className="px-3 py-2 text-right align-middle font-mono tabular-nums">
                 {formatBytes(process.maxRssBytes)}
               </td>
-              <td className="px-3 py-2 align-middle text-muted-foreground">
+              <td className="px-3 py-2 align-middle font-mono text-[11px] text-muted-foreground">
                 <Tooltip>
                   <TooltipTrigger
-                    render={<span className="block truncate">{process.command}</span>}
+                    render={
+                      <span className="block truncate">{process.command}</span>
+                    }
                   />
                   <TooltipPopup
                     side="top"
-                    className="max-w-[min(440px,calc(100vw-2rem))] whitespace-normal break-words text-left font-mono text-[11px] leading-relaxed text-wrap"
+                    className="max-w-[min(960px,calc(100vw-2rem))] whitespace-normal break-words text-left font-mono text-[11px] leading-relaxed text-wrap"
                   >
                     {process.command}
                   </TooltipPopup>
@@ -751,19 +806,29 @@ function ProcessResourceHistoryTable({
   );
 }
 
-function DiagnosticsLastChecked({ checkedAt }: { checkedAt: DateTime.Utc | null }) {
+function DiagnosticsLastChecked({
+  checkedAt,
+}: {
+  checkedAt: DateTime.Utc | null;
+}) {
   useRelativeTimeTick();
-  const relative = checkedAt ? formatRelativeTime(DateTime.formatIso(checkedAt)) : null;
+  const relative = checkedAt
+    ? formatRelativeTime(DateTime.formatIso(checkedAt))
+    : null;
 
   if (!relative) {
-    return <span className="text-[11px] text-muted-foreground/50">Checking</span>;
+    return (
+      <span className="text-[11px] text-muted-foreground/50">Checking</span>
+    );
   }
 
   return (
     <span className="text-[11px] text-muted-foreground/60">
       {relative.suffix ? (
         <>
-          Checked <span className="font-mono tabular-nums">{relative.value}</span> {relative.suffix}
+          Checked{" "}
+          <span className="font-mono tabular-nums">{relative.value}</span>{" "}
+          {relative.suffix}
         </>
       ) : (
         <>Checked {relative.value}</>
@@ -793,7 +858,9 @@ function DiagnosticsRefreshButton({
             onClick={onClick}
             aria-label={label}
           >
-            <RefreshCwIcon className={cn("size-3", isPending && "animate-spin")} />
+            <RefreshCwIcon
+              className={cn("size-3", isPending && "animate-spin")}
+            />
           </Button>
         }
       />
@@ -807,8 +874,9 @@ export function DiagnosticsSettingsPanel() {
   const availableEditors = useServerAvailableEditors();
   const [resourceWindowMs, setResourceWindowMs] = useState(15 * 60_000);
   const selectedResourceWindow =
-    RESOURCE_HISTORY_WINDOWS.find((option) => option.windowMs === resourceWindowMs) ??
-    RESOURCE_HISTORY_WINDOWS[1];
+    RESOURCE_HISTORY_WINDOWS.find(
+      (option) => option.windowMs === resourceWindowMs,
+    ) ?? RESOURCE_HISTORY_WINDOWS[1];
   const { data, error, isPending, refresh } = useTraceDiagnostics();
   const {
     data: processData,
@@ -826,7 +894,9 @@ export function DiagnosticsSettingsPanel() {
     bucketMs: selectedResourceWindow.bucketMs,
   });
   const [isOpeningLogsDirectory, setIsOpeningLogsDirectory] = useState(false);
-  const [openLogsDirectoryError, setOpenLogsDirectoryError] = useState<string | null>(null);
+  const [openLogsDirectoryError, setOpenLogsDirectoryError] = useState<
+    string | null
+  >(null);
   const [signalingPid, setSignalingPid] = useState<number | null>(null);
 
   const openLogsDirectory = useCallback(() => {
@@ -845,7 +915,9 @@ export function DiagnosticsSettingsPanel() {
       .shell.openInEditor(logsDirectoryPath, editor)
       .catch((error: unknown) => {
         setOpenLogsDirectoryError(
-          error instanceof Error ? error.message : "Unable to open logs folder.",
+          error instanceof Error
+            ? error.message
+            : "Unable to open logs folder.",
         );
       })
       .finally(() => {
@@ -859,7 +931,9 @@ export function DiagnosticsSettingsPanel() {
     (pid: number, signal: ServerProcessSignal) => {
       if (
         signal === "SIGKILL" &&
-        !window.confirm(`Send SIGKILL to process ${pid}? This cannot be handled by the process.`)
+        !window.confirm(
+          `Send SIGKILL to process ${pid}? This cannot be handled by the process.`,
+        )
       ) {
         return;
       }
@@ -894,7 +968,10 @@ export function DiagnosticsSettingsPanel() {
           toastManager.add({
             type: "error",
             title: `Could not send ${signal}`,
-            description: error instanceof Error ? error.message : `Failed to send ${signal}.`,
+            description:
+              error instanceof Error
+                ? error.message
+                : `Failed to send ${signal}.`,
           });
         })
         .finally(() => {
@@ -904,8 +981,12 @@ export function DiagnosticsSettingsPanel() {
     [refreshProcesses],
   );
 
-  const processDiagnosticsError = processData ? Option.getOrNull(processData.error) : null;
-  const processResourceError = resourceData ? Option.getOrNull(resourceData.error) : null;
+  const processDiagnosticsError = processData
+    ? Option.getOrNull(processData.error)
+    : null;
+  const processResourceError = resourceData
+    ? Option.getOrNull(resourceData.error)
+    : null;
   const traceDiagnosticsError = data ? Option.getOrNull(data.error) : null;
   const traceDiagnosticsPartialFailure = data
     ? Option.getOrElse(data.partialFailure, () => false)
@@ -933,7 +1014,9 @@ export function DiagnosticsSettingsPanel() {
           />
           <StatBlock
             label="CPU"
-            value={processData ? `${processData.totalCpuPercent.toFixed(1)}%` : "..."}
+            value={
+              processData ? `${processData.totalCpuPercent.toFixed(1)}%` : "..."
+            }
             tooltip="Total CPU across live child processes of the current server process. The desktop shell and other parent processes are not included."
           />
           <StatBlock
@@ -994,21 +1077,37 @@ export function DiagnosticsSettingsPanel() {
         <StatsGrid>
           <StatBlock
             label="CPU Time"
-            value={resourceData ? formatCpuTime(resourceData.totalCpuSecondsApprox) : "..."}
+            value={
+              resourceData
+                ? formatCpuTime(resourceData.totalCpuSecondsApprox)
+                : "..."
+            }
             tooltip="Approximate active CPU time for the T3 server root process and its descendants during the selected window. It grows only while sampled processes use CPU and older samples leave as the window moves."
           />
           <StatBlock
             label="Samples"
-            value={resourceData ? formatCount(resourceData.retainedSampleCount) : "..."}
+            value={
+              resourceData
+                ? formatCount(resourceData.retainedSampleCount)
+                : "..."
+            }
             tooltip="In-memory process samples retained by the server. This resets when the server restarts."
           />
           <StatBlock
             label="Interval"
-            value={resourceData ? formatDuration(resourceData.sampleIntervalMs) : "..."}
+            value={
+              resourceData
+                ? formatDuration(resourceData.sampleIntervalMs)
+                : "..."
+            }
           />
           <StatBlock
             label="Processes"
-            value={resourceData ? formatCount(resourceData.topProcesses.length) : "..."}
+            value={
+              resourceData
+                ? formatCount(resourceData.topProcesses.length)
+                : "..."
+            }
           />
         </StatsGrid>
         {processResourceError || resourceError ? (
@@ -1050,7 +1149,10 @@ export function DiagnosticsSettingsPanel() {
                     size="icon-xs"
                     variant="ghost"
                     className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
-                    disabled={!observability?.logsDirectoryPath || isOpeningLogsDirectory}
+                    disabled={
+                      !observability?.logsDirectoryPath ||
+                      isOpeningLogsDirectory
+                    }
                     onClick={openLogsDirectory}
                     aria-label="Open logs folder"
                   >
@@ -1069,7 +1171,10 @@ export function DiagnosticsSettingsPanel() {
         }
       >
         <StatsGrid>
-          <StatBlock label="Spans" value={data ? formatCount(data.recordCount) : "..."} />
+          <StatBlock
+            label="Spans"
+            value={data ? formatCount(data.recordCount) : "..."}
+          />
           <StatBlock
             label="Failures"
             value={data ? formatCount(data.failureCount) : "..."}
@@ -1147,7 +1252,13 @@ export function DiagnosticsSettingsPanel() {
             ))}
           </DiagnosticsTable>
         ) : (
-          <EmptyRows label={isInitialLoading ? "Loading failures..." : "No failed spans found."} />
+          <EmptyRows
+            label={
+              isInitialLoading
+                ? "Loading failures..."
+                : "No failed spans found."
+            }
+          />
         )}
       </SettingsSection>
 
@@ -1176,7 +1287,11 @@ export function DiagnosticsSettingsPanel() {
           </DiagnosticsTable>
         ) : (
           <EmptyRows
-            label={isInitialLoading ? "Loading failure groups..." : "No repeated failures found."}
+            label={
+              isInitialLoading
+                ? "Loading failure groups..."
+                : "No repeated failures found."
+            }
           />
         )}
       </SettingsSection>
@@ -1206,7 +1321,11 @@ export function DiagnosticsSettingsPanel() {
             ))}
           </DiagnosticsTable>
         ) : (
-          <EmptyRows label={isInitialLoading ? "Loading slow spans..." : "No spans found."} />
+          <EmptyRows
+            label={
+              isInitialLoading ? "Loading slow spans..." : "No spans found."
+            }
+          />
         )}
       </SettingsSection>
 
@@ -1228,11 +1347,21 @@ export function DiagnosticsSettingsPanel() {
               </colgroup>
               <thead className="border-b border-border/60 text-[11px] uppercase tracking-[0.08em] text-muted-foreground/70">
                 <tr>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold sm:pl-5">Time</th>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Level</th>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Span</th>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">Message</th>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold sm:pr-5">Trace</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold sm:pl-5">
+                    Time
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">
+                    Level
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">
+                    Span
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">
+                    Message
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold sm:pr-5">
+                    Trace
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -1250,7 +1379,9 @@ export function DiagnosticsSettingsPanel() {
                       </span>
                     </td>
                     <td className="px-4 py-3 align-top">
-                      <div className="truncate font-medium text-foreground">{event.spanName}</div>
+                      <div className="truncate font-medium text-foreground">
+                        {event.spanName}
+                      </div>
                     </td>
                     <td className="px-4 py-3 align-top text-muted-foreground">
                       <ExpandableText
@@ -1269,7 +1400,11 @@ export function DiagnosticsSettingsPanel() {
           </ScrollArea>
         ) : (
           <EmptyRows
-            label={isInitialLoading ? "Loading recent logs..." : "No warnings or errors found."}
+            label={
+              isInitialLoading
+                ? "Loading recent logs..."
+                : "No warnings or errors found."
+            }
           />
         )}
       </SettingsSection>
@@ -1279,7 +1414,13 @@ export function DiagnosticsSettingsPanel() {
           <DiagnosticsTable
             headers={["Span", "Count", "Failures", "Average", "Max"]}
             minTableWidth="min-w-[760px]"
-            columnWidths={["w-[48%]", "w-[13%]", "w-[13%]", "w-[13%]", "w-[13%]"]}
+            columnWidths={[
+              "w-[48%]",
+              "w-[13%]",
+              "w-[13%]",
+              "w-[13%]",
+              "w-[13%]",
+            ]}
           >
             {data.topSpansByCount.map((span) => (
               <tr key={span.name}>
@@ -1302,7 +1443,11 @@ export function DiagnosticsSettingsPanel() {
             ))}
           </DiagnosticsTable>
         ) : (
-          <EmptyRows label={isInitialLoading ? "Loading span names..." : "No spans found."} />
+          <EmptyRows
+            label={
+              isInitialLoading ? "Loading span names..." : "No spans found."
+            }
+          />
         )}
       </SettingsSection>
     </SettingsPageContainer>
