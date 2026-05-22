@@ -36,6 +36,7 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.match(env.GC_API_URL ?? "", /^http:\/\/127\.0\.0\.1:\d+$/);
       assert.equal(env.GC_BEADS_BACKEND, undefined);
       assert.equal(env.BEADS_BACKEND, undefined);
+      assert.equal(env.GC_NATIVE_DOLTLITE_BEADS, undefined);
       assert.equal(
         env.GC_BIN,
         path.join(expectedBinDir, process.platform === "win32" ? "gc.exe" : "gc"),
@@ -92,6 +93,28 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.equal(env.GC_BIN, "/tmp/bin/gc");
       assert.equal(env.BD_BIN, "/tmp/bin/bd");
       assert.equal(env.GC_CITY_PATH, "/tmp/city");
+      assert.match(env.GC_SUPERVISOR_ENV ?? "", /\bT3_WS_URL\b/);
+      assert.match(env.GC_SUPERVISOR_ENV ?? "", /\bGC_API_URL\b/);
+      assert.match(env.GC_SUPERVISOR_ENV ?? "", /\bGC_BEADS_BACKEND\b/);
+      assert.match(env.GC_SUPERVISOR_ENV ?? "", /\bGC_NATIVE_DOLTLITE_BEADS\b/);
+    }),
+  );
+
+  it.effect("opts bundled T3 runtime vars into persistent supervisor env", () =>
+    Effect.gen(function* () {
+      const env = yield* createBundledGascityProcessEnv({
+        baseEnv: {
+          GC_SUPERVISOR_ENV: "OPENAI_API_KEY",
+          VITE_WS_URL: "ws://localhost:14567",
+        },
+        t3Home: undefined,
+      });
+
+      assert.equal(env.T3_WS_URL, "ws://localhost:14567/ws");
+      assert.match(env.GC_SUPERVISOR_ENV ?? "", /\bOPENAI_API_KEY\b/);
+      assert.match(env.GC_SUPERVISOR_ENV ?? "", /\bT3_WS_URL\b/);
+      assert.match(env.GC_SUPERVISOR_ENV ?? "", /\bT3_HOME\b/);
+      assert.match(env.GC_SUPERVISOR_ENV ?? "", /\bGC_API_URL\b/);
     }),
   );
 
@@ -109,6 +132,7 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.equal(env.GC_CITY_PATH, DEFAULT_GC_CITY_PATH);
       assert.equal(env.GC_BEADS_BACKEND, undefined);
       assert.equal(env.BEADS_BACKEND, undefined);
+      assert.equal(env.GC_NATIVE_DOLTLITE_BEADS, undefined);
     }),
   );
 
@@ -125,6 +149,7 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.equal(env.GC_CITY_PATH, cityPath);
       assert.equal(env.GC_BEADS_BACKEND, "doltlite");
       assert.equal(env.BEADS_BACKEND, "doltlite");
+      assert.equal(env.GC_NATIVE_DOLTLITE_BEADS, "true");
     }),
   );
 
@@ -148,6 +173,7 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.equal(env.BEADS_DOLT_SHARED_SERVER, undefined);
       assert.equal(env.GC_BEADS_BACKEND, undefined);
       assert.equal(env.BEADS_BACKEND, undefined);
+      assert.equal(env.GC_NATIVE_DOLTLITE_BEADS, undefined);
     }),
   );
 

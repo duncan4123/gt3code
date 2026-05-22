@@ -39,6 +39,7 @@
     "gascity:start": "node scripts/gascity-runner.ts start",
     "gascity:stop": "node scripts/gascity-runner.ts stop",
     "gascity:config": "node scripts/gascity-runner.ts config",
+    "gascity:doctor": "node scripts/gascity-runner.ts doctor",
     "gascity:path": "node scripts/gascity-runner.ts path",
     "gc": "node scripts/gascity-runner.ts gc",
     "package-sources:check": "node scripts/package-source-sync.ts check",

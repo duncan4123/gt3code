@@ -28,3 +28,10 @@ squashfs-root/
 .gc/
 dist-electron/
 .electron-runtime/
+.jj-workspaces/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/

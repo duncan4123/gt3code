@@ -87,6 +87,19 @@ function normalizeT3WsUrl(raw: string | undefined): string | undefined {
   return trimmed.endsWith("/ws") ? trimmed : `${trimmed.replace(/\/$/, "")}/ws`;
 }
 
+function mergeEnvList(existing: string | undefined, keys: ReadonlyArray<string>): string {
+  const merged = new Set(
+    (existing ?? "")
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  );
+  for (const key of keys) {
+    merged.add(key);
+  }
+  return [...merged].join(",");
+}
+
 export function createBundledGascityProcessEnv({
   baseEnv,
   t3Home,
@@ -104,6 +117,7 @@ export function createBundledGascityProcessEnv({
     if (cityPath && usesDoltliteBeadsBackend(cityPath)) {
       env.GC_BEADS_BACKEND ??= "doltlite";
       env.BEADS_BACKEND ??= "doltlite";
+      env.GC_NATIVE_DOLTLITE_BEADS ??= "true";
     }
     clearDoltServerEnv(env);
 
@@ -126,6 +140,24 @@ export function createBundledGascityProcessEnv({
     if (t3WsUrl) {
       output.T3_WS_URL = t3WsUrl;
     }
+    output.GC_SUPERVISOR_ENV = mergeEnvList(output.GC_SUPERVISOR_ENV, [
+      "T3_HOME",
+      "T3CODE_HOME",
+      "T3_WS_URL",
+      "T3CODE_GASCITY_HOME",
+      "GC_BIN",
+      "BD_BIN",
+      "BR_BIN",
+      "T3CODE_WORKTREES_DIR",
+      "GC_WORKTREES_DIR",
+      "GC_API_URL",
+      "GC_BEADS_BACKEND",
+      "BEADS_BACKEND",
+      "GC_NATIVE_DOLTLITE_BEADS",
+      "DOLTLITE_LIBRARY",
+      "LD_LIBRARY_PATH",
+      "DYLD_LIBRARY_PATH",
+    ]);
     if (cityPath) {
       output.GC_CITY_PATH = cityPath;
     }

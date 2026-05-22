@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
+import { Socket } from "node:net";
 import {
   chmodSync,
   copyFileSync,
@@ -10,6 +11,7 @@ import {
   mkdirSync,
   readdirSync,
   readlinkSync,
+  realpathSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -20,8 +22,14 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { findBuiltBdBinaryPath, findBuiltDoltliteLibraryPath } from "@t3tools/beads-doltlite";
-import { findBrBeadsProviderScriptPath, findBuiltGcBinaryPath } from "@t3tools/gascity";
+import {
+  findBuiltBdBinaryPath,
+  findBuiltDoltliteLibraryPath,
+} from "@t3tools/beads-doltlite";
+import {
+  findBrBeadsProviderScriptPath,
+  findBuiltGcBinaryPath,
+} from "@t3tools/gascity";
 import {
   getBundledGascityConfigLayout,
   resolveManagedBrBinaryPath,
@@ -62,7 +70,10 @@ async function main(): Promise<void> {
       return;
     }
     case "prepare-update": {
-      stopRuntimeSupervisorForUpdate(getRuntimePaths(), "updating Gas City tools");
+      stopRuntimeSupervisorForUpdate(
+        getRuntimePaths(),
+        "updating Gas City tools",
+      );
       return;
     }
     case "dry-run": {
@@ -81,10 +92,14 @@ async function main(): Promise<void> {
     }
     case "status": {
       const runtime = ensureRuntimeInstalled();
-      const statusArgs = await resolveCityCommandArgs("status", passthroughArgs, {
-        prompt: false,
-        showControllerStatus: false,
-      });
+      const statusArgs = await resolveCityCommandArgs(
+        "status",
+        passthroughArgs,
+        {
+          prompt: false,
+          showControllerStatus: false,
+        },
+      );
       runGc(runtime, statusArgs);
       return;
     }
@@ -110,6 +125,11 @@ async function main(): Promise<void> {
     case "config": {
       const runtime = ensureRuntimeInstalled();
       runGc(runtime, ["config", "show", ...passthroughArgs]);
+      return;
+    }
+    case "doctor": {
+      const runtime = getRuntimePaths();
+      await runDoctor(runtime);
       return;
     }
     case "path": {
@@ -194,7 +214,9 @@ async function promptForCityPath(options: {
       if (byName) {
         return byName;
       }
-      console.error(`Enter a number from 1 to ${cities.length} or a configured city name.`);
+      console.error(
+        `Enter a number from 1 to ${cities.length} or a configured city name.`,
+      );
     }
   } finally {
     rl.close();
@@ -230,7 +252,11 @@ function extractCitySelection(
     }
     remaining.push(arg);
   }
-  if (cityPath && !existsSync(cityPath) && !resolveConfiguredCityPath(cityPath)) {
+  if (
+    cityPath &&
+    !existsSync(cityPath) &&
+    !resolveConfiguredCityPath(cityPath)
+  ) {
     throw new Error(`Unknown Gas City city for ${commandName}: ${cityPath}`);
   }
   return { cityPath, args: remaining };
@@ -272,8 +298,10 @@ function readCityControllerStatuses(
       const line =
         outputText
           .split("\n")
-          .find((candidate) => candidate.includes(city.path) || candidate.includes(city.name)) ??
-        "";
+          .find(
+            (candidate) =>
+              candidate.includes(city.path) || candidate.includes(city.name),
+          ) ?? "";
       if (!line) {
         return [city.path, "not registered"] as const;
       }
@@ -295,7 +323,9 @@ function summarizeControllerStatus(line: string): string {
   return "registered";
 }
 
-function resolveConfiguredCityPath(selector: string | undefined): string | null {
+function resolveConfiguredCityPath(
+  selector: string | undefined,
+): string | null {
   if (!selector) {
     return null;
   }
@@ -320,7 +350,8 @@ function normalizeCityArgs(args: ReadonlyArray<string>): ReadonlyArray<string> {
       continue;
     }
     if (arg?.startsWith("--city=")) {
-      normalized[index] = `--city=${resolveCitySelector(arg.slice("--city=".length))}`;
+      normalized[index] =
+        `--city=${resolveCitySelector(arg.slice("--city=".length))}`;
       continue;
     }
   }
@@ -355,27 +386,41 @@ function addStartFlag(args: ReadonlyArray<string>, flag: string): string[] {
   return next;
 }
 
-function installRuntime(options: { readonly overwriteConfig: boolean }): RuntimePaths {
+function installRuntime(options: {
+  readonly overwriteConfig: boolean;
+}): RuntimePaths {
   if (options.overwriteConfig) {
     console.warn(
       "gascity:install no longer overwrites config; packages/gascity-config/config is the active city.",
     );
   }
-  const rootDir = process.env.T3CODE_GASCITY_HOME ?? process.env.GC_HOME ?? defaultRuntimeRoot;
+  const rootDir =
+    process.env.T3CODE_GASCITY_HOME ??
+    process.env.GC_HOME ??
+    defaultRuntimeRoot;
   const gcBinarySource = process.env.GASCITY_BINARY ?? findBuiltGcBinaryPath();
   const bdBinarySource = process.env.BD_BINARY ?? findBuiltBdBinaryPath();
-  const doltliteLibrarySource = process.env.DOLTLITE_LIBRARY ?? findBuiltDoltliteLibraryPath();
+  const doltliteLibrarySource =
+    process.env.DOLTLITE_LIBRARY ?? findBuiltDoltliteLibraryPath();
   if (!gcBinarySource) {
-    throw new Error("No built Gas City binary is available. Run bun build:gascity-tools.");
+    throw new Error(
+      "No built Gas City binary is available. Run bun build:gascity-tools.",
+    );
   }
   if (!bdBinarySource) {
-    throw new Error("No built beads binary is available. Run bun build:gascity-tools.");
+    throw new Error(
+      "No built beads binary is available. Run bun build:gascity-tools.",
+    );
   }
   if (!brBeadsScriptSourcePath) {
-    throw new Error("No beads_rust exec provider script is available in @t3tools/gascity.");
+    throw new Error(
+      "No beads_rust exec provider script is available in @t3tools/gascity.",
+    );
   }
   if (!doltliteLibrarySource && process.platform !== "win32") {
-    throw new Error("No built Doltlite runtime library is available. Run bun build:gascity-tools.");
+    throw new Error(
+      "No built Doltlite runtime library is available. Run bun build:gascity-tools.",
+    );
   }
   const brBinarySource = resolveManagedBrBinaryPath();
   const runtime = getRuntimePaths();
@@ -417,12 +462,15 @@ function ensureRuntimeInstalled(): RuntimePaths {
   const runtime = getRuntimePaths();
   const gcBinarySource = process.env.GASCITY_BINARY ?? findBuiltGcBinaryPath();
   const bdBinarySource = process.env.BD_BINARY ?? findBuiltBdBinaryPath();
-  const doltliteLibrarySource = process.env.DOLTLITE_LIBRARY ?? findBuiltDoltliteLibraryPath();
+  const doltliteLibrarySource =
+    process.env.DOLTLITE_LIBRARY ?? findBuiltDoltliteLibraryPath();
   const canResolveBr =
     gcBinarySource !== undefined &&
     bdBinarySource !== undefined &&
     (doltliteLibrarySource !== undefined || process.platform === "win32");
-  const brBinarySource = canResolveBr ? resolveManagedBrBinaryPath() : undefined;
+  const brBinarySource = canResolveBr
+    ? resolveManagedBrBinaryPath()
+    : undefined;
   if (
     runtimeMatchesSources(runtime, {
       gcBinarySource,
@@ -450,13 +498,22 @@ function runtimeMatchesSources(
   },
 ): boolean {
   if (!existsSync(runtime.cityDir)) return false;
-  if (!sources.gcBinarySource || !sameFileHash(sources.gcBinarySource, runtime.gcBinaryPath)) {
+  if (
+    !sources.gcBinarySource ||
+    !sameFileHash(sources.gcBinarySource, runtime.gcBinaryPath)
+  ) {
     return false;
   }
-  if (!sources.bdBinarySource || !sameFileHash(sources.bdBinarySource, runtime.bdBinaryPath)) {
+  if (
+    !sources.bdBinarySource ||
+    !sameFileHash(sources.bdBinarySource, runtime.bdBinaryPath)
+  ) {
     return false;
   }
-  if (!sources.brBinarySource || !sameFileHash(sources.brBinarySource, runtime.brBinaryPath)) {
+  if (
+    !sources.brBinarySource ||
+    !sameFileHash(sources.brBinarySource, runtime.brBinaryPath)
+  ) {
     return false;
   }
   if (
@@ -477,14 +534,21 @@ function runtimeMatchesSources(
 }
 
 function sameFileHash(left: string, right: string): boolean {
-  return existsSync(left) && existsSync(right) && sha256File(left) === sha256File(right);
+  return (
+    existsSync(left) &&
+    existsSync(right) &&
+    sha256File(left) === sha256File(right)
+  );
 }
 
 function sha256File(filePath: string): string {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
 }
 
-function stopRuntimeSupervisorForUpdate(runtime: RuntimePaths, action: string): void {
+function stopRuntimeSupervisorForUpdate(
+  runtime: RuntimePaths,
+  action: string,
+): void {
   stopRuntimeSupervisorServices();
   if (!existsSync(runtime.gcBinaryPath)) {
     terminateOrphanedRuntimeSupervisors(runtime);
@@ -519,8 +583,11 @@ function stopRuntimeSupervisorForUpdate(runtime: RuntimePaths, action: string): 
   if (outputText.trim()) {
     process.stderr.write(outputText);
   }
-  const reason = result.error instanceof Error ? `: ${result.error.message}` : "";
-  throw new Error(`Failed to stop Gas City supervisor before ${action}${reason}`);
+  const reason =
+    result.error instanceof Error ? `: ${result.error.message}` : "";
+  throw new Error(
+    `Failed to stop Gas City supervisor before ${action}${reason}`,
+  );
 }
 
 function stopRuntimeSupervisorServices(): void {
@@ -529,7 +596,14 @@ function stopRuntimeSupervisorServices(): void {
   }
   const listed = spawnSync(
     "systemctl",
-    ["--user", "--all", "--plain", "--no-legend", "list-units", "gascity-supervisor*.service"],
+    [
+      "--user",
+      "--all",
+      "--plain",
+      "--no-legend",
+      "list-units",
+      "gascity-supervisor*.service",
+    ],
     {
       encoding: "utf8",
       timeout: 5000,
@@ -541,7 +615,12 @@ function stopRuntimeSupervisorServices(): void {
   const units = (listed.stdout ?? "")
     .split(/\r?\n/)
     .map((line) => line.trim().split(/\s+/)[0])
-    .filter((unit) => unit.startsWith("gascity-supervisor") && unit.endsWith(".service"));
+    .filter(
+      (unit): unit is string =>
+        typeof unit === "string" &&
+        unit.startsWith("gascity-supervisor") &&
+        unit.endsWith(".service"),
+    );
   if (units.length === 0) {
     return;
   }
@@ -566,7 +645,9 @@ function terminateOrphanedRuntimeSupervisors(runtime: RuntimePaths): number {
   const pids = readdirSync("/proc")
     .map((entry) => Number(entry))
     .filter((pid) => Number.isInteger(pid) && pid > 0)
-    .filter((pid) => processMatchesRuntimeSupervisor(pid, runtime.gcBinaryPath));
+    .filter((pid) =>
+      processMatchesRuntimeSupervisor(pid, runtime.gcBinaryPath),
+    );
   for (const pid of pids) {
     try {
       process.kill(pid, "SIGTERM");
@@ -583,14 +664,22 @@ function terminateOrphanedRuntimeSupervisors(runtime: RuntimePaths): number {
     }
   }
   if (pids.length > 0) {
-    console.log(`Stopped ${pids.length} stale Gas City supervisor process(es).`);
+    console.log(
+      `Stopped ${pids.length} stale Gas City supervisor process(es).`,
+    );
   }
   return pids.length;
 }
 
-function processMatchesRuntimeSupervisor(pid: number, gcBinaryPath: string): boolean {
+function processMatchesRuntimeSupervisor(
+  pid: number,
+  gcBinaryPath: string,
+): boolean {
   try {
-    const cmdline = readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ");
+    const cmdline = readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(
+      /\0/g,
+      " ",
+    );
     if (!cmdline.includes(" supervisor run")) {
       return false;
     }
@@ -604,22 +693,45 @@ function processMatchesRuntimeSupervisor(pid: number, gcBinaryPath: string): boo
   }
 }
 
-function waitForProcessesToExit(pids: ReadonlyArray<number>, timeoutMs: number): void {
+function waitForProcessesToExit(
+  pids: ReadonlyArray<number>,
+  timeoutMs: number,
+): void {
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline && pids.some((pid) => existsSync(`/proc/${pid}`))) {
+  while (
+    Date.now() < deadline &&
+    pids.some((pid) => existsSync(`/proc/${pid}`))
+  ) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
   }
 }
 
 function getRuntimePaths(): RuntimePaths {
-  const rootDir = process.env.T3CODE_GASCITY_HOME ?? process.env.GC_HOME ?? defaultRuntimeRoot;
+  const rootDir =
+    process.env.T3CODE_GASCITY_HOME ??
+    process.env.GC_HOME ??
+    defaultRuntimeRoot;
   const configuredCity = process.env.GC_CITY_PATH ?? process.env.GC_CITY;
   return {
     rootDir,
-    cityDir: configuredCity ? resolveCitySelector(configuredCity) : defaultCityRoot,
-    gcBinaryPath: join(rootDir, "bin", process.platform === "win32" ? "gc.exe" : "gc"),
-    bdBinaryPath: join(rootDir, "bin", process.platform === "win32" ? "bd.exe" : "bd"),
-    brBinaryPath: join(rootDir, "bin", process.platform === "win32" ? "br.exe" : "br"),
+    cityDir: configuredCity
+      ? resolveCitySelector(configuredCity)
+      : defaultCityRoot,
+    gcBinaryPath: join(
+      rootDir,
+      "bin",
+      process.platform === "win32" ? "gc.exe" : "gc",
+    ),
+    bdBinaryPath: join(
+      rootDir,
+      "bin",
+      process.platform === "win32" ? "bd.exe" : "bd",
+    ),
+    brBinaryPath: join(
+      rootDir,
+      "bin",
+      process.platform === "win32" ? "br.exe" : "br",
+    ),
     brBeadsScriptPath: join(
       rootDir,
       "bin",
@@ -654,27 +766,36 @@ function writeBundledCitySiteBinding(cityPath: string): void {
   const rigEntries = rigNames
     .map((name) => ({ name, path: bundledRigPath(cityPath, name) }))
     .filter(
-      (entry): entry is { readonly name: string; readonly path: string } => entry.path !== null,
+      (entry): entry is { readonly name: string; readonly path: string } =>
+        entry.path !== null,
     );
   const siteDir = join(cityPath, ".gc");
   mkdirSync(siteDir, { recursive: true });
   const workspaceName = registrationNameForCity(cityPath);
-  const workspacePrefix = readWorkspacePrefix(cityPath) ?? defaultWorkspacePrefix(cityPath);
+  const workspacePrefix =
+    readWorkspacePrefix(cityPath) ?? defaultWorkspacePrefix(cityPath);
   const header = [
     `workspace_name = ${JSON.stringify(workspaceName)}`,
-    ...(workspacePrefix ? [`workspace_prefix = ${JSON.stringify(workspacePrefix)}`] : []),
+    ...(workspacePrefix
+      ? [`workspace_prefix = ${JSON.stringify(workspacePrefix)}`]
+      : []),
   ];
   const rigBlocks = rigEntries.map(
     (entry) =>
       `[[rig]]\nname = ${JSON.stringify(entry.name)}\npath = ${JSON.stringify(entry.path)}`,
   );
-  writeFileSync(join(siteDir, "site.toml"), `${[...header, ...rigBlocks].join("\n\n")}\n`);
+  writeFileSync(
+    join(siteDir, "site.toml"),
+    `${[...header, ...rigBlocks].join("\n\n")}\n`,
+  );
 }
 
 function readCityRigNames(cityPath: string): string[] {
   const content = readFileSync(join(cityPath, "city.toml"), "utf8");
   const names: string[] = [];
-  for (const match of content.matchAll(/(?:^|\n)\[\[rigs\]\]([\s\S]*?)(?=\n\[\[|\n\[|$)/g)) {
+  for (const match of content.matchAll(
+    /(?:^|\n)\[\[rigs\]\]([\s\S]*?)(?=\n\[\[|\n\[|$)/g,
+  )) {
     const name = /^\s*name\s*=\s*"([^"]+)"\s*$/m.exec(match[1] ?? "")?.[1];
     if (name) {
       names.push(name);
@@ -715,8 +836,13 @@ function bundledRigPath(cityPath: string, rigName: string): string | null {
 
 function readWorkspacePrefix(cityPath: string): string | null {
   const content = readFileSync(join(cityPath, "city.toml"), "utf8");
-  const workspaceMatch = /(?:^|\n)\[workspace\]([\s\S]*?)(?:\n\[|$)/.exec(content);
-  return /^\s*prefix\s*=\s*"([^"]+)"\s*$/m.exec(workspaceMatch?.[1] ?? "")?.[1] ?? null;
+  const workspaceMatch = /(?:^|\n)\[workspace\]([\s\S]*?)(?:\n\[|$)/.exec(
+    content,
+  );
+  return (
+    /^\s*prefix\s*=\s*"([^"]+)"\s*$/m.exec(workspaceMatch?.[1] ?? "")?.[1] ??
+    null
+  );
 }
 
 function defaultWorkspacePrefix(cityPath: string): string | null {
@@ -734,7 +860,9 @@ function prepareActiveCity(
     writeDefaultBeadsConfig(cityDir, "t3", "hq");
     if (options.initializeStores) {
       if (!options.bdBinaryPath)
-        throw new Error("bd binary path is required to initialize beads stores");
+        throw new Error(
+          "bd binary path is required to initialize beads stores",
+        );
       initializeDoltliteBeadsStore(options.bdBinaryPath, cityDir, "t3");
     }
   }
@@ -774,7 +902,10 @@ function initializeDoltliteBeadsStore(
   }
 }
 
-function prepareBdInitEnv(binDir: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+function prepareBdInitEnv(
+  binDir: string,
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
   const next: NodeJS.ProcessEnv = {
     ...env,
     BEADS_BACKEND: "doltlite",
@@ -789,7 +920,9 @@ function prepareBdInitEnv(binDir: string, env: NodeJS.ProcessEnv): NodeJS.Proces
   return next;
 }
 
-function withoutDoltliteInitServerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+function withoutDoltliteInitServerEnv(
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
   const next = { ...env };
   for (const key of Object.keys(next)) {
     if (
@@ -809,11 +942,17 @@ function withoutDoltliteInitServerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv
   return next;
 }
 
-function writeDefaultBeadsConfig(cityDir: string, issuePrefix: string, doltDatabase: string): void {
+function writeDefaultBeadsConfig(
+  cityDir: string,
+  issuePrefix: string,
+  doltDatabase: string,
+): void {
   const beadsDir = join(cityDir, ".beads");
   mkdirSync(beadsDir, { recursive: true });
   const configPath = join(beadsDir, "config.yaml");
-  const configContent = existsSync(configPath) ? readFileSync(configPath, "utf8") : "";
+  const configContent = existsSync(configPath)
+    ? readFileSync(configPath, "utf8")
+    : "";
   writeFileSync(
     configPath,
     ensureYamlScalarLines(configContent, {
@@ -844,13 +983,18 @@ function writeDefaultBeadsConfig(cityDir: string, issuePrefix: string, doltDatab
   );
 }
 
-function ensureYamlScalarLines(content: string, values: Record<string, string>): string {
+function ensureYamlScalarLines(
+  content: string,
+  values: Record<string, string>,
+): string {
   const lines = content
     .split("\n")
     .filter((line, index, all) => index < all.length - 1 || line !== "");
   for (const [key, value] of Object.entries(values)) {
     const nextLine = `${key}: ${value}`;
-    const index = lines.findIndex((line) => line.trimStart().startsWith(`${key}:`));
+    const index = lines.findIndex((line) =>
+      line.trimStart().startsWith(`${key}:`),
+    );
     if (index >= 0) {
       lines[index] = nextLine;
     } else {
@@ -887,7 +1031,10 @@ function ensureRuntimeCommandLinks(runtime: RuntimePaths): void {
     { command: "br", target: runtime.brBinaryPath },
     { command: "gc-beads-br", target: runtime.brBeadsScriptPath },
   ] as const;
-  const userBinDirs = [join(homedir(), "go", "bin"), join(homedir(), ".local", "bin")];
+  const userBinDirs = [
+    join(homedir(), "go", "bin"),
+    join(homedir(), ".local", "bin"),
+  ];
   for (const binDir of userBinDirs) {
     mkdirSync(binDir, { recursive: true });
     for (const { command, target } of linkTargets) {
@@ -944,6 +1091,7 @@ function runGc(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
     prepareActiveCity(selectedCityPath, { initializeStores: false });
   }
   const env: NodeJS.ProcessEnv = runtimeEnv(runtime, gcApiUrl);
+  configureCityScopedRuntimeEnv(env, selectedCityPath);
   if (selectedCityPath) {
     env.GC_CITY_PATH = selectedCityPath;
     env.GC_CITY = selectedCityPath;
@@ -969,14 +1117,19 @@ function runStart(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
 
   prepareActiveCity(selectedCityPath, { initializeStores: false });
   const env = runtimeEnv(runtime, resolveGcApiUrl(runtime));
+  configureCityScopedRuntimeEnv(env, selectedCityPath);
   env.GC_CITY_PATH = selectedCityPath;
   env.GC_CITY = selectedCityPath;
 
-  const supervisorStart = spawnSync(runtime.gcBinaryPath, ["supervisor", "start"], {
-    cwd: repoRoot,
-    env,
-    encoding: "utf8",
-  });
+  const supervisorStart = spawnSync(
+    runtime.gcBinaryPath,
+    ["supervisor", "start"],
+    {
+      cwd: repoRoot,
+      env,
+      encoding: "utf8",
+    },
+  );
   const supervisorStartOutput = `${supervisorStart.stdout ?? ""}${supervisorStart.stderr ?? ""}`;
   if (
     (supervisorStart.status ?? 1) !== 0 &&
@@ -991,11 +1144,15 @@ function runStart(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
 
   upsertRuntimeCityRegistration(runtime, selectedCityPath);
 
-  const supervisorReload = spawnSync(runtime.gcBinaryPath, ["supervisor", "reload"], {
-    cwd: repoRoot,
-    env,
-    stdio: "inherit",
-  });
+  const supervisorReload = spawnSync(
+    runtime.gcBinaryPath,
+    ["supervisor", "reload"],
+    {
+      cwd: repoRoot,
+      env,
+      stdio: "inherit",
+    },
+  );
   if ((supervisorReload.status ?? 1) !== 0) {
     process.exit(supervisorReload.status ?? 1);
   }
@@ -1003,13 +1160,39 @@ function runStart(runtime: RuntimePaths, args: ReadonlyArray<string>): never {
   console.log(
     `Registered suspended city '${registrationNameForCity(selectedCityPath)}' (${selectedCityPath})`,
   );
-  console.log("Gas City supervisor API is ready; agents remain suspended by city config.");
+  console.log(
+    "Gas City supervisor API is ready; agents remain suspended by city config.",
+  );
   process.exit(0);
 }
 
-function runtimeEnv(runtime: RuntimePaths, gcApiUrl = resolveGcApiUrl(runtime)): NodeJS.ProcessEnv {
+function runtimeEnv(
+  runtime: RuntimePaths,
+  gcApiUrl = resolveGcApiUrl(runtime),
+): NodeJS.ProcessEnv {
   const t3WsUrl = resolveT3WsUrl();
-  const t3Home = process.env.T3_HOME?.trim() || process.env.T3CODE_HOME?.trim() || defaultT3Home;
+  const t3Home =
+    process.env.T3_HOME?.trim() ||
+    process.env.T3CODE_HOME?.trim() ||
+    defaultT3Home;
+  const supervisorEnvKeys = [
+    "T3_HOME",
+    "T3CODE_HOME",
+    "T3_WS_URL",
+    "T3CODE_GASCITY_HOME",
+    "GC_BIN",
+    "BD_BIN",
+    "BR_BIN",
+    "T3CODE_WORKTREES_DIR",
+    "GC_WORKTREES_DIR",
+    "GC_API_URL",
+    "GC_BEADS_BACKEND",
+    "BEADS_BACKEND",
+    "GC_NATIVE_DOLTLITE_BEADS",
+    "DOLTLITE_LIBRARY",
+    "LD_LIBRARY_PATH",
+    "DYLD_LIBRARY_PATH",
+  ];
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     T3_HOME: t3Home,
@@ -1019,22 +1202,113 @@ function runtimeEnv(runtime: RuntimePaths, gcApiUrl = resolveGcApiUrl(runtime)):
     GC_BIN: runtime.gcBinaryPath,
     BD_BIN: runtime.bdBinaryPath,
     BR_BIN: runtime.brBinaryPath,
+    DOLTLITE_LIBRARY: runtime.doltliteLibraryPath,
     T3CODE_WORKTREES_DIR: runtime.worktreesDir,
     GC_WORKTREES_DIR: runtime.worktreesDir,
     GC_API_URL: gcApiUrl,
     ...(t3WsUrl ? { T3_WS_URL: t3WsUrl } : {}),
   };
+  env.GC_SUPERVISOR_ENV = mergeEnvList(
+    env.GC_SUPERVISOR_ENV,
+    supervisorEnvKeys,
+  );
   prepareRuntimeEnv(env, dirname(runtime.gcBinaryPath));
+  writeRuntimeEnvFile(runtime, env);
   return env;
 }
 
-function resolveT3WsUrl(): string | null {
-  const explicit = process.env.T3_WS_URL?.trim() || process.env.VITE_WS_URL?.trim();
-  if (explicit) {
-    return explicit.endsWith("/ws") ? explicit : `${explicit.replace(/\/$/, "")}/ws`;
+function runtimeEnvPath(runtime: RuntimePaths): string {
+  return join(runtime.rootDir, "runtime.env");
+}
+
+function writeRuntimeEnvFile(
+  runtime: RuntimePaths,
+  env: NodeJS.ProcessEnv,
+): void {
+  mkdirSync(runtime.rootDir, { recursive: true });
+  const keys = [
+    "T3_HOME",
+    "T3CODE_HOME",
+    "T3_WS_URL",
+    "T3CODE_GASCITY_HOME",
+    "GC_HOME",
+    "GC_CITY_PATH",
+    "GC_API_URL",
+    "GC_BIN",
+    "BD_BIN",
+    "BR_BIN",
+    "DOLTLITE_LIBRARY",
+    "T3CODE_WORKTREES_DIR",
+    "GC_WORKTREES_DIR",
+    "GC_BEADS_BACKEND",
+    "BEADS_BACKEND",
+    "GC_NATIVE_DOLTLITE_BEADS",
+    "LD_LIBRARY_PATH",
+    "DYLD_LIBRARY_PATH",
+  ];
+  const lines = [
+    "# Generated by T3 Code. Do not edit by hand.",
+    ...keys.flatMap((key) => {
+      const value = env[key]?.trim();
+      return value ? [`${key}=${shellQuote(value)}`] : [];
+    }),
+  ];
+  writeFileSync(runtimeEnvPath(runtime), `${lines.join("\n")}\n`);
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function configureCityScopedRuntimeEnv(
+  env: NodeJS.ProcessEnv,
+  selectedCityPath: string | null,
+): void {
+  if (!selectedCityPath || !existsSync(selectedCityPath)) {
+    return;
   }
-  const port = process.env.T3CODE_PORT?.trim() || "13773";
-  return `ws://127.0.0.1:${port}/ws`;
+  if (!usesDoltliteBeadsBackend(selectedCityPath)) {
+    return;
+  }
+  env.GC_BEADS_BACKEND = "doltlite";
+  env.BEADS_BACKEND = "doltlite";
+  env.GC_NATIVE_DOLTLITE_BEADS ??= "true";
+  env.GC_SUPERVISOR_ENV = mergeEnvList(env.GC_SUPERVISOR_ENV, [
+    "GC_BEADS_BACKEND",
+    "BEADS_BACKEND",
+    "GC_NATIVE_DOLTLITE_BEADS",
+    "DOLTLITE_LIBRARY",
+    "LD_LIBRARY_PATH",
+    "DYLD_LIBRARY_PATH",
+  ]);
+}
+
+function mergeEnvList(
+  existing: string | undefined,
+  keys: ReadonlyArray<string>,
+): string {
+  const merged = new Set(
+    (existing ?? "")
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  );
+  for (const key of keys) {
+    merged.add(key);
+  }
+  return [...merged].join(",");
+}
+
+function resolveT3WsUrl(): string | null {
+  const explicit =
+    process.env.T3_WS_URL?.trim() || process.env.VITE_WS_URL?.trim();
+  if (explicit) {
+    return explicit.endsWith("/ws")
+      ? explicit
+      : `${explicit.replace(/\/$/, "")}/ws`;
+  }
+  const port = process.env.T3CODE_PORT?.trim() || "3773";
+  return `ws://localhost:${port}/ws`;
 }
 
 function cityWorkspaceIsSuspended(cityPath: string): boolean {
@@ -1043,7 +1317,9 @@ function cityWorkspaceIsSuspended(cityPath: string): boolean {
     return false;
   }
   const content = readFileSync(cityTomlPath, "utf8");
-  const workspaceMatch = /(?:^|\n)\[workspace\]([\s\S]*?)(?:\n\[|$)/.exec(content);
+  const workspaceMatch = /(?:^|\n)\[workspace\]([\s\S]*?)(?:\n\[|$)/.exec(
+    content,
+  );
   const workspaceBody = workspaceMatch?.[1] ?? "";
   return /^\s*suspended\s*=\s*true\s*$/m.test(workspaceBody);
 }
@@ -1052,8 +1328,12 @@ function registrationNameForCity(cityPath: string): string {
   const cityTomlPath = join(cityPath, "city.toml");
   if (existsSync(cityTomlPath)) {
     const content = readFileSync(cityTomlPath, "utf8");
-    const workspaceMatch = /(?:^|\n)\[workspace\]([\s\S]*?)(?:\n\[|$)/.exec(content);
-    const explicitName = /^\s*name\s*=\s*"([^"]+)"\s*$/m.exec(workspaceMatch?.[1] ?? "")?.[1];
+    const workspaceMatch = /(?:^|\n)\[workspace\]([\s\S]*?)(?:\n\[|$)/.exec(
+      content,
+    );
+    const explicitName = /^\s*name\s*=\s*"([^"]+)"\s*$/m.exec(
+      workspaceMatch?.[1] ?? "",
+    )?.[1];
     if (explicitName) {
       return explicitName;
     }
@@ -1061,7 +1341,10 @@ function registrationNameForCity(cityPath: string): string {
   return basename(resolve(cityPath));
 }
 
-function upsertRuntimeCityRegistration(runtime: RuntimePaths, cityPath: string): void {
+function upsertRuntimeCityRegistration(
+  runtime: RuntimePaths,
+  cityPath: string,
+): void {
   mkdirSync(runtime.rootDir, { recursive: true });
   const registryPath = join(runtime.rootDir, "cities.toml");
   const name = registrationNameForCity(cityPath);
@@ -1094,17 +1377,26 @@ function readRuntimeCityRegistrations(
       const name = /^\s*name\s*=\s*"([^"]+)"\s*$/m.exec(block)?.[1];
       return path && name ? { name, path } : null;
     })
-    .filter((entry): entry is { readonly name: string; readonly path: string } => entry !== null);
+    .filter(
+      (entry): entry is { readonly name: string; readonly path: string } =>
+        entry !== null,
+    );
 }
 
-function gcArgsForRuntime(runtime: RuntimePaths, args: ReadonlyArray<string>): string[] {
+function gcArgsForRuntime(
+  runtime: RuntimePaths,
+  args: ReadonlyArray<string>,
+): string[] {
   if (argsSelectCity(args)) {
     return [...args];
   }
   return ["--city", runtime.cityDir, ...args];
 }
 
-function selectedCityPathForEnv(runtime: RuntimePaths, args: ReadonlyArray<string>): string | null {
+function selectedCityPathForEnv(
+  runtime: RuntimePaths,
+  args: ReadonlyArray<string>,
+): string | null {
   const command = args[0];
   if (command === "cities" || command === "supervisor") {
     return selectedCityPathFromArgs(args);
@@ -1122,7 +1414,9 @@ function argsSelectCity(args: ReadonlyArray<string>): boolean {
   }
   if (command === "start" || command === "register") {
     const target = args[1];
-    return typeof target === "string" && target.length > 0 && !target.startsWith("-");
+    return (
+      typeof target === "string" && target.length > 0 && !target.startsWith("-")
+    );
   }
   return command === "cities" || command === "supervisor";
 }
@@ -1178,10 +1472,15 @@ function prepareRuntimeEnv(env: NodeJS.ProcessEnv, binDir: string): void {
   }
 }
 
-function prependPathEnv(env: NodeJS.ProcessEnv, key: string, value: string): void {
+function prependPathEnv(
+  env: NodeJS.ProcessEnv,
+  key: string,
+  value: string,
+): void {
   const actualKey =
     key === "PATH" && process.platform === "win32"
-      ? (Object.keys(env).find((name) => name.toLowerCase() === "path") ?? "Path")
+      ? (Object.keys(env).find((name) => name.toLowerCase() === "path") ??
+        "Path")
       : key;
   const separator = process.platform === "win32" ? ";" : ":";
   env[actualKey] = [value, env[actualKey]].filter(Boolean).join(separator);
@@ -1217,6 +1516,270 @@ function printRuntime(runtime: RuntimePaths): void {
   console.log(`DOLTLITE_LIBRARY=${runtime.doltliteLibraryPath}`);
   console.log(`T3CODE_WORKTREES_DIR=${runtime.worktreesDir}`);
   console.log(`GC_API_URL=${resolveGcApiUrl(runtime)}`);
+  console.log(`GASCITY_RUNTIME_ENV=${runtimeEnvPath(runtime)}`);
+}
+
+async function runDoctor(runtime: RuntimePaths): Promise<void> {
+  const selectedCityPath = process.env.GC_CITY_PATH
+    ? resolveCitySelector(process.env.GC_CITY_PATH)
+    : runtime.cityDir;
+  const env = runtimeEnv(runtime);
+  configureCityScopedRuntimeEnv(env, selectedCityPath);
+  if (selectedCityPath) {
+    env.GC_CITY_PATH = selectedCityPath;
+    writeRuntimeEnvFile(runtime, env);
+  }
+
+  const checks: Array<{
+    readonly label: string;
+    readonly ok: boolean;
+    readonly detail: string;
+  }> = [];
+  const add = (label: string, ok: boolean, detail: string): void => {
+    checks.push({ label, ok, detail });
+  };
+
+  add(
+    "runtime env",
+    existsSync(runtimeEnvPath(runtime)),
+    runtimeEnvPath(runtime),
+  );
+  add("gc binary", existsSync(runtime.gcBinaryPath), runtime.gcBinaryPath);
+  add("bd binary", existsSync(runtime.bdBinaryPath), runtime.bdBinaryPath);
+  add("br binary", existsSync(runtime.brBinaryPath), runtime.brBinaryPath);
+  const shellGc = checkShellCommand("gc", runtime.gcBinaryPath);
+  const shellBd = checkShellCommand("bd", runtime.bdBinaryPath);
+  const shellBr = checkShellCommand("br", runtime.brBinaryPath);
+  add(`shell ${shellGc.command}`, shellGc.ok, shellGc.detail);
+  add(`shell ${shellBd.command}`, shellBd.ok, shellBd.detail);
+  add(`shell ${shellBr.command}`, shellBr.ok, shellBr.detail);
+  add(
+    "doltlite library",
+    process.platform === "win32" || existsSync(runtime.doltliteLibraryPath),
+    runtime.doltliteLibraryPath,
+  );
+  add(
+    "city config",
+    existsSync(join(selectedCityPath, "city.toml")),
+    selectedCityPath,
+  );
+  add("t3 ws url", Boolean(env.T3_WS_URL), env.T3_WS_URL ?? "missing");
+  add("gc api url", Boolean(env.GC_API_URL), env.GC_API_URL ?? "missing");
+
+  const t3Target = parseHostPort(env.T3_WS_URL);
+  const gcTarget = parseHostPort(env.GC_API_URL);
+  const t3Reachable = await canConnect(t3Target);
+  const gcReachable = await canConnect(gcTarget);
+  add(
+    "t3 websocket port",
+    t3Reachable.ok,
+    t3Target
+      ? `${t3Target.host}:${t3Target.port}${t3Reachable.error ? ` - ${t3Reachable.error}` : ""}`
+      : "unparseable",
+  );
+  add(
+    "gc api port",
+    gcReachable.ok,
+    gcTarget
+      ? `${gcTarget.host}:${gcTarget.port}${gcReachable.error ? ` - ${gcReachable.error}` : ""}`
+      : "unparseable",
+  );
+
+  const supervisorStatus = spawnSync(
+    runtime.gcBinaryPath,
+    ["supervisor", "status"],
+    {
+      cwd: repoRoot,
+      env,
+      encoding: "utf8",
+      timeout: 5000,
+    },
+  );
+  const supervisorOutput =
+    `${supervisorStatus.stdout ?? ""}${supervisorStatus.stderr ?? ""}`.trim();
+  add(
+    "supervisor status",
+    (supervisorStatus.status ?? 1) === 0,
+    firstLine(supervisorOutput) || "no output",
+  );
+
+  const serviceEnv = readSystemdSupervisorEnv();
+  if (serviceEnv.size > 0) {
+    add(
+      "systemd T3_WS_URL",
+      normalizeComparableUrl(serviceEnv.get("T3_WS_URL")) ===
+        normalizeComparableUrl(env.T3_WS_URL),
+      serviceEnv.get("T3_WS_URL") ?? "missing",
+    );
+    add(
+      "systemd GC_HOME",
+      serviceEnv.get("GC_HOME") === env.GC_HOME,
+      serviceEnv.get("GC_HOME") ?? "missing",
+    );
+  } else {
+    add("systemd service", false, "no gascity-supervisor service found");
+  }
+
+  const staleDolt = findMatchingProcesses("dolt sql-server");
+  add(
+    "dolt sql-server",
+    staleDolt.length === 0 || !usesDoltliteBeadsBackend(selectedCityPath),
+    staleDolt.length === 0 ? "none" : staleDolt.slice(0, 3).join("; "),
+  );
+
+  console.log("Gas City T3Code Doctor");
+  for (const check of checks) {
+    console.log(`${check.ok ? "✓" : "✗"} ${check.label}: ${check.detail}`);
+  }
+  const failed = checks.filter((check) => !check.ok);
+  if (failed.length > 0) {
+    process.exitCode = 1;
+  }
+}
+
+function parseHostPort(
+  raw: string | undefined,
+): { readonly host: string; readonly port: number } | null {
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    const port = Number.parseInt(url.port, 10);
+    if (!Number.isInteger(port)) return null;
+    const host = url.hostname === "localhost" ? "127.0.0.1" : url.hostname;
+    return { host, port };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeComparableUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    if (url.hostname === "localhost") {
+      url.hostname = "127.0.0.1";
+    }
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
+function checkShellCommand(
+  commandName: string,
+  expectedPath: string,
+): { readonly command: string; readonly ok: boolean; readonly detail: string } {
+  const result = spawnSync("sh", ["-lc", `command -v ${commandName}`], {
+    encoding: "utf8",
+    timeout: 2000,
+  });
+  const commandPath = result.stdout.trim().split(/\r?\n/)[0];
+  if (!commandPath) {
+    return { command: commandName, ok: false, detail: "not found on PATH" };
+  }
+  try {
+    const actual = realpathSync(commandPath);
+    const expected = realpathSync(expectedPath);
+    return {
+      command: commandName,
+      ok: actual === expected,
+      detail:
+        actual === expected
+          ? commandPath
+          : `${commandPath} -> ${actual}; expected ${expected}`,
+    };
+  } catch (error) {
+    return {
+      command: commandName,
+      ok: false,
+      detail: error instanceof Error ? error.message : commandPath,
+    };
+  }
+}
+
+function canConnect(
+  target: { readonly host: string; readonly port: number } | null,
+): Promise<{ readonly ok: boolean; readonly error?: string }> {
+  if (!target) {
+    return Promise.resolve({ ok: false, error: "unparseable target" });
+  }
+  return new Promise((resolveResult) => {
+    const socket = new Socket();
+    const done = (ok: boolean, error?: string): void => {
+      socket.destroy();
+      resolveResult(error ? { ok, error } : { ok });
+    };
+    socket.setTimeout(750);
+    socket.once("connect", () => done(true));
+    socket.once("timeout", () => done(false, "timeout"));
+    socket.once("error", (error) => done(false, error.message));
+    socket.connect(target.port, target.host);
+  });
+}
+
+function readSystemdSupervisorEnv(): Map<string, string> {
+  if (process.platform === "win32") return new Map();
+  const listed = spawnSync(
+    "systemctl",
+    [
+      "--user",
+      "--all",
+      "--plain",
+      "--no-legend",
+      "list-units",
+      "gascity-supervisor*.service",
+    ],
+    { encoding: "utf8", timeout: 5000 },
+  );
+  const unit = (listed.stdout ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim().split(/\s+/)[0])
+    .find(
+      (name) =>
+        name?.startsWith("gascity-supervisor") && name.endsWith(".service"),
+    );
+  if (!unit) return new Map();
+  const cat = spawnSync("systemctl", ["--user", "cat", unit], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  const env = new Map<string, string>();
+  for (const match of (cat.stdout ?? "").matchAll(
+    /^\s*Environment=([A-Z0-9_]+)="?([^"\n]*)"?\s*$/gm,
+  )) {
+    const key = match[1];
+    const value = match[2];
+    if (key && value !== undefined) {
+      env.set(key, value);
+    }
+  }
+  return env;
+}
+
+function findMatchingProcesses(pattern: string): string[] {
+  if (!existsSync("/proc")) return [];
+  return readdirSync("/proc")
+    .map((entry) => Number(entry))
+    .filter((pid) => Number.isInteger(pid) && pid > 0)
+    .flatMap((pid) => {
+      try {
+        const cmdline = readFileSync(`/proc/${pid}/cmdline`, "utf8")
+          .replaceAll("\0", " ")
+          .trim();
+        return cmdline.includes(pattern) ? [`${pid} ${cmdline}`] : [];
+      } catch {
+        return [];
+      }
+    });
+}
+
+function firstLine(text: string): string {
+  return (
+    text
+      .split(/\r?\n/)
+      .find((line) => line.trim())
+      ?.trim() ?? ""
+  );
 }
 
 function printHelp(): void {
@@ -1231,6 +1794,7 @@ Commands:
   bun gascity:start     Choose and start a configured city in an interactive terminal
   bun gascity:stop      Stop GC sessions for the bundled runtime
   bun gascity:config    Show resolved GC config
+  bun gascity:doctor    Check runtime env, supervisor env, ports, and stale processes
   bun gascity:path      Print runtime paths
   bun gc -- <args>      Run bundled gc with the packaged city
 
