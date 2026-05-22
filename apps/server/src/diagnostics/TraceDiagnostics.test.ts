@@ -246,6 +246,107 @@ describe("TraceDiagnostics", () => {
     }),
   );
 
+  it.effect("suppresses benign websocket stream completion failures", () =>
+    Effect.sync(() => {
+      const diagnostics = TraceDiagnostics.aggregateTraceDiagnostics({
+        traceFilePath: "/tmp/server.trace.ndjson",
+        readAt: DateTime.makeUnsafe("2026-05-05T10:00:00.000Z"),
+        files: [
+          {
+            path: "/tmp/server.trace.ndjson",
+            text: [
+              record({
+                name: "ws.rpc.orchestration.subscribeThread",
+                traceId: "trace-done",
+                spanId: "span-done",
+                startMs: 1_000,
+                durationMs: 245_300,
+                exit: {
+                  _tag: "Failure",
+                  cause: 'Error: {"~effect/Cause/Done":"~effect/Cause/Done","_tag":"Done"}',
+                },
+              }),
+              record({
+                name: "ws.rpc.gc.wakeSession",
+                traceId: "trace-gc",
+                spanId: "span-gc",
+                startMs: 2_000,
+                durationMs: 25,
+                exit: {
+                  _tag: "Failure",
+                  cause: "fetch failed",
+                },
+              }),
+            ].join("\n"),
+          },
+        ],
+      });
+
+      assert.equal(diagnostics.recordCount, 2);
+      assert.equal(diagnostics.failureCount, 1);
+      assert.deepStrictEqual(
+        diagnostics.latestFailures.map((failure) => failure.name),
+        ["ws.rpc.gc.wakeSession"],
+      );
+      assert.equal(
+        diagnostics.topSpansByCount.find(
+          (span) => span.name === "ws.rpc.orchestration.subscribeThread",
+        )?.failureCount,
+        0,
+      );
+    }),
+  );
+
+  it.effect("suppresses self process diagnostics timeout failures", () =>
+    Effect.sync(() => {
+      const diagnostics = TraceDiagnostics.aggregateTraceDiagnostics({
+        traceFilePath: "/tmp/server.trace.ndjson",
+        readAt: DateTime.makeUnsafe("2026-05-05T10:00:00.000Z"),
+        files: [
+          {
+            path: "/tmp/server.trace.ndjson",
+            text: [
+              record({
+                name: "runProcess",
+                traceId: "trace-process-timeout",
+                spanId: "span-process-timeout",
+                startMs: 1_000,
+                durationMs: 1_200,
+                exit: {
+                  _tag: "Failure",
+                  cause:
+                    "ProcessDiagnosticsError: Failed to query process diagnostics. timed out.",
+                },
+              }),
+              record({
+                name: "ws.rpc.gc.wakeSession",
+                traceId: "trace-gc",
+                spanId: "span-gc",
+                startMs: 2_000,
+                durationMs: 25,
+                exit: {
+                  _tag: "Failure",
+                  cause: "fetch failed",
+                },
+              }),
+            ].join("\n"),
+          },
+        ],
+      });
+
+      assert.equal(diagnostics.recordCount, 2);
+      assert.equal(diagnostics.failureCount, 1);
+      assert.deepStrictEqual(
+        diagnostics.latestFailures.map((failure) => failure.name),
+        ["ws.rpc.gc.wakeSession"],
+      );
+      assert.equal(
+        diagnostics.topSpansByCount.find((span) => span.name === "runProcess")?.failureCount,
+        0,
+      );
+    }),
+  );
+
   it.effect("keeps loaded trace data when one rotated trace file fails to read", () =>
     Effect.gen(function* () {
       const traceFilePath = "/tmp/server.trace.ndjson";

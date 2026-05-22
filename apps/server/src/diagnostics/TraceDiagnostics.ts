@@ -117,6 +117,25 @@ function isOptionalSourceControlCliProbeFailure(name: string, cause: string): bo
   return optionalCliProbe && missingOptionalCli;
 }
 
+function isBenignStreamCompletionFailure(name: string, cause: string): boolean {
+  if (!name.startsWith("ws.rpc.")) {
+    return false;
+  }
+
+  return cause.includes("~effect/Cause/Done") || /"_tag"\s*:\s*"Done"/u.test(cause);
+}
+
+function isSelfProcessDiagnosticsFailure(name: string, cause: string): boolean {
+  if (name !== "runProcess") {
+    return false;
+  }
+
+  return (
+    cause.includes("ProcessDiagnosticsError") &&
+    cause.includes("Failed to query process diagnostics. timed out.")
+  );
+}
+
 function isTraceEvent(value: unknown): value is TraceEventLike {
   return typeof value === "object" && value !== null;
 }
@@ -264,7 +283,11 @@ export function aggregateTraceDiagnostics(
       const isFailure = exitTag === "Failure";
       const isInterrupted = exitTag === "Interrupted";
       const cause = isFailure ? readExitCause(parsed.exit) : "";
-      const suppressFailure = isFailure && isOptionalSourceControlCliProbeFailure(name, cause);
+      const suppressFailure =
+        isFailure &&
+        (isOptionalSourceControlCliProbeFailure(name, cause) ||
+          isBenignStreamCompletionFailure(name, cause) ||
+          isSelfProcessDiagnosticsFailure(name, cause));
       if (isFailure && !suppressFailure) failureCount += 1;
       if (isInterrupted) interruptionCount += 1;
 
