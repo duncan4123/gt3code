@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+
 import { Cause, Effect, Layer, Option, Queue, Schema, Stream } from "effect";
 import {
   CommandId,
@@ -23,7 +27,11 @@ import {
   WsRpcGroup,
 } from "@t3tools/contracts";
 import { clamp } from "effect/Number";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import {
+  HttpRouter,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery.ts";
@@ -45,7 +53,10 @@ import { GcContextProvider } from "./gc/Services/GcContextProvider.ts";
 import { makeGcRpcHandlers } from "./gc/rpcHandlers.ts";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents.ts";
 import { ServerRuntimeStartup } from "./serverRuntimeStartup.ts";
-import { redactServerSettingsForClient, ServerSettingsService } from "./serverSettings.ts";
+import {
+  redactServerSettingsForClient,
+  ServerSettingsService,
+} from "./serverSettings.ts";
 import { SourceControlDiscovery } from "./sourceControl/SourceControlDiscovery.ts";
 import { SourceControlRepositoryService } from "./sourceControl/SourceControlRepositoryService.ts";
 import { TerminalManager } from "./terminal/Services/Manager.ts";
@@ -61,6 +72,291 @@ import { ServerAuth } from "./auth/Services/ServerAuth.ts";
 import { TraceDiagnostics } from "./diagnostics/TraceDiagnostics.ts";
 import { ProcessDiagnostics } from "./diagnostics/ProcessDiagnostics.ts";
 import { ProcessResourceMonitor } from "./diagnostics/ProcessResourceMonitor.ts";
+
+function readSupervisorPort(supervisorTomlPath: string): number | null {
+  if (!existsSync(supervisorTomlPath)) {
+    return null;
+  }
+  try {
+    const port = readFileSync(supervisorTomlPath, "utf8").match(
+      /^\s*port\s*=\s*"?([0-9]+)"?\s*$/m,
+    )?.[1];
+    return port ? Number(port) : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeWsUrl(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed.endsWith("/ws") ? trimmed : `${trimmed.replace(/\/$/, "")}/ws`;
+}
+
+function readT3BridgeWsUrlHint(t3Home: string | undefined): string | undefined {
+  if (!t3Home) {
+    return undefined;
+  }
+  const hintPath = path.join(t3Home, "ws-url");
+  if (!existsSync(hintPath)) {
+    return undefined;
+  }
+  try {
+    return normalizeWsUrl(readFileSync(hintPath, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+function wsUrlPort(wsUrl: string | undefined): number | undefined {
+  if (!wsUrl) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(wsUrl);
+    const port = Number(parsed.port);
+    return Number.isFinite(port) ? port : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function checkTcpListening(port: number | undefined): {
+  readonly reachable?: boolean;
+  readonly error?: string;
+} {
+  if (typeof port !== "number") {
+    return {};
+  }
+  const result = spawnSync("bash", ["-lc", `</dev/tcp/127.0.0.1/${port}`], {
+    encoding: "utf8",
+    timeout: 1_000,
+  });
+  if (result.status === 0) {
+    return { reachable: true };
+  }
+  const error = [result.stderr.trim(), result.stdout.trim()]
+    .filter(Boolean)
+    .join("\n");
+  return {
+    reachable: false,
+    error: error || `127.0.0.1:${port} is not reachable`,
+  };
+}
+
+function currentGitBranch(cwd: string): string | undefined {
+  const result = spawnSync("git", ["branch", "--show-current"], {
+    cwd,
+    encoding: "utf8",
+    timeout: 1_000,
+  });
+  const branch = result.status === 0 ? result.stdout.trim() : "";
+  return branch || undefined;
+}
+
+function discoverGascityProcesses(input: {
+  readonly runtimeHome: string;
+  readonly gcBin: string;
+  readonly bdBin: string;
+  readonly brBin: string;
+}): {
+  readonly processes: Array<{
+    readonly pid: number;
+    readonly ppid: number;
+    readonly pgid: Option.Option<number>;
+    readonly status: string;
+    readonly cpuPercent: number;
+    readonly rssBytes: number;
+    readonly elapsed: string;
+    readonly command: string;
+    readonly depth: number;
+    readonly childPids: number[];
+  }>;
+  readonly error?: string;
+} {
+  const result = spawnSync(
+    "ps",
+    ["-eo", "pid=,ppid=,pgid=,stat=,pcpu=,rss=,etime=,args="],
+    {
+      encoding: "utf8",
+      timeout: 2_000,
+    },
+  );
+  if (result.status !== 0) {
+    return {
+      processes: [],
+      error:
+        result.stderr.trim() ||
+        result.stdout.trim() ||
+        "Failed to scan system processes.",
+    };
+  }
+
+  const markers = [
+    input.runtimeHome,
+    input.gcBin,
+    input.bdBin,
+    input.brBin,
+    " supervisor run",
+    "/gc supervisor run",
+    "/bd ",
+    "/br ",
+    " dolt ",
+    "/dolt",
+    " doltlite",
+    "/doltlite",
+    "/dlite",
+  ].filter(Boolean);
+
+  const rows = result.stdout
+    .split("\n")
+    .flatMap((line) => {
+      const match = line.match(
+        /^\s*(\d+)\s+(\d+)\s+(-?\d+)\s+(\S+)\s+([0-9.]+)\s+(\d+)\s+(\S+)\s+(.+)$/u,
+      );
+      if (!match) return [];
+      const [
+        ,
+        pidText,
+        ppidText,
+        pgidText,
+        status,
+        cpuText,
+        rssText,
+        elapsed,
+        command,
+      ] = match;
+      if (!command || !markers.some((marker) => command.includes(marker))) {
+        return [];
+      }
+      if (
+        command.includes("ps -eo ") ||
+        command.includes("systemctl --user status")
+      ) {
+        return [];
+      }
+      return [
+        {
+          pid: Number(pidText),
+          ppid: Number(ppidText),
+          pgid:
+            Number(pgidText) >= 0
+              ? Option.some(Number(pgidText))
+              : Option.none(),
+          status: status!,
+          cpuPercent: Number(cpuText),
+          rssBytes: Number(rssText) * 1024,
+          elapsed: elapsed!,
+          command,
+          depth: 0,
+          childPids: [],
+        },
+      ];
+    })
+    .filter((process) => Number.isInteger(process.pid) && process.pid > 0)
+    .toSorted((left, right) => left.pid - right.pid);
+
+  const selectedPids = new Set(rows.map((row) => row.pid));
+  return {
+    processes: rows.map((row) => ({
+      ...row,
+      childPids: rows
+        .filter(
+          (candidate) =>
+            candidate.ppid === row.pid && selectedPids.has(candidate.pid),
+        )
+        .map((candidate) => candidate.pid),
+      depth: selectedPids.has(row.ppid) ? 1 : 0,
+    })),
+  };
+}
+
+function makeGascityDiagnostics(cwd: string) {
+  const runtimeHome =
+    process.env.T3CODE_GASCITY_HOME?.trim() ||
+    process.env.GC_HOME?.trim() ||
+    path.join(cwd, ".t3-dev", "gascity");
+  const supervisorTomlPath = path.join(runtimeHome, "supervisor.toml");
+  const supervisorPort = readSupervisorPort(supervisorTomlPath);
+  const configuredApiUrl = process.env.GC_API_URL?.trim() || undefined;
+  const resolvedApiUrl = supervisorPort
+    ? `http://127.0.0.1:${supervisorPort}`
+    : (configuredApiUrl ?? "http://127.0.0.1:8372");
+  const appBranch = currentGitBranch(cwd);
+  const apiUrlSource: "supervisor.toml" | "GC_API_URL" | "default" =
+    supervisorPort
+      ? "supervisor.toml"
+      : configuredApiUrl
+        ? "GC_API_URL"
+        : "default";
+  const cityPath =
+    process.env.GC_CITY_PATH?.trim() ||
+    process.env.GC_CITY?.trim() ||
+    undefined;
+  const cityName = process.env.GC_CITY_NAME?.trim() || undefined;
+  const t3Home = process.env.T3_HOME?.trim() || undefined;
+  const envT3WsUrl = normalizeWsUrl(process.env.T3_WS_URL);
+  const hintT3WsUrl = readT3BridgeWsUrlHint(t3Home);
+  const t3WsUrl = envT3WsUrl ?? hintT3WsUrl;
+  const t3WsUrlSource = envT3WsUrl
+    ? "T3_WS_URL"
+    : hintT3WsUrl
+      ? "ws-url"
+      : undefined;
+  const t3ServerPort = wsUrlPort(t3WsUrl);
+  const t3WsReachability = checkTcpListening(t3ServerPort);
+  const worktreesDir =
+    process.env.T3CODE_WORKTREES_DIR?.trim() ||
+    process.env.GC_WORKTREES_DIR?.trim() ||
+    undefined;
+  const gcBin =
+    process.env.GC_BIN?.trim() || path.join(runtimeHome, "bin", "gc");
+  const bdBin =
+    process.env.BD_BIN?.trim() || path.join(runtimeHome, "bin", "bd");
+  const brBin =
+    process.env.BR_BIN?.trim() || path.join(runtimeHome, "bin", "br");
+  const processScan = discoverGascityProcesses({
+    runtimeHome,
+    gcBin,
+    bdBin,
+    brBin,
+  });
+
+  return {
+    cwd,
+    ...(appBranch ? { appBranch } : {}),
+    runtimeHome,
+    supervisorTomlPath,
+    supervisorTomlExists: existsSync(supervisorTomlPath),
+    ...(supervisorPort ? { supervisorPort } : {}),
+    resolvedApiUrl,
+    ...(configuredApiUrl ? { configuredApiUrl } : {}),
+    apiUrlSource,
+    ...(cityPath ? { cityPath } : {}),
+    ...(cityName ? { cityName } : {}),
+    gcBin,
+    bdBin,
+    brBin,
+    ...(t3Home ? { t3Home } : {}),
+    ...(t3WsUrl ? { t3WsUrl } : {}),
+    ...(t3WsUrlSource ? { t3WsUrlSource } : {}),
+    ...(typeof t3ServerPort === "number" ? { t3ServerPort } : {}),
+    ...(typeof t3WsReachability.reachable === "boolean"
+      ? {
+          t3WsReachable: t3WsReachability.reachable,
+          t3ServerPortListening: t3WsReachability.reachable,
+        }
+      : {}),
+    ...(t3WsReachability.error
+      ? { t3WsReachabilityError: t3WsReachability.error }
+      : {}),
+    ...(worktreesDir ? { worktreesDir } : {}),
+    processes: processScan.processes,
+    ...(processScan.error ? { processScanError: processScan.error } : {}),
+  } as const;
+}
 
 const WsRpcLayer = WsRpcGroup.toLayer(
   Effect.gen(function* () {
@@ -88,18 +384,23 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     const processResourceMonitor = yield* ProcessResourceMonitor;
     const providerMaintenanceRunner = yield* ProviderMaintenanceRunner;
     const sourceControlDiscovery = yield* SourceControlDiscovery;
-    const sourceControlRepositoryService = yield* SourceControlRepositoryService;
+    const sourceControlRepositoryService =
+      yield* SourceControlRepositoryService;
     const gcApiClient = yield* GcApiClient;
     const gcContextProvider = yield* GcContextProvider;
 
-    const serverCommandId = (tag: string) => CommandId.make(`server:${tag}:${crypto.randomUUID()}`);
+    const serverCommandId = (tag: string) =>
+      CommandId.make(`server:${tag}:${crypto.randomUUID()}`);
 
     const messageFromUnknown = (cause: unknown): string =>
       cause instanceof Error ? cause.message : String(cause);
 
     const appendSetupScriptActivity = (input: {
       readonly threadId: ThreadId;
-      readonly kind: "setup-script.requested" | "setup-script.started" | "setup-script.failed";
+      readonly kind:
+        | "setup-script.requested"
+        | "setup-script.started"
+        | "setup-script.failed";
       readonly summary: string;
       readonly createdAt: string;
       readonly payload: Record<string, unknown>;
@@ -129,20 +430,27 @@ const WsRpcLayer = WsRpcGroup.toLayer(
             cause,
           });
 
-    const toBootstrapDispatchCommandCauseError = (cause: Cause.Cause<unknown>) => {
+    const toBootstrapDispatchCommandCauseError = (
+      cause: Cause.Cause<unknown>,
+    ) => {
       const error = Cause.squash(cause);
       return Schema.is(OrchestrationDispatchCommandError)(error)
         ? error
         : new OrchestrationDispatchCommandError({
             message:
-              error instanceof Error ? error.message : "Failed to bootstrap thread turn start.",
+              error instanceof Error
+                ? error.message
+                : "Failed to bootstrap thread turn start.",
             cause,
           });
     };
 
     const dispatchBootstrapTurnStart = (
       command: Extract<OrchestrationCommand, { type: "thread.turn.start" }>,
-    ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> =>
+    ): Effect.Effect<
+      { readonly sequence: number },
+      OrchestrationDispatchCommandError
+    > =>
       Effect.gen(function* () {
         const bootstrap = command.bootstrap;
         const { bootstrap: _bootstrap, ...finalTurnStartCommand } = command;
@@ -168,7 +476,9 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           readonly worktreePath: string;
         }) => {
           const detail =
-            input.error instanceof Error ? input.error.message : "Unknown setup failure.";
+            input.error instanceof Error
+              ? input.error.message
+              : "Unknown setup failure.";
           return appendSetupScriptActivity({
             threadId: command.threadId,
             kind: "setup-script.failed",
@@ -182,11 +492,14 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           }).pipe(
             Effect.ignoreCause({ log: false }),
             Effect.flatMap(() =>
-              Effect.logWarning("bootstrap turn start failed to launch setup script", {
-                threadId: command.threadId,
-                worktreePath: input.worktreePath,
-                detail,
-              }),
+              Effect.logWarning(
+                "bootstrap turn start failed to launch setup script",
+                {
+                  threadId: command.threadId,
+                  worktreePath: input.worktreePath,
+                  detail,
+                },
+              ),
             ),
           );
         };
@@ -250,7 +563,9 @@ const WsRpcLayer = WsRpcGroup.toLayer(
                   .runForThread({
                     threadId: command.threadId,
                     ...(targetProjectId ? { projectId: targetProjectId } : {}),
-                    ...(targetProjectCwd ? { projectCwd: targetProjectCwd } : {}),
+                    ...(targetProjectCwd
+                      ? { projectCwd: targetProjectCwd }
+                      : {}),
                     worktreePath,
                   })
                   .pipe(
@@ -324,22 +639,31 @@ const WsRpcLayer = WsRpcGroup.toLayer(
             if (Cause.hasInterruptsOnly(cause)) {
               return Effect.fail(dispatchError);
             }
-            return cleanupCreatedThread().pipe(Effect.flatMap(() => Effect.fail(dispatchError)));
+            return cleanupCreatedThread().pipe(
+              Effect.flatMap(() => Effect.fail(dispatchError)),
+            );
           }),
         );
       });
 
     const dispatchNormalizedCommand = (
       normalizedCommand: OrchestrationCommand,
-    ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> => {
+    ): Effect.Effect<
+      { readonly sequence: number },
+      OrchestrationDispatchCommandError
+    > => {
       const dispatchEffect =
-        normalizedCommand.type === "thread.turn.start" && normalizedCommand.bootstrap
+        normalizedCommand.type === "thread.turn.start" &&
+        normalizedCommand.bootstrap
           ? dispatchBootstrapTurnStart(normalizedCommand)
           : orchestrationEngine
               .dispatch(normalizedCommand)
               .pipe(
                 Effect.mapError((cause) =>
-                  toDispatchCommandError(cause, "Failed to dispatch orchestration command"),
+                  toDispatchCommandError(
+                    cause,
+                    "Failed to dispatch orchestration command",
+                  ),
                 ),
               );
 
@@ -347,7 +671,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         .enqueueCommand(dispatchEffect)
         .pipe(
           Effect.mapError((cause) =>
-            toDispatchCommandError(cause, "Failed to dispatch orchestration command"),
+            toDispatchCommandError(
+              cause,
+              "Failed to dispatch orchestration command",
+            ),
           ),
         );
     };
@@ -355,7 +682,9 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     const loadServerConfig = Effect.gen(function* () {
       const keybindingsConfig = yield* keybindings.loadConfigState;
       const providers = yield* providerRegistry.getProviders;
-      const settings = redactServerSettingsForClient(yield* serverSettings.getSettings);
+      const settings = redactServerSettingsForClient(
+        yield* serverSettings.getSettings,
+      );
       const environment = yield* serverEnvironment.getDescriptor;
       const auth = yield* serverAuth.getDescriptor();
 
@@ -363,6 +692,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         environment,
         auth,
         cwd: config.cwd,
+        gascity: makeGascityDiagnostics(config.cwd),
         keybindingsConfigPath: config.keybindingsConfigPath,
         keybindings: keybindingsConfig.keybindings,
         issues: keybindingsConfig.issues,
@@ -371,9 +701,13 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observability: {
           logsDirectoryPath: config.logsDir,
           localTracingEnabled: true,
-          ...(config.otlpTracesUrl !== undefined ? { otlpTracesUrl: config.otlpTracesUrl } : {}),
+          ...(config.otlpTracesUrl !== undefined
+            ? { otlpTracesUrl: config.otlpTracesUrl }
+            : {}),
           otlpTracesEnabled: config.otlpTracesUrl !== undefined,
-          ...(config.otlpMetricsUrl !== undefined ? { otlpMetricsUrl: config.otlpMetricsUrl } : {}),
+          ...(config.otlpMetricsUrl !== undefined
+            ? { otlpMetricsUrl: config.otlpMetricsUrl }
+            : {}),
           otlpMetricsEnabled: config.otlpMetricsUrl !== undefined,
         },
         settings,
@@ -388,14 +722,19 @@ const WsRpcLayer = WsRpcGroup.toLayer(
             const normalizedCommand = yield* normalizeDispatchCommand(command);
             const result = yield* dispatchNormalizedCommand(normalizedCommand);
             if (normalizedCommand.type === "thread.archive") {
-              yield* terminalManager.close({ threadId: normalizedCommand.threadId }).pipe(
-                Effect.catch((error) =>
-                  Effect.logWarning("failed to close thread terminals after archive", {
-                    threadId: normalizedCommand.threadId,
-                    error: error.message,
-                  }),
-                ),
-              );
+              yield* terminalManager
+                .close({ threadId: normalizedCommand.threadId })
+                .pipe(
+                  Effect.catch((error) =>
+                    Effect.logWarning(
+                      "failed to close thread terminals after archive",
+                      {
+                        threadId: normalizedCommand.threadId,
+                        error: error.message,
+                      },
+                    ),
+                  ),
+                );
             }
             return result;
           }).pipe(
@@ -495,7 +834,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(
           ORCHESTRATION_WS_METHODS.searchThreadMessages,
           (projectionSnapshotQuery.searchThreadMessages
-            ? projectionSnapshotQuery.searchThreadMessages(input.query, input.limit)
+            ? projectionSnapshotQuery.searchThreadMessages(
+                input.query,
+                input.limit,
+              )
             : Effect.succeed({ results: [] })
           ).pipe(
             Effect.mapError(
@@ -512,15 +854,17 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcStreamEffect(
           ORCHESTRATION_WS_METHODS.subscribeShell,
           Effect.gen(function* () {
-            const initialSnapshot = yield* projectionSnapshotQuery.getShellSnapshot().pipe(
-              Effect.mapError(
-                (cause) =>
-                  new OrchestrationGetSnapshotError({
-                    message: "Failed to load orchestration shell snapshot",
-                    cause,
-                  }),
-              ),
-            );
+            const initialSnapshot = yield* projectionSnapshotQuery
+              .getShellSnapshot()
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new OrchestrationGetSnapshotError({
+                      message: "Failed to load orchestration shell snapshot",
+                      cause,
+                    }),
+                ),
+              );
             return Stream.concat(
               Stream.make({
                 kind: "snapshot" as const,
@@ -536,7 +880,8 @@ const WsRpcLayer = WsRpcGroup.toLayer(
                     Effect.mapError(
                       (cause) =>
                         new OrchestrationGetSnapshotError({
-                          message: "Failed to load orchestration shell snapshot",
+                          message:
+                            "Failed to load orchestration shell snapshot",
                           cause,
                         }),
                     ),
@@ -603,7 +948,9 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       [WS_METHODS.serverRefreshProviders]: (_input) =>
         observeRpcEffect(
           WS_METHODS.serverRefreshProviders,
-          providerRegistry.refresh().pipe(Effect.map((providers) => ({ providers }))),
+          providerRegistry
+            .refresh()
+            .pipe(Effect.map((providers) => ({ providers }))),
           { "rpc.aggregate": "server" },
         ),
       [WS_METHODS.serverUpdateProvider]: (input) =>
@@ -625,7 +972,8 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(
           WS_METHODS.serverUpsertKeybinding,
           Effect.gen(function* () {
-            const keybindingsConfig = yield* keybindings.upsertKeybindingRule(rule);
+            const keybindingsConfig =
+              yield* keybindings.upsertKeybindingRule(rule);
             return { keybindings: keybindingsConfig, issues: [] };
           }),
           { "rpc.aggregate": "server" },
@@ -634,19 +982,28 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(
           WS_METHODS.serverRemoveKeybinding,
           Effect.gen(function* () {
-            const keybindingsConfig = yield* keybindings.removeKeybindingRule(input);
+            const keybindingsConfig =
+              yield* keybindings.removeKeybindingRule(input);
             return { keybindings: keybindingsConfig, issues: [] };
           }),
           { "rpc.aggregate": "server" },
         ),
       [WS_METHODS.serverGetSettings]: (_input) =>
-        observeRpcEffect(WS_METHODS.serverGetSettings, serverSettings.getSettings, {
-          "rpc.aggregate": "server",
-        }),
+        observeRpcEffect(
+          WS_METHODS.serverGetSettings,
+          serverSettings.getSettings,
+          {
+            "rpc.aggregate": "server",
+          },
+        ),
       [WS_METHODS.serverUpdateSettings]: ({ patch }) =>
-        observeRpcEffect(WS_METHODS.serverUpdateSettings, serverSettings.updateSettings(patch), {
-          "rpc.aggregate": "server",
-        }),
+        observeRpcEffect(
+          WS_METHODS.serverUpdateSettings,
+          serverSettings.updateSettings(patch),
+          {
+            "rpc.aggregate": "server",
+          },
+        ),
       [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>
         observeRpcEffect(
           WS_METHODS.serverGetTraceDiagnostics,
@@ -657,9 +1014,13 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           { "rpc.aggregate": "server" },
         ),
       [WS_METHODS.serverGetProcessDiagnostics]: (_input) =>
-        observeRpcEffect(WS_METHODS.serverGetProcessDiagnostics, processDiagnostics.read, {
-          "rpc.aggregate": "server",
-        }),
+        observeRpcEffect(
+          WS_METHODS.serverGetProcessDiagnostics,
+          processDiagnostics.read,
+          {
+            "rpc.aggregate": "server",
+          },
+        ),
       [WS_METHODS.serverGetProcessResourceHistory]: (input) =>
         observeRpcEffect(
           WS_METHODS.serverGetProcessResourceHistory,
@@ -667,13 +1028,21 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           { "rpc.aggregate": "server" },
         ),
       [WS_METHODS.serverSignalProcess]: (input) =>
-        observeRpcEffect(WS_METHODS.serverSignalProcess, processDiagnostics.signal(input), {
-          "rpc.aggregate": "server",
-        }),
+        observeRpcEffect(
+          WS_METHODS.serverSignalProcess,
+          processDiagnostics.signal(input),
+          {
+            "rpc.aggregate": "server",
+          },
+        ),
       [WS_METHODS.serverDiscoverSourceControl]: (_input) =>
-        observeRpcEffect(WS_METHODS.serverDiscoverSourceControl, sourceControlDiscovery.discover, {
-          "rpc.aggregate": "server",
-        }),
+        observeRpcEffect(
+          WS_METHODS.serverDiscoverSourceControl,
+          sourceControlDiscovery.discover,
+          {
+            "rpc.aggregate": "server",
+          },
+        ),
       [WS_METHODS.projectsSearchEntries]: (input) =>
         observeRpcEffect(
           WS_METHODS.projectsSearchEntries,
@@ -719,9 +1088,13 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           { "rpc.aggregate": "workspace" },
         ),
       [WS_METHODS.shellOpenInEditor]: (input) =>
-        observeRpcEffect(WS_METHODS.shellOpenInEditor, externalLauncher.launchEditor(input), {
-          "rpc.aggregate": "workspace",
-        }),
+        observeRpcEffect(
+          WS_METHODS.shellOpenInEditor,
+          externalLauncher.launchEditor(input),
+          {
+            "rpc.aggregate": "workspace",
+          },
+        ),
       [WS_METHODS.sourceControlLookupRepository]: (input) =>
         observeRpcEffect(
           WS_METHODS.sourceControlLookupRepository,
@@ -774,9 +1147,13 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           { "rpc.aggregate": "sourceControl" },
         ),
       [WS_METHODS.vcsRefreshStatus]: (input) =>
-        observeRpcEffect(WS_METHODS.vcsRefreshStatus, vcsManager.status(input), {
-          "rpc.aggregate": "git",
-        }),
+        observeRpcEffect(
+          WS_METHODS.vcsRefreshStatus,
+          vcsManager.status(input),
+          {
+            "rpc.aggregate": "git",
+          },
+        ),
       [WS_METHODS.subscribeVcsStatus]: (input) =>
         observeRpcStream(
           WS_METHODS.subscribeVcsStatus,
@@ -819,28 +1196,35 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       [WS_METHODS.gitRunStackedAction]: (input) =>
         observeRpcStream(
           WS_METHODS.gitRunStackedAction,
-          Stream.callback<GitActionProgressEvent, GitManagerServiceError>((queue) =>
-            vcsManager
-              .runStackedAction(input, {
-                actionId: input.actionId,
-                progressReporter: {
-                  publish: (event) =>
-                    Queue.offer(queue, event as GitActionProgressEvent).pipe(Effect.asVoid),
-                },
-              })
-              .pipe(
-                Effect.matchCauseEffect({
-                  onFailure: (cause) => Queue.failCause(queue, cause),
-                  onSuccess: () => Queue.end(queue).pipe(Effect.asVoid),
-                }),
-              ),
+          Stream.callback<GitActionProgressEvent, GitManagerServiceError>(
+            (queue) =>
+              vcsManager
+                .runStackedAction(input, {
+                  actionId: input.actionId,
+                  progressReporter: {
+                    publish: (event) =>
+                      Queue.offer(queue, event as GitActionProgressEvent).pipe(
+                        Effect.asVoid,
+                      ),
+                  },
+                })
+                .pipe(
+                  Effect.matchCauseEffect({
+                    onFailure: (cause) => Queue.failCause(queue, cause),
+                    onSuccess: () => Queue.end(queue).pipe(Effect.asVoid),
+                  }),
+                ),
           ),
           { "rpc.aggregate": "git" },
         ),
       [WS_METHODS.gitResolvePullRequest]: (input) =>
-        observeRpcEffect(WS_METHODS.gitResolvePullRequest, vcsManager.resolvePullRequest(input), {
-          "rpc.aggregate": "git",
-        }),
+        observeRpcEffect(
+          WS_METHODS.gitResolvePullRequest,
+          vcsManager.resolvePullRequest(input),
+          {
+            "rpc.aggregate": "git",
+          },
+        ),
       [WS_METHODS.gitPreparePullRequestThread]: (input) =>
         observeRpcEffect(
           WS_METHODS.gitPreparePullRequestThread,
@@ -862,13 +1246,21 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           { "rpc.aggregate": "git" },
         ),
       [WS_METHODS.vcsCreateWorktree]: (input) =>
-        observeRpcEffect(WS_METHODS.vcsCreateWorktree, vcs.createWorktree(input), {
-          "rpc.aggregate": "git",
-        }),
+        observeRpcEffect(
+          WS_METHODS.vcsCreateWorktree,
+          vcs.createWorktree(input),
+          {
+            "rpc.aggregate": "git",
+          },
+        ),
       [WS_METHODS.vcsRemoveWorktree]: (input) =>
-        observeRpcEffect(WS_METHODS.vcsRemoveWorktree, vcs.removeWorktree(input), {
-          "rpc.aggregate": "git",
-        }),
+        observeRpcEffect(
+          WS_METHODS.vcsRemoveWorktree,
+          vcs.removeWorktree(input),
+          {
+            "rpc.aggregate": "git",
+          },
+        ),
       [WS_METHODS.vcsCreateRef]: (input) =>
         observeRpcEffect(
           WS_METHODS.vcsCreateRef,
@@ -894,9 +1286,13 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           },
         ),
       [WS_METHODS.vcsInit]: (input) =>
-        observeRpcEffect(WS_METHODS.vcsInit, vcsProvisioning.initRepository(input), {
-          "rpc.aggregate": "git",
-        }),
+        observeRpcEffect(
+          WS_METHODS.vcsInit,
+          vcsProvisioning.initRepository(input),
+          {
+            "rpc.aggregate": "git",
+          },
+        ),
       ...makeGcRpcHandlers({
         gcApiClient,
         gcContextProvider,
@@ -907,25 +1303,45 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           "rpc.aggregate": "terminal",
         }),
       [WS_METHODS.terminalWrite]: (input) =>
-        observeRpcEffect(WS_METHODS.terminalWrite, terminalManager.write(input), {
-          "rpc.aggregate": "terminal",
-        }),
+        observeRpcEffect(
+          WS_METHODS.terminalWrite,
+          terminalManager.write(input),
+          {
+            "rpc.aggregate": "terminal",
+          },
+        ),
       [WS_METHODS.terminalResize]: (input) =>
-        observeRpcEffect(WS_METHODS.terminalResize, terminalManager.resize(input), {
-          "rpc.aggregate": "terminal",
-        }),
+        observeRpcEffect(
+          WS_METHODS.terminalResize,
+          terminalManager.resize(input),
+          {
+            "rpc.aggregate": "terminal",
+          },
+        ),
       [WS_METHODS.terminalClear]: (input) =>
-        observeRpcEffect(WS_METHODS.terminalClear, terminalManager.clear(input), {
-          "rpc.aggregate": "terminal",
-        }),
+        observeRpcEffect(
+          WS_METHODS.terminalClear,
+          terminalManager.clear(input),
+          {
+            "rpc.aggregate": "terminal",
+          },
+        ),
       [WS_METHODS.terminalRestart]: (input) =>
-        observeRpcEffect(WS_METHODS.terminalRestart, terminalManager.restart(input), {
-          "rpc.aggregate": "terminal",
-        }),
+        observeRpcEffect(
+          WS_METHODS.terminalRestart,
+          terminalManager.restart(input),
+          {
+            "rpc.aggregate": "terminal",
+          },
+        ),
       [WS_METHODS.terminalClose]: (input) =>
-        observeRpcEffect(WS_METHODS.terminalClose, terminalManager.close(input), {
-          "rpc.aggregate": "terminal",
-        }),
+        observeRpcEffect(
+          WS_METHODS.terminalClose,
+          terminalManager.close(input),
+          {
+            "rpc.aggregate": "terminal",
+          },
+        ),
       [WS_METHODS.subscribeTerminalEvents]: (_input) =>
         observeRpcStream(
           WS_METHODS.subscribeTerminalEvents,
@@ -973,7 +1389,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
                 type: "snapshot" as const,
                 config: yield* loadServerConfig,
               }),
-              Stream.merge(keybindingsUpdates, Stream.merge(providerStatuses, settingsUpdates)),
+              Stream.merge(
+                keybindingsUpdates,
+                Stream.merge(providerStatuses, settingsUpdates),
+              ),
             );
           }),
           { "rpc.aggregate": "server" },
@@ -1003,7 +1422,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
             const liveEvents = lifecycleEvents.stream.pipe(
               Stream.filter((event) => event.sequence > snapshot.sequence),
             );
-            return Stream.concat(Stream.fromIterable(snapshotEvents), liveEvents);
+            return Stream.concat(
+              Stream.fromIterable(snapshotEvents),
+              liveEvents,
+            );
           }),
           { "rpc.aggregate": "server" },
         ),
@@ -1013,13 +1435,18 @@ const WsRpcLayer = WsRpcGroup.toLayer(
 
 export const websocketRpcRouteLayer = Layer.unwrap(
   Effect.gen(function* () {
-    const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(WsRpcGroup, {
-      spanPrefix: "ws.rpc",
-      spanAttributes: {
-        "rpc.transport": "websocket",
-        "rpc.system": "effect-rpc",
+    const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(
+      WsRpcGroup,
+      {
+        spanPrefix: "ws.rpc",
+        spanAttributes: {
+          "rpc.transport": "websocket",
+          "rpc.system": "effect-rpc",
+        },
       },
-    }).pipe(Effect.provide(Layer.mergeAll(WsRpcLayer, RpcSerialization.layerJson)));
+    ).pipe(
+      Effect.provide(Layer.mergeAll(WsRpcLayer, RpcSerialization.layerJson)),
+    );
     return HttpRouter.add(
       "GET",
       "/ws",
@@ -1035,7 +1462,10 @@ export const websocketRpcRouteLayer = Layer.unwrap(
           }
           const token = url.value.searchParams.get("token");
           if (token !== config.authToken) {
-            return HttpServerResponse.text("Unauthorized WebSocket connection", { status: 401 });
+            return HttpServerResponse.text(
+              "Unauthorized WebSocket connection",
+              { status: 401 },
+            );
           }
         }
         return yield* rpcWebSocketHttpEffect;

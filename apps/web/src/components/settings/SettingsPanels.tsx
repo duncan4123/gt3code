@@ -909,6 +909,15 @@ export function GeneralSettingsPanel() {
             </Button>
           }
         />
+        <SettingsRow
+          title="Gas City"
+          description="Inspect bundled Gas City runtime paths, API discovery, and installed binaries."
+          control={
+            <Button render={<Link to="/settings/gascity" />} size="xs" variant="outline">
+              View Gas City
+            </Button>
+          }
+        />
       </SettingsSection>
     </SettingsPageContainer>
   );
