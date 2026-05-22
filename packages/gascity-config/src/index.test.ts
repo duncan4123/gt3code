@@ -188,7 +188,6 @@ describe("@t3tools/gascity-config", () => {
     expect(gastownRigs.map((rig) => rig.name)).toEqual([
       "gascity",
       "beads-doltlite",
-      "context-mode",
       "t3code",
       "test-rig",
     ]);
@@ -215,7 +214,11 @@ describe("@t3tools/gascity-config", () => {
         );
         expect(agent.scope).toBe("rig");
         expect(agent.provider).toEqual(expect.any(String));
-        expect(agent.work_dir).toEqual(expect.stringContaining(".gc/jj/agents/{{.Rig}}"));
+        expect(agent.work_dir).toEqual(
+          expect.stringContaining(
+            "{{.WorktreesRoot}}/gascity/{{.CityName}}/{{.Rig}}/jj/agents",
+          ),
+        );
         expect(agent.wake_mode).toBe("fresh");
         expect(agent.max_active_sessions).toEqual(expect.any(Number));
         const defaults = expectStringRecord(agent.option_defaults);

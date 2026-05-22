@@ -20,9 +20,11 @@ jj status
 ## Agent Rules
 
 - Worker agents create and edit only their bead workspace.
+- Worker and agent workspaces must stay outside the served T3 checkout.
 - Lander agents are the only agents that move target bookmarks.
 - Sentinel agents repair stuck state; they do not land code.
 - Preserve `jj_change`, `jj_workspace`, and `work_dir` metadata on beads.
+- Do not run `jj file track .` from the served root checkout.
 
 ## Common Commands
 
@@ -31,6 +33,8 @@ jj workspace add --name NAME -r REV -m MESSAGE PATH
 jj workspace list
 jj workspace root
 jj workspace forget NAME
+jj op log --limit 20
+jj op undo OPERATION_ID
 jj describe -m "message"
 jj git push --remote jorje -c @
 jj bookmark set integration/t3code-agent-controls-sidebar -r CHANGE

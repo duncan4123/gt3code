@@ -1,10 +1,8 @@
 [workspace]
-suspended = false
 global_fragments = ["command-glossary", "operational-awareness"]
 
 [[agent]]
 name = "codex"
-suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "codex"
 max_active_sessions = 5
@@ -16,7 +14,6 @@ model = "gpt-5.5"
 
 [[agent]]
 name = "kimi-for-coding"
-suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "kimi-for-coding"
 max_active_sessions = 5
@@ -30,7 +27,6 @@ model = "kimi-for-coding/k2p6"
 [[agent]]
 name = "codex"
 dir = "gascity"
-suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "codex"
 max_active_sessions = 5
@@ -43,7 +39,6 @@ model = "gpt-5.5"
 [[agent]]
 name = "kimi-for-coding"
 dir = "gascity"
-suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "kimi-for-coding"
 max_active_sessions = 5
@@ -57,7 +52,6 @@ model = "kimi-for-coding/k2p6"
 [[agent]]
 name = "codex"
 dir = "beads-doltlite"
-suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "codex"
 max_active_sessions = 5
@@ -70,7 +64,6 @@ model = "gpt-5.5"
 [[agent]]
 name = "kimi-for-coding"
 dir = "beads-doltlite"
-suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "kimi-for-coding"
 max_active_sessions = 5
@@ -84,7 +77,6 @@ model = "kimi-for-coding/k2p6"
 [[agent]]
 name = "codex"
 dir = "t3code"
-suspended = false
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
 provider = "codex"
 max_active_sessions = 5
@@ -137,7 +129,8 @@ model = "kimi-for-coding/k2p6"
 
 [[rigs]]
 name = "gascity"
-suspended = false
+prefix = "gc"
+suspended = true
 includes = ["../../packs/gastown"]
 
 [[rigs.overrides]]
@@ -173,7 +166,7 @@ suspended = true
 [[rigs]]
 name = "t3code"
 prefix = "t3"
-suspended = false
+suspended = true
 includes = ["../../packs/gastown", "packs/jj"]
 
 [[rigs.overrides]]
@@ -281,6 +274,7 @@ dir = "gascity"
 name = "refinery"
 suspended = false
 provider = "codex"
+wake_mode = "resume"
 [patches.agent.option_defaults]
 model = "gpt-5.5"
 
@@ -339,6 +333,7 @@ dir = "t3code"
 name = "refinery"
 suspended = true
 provider = "kimi-for-coding"
+wake_mode = "resume"
 [patches.agent.option_defaults]
 agent = "build"
 model = "kimi-for-coding/k2p6"
@@ -379,7 +374,7 @@ model = "gpt-5.5"
 [[patches.agent]]
 dir = "test-rig"
 name = "planner"
-work_dir = ".gc/jj/agents/{{.Rig}}/planner"
+work_dir = "{{.WorktreesRoot}}/gascity/{{.CityName}}/{{.Rig}}/jj/agents/planner"
 suspended = false
 provider = "codex"
 nudge = "Check mail, then create or refine stack-shaped work beads."
@@ -392,7 +387,7 @@ model = "gpt-5.5"
 [[patches.agent]]
 dir = "test-rig"
 name = "worker"
-work_dir = ".gc/jj/agents/{{.Rig}}/workers/{{.AgentBase}}"
+work_dir = "{{.WorktreesRoot}}/gascity/{{.CityName}}/{{.Rig}}/jj/agents/workers/{{.AgentBase}}"
 suspended = false
 provider = "codex"
 nudge = "Run gc hook; claim one routed work bead, create a JJ workspace, and submit the change."
@@ -407,7 +402,7 @@ model = "gpt-5.5"
 [[patches.agent]]
 dir = "test-rig"
 name = "lander"
-work_dir = ".gc/jj/agents/{{.Rig}}/lander"
+work_dir = "{{.WorktreesRoot}}/gascity/{{.CityName}}/{{.Rig}}/jj/agents/lander"
 suspended = false
 provider = "kimi-for-coding"
 nudge = "Run gc prime, inspect submitted JJ changes, and land ready work serially."
@@ -421,7 +416,7 @@ model = "kimi-for-coding/k2p6"
 [[patches.agent]]
 dir = "test-rig"
 name = "sentinel"
-work_dir = ".gc/jj/agents/{{.Rig}}/sentinel"
+work_dir = "{{.WorktreesRoot}}/gascity/{{.CityName}}/{{.Rig}}/jj/agents/sentinel"
 suspended = false
 provider = "kimi-for-coding"
 nudge = "Run gc prime, inspect JJ workspace health, and repair stuck workflow state."
@@ -435,6 +430,11 @@ model = "kimi-for-coding/k2p6"
 [[patches.agent]]
 dir = "t3code"
 name = "worker"
+wake_mode = "resume"
+
+[[patches.agent]]
+dir = "t3code"
+name = "lander"
 wake_mode = "resume"
 
 [[patches.named_session]]

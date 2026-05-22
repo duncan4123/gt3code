@@ -2,7 +2,7 @@ scope = "rig"
 provider = "kimi-for-coding"
 option_defaults = { model = "kimi-for-coding/k2p6", agent = "build" }
 wake_mode = "fresh"
-work_dir = ".gc/jj/agents/{{.Rig}}/sentinel"
+work_dir = "{{.WorktreesRoot}}/gascity/{{.CityName}}/{{.Rig}}/jj/agents/sentinel"
 nudge = "Run gc prime, inspect JJ workspace health, and repair stuck workflow state."
 idle_timeout = "1h"
 max_active_sessions = 1

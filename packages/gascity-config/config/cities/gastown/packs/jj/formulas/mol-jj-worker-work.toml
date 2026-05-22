@@ -55,7 +55,14 @@ cd "${GC_RIG_ROOT:?GC_RIG_ROOT required}"
 jj git fetch --remote "$TARGET_REMOTE"
 SAFE_ISSUE=$(printf '%s' "{{issue}}" | tr -c 'A-Za-z0-9._-' '-')
 JJ_WORKSPACE="gc-${SAFE_ISSUE}-${GC_AGENT_BASE:-${GC_SESSION_NAME:-worker}}"
-WORK_DIR="$GC_RIG_ROOT/.gc/jj/workspaces/$JJ_WORKSPACE"
+CITY_NAME=$(basename "${GC_CITY_PATH:-${GC_CITY:-city}}")
+RIG_NAME="${GC_RIG:-rig}"
+WORKTREES_ROOT="${GC_WORKTREES_DIR:-${T3CODE_WORKTREES_DIR:-}}"
+if [ -z "$WORKTREES_ROOT" ]; then
+  WORKTREES_ROOT="${T3CODE_HOME:-${GC_CITY_PATH:-${GC_CITY:?GC_CITY_PATH or T3CODE_HOME required}}}/worktrees"
+fi
+JJ_WORKSPACES_ROOT="${GC_JJ_WORKSPACES_ROOT:-$WORKTREES_ROOT/gascity/$CITY_NAME/$RIG_NAME/jj/workspaces}"
+WORK_DIR="$JJ_WORKSPACES_ROOT/$JJ_WORKSPACE"
 mkdir -p "$(dirname "$WORK_DIR")"
 jj workspace add --name "$JJ_WORKSPACE" -r "$TARGET@$TARGET_REMOTE" -m "{{issue}}: work" "$WORK_DIR"
 cd "$WORK_DIR"

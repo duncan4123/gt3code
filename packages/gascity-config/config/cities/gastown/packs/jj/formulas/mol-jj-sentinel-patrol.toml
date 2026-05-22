@@ -28,7 +28,14 @@ From the rig root:
 ```bash
 cd "${GC_RIG_ROOT:?GC_RIG_ROOT required}"
 jj workspace list
-find .gc/jj/workspaces -maxdepth 2 -type d 2>/dev/null || true
+CITY_NAME=$(basename "${GC_CITY_PATH:-${GC_CITY:-city}}")
+RIG_NAME="${GC_RIG:-rig}"
+WORKTREES_ROOT="${GC_WORKTREES_DIR:-${T3CODE_WORKTREES_DIR:-}}"
+if [ -z "$WORKTREES_ROOT" ]; then
+  WORKTREES_ROOT="${T3CODE_HOME:-${GC_CITY_PATH:-${GC_CITY:?GC_CITY_PATH or T3CODE_HOME required}}}/worktrees"
+fi
+JJ_WORKSPACES_ROOT="${GC_JJ_WORKSPACES_ROOT:-$WORKTREES_ROOT/gascity/$CITY_NAME/$RIG_NAME/jj/workspaces}"
+find "$JJ_WORKSPACES_ROOT" -maxdepth 2 -type d 2>/dev/null || true
 ```
 
 Record any workspace that exists on disk but has no open bead metadata.

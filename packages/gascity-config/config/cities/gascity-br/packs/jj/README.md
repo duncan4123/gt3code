@@ -13,6 +13,15 @@ Jorje reviews:
 Gas City and beads remain the queue and ownership system. JJ is the code-change
 system. Jorje is the review surface.
 
+Agent state and bead workspaces live inside the T3 install's shared worktree
+root by default:
+
+```text
+${T3CODE_WORKTREES_DIR:-$T3CODE_HOME/worktrees}/gascity/<city>/<rig>/jj/
+```
+
+Set `GC_JJ_WORKSPACES_ROOT` to override the bead workspace root.
+
 ## Metadata Contract
 
 - `work_dir`: absolute JJ workspace path for the bead.
