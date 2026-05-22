@@ -65,6 +65,13 @@ function materializeSource(manifest: Manifest, destination: string): string {
   return commit;
 }
 
+function assertCleanGitWorktree(repo: string): void {
+  const status = execFileSync("git", ["-C", repo, "status", "--porcelain"], { encoding: "utf8" }).trim();
+  if (status) {
+    throw new Error(`Refusing to export into dirty repo ${repo}. Commit, stash, or clean it first.`);
+  }
+}
+
 function hashFile(file: string): string {
   return createHash("sha256").update(readFileSync(file)).digest("hex");
 }
@@ -145,6 +152,13 @@ function copyDir(source: string, destination: string, excludes: Array<string>, p
   }
 }
 
+function emptyDirContents(directory: string, excludes: Array<string>): void {
+  for (const name of readdirSync(directory)) {
+    if (shouldSkip(name, excludes)) continue;
+    rmSync(path.join(directory, name), { recursive: true, force: true });
+  }
+}
+
 function runForManifest(manifest: Manifest): boolean {
   const excludes = [".git", ".jj", ...(manifest.exclude ?? [])];
   const packagePath = path.resolve(repoRoot, manifest.path);
@@ -162,6 +176,23 @@ function runForManifest(manifest: Manifest): boolean {
       mkdirSync(packagePath, { recursive: true });
       copyDir(sourcePath, packagePath, excludes);
       console.log(`${manifest.name}: pulled ${manifest.syncedBranch}@${actualCommit} into ${manifest.path}`);
+      return true;
+    }
+
+    if (command === "export") {
+      assertCleanGitWorktree(manifest.sourceRepo);
+      const exportedChanged = compareDirs(manifest.sourceRepo, packagePath, excludes);
+      if (exportedChanged.length === 0) {
+        console.log(`${manifest.name}: no package changes to export`);
+        return true;
+      }
+
+      emptyDirContents(manifest.sourceRepo, [".git", ".jj", ...(manifest.exclude ?? [])]);
+      mkdirSync(manifest.sourceRepo, { recursive: true });
+      copyDir(packagePath, manifest.sourceRepo, excludes);
+      console.log(`${manifest.name}: exported package source into ${manifest.sourceRepo}`);
+      console.log("  review with:");
+      console.log(`  git -C ${manifest.sourceRepo} diff --stat`);
       return true;
     }
 
@@ -183,8 +214,8 @@ function runForManifest(manifest: Manifest): boolean {
   }
 }
 
-if (!["check", "diff", "pull"].includes(command)) {
-  console.error("Usage: node scripts/package-source-sync.ts [check|diff|pull] [package-name...]");
+if (!["check", "diff", "pull", "export"].includes(command)) {
+  console.error("Usage: node scripts/package-source-sync.ts [check|diff|pull|export] [package-name...]");
   process.exit(2);
 }
 

@@ -23,3 +23,8 @@ Backup snapshot details:
 
 Use `bun run package-sources:check gascity` before building to verify that
 `packages/gascity/source` still matches the declared source branch.
+
+If package-local testing produces source fixes, use
+`bun run package-sources:export gascity` to copy only manifest-allowed source
+files back into `/data/projects/gascity`. The export command refuses to run if
+the target repo has dirty work and does not commit or push.

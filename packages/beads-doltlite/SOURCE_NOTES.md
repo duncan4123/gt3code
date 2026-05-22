@@ -16,3 +16,8 @@ Related branches:
 
 Use `bun run package-sources:check beads-doltlite` before building to verify that
 `packages/beads-doltlite/source` still matches the declared source branch.
+
+If package-local testing produces source fixes, use
+`bun run package-sources:export beads-doltlite` to copy only manifest-allowed
+source files back into `/data/projects/beads-doltlite`. The export command
+refuses to run if the target repo has dirty work and does not commit or push.

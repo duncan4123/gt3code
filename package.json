@@ -43,6 +43,7 @@
     "gc": "node scripts/gascity-runner.ts gc",
     "package-sources:check": "node scripts/package-source-sync.ts check",
     "package-sources:diff": "node scripts/package-source-sync.ts diff",
+    "package-sources:export": "node scripts/package-source-sync.ts export",
     "package-sources:pull": "node scripts/package-source-sync.ts pull",
     "start": "turbo run start --filter=t3",
     "start:desktop": "turbo run start --filter=@t3tools/desktop",
