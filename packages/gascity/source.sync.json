@@ -1,0 +1,40 @@
+{
+  "name": "gascity",
+  "path": "packages/gascity/source",
+  "sourceRepo": "/data/projects/gascity",
+  "remote": "git@github-duncan:duncan4123/gascity.git",
+  "syncedBranch": "integrate/beads-doltlite-gascity-pr",
+  "syncedCommit": "7d5dea57a",
+  "upstreamRepo": "https://github.com/gastownhall/gascity",
+  "upstreamBranch": "main",
+  "relatedBranches": [
+    {
+      "name": "integrate/beads-doltlite-gascity-pr",
+      "repo": "git@github-duncan:duncan4123/gascity.git",
+      "role": "current DoltLite + T3Bridge PR branch",
+      "pr": "https://github.com/gastownhall/gascity/pull/2474"
+    },
+    {
+      "name": "snapshot/t3code-packaged-gascity-20260522",
+      "repo": "git@github-duncan:duncan4123/gascity.git",
+      "role": "raw backup of the previous packaged T3Code source snapshot"
+    }
+  ],
+  "exclude": [
+    ".git",
+    ".jj",
+    ".direnv",
+    ".beads",
+    ".codex",
+    ".gc",
+    ".opencode",
+    ".runtime",
+    "bin",
+    "dist",
+    "build",
+    "tmp",
+    ".gc/runtime",
+    "cmd/gc/.runtime",
+    "t3bridge.test"
+  ]
+}

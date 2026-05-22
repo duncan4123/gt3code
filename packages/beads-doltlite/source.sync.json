@@ -1,0 +1,35 @@
+{
+  "name": "beads-doltlite",
+  "path": "packages/beads-doltlite/source",
+  "sourceRepo": "/data/projects/beads-doltlite",
+  "remote": "git@github-duncan:duncan4123/beads.git",
+  "syncedBranch": "beads-doltlite",
+  "syncedCommit": "7453c9c46",
+  "upstreamRepo": "https://github.com/gastownhall/beads",
+  "upstreamBranch": "main",
+  "relatedBranches": [
+    {
+      "name": "beads-doltlite",
+      "repo": "git@github-duncan:duncan4123/beads.git",
+      "role": "focused upstream Beads DoltLite backend PR branch",
+      "pr": "https://github.com/gastownhall/beads/pull/4084"
+    },
+    {
+      "name": "beads-doltlite",
+      "repo": "git@github-duncan:duncan4123/beads-doltlite.git",
+      "role": "older standalone fork remote kept as a backup/reference"
+    }
+  ],
+  "exclude": [
+    ".git",
+    ".jj",
+    ".direnv",
+    ".beads",
+    ".codex",
+    ".gc",
+    ".opencode",
+    "dist",
+    "build",
+    "tmp"
+  ]
+}
