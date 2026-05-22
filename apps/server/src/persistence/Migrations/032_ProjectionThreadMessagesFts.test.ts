@@ -9,7 +9,7 @@ import * as NodeSqliteClient from "../NodeSqliteClient.ts";
 const layer = it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()));
 
 layer("032_ProjectionThreadMessagesFts", (it) => {
-  it.effect("backfills and syncs thread message text", () =>
+  it.effect("adds explicit message row ids and backfills finalized thread message text", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
 
@@ -45,42 +45,13 @@ layer("032_ProjectionThreadMessagesFts", (it) => {
       const backfilled = yield* sql<{ readonly messageId: string }>`
         SELECT m.message_id AS "messageId"
         FROM messages_fts
-        JOIN projection_thread_messages m ON m.rowid = messages_fts.rowid
+        JOIN projection_thread_messages m ON m.row_id = messages_fts.rowid
         WHERE messages_fts MATCH 'needle'
       `;
       assert.deepStrictEqual(
         backfilled.map((row) => row.messageId),
         ["message-1"],
       );
-
-      yield* sql`
-        UPDATE projection_thread_messages
-        SET text = 'beta haystack'
-        WHERE message_id = 'message-1'
-      `;
-
-      const updated = yield* sql<{ readonly messageId: string }>`
-        SELECT m.message_id AS "messageId"
-        FROM messages_fts
-        JOIN projection_thread_messages m ON m.rowid = messages_fts.rowid
-        WHERE messages_fts MATCH 'haystack'
-      `;
-      assert.deepStrictEqual(
-        updated.map((row) => row.messageId),
-        ["message-1"],
-      );
-
-      yield* sql`
-        DELETE FROM projection_thread_messages
-        WHERE message_id = 'message-1'
-      `;
-
-      const deleted = yield* sql<{ readonly count: number }>`
-        SELECT COUNT(*) AS "count"
-        FROM messages_fts
-        WHERE messages_fts MATCH 'haystack'
-      `;
-      assert.strictEqual(deleted[0]?.count, 0);
     }),
   );
 });

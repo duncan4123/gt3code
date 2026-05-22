@@ -1,42 +1,59 @@
+import * as FileSystem from "effect/FileSystem";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Scope from "effect/Scope";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
+import { DatabaseSync as NodeSqliteDb } from "node:sqlite";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { runMigrations } from "../Migrations.ts";
 import { ServerConfig } from "../../config.ts";
+import { layer } from "../NodeSqliteClient.ts";
 
 type RuntimeSqliteLayerConfig = {
   readonly filename: string;
   readonly spanAttributes?: Record<string, unknown>;
 };
 
-type Loader = {
-  layer: (config: RuntimeSqliteLayerConfig) => Layer.Layer<SqlClient.SqlClient>;
-};
-const defaultSqliteClientLoaders = {
-  bun: () => import("@effect/sql-sqlite-bun/SqliteClient"),
-  node: () => import("../NodeSqliteClient.ts"),
-} satisfies Record<string, () => Promise<Loader>>;
-
-const makeRuntimeSqliteLayer = Effect.fn("makeRuntimeSqliteLayer")(function* (
+const makeRuntimeSqliteLayer = (
   config: RuntimeSqliteLayerConfig,
-) {
-  const runtime = process.versions.bun !== undefined ? "bun" : "node";
-  const loader = defaultSqliteClientLoaders[runtime];
-  const clientModule = yield* Effect.promise<Loader>(loader);
-  return clientModule.layer(config);
-}, Layer.unwrap);
+): Layer.Layer<SqlClient.SqlClient> => layer(config);
 
-const setup = Layer.effectDiscard(
-  Effect.gen(function* () {
+export const projDbPath = (mainDbPath: string): string =>
+  mainDbPath.replace(/\.sqlite$/, "-proj.sqlite");
+
+const ensureBtreeFile = (path: string): void => {
+  if (existsSync(path)) {
+    const header = readFileSync(path, { encoding: null, flag: "r" }).subarray(0, 16);
+    if (header.equals(Buffer.from("SQLite format 3\0", "binary"))) {
+      return;
+    }
+    rmSync(path, { force: true });
+  }
+  const db = new NodeSqliteDb(path);
+  db.exec("CREATE TABLE _init(x); DROP TABLE _init;");
+  db.close();
+};
+
+const escapeSqliteStringLiteral = (value: string): string => value.replaceAll("'", "''");
+
+const makeSetup = (projPath: string | null) =>
+  Layer.effectDiscard(Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    yield* sql`PRAGMA journal_mode = WAL;`;
     yield* sql`PRAGMA foreign_keys = ON;`;
+
+    if (projPath) {
+      ensureBtreeFile(projPath);
+      yield* sql.unsafe(`ATTACH DATABASE '${escapeSqliteStringLiteral(projPath)}' AS proj`);
+      yield* Effect.logInfo(`attached projection sidecar: ${projPath}`);
+    }
+
     yield* runMigrations();
-  }),
-);
+  }));
 
 export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(function* (
   dbPath: string,
@@ -45,8 +62,10 @@ export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(
   const path = yield* Path.Path;
   yield* fs.makeDirectory(path.dirname(dbPath), { recursive: true });
 
+  const projPath = projDbPath(dbPath);
+
   return Layer.provideMerge(
-    setup,
+    makeSetup(projPath),
     makeRuntimeSqliteLayer({
       filename: dbPath,
       spanAttributes: {
@@ -57,8 +76,26 @@ export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(
   );
 }, Layer.unwrap);
 
+const memorySetup = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const scope = yield* Effect.scope;
+    const tempDir = mkdtempSync(join(tmpdir(), "t3-proj-"));
+    const projPath = join(tempDir, "proj.sqlite");
+    ensureBtreeFile(projPath);
+    yield* Scope.addFinalizer(
+      scope,
+      Effect.sync(() => rmSync(tempDir, { recursive: true, force: true })),
+    );
+
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`PRAGMA foreign_keys = ON;`;
+    yield* sql.unsafe(`ATTACH DATABASE '${escapeSqliteStringLiteral(projPath)}' AS proj`);
+    yield* runMigrations();
+  }),
+);
+
 export const SqlitePersistenceMemory = Layer.provideMerge(
-  setup,
+  memorySetup,
   makeRuntimeSqliteLayer({ filename: ":memory:" }),
 );
 

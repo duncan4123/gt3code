@@ -1,10 +1,10 @@
 /**
- * Port of `@effect/sql-sqlite-node` that uses the native `node:sqlite`
- * bindings instead of `better-sqlite3`.
+ * Port of `@effect/sql-sqlite-node` backed by the local `doltlite`
+ * compatibility bindings instead of `node:sqlite`.
  *
  * @module SqliteClient
  */
-import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { DatabaseSync, type StatementSync } from "doltlite";
 
 import * as Cache from "effect/Cache";
 import * as Config from "effect/Config";

@@ -55,6 +55,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
         row.attachments !== undefined ? JSON.stringify(row.attachments) : null;
       return sql`
         INSERT INTO projection_thread_messages (
+          row_id,
           message_id,
           thread_id,
           turn_id,
@@ -66,6 +67,17 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           updated_at
         )
         VALUES (
+          COALESCE(
+            (
+              SELECT row_id
+              FROM projection_thread_messages
+              WHERE message_id = ${row.messageId}
+            ),
+            (
+              SELECT COALESCE(MAX(row_id), 0) + 1
+              FROM projection_thread_messages
+            )
+          ),
           ${row.messageId},
           ${row.threadId},
           ${row.turnId},
@@ -157,7 +169,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
     execute: ({ messageId }) =>
       sql`
         SELECT
-          rowid AS "rowId",
+          row_id AS "rowId",
           text
         FROM projection_thread_messages
         WHERE message_id = ${messageId}
@@ -213,9 +225,10 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
       .unsafe(
         `
           INSERT INTO messages_fts(messages_fts, rowid, text)
-          SELECT 'delete', rowid, text
+          SELECT 'delete', row_id, text
           FROM projection_thread_messages
           WHERE thread_id = ?
+            AND row_id IS NOT NULL
         `,
         [threadId],
       )
