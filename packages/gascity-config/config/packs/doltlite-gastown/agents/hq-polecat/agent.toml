@@ -2,12 +2,13 @@ scope = "city"
 provider = "codex"
 option_defaults = { model = "gpt-5.4" }
 wake_mode = "resume"
+is_pool = true
 work_dir = "{{.WorktreesRoot}}/t3code/{{.AgentBase}}"
 pre_start = [
   "{{.ConfigDir}}/scripts/worktree-setup.sh \"$(cd '{{.CityRoot}}/../../..' && pwd)\" {{.WorkDir}} {{.AgentBase}} --sync",
 ]
 idle_timeout = "2h"
-min_active_sessions = 2
+min_active_sessions = 0
 max_active_sessions = 5
 session_live = [
   "{{.ConfigDir}}/scripts/tmux-theme.sh {{.Session}} {{.Agent}} {{.ConfigDir}}",

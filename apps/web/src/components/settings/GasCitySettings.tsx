@@ -48,7 +48,7 @@ function StatBlock({
   label: string;
   value: string;
   tooltip?: ReactNode;
-  tone?: "default" | "warning";
+  tone?: "default" | "warning" | "danger";
 }) {
   return (
     <div className="min-w-0 border-border/60 px-4 py-3 sm:px-5">
@@ -80,6 +80,7 @@ function StatBlock({
         className={cn(
           "mt-1 truncate font-mono text-lg font-semibold tabular-nums text-foreground",
           tone === "warning" && "text-amber-600 dark:text-amber-400",
+          tone === "danger" && "text-destructive",
         )}
       >
         {value}
@@ -150,6 +151,13 @@ function ValueRow({
       </td>
     </tr>
   );
+}
+
+function boolValue(value: boolean | undefined) {
+  if (value === undefined) {
+    return undefined;
+  }
+  return value ? "yes" : "no";
 }
 
 type GasCityLifecycleRow = {
@@ -284,6 +292,19 @@ export function GasCitySettingsPanel() {
       : diagnostics?.t3WsReachable === false
         ? "unreachable"
         : "unknown";
+  const doltliteState = diagnostics?.beadStores.some(
+    (store) => store.backend === "doltlite" || store.database === "doltlite",
+  )
+    ? "doltlite"
+    : "unknown";
+  const t3WsRouteState =
+    diagnostics?.t3WsLooksLikeTailscale === true
+      ? "tailscale"
+      : diagnostics?.t3WsIsLoopback === true
+        ? "loopback"
+        : diagnostics?.t3WsHost
+          ? "remote"
+          : "unknown";
   const cityRoots = useMemo(
     () =>
       (gcConfig?.rigs ?? []).filter(
@@ -440,6 +461,18 @@ export function GasCitySettingsPanel() {
             tone={t3BridgeState === "unreachable" ? "danger" : "default"}
             tooltip="Checks the WebSocket URL Gas City uses for T3Bridge sessions."
           />
+          <StatBlock
+            label="Route"
+            value={t3WsRouteState}
+            tone={t3WsRouteState === "tailscale" ? "warning" : "default"}
+            tooltip="Classifies the T3Bridge WebSocket host as loopback, Tailscale, or another remote host."
+          />
+          <StatBlock
+            label="Beads"
+            value={doltliteState}
+            tone={doltliteState === "unknown" ? "warning" : "default"}
+            tooltip="Reads .beads/metadata.json for the tracked T3/Gas City stores."
+          />
         </StatsGrid>
         <DiagnosticsTable>
           <ValueRow label="GC_API_URL" value={diagnostics?.configuredApiUrl} />
@@ -448,6 +481,14 @@ export function GasCitySettingsPanel() {
             value={
               diagnostics
                 ? `${diagnostics.supervisorTomlPath} (${diagnostics.supervisorTomlExists ? "exists" : "missing"})`
+                : undefined
+            }
+          />
+          <ValueRow
+            label="Tailscale serve"
+            value={
+              diagnostics
+                ? `${diagnostics.tailscaleServeEnabled ? "enabled" : "disabled"} on ${diagnostics.tailscaleServePort}`
                 : undefined
             }
           />
@@ -508,6 +549,15 @@ export function GasCitySettingsPanel() {
           <ValueRow label="T3 home" value={diagnostics?.t3Home} />
           <ValueRow label="T3 WS URL" value={diagnostics?.t3WsUrl} />
           <ValueRow label="T3 WS source" value={diagnostics?.t3WsUrlSource} />
+          <ValueRow label="T3 WS host" value={diagnostics?.t3WsHost} />
+          <ValueRow
+            label="T3 WS loopback"
+            value={boolValue(diagnostics?.t3WsIsLoopback)}
+          />
+          <ValueRow
+            label="T3 WS Tailscale-like"
+            value={boolValue(diagnostics?.t3WsLooksLikeTailscale)}
+          />
           <ValueRow
             label="T3 WS reachable"
             value={
@@ -530,6 +580,51 @@ export function GasCitySettingsPanel() {
                 : undefined
             }
           />
+          <ValueRow
+            label="Projection sidecar"
+            value={
+              diagnostics
+                ? `${diagnostics.projectionDbPath} (${diagnostics.projectionDbExists ? "exists" : "missing"})`
+                : undefined
+            }
+          />
+        </DiagnosticsTable>
+      </SettingsSection>
+
+      <SettingsSection title="DoltLite Beads">
+        <DiagnosticsTable>
+          <ValueRow
+            label="GC native beads"
+            value={diagnostics?.nativeDoltliteBeads}
+          />
+          <ValueRow label="Beads backend" value={diagnostics?.beadsBackend} />
+          <ValueRow
+            label="DoltLite library"
+            value={diagnostics?.doltliteLibrary}
+          />
+          <ValueRow
+            label="LD_LIBRARY_PATH"
+            value={diagnostics?.ldLibraryPath}
+          />
+          {diagnostics?.beadStores.map((store) => (
+            <ValueRow
+              key={`${store.label}:${store.path}`}
+              label={store.label}
+              value={[
+                store.path,
+                store.exists ? "exists" : "missing",
+                store.backend ? `backend=${store.backend}` : undefined,
+                store.mode ? `mode=${store.mode}` : undefined,
+                store.database ? `database=${store.database}` : undefined,
+                store.doltDatabase
+                  ? `dolt_database=${store.doltDatabase}`
+                  : undefined,
+                store.error ? `error=${store.error}` : undefined,
+              ]
+                .filter(Boolean)
+                .join(" | ")}
+            />
+          ))}
         </DiagnosticsTable>
       </SettingsSection>
 

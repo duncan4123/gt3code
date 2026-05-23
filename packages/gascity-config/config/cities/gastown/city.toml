@@ -1,135 +1,11 @@
 [workspace]
 global_fragments = ["command-glossary", "operational-awareness"]
 
-[[agent]]
-name = "codex"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "codex"
-max_active_sessions = 5
-min_active_sessions = 0
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-[agent.option_defaults]
-model = "gpt-5.5"
-
-[[agent]]
-name = "kimi-for-coding"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "codex"
-max_active_sessions = 5
-min_active_sessions = 0
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-[agent.option_defaults]
-model = "gpt-5.5"
-
-[[agent]]
-name = "codex"
-dir = "gascity"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "codex"
-max_active_sessions = 5
-min_active_sessions = 0
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-[agent.option_defaults]
-model = "gpt-5.5"
-
-[[agent]]
-name = "kimi-for-coding"
-dir = "gascity"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "codex"
-max_active_sessions = 5
-min_active_sessions = 0
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-[agent.option_defaults]
-model = "gpt-5.5"
-
-[[agent]]
-name = "codex"
-dir = "beads-doltlite"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "codex"
-max_active_sessions = 5
-min_active_sessions = 0
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-[agent.option_defaults]
-model = "gpt-5.5"
-
-[[agent]]
-name = "kimi-for-coding"
-dir = "beads-doltlite"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "codex"
-max_active_sessions = 5
-min_active_sessions = 0
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-[agent.option_defaults]
-agent = "build"
-model = "kimi-for-coding/k2p6"
-
-[[agent]]
-name = "codex"
-dir = "t3code"
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "codex"
-max_active_sessions = 5
-min_active_sessions = 0
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-[agent.option_defaults]
-model = "gpt-5.5"
-
-[[agent]]
-name = "kimi-for-coding"
-dir = "t3code"
-suspended = true
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "codex"
-max_active_sessions = 5
-min_active_sessions = 0
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-[agent.option_defaults]
-agent = "build"
-model = "kimi-for-coding/k2p6"
-
-[[agent]]
-name = "codex"
-dir = "test-rig"
-suspended = true
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "codex"
-max_active_sessions = 5
-min_active_sessions = 0
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-[agent.option_defaults]
-model = "gpt-5.5"
-
-[[agent]]
-name = "kimi-for-coding"
-dir = "test-rig"
-suspended = true
-prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "kimi-for-coding"
-max_active_sessions = 5
-min_active_sessions = 0
-default_sling_formula = "mol-do-work"
-wake_mode = "fresh"
-[agent.option_defaults]
-agent = "build"
-model = "kimi-for-coding/k2p6"
-
 [[rigs]]
 name = "gascity"
 prefix = "gc"
 suspended = true
-includes = ["../../packs/gastown"]
+includes = ["../../packs/doltlite-gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
@@ -147,7 +23,7 @@ suspended = false
 name = "beads-doltlite"
 prefix = "bd"
 suspended = true
-includes = ["../../packs/gastown"]
+includes = ["../../packs/doltlite-gastown"]
 
 [[rigs.overrides]]
 agent = "polecat"
@@ -164,8 +40,7 @@ suspended = true
 [[rigs]]
 name = "t3code"
 prefix = "t3"
-suspended = false
-includes = ["../../packs/gastown", "packs/jj"]
+includes = ["../../packs/doltlite-gastown", "packs/jj"]
 
 [[rigs.overrides]]
 agent = "polecat"
@@ -199,7 +74,7 @@ suspended = false
 name = "test-rig"
 prefix = "tr"
 suspended = true
-includes = ["../../packs/gastown", "packs/jj"]
+includes = ["../../packs/doltlite-gastown", "packs/jj"]
 
 [[rigs.overrides]]
 agent = "polecat"
@@ -372,7 +247,7 @@ model = "gpt-5.5"
 [[patches.agent]]
 dir = "test-rig"
 name = "planner"
-work_dir = ".t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/planner"
+work_dir = "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/planner"
 suspended = false
 provider = "codex"
 nudge = "Check mail, then create or refine stack-shaped work beads."
@@ -385,7 +260,7 @@ model = "gpt-5.5"
 [[patches.agent]]
 dir = "test-rig"
 name = "worker"
-work_dir = ".t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/workers/{{.AgentBase}}"
+work_dir = "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/workers/{{.AgentBase}}"
 suspended = false
 provider = "codex"
 nudge = "Run gc hook; claim one routed work bead, create a JJ workspace, and submit the change."
@@ -400,7 +275,7 @@ model = "gpt-5.5"
 [[patches.agent]]
 dir = "test-rig"
 name = "lander"
-work_dir = ".t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/lander"
+work_dir = "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/lander"
 suspended = false
 provider = "kimi-for-coding"
 nudge = "Run gc prime, inspect submitted JJ changes, and land ready work serially."
@@ -411,7 +286,7 @@ max_active_sessions = 1
 [[patches.agent]]
 dir = "test-rig"
 name = "sentinel"
-work_dir = ".t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/sentinel"
+work_dir = "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/sentinel"
 suspended = false
 provider = "kimi-for-coding"
 nudge = "Run gc prime, inspect JJ workspace health, and repair stuck workflow state."
@@ -474,6 +349,33 @@ backend = "doltlite"
 
 [session]
 provider = "t3bridge"
+
+[orders]
+# T3Code's packaged gastown uses the DoltLite Beads file backend. These
+# mechanical maintenance orders currently run during supervisor startup and
+# some still assume the legacy Dolt SQL-server pack. Keep startup dedicated to
+# bringing T3Bridge-backed agents online; re-enable DoltLite-safe maintenance
+# orders one by one after they are bounded and provider-aware.
+skip = [
+  "beads-health",
+  "cross-rig-deps",
+  "digest-generate",
+  "dolt-health",
+  "dolt-remotes-patrol",
+  "doltlite-compact",
+  "gate-sweep",
+  "mol-dog-backup",
+  "mol-dog-compactor",
+  "mol-dog-doctor",
+  "mol-dog-jsonl",
+  "mol-dog-phantom-db",
+  "mol-dog-reaper",
+  "mol-dog-stale-db",
+  "orphan-sweep",
+  "prune-branches",
+  "spawn-storm-detect",
+  "wisp-compact",
+]
 
 [daemon]
 formula_v2 = true

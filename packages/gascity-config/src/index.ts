@@ -26,6 +26,7 @@ export interface GascityConfigLayout {
   readonly packTomlPath: string;
   readonly packsDir: string;
   readonly gastownPackDir: string;
+  readonly doltliteGastownPackDir: string;
   readonly maintenancePackDir: string;
 }
 
@@ -77,7 +78,8 @@ function hasBundledGascityConfigRoot(candidateRoot: string): boolean {
     existsSync(path.join(candidateRoot, "config", "cities", "gastown", "pack.toml")) &&
     existsSync(path.join(candidateRoot, "config", "cities", "gascity-br", "city.toml")) &&
     existsSync(path.join(candidateRoot, "config", "cities", "gascity-br", "pack.toml")) &&
-    existsSync(path.join(candidateRoot, "config", "packs", "gastown", "pack.toml"))
+    existsSync(path.join(candidateRoot, "config", "packs", "gastown", "pack.toml")) &&
+    existsSync(path.join(candidateRoot, "config", "packs", "doltlite-gastown", "pack.toml"))
   );
 }
 
@@ -150,6 +152,7 @@ function getGascityConfigLayout(rootDir: string, packsRoot?: string): GascityCon
     packTomlPath: path.join(rootDir, "pack.toml"),
     packsDir,
     gastownPackDir: path.join(packsDir, "gastown"),
+    doltliteGastownPackDir: path.join(packsDir, "doltlite-gastown"),
     maintenancePackDir: path.join(packsDir, "maintenance"),
   };
 }
@@ -562,7 +565,7 @@ export function assertBundledGascityConfigPresent(): void {
       layout.cityTomlPath,
       layout.packTomlPath,
     ]),
-    path.join(getBundledGascityConfigLayout().gastownPackDir, "pack.toml"),
+    path.join(getBundledGascityConfigLayout().doltliteGastownPackDir, "pack.toml"),
     path.join(getBundledGascityConfigLayout().maintenancePackDir, "pack.toml"),
   ]) {
     if (!existsSync(requiredPath) || !statSync(requiredPath).isFile()) {

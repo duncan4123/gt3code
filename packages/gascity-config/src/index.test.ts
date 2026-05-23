@@ -135,8 +135,8 @@ describe("@t3tools/gascity-config", () => {
     expect(cityToml).toContain("[[patches.agent]]");
     expect(cityToml).toContain("[[patches.named_session]]");
     expect(cityToml).toContain("[beads]");
-    expect(readFileSync(layout.packTomlPath, "utf8")).toContain("[imports.gastown]");
-    expect(readFileSync(path.join(layout.gastownPackDir, "pack.toml"), "utf8")).toContain(
+    expect(readFileSync(layout.packTomlPath, "utf8")).toContain("[imports.doltlite-gastown]");
+    expect(readFileSync(path.join(layout.doltliteGastownPackDir, "pack.toml"), "utf8")).toContain(
       "../maintenance",
     );
     expect(readFileSync(path.join(layout.maintenancePackDir, "pack.toml"), "utf8")).toContain(
@@ -195,13 +195,17 @@ describe("@t3tools/gascity-config", () => {
     for (const rig of [...gastownRigs, ...gascityBrRigs]) {
       expect(rig.name).toEqual(expect.any(String));
       expect(rig.prefix).toEqual(expect.any(String));
-      expect(rig.suspended).toEqual(expect.any(Boolean));
+      expect(
+        rig.suspended === undefined || typeof rig.suspended === "boolean",
+      ).toBe(true);
       expect(rig.includes).toEqual(expect.arrayContaining([expect.any(String)]));
     }
 
     const testRig = gastownRigs.find((rig) => rig.name === "test-rig");
     const t3JjRig = gascityBrRigs.find((rig) => rig.name === "t3-jj");
-    expect(testRig?.includes).toEqual(expect.arrayContaining(["../../packs/gastown", "packs/jj"]));
+    expect(testRig?.includes).toEqual(
+      expect.arrayContaining(["../../packs/doltlite-gastown", "packs/jj"]),
+    );
     expect(t3JjRig?.includes).toEqual(expect.arrayContaining(["packs/flywheel/all", "packs/jj"]));
 
     const jjAgents = ["planner", "worker", "lander", "sentinel"];
@@ -214,11 +218,9 @@ describe("@t3tools/gascity-config", () => {
         );
         expect(agent.scope).toBe("rig");
         expect(agent.provider).toEqual(expect.any(String));
-        expect(agent.work_dir).toEqual(
-          expect.stringContaining(
-            ".t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents",
-          ),
-        );
+        const expectedJjAgentsRoot =
+          "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents";
+        expect(agent.work_dir).toEqual(expect.stringContaining(expectedJjAgentsRoot));
         expect(agent.wake_mode).toBe("fresh");
         expect(agent.max_active_sessions).toEqual(expect.any(Number));
         const defaults = expectStringRecord(agent.option_defaults);
@@ -269,8 +271,10 @@ describe("@t3tools/gascity-config", () => {
       const cityToml = readFileSync(layout.cityTomlPath, "utf8");
       expect(cityToml).toContain('name = "gascity"');
       expect(cityToml).toContain('name = "beads-doltlite"');
-      expect(readFileSync(layout.packTomlPath, "utf8")).toContain("[imports.gastown]");
-      expect(readFileSync(path.join(layout.gastownPackDir, "pack.toml"), "utf8")).toContain(
+      expect(readFileSync(layout.packTomlPath, "utf8")).toContain(
+        "[imports.doltlite-gastown]",
+      );
+      expect(readFileSync(path.join(layout.doltliteGastownPackDir, "pack.toml"), "utf8")).toContain(
         "../maintenance",
       );
       expect(existsSync(path.join(layout.rootDir, ".gc"))).toBe(false);

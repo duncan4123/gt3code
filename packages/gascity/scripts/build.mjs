@@ -36,7 +36,7 @@ const stampPath = path.join(
 const sourceRoot = resolveSourceRoot();
 const beadsSourceRoot = path.join(repoRoot, "packages", "beads-doltlite", "source");
 const doltliteBuildDir = resolveDoltliteBuildDir();
-const goBuildTags = "libsqlite3";
+const goBuildTags = "libsqlite3,gascity_native_beads";
 const goToolchain = process.env.GOTOOLCHAIN || "go1.26.2+auto";
 
 stopBundledSupervisorsBeforeBuild();

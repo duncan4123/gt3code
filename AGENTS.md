@@ -39,6 +39,40 @@ Long term maintainability is a core priority. If you add new functionality, firs
 - `packages/contracts`: Shared effect/Schema schemas and TypeScript contracts for provider events, WebSocket protocol, and model/session types. Keep this package schema-only — no runtime logic.
 - `packages/shared`: Shared runtime utilities consumed by both server and web. Uses explicit subpath exports (e.g. `@t3tools/shared/git`) — no barrel index.
 
+## Gas City / T3Code Integration Model
+
+This repo is part of a three-fork integration effort:
+
+- `/data/projects/t3code`: T3Code app and JJ workspace. This is where the app is
+  run from and where package artifacts are consumed.
+- `/data/projects/gascity`: our Gas City fork. It owns GC runtime, T3Bridge,
+  agents, convoys, packs, and orchestration behavior.
+- `/data/projects/beads-doltlite`: our Beads fork. It owns the DoltLite Beads
+  backend, storage/schema behavior, and `bd` semantics used by Gas City.
+
+`packages/gascity/source` and `packages/beads-doltlite/source` are copied source
+artifacts, not authoritative history. Their source-of-truth metadata lives in:
+
+- `packages/gascity/source.sync.json`
+- `packages/beads-doltlite/source.sync.json`
+
+When debugging missing behavior or regressions, compare all three boundaries:
+
+1. upstream repo -> our fork branch
+2. our fork branch -> packaged source copy
+3. packaged source copy -> current T3Code JJ stack / `live/current`
+
+Do not assume missing behavior is new work. We have repeatedly lost features
+during upstream syncs and package-copy updates. Before reimplementing behavior,
+search the relevant fork's branches, remotes, and checkpoint refs for older
+working code, especially DoltLite, T3Bridge, convoy, pool-agent, session, and
+package-sync changes.
+
+Keep fork features easy to replay on new upstreams. Prefer small, well-named
+commits and fork-owned files/adapters over broad edits to upstream-owned code.
+When upstream structure changes, port the fork behavior into the new upstream
+shape instead of preserving stale architecture.
+
 ## Codex App Server (Important)
 
 T3 Code is currently Codex-first. The server starts `codex app-server` (JSON-RPC over stdio) per provider session, then streams structured events to the browser through WebSocket push messages.
@@ -156,80 +190,7 @@ When a feature is broken or missing after an upstream merge:
 **BEADS ↔ T3 Code:**
 - Issue tracking via `bd` CLI
 - Dolt database for persistent structured memory
-- Integration markers in this file (`<!-- BEGIN BEADS INTEGRATION -->`)
-
-**DoltLite ↔ BEADS:**
-- `packages/doltlite/` provides the embedded Dolt database
-- `packages/beads-doltlite/` uses DoltLite for issue storage
-
-### Development Setup
-
-```bash
-bun install .
-bun run build:gascity-tools
-bun gascity:install
-bun gascity:start
-bun dev
-```
-
-Runtime paths (development):
-- T3 Code data: `./.t3-dev`
-- GasCity supervisor/runtime: `./.t3-dev/gascity`
-- GasCity worktrees: `./.t3-dev/worktrees`
-- Bundled city config: `./packages/gascity-config/config/cities/*`
-
-All bundled GasCity paths are derived from the T3 Code install root. The app must not read `~/.gc`, another checkout's `.t3-dev`, or a machine-global supervisor registry.
-
-### Jujutsu (jj) Configuration
-
-```bash
-jj config set --repo git.fetch '["upstream", "origin"]'
-jj config set --repo git.push origin
-jj bookmark track main --remote=origin
-jj bookmark untrack main --remote=upstream
-jj config set --repo 'revset-aliases."trunk()"' main@origin
-```
-
-### Working with History
-
-This repo uses **Jujutsu (jj)**, not vanilla git. Key commands:
-
-```bash
-jj status                    # Working copy status
-jj log --limit 20            # Recent history
-jj diff                      # Current changes
-jj bookmark list --all-remotes  # All branches/bookmarks
-jj show <change-id>          # Show a specific change
-jj restore --from <change-id> -- path/to/file  # Restore a file from history
-jj op log --limit 20         # Operation log (for recovery)
-jj op undo <operation-id>    # Undo an operation
-```
-
-**Agent workspace safety:** See `docs/jj-agent-workspace-safety.md`
-
-### Code Ownership Guidelines
-
-When adding features:
-
-1. **Check if upstream T3 Code has a similar feature** — if so, study how they implement it and hook into their patterns rather than reinventing
-2. **Put fork-specific code in our own packages** — prefer `packages/gascity-config/`, `packages/gascity/src/`, or new files in `apps/server/src/gc/` over modifying upstream server files
-3. **Minimize edits to upstream files** — if you must modify upstream code, keep the change as small as possible and document why it's needed
-4. **Use adapters and composition** — create adapter layers (e.g., `apps/server/src/gc/Layers/`) rather than inline modifications
-5. **Test upstream compatibility** — after making changes, verify that the core T3 Code functionality still works without GasCity/BEADS enabled
-
-### Recovering from Upstream Integration Loss
-
-When upstream integration destroys our features:
-
-1. Identify the feature that was lost
-2. Search `jj log --all` for commits/bookmarks matching the feature name
-3. Check rescue bookmarks (`rescue/*`) and snapshot branches
-4. Diff the old working version against current to see what was lost
-5. Re-apply the feature using the **new-file pattern** — extract the logic into a fork-owned file rather than re-modifying upstream files the same way
-6. Document the recovery in the commit message for future reference
-
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
-
+- Integration markers in this file (`<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
 ## Beads Issue Tracker
 
 This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
@@ -248,7 +209,8 @@ bd close <id>         # Complete work
 - Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-- For controller or session reconciler incidents, use `gc trace` and follow `engdocs/contributors/reconciler-debugging.md` for the artifact collection workflow.
+
+**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
 
 ## Session Completion
 
@@ -262,7 +224,6 @@ bd close <id>         # Complete work
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd dolt push
    git push
    git status  # MUST show "up to date with origin"
    ```
@@ -271,7 +232,6 @@ bd close <id>         # Complete work
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
-
 - Work is NOT complete until `git push` succeeds
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push

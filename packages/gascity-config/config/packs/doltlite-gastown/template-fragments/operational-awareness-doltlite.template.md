@@ -70,6 +70,37 @@ gc mail send mayor -s "Doltlite: <describe symptom>" -m "<paste evidence>"
 
 **Do NOT invent `gc dolt ...` commands when running in doltlite mode.**
 
+### Three-Repo Integration Boundary
+
+This work is not just a package edit. It is an integration between:
+
+- `/data/projects/t3code`: the runnable T3Code app, JJ workflow, and copied
+  package artifacts
+- `/data/projects/gascity`: our Gas City fork, including T3Bridge, agents,
+  convoys, packs, runtime/session behavior, and `gc`
+- `/data/projects/beads-doltlite`: our Beads fork, including the DoltLite
+  backend, storage/schema behavior, and `bd`
+
+`packages/gascity/source` and `packages/beads-doltlite/source` are copied
+artifacts. They must be compared with their declared source repos in
+`source.sync.json`; do not treat the package copy as authoritative history.
+
+For regressions or missing features, compare three deltas before implementing:
+
+1. upstream -> our fork branch
+2. our fork branch -> packaged source
+3. packaged source -> current T3Code JJ stack / live app
+
+Older branches, remote refs, and `refs/t3/checkpoints/...` may already contain
+working code for the behavior being repaired. Search the relevant fork history
+before recreating DoltLite, T3Bridge, pool-agent, convoy, session, or package
+sync behavior.
+
+Keep changes easy to rebase onto upstream. Prefer fork-owned adapters, narrow
+new files, and explicit source-sync notes over broad edits to upstream-owned
+surfaces. If upstream refactors a subsystem, port our behavior to the new
+upstream shape and document the mapping.
+
 ### Communication: Nudge First, Mail Rarely
 
 Every `gc mail send` creates a permanent bead with a Dolt commit. `gc nudge`

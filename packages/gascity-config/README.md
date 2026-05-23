@@ -3,7 +3,7 @@
 Bundled Gas City configuration for T3Code.
 
 This package ships the active T3Code Gas City: `city.toml`, root `pack.toml`,
-the Gastown pack, and the maintenance pack it depends on. In development,
+the DoltLite-aware Gastown pack, and the maintenance pack it depends on. In development,
 launchers should pass this package's config directory directly to `gc --city`.
 Runtime-local state may be created next to it, but is ignored by Git.
 
@@ -27,6 +27,6 @@ and Gastown-created worktrees share one root. Gastown templates use
 `{{.WorktreesRoot}}/gascity/...` for mutating rig agents.
 
 `materializeGascityRuntime` also seeds `city/.beads/config.yaml` with the local
-beads issue prefix. It does not set Dolt lifecycle or port options; GC owns
-those runtime details.
+beads issue prefix. Gastown uses the embedded DoltLite beads backend; it should
+not propagate legacy Dolt server lifecycle or port options.
 Pass `seedLocalBeadsConfig: false` only when the launcher owns that setup.

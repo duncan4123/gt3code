@@ -213,78 +213,68 @@ Close this step after assessment."""
 
 [[steps]]
 id = "dolt-health"
-title = "Run Dolt data-plane health check"
+title = "Run DoltLite data-plane health check"
 needs = ["utility-agent-health"]
 description = """
-Run `gc dolt health --json` to inspect the Dolt data plane and flag anomalies.
+Inspect the embedded DoltLite beads data plane and flag anomalies.
 
 This step surfaces problems that individual patrol steps won't catch:
-commit bloat (compactor dog may have failed), stale backups (backup dog
-may have failed), orphan databases, and zombie Dolt server processes.
+slow or failing beads commands, missing store metadata, and stale backend
+configuration that points agents back at the old Dolt server mode.
 
-**Step 1: Run the health check**
+**Step 1: Run bounded health checks**
 ```bash
-gc dolt health --json
+gc service list
+gc service doctor
+gc doctor
+bd list --json --limit=1
 ```
 
-Parse the JSON output (HealthReport schema):
-- `server`: running, pid, port, latency_ms
-- `databases[]`: name, commits, open_beads
-- `backups`: dolt_freshness, dolt_age_seconds, dolt_stale
-- `processes`: zombie_count, zombie_pids
-- `orphans[]`: name, size
+For each configured rig, also verify the rig-local beads view:
+```bash
+gc --rig <rig> bd list --json --limit=1
+```
+
+Inspect each `.beads/metadata.json` store and confirm:
+- `backend` is `doltlite`
+- `database` is `doltlite`
+- `dolt_mode` is `embedded`
+- no legacy Dolt server host/port state is being propagated
 
 **Step 2: Evaluate thresholds**
 
 | Signal | Threshold | Meaning |
 |--------|-----------|---------|
-| `server.running == false` | — | Dolt server is down (CRITICAL) |
-| `server.latency_ms > 5000` | 5 s | Server may be overloaded |
-| `databases[].commits > 50000` | 50 k | Compactor dog may have stalled |
-| `backups.dolt_stale == true` | >30 min | Backup dog may have failed |
-| `processes.zombie_count > 0` | any | Zombie Dolt servers detected |
-| `orphans` non-empty | any | Orphan databases accumulating |
+| `bd list` fails or hangs | >5 s | DoltLite store/open path is unhealthy |
+| `gc --rig <rig> bd list` fails | any rig | Rig store propagation is broken |
+| metadata backend is not `doltlite` | any store | Wrong backend selected |
+| metadata mode is not `embedded` | any store | Old server-mode assumptions leaked |
+| docs/prompts mention Dolt server for active pack | any active file | Agent guidance is stale |
 
 **Step 3: React to alerts**
 
-**Server down (CRITICAL):**
+**DoltLite store unavailable (CRITICAL):**
 ```bash
-gc mail send mayor/ -s "ESCALATION: Dolt server unreachable [CRITICAL]" \\
-  -m "gc dolt health reports server not running"
+gc mail send mayor/ -s "ESCALATION: DoltLite beads unavailable [CRITICAL]" \\
+  -m "bd/gc beads checks failed; include gc service doctor and gc doctor output"
 ```
 
-**Commit bloat (commits > 50k in any DB):**
-The compactor dog (`mol-dog-compactor`) may have failed. Log for awareness.
-If the compactor order is configured, it will self-dispatch. Otherwise
-nudge the dog pool:
+**Rig store propagation broken:**
+Nudge the dog pool with the exact rig and failing command:
 ```bash
-gc nudge dog/ "Compactor needed: <db_name> has <count> commits"
+gc nudge dog/ "DoltLite rig store check failed for <rig>: <command/result>"
 ```
 
-**Stale backups:**
-The backup dog (`mol-dog-backup`) may have failed. Same pattern — log and
-nudge if order hasn't self-healed:
-```bash
-gc nudge dog/ "Backup needed: dolt backup is <age> old"
-```
-
-**Zombie processes:**
-Kill zombie Dolt servers not on the expected port:
-```bash
-kill <zombie_pid>
-```
-
-**Orphan DBs:**
-Run cleanup:
-```bash
-gc dolt cleanup
-```
-If orphan count exceeds safety limit, escalate to mayor.
+**Stale active guidance:**
+File a real work bead against the pack/config source. Include the file path and
+the stale sentence, then route it through the normal convoy workflow.
 
 **If everything is healthy:**
-Log `Dolt health: OK` and move on.
+Log `DoltLite health: OK` and move on.
 
-**Exit criteria:** Health check run, alerts handled or escalated."""
+**Do not run or recommend `gc dolt ...` commands in this DoltLite city.**
+
+**Exit criteria:** Health checks run, metadata verified, alerts handled or escalated."""
 
 [[steps]]
 id = "system-health"

@@ -2175,6 +2175,29 @@ func TestBdStoreSetMetadata(t *testing.T) {
 	}
 }
 
+func TestBdStoreSetMetadataDisablesAutoCommitForDoltlite(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".beads"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".beads", "metadata.json"), []byte(`{"backend":"doltlite"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var gotArgs []string
+	runner := func(_, _ string, args ...string) ([]byte, error) {
+		gotArgs = args
+		return nil, nil
+	}
+	s := beads.NewBdStore(dir, runner)
+	if err := s.SetMetadata("bd-42", "merge_strategy", "mr"); err != nil {
+		t.Fatal(err)
+	}
+	wantArgs := "--dolt-auto-commit off update --json bd-42 --set-metadata merge_strategy=mr"
+	if strings.Join(gotArgs, " ") != wantArgs {
+		t.Errorf("args = %q, want %q", strings.Join(gotArgs, " "), wantArgs)
+	}
+}
+
 func TestBdStoreSetMetadataError(t *testing.T) {
 	runner := func(_, _ string, _ ...string) ([]byte, error) {
 		return nil, fmt.Errorf("exit status 1")

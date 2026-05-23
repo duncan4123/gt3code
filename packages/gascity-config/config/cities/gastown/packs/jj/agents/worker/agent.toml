@@ -3,7 +3,7 @@ provider = "codex"
 option_defaults = { model = "gpt-5.5" }
 wake_mode = "fresh"
 is_pool = true
-work_dir = ".t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/workers/{{.AgentBase}}"
+work_dir = "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/workers/{{.AgentBase}}"
 nudge = "Run gc hook; claim one routed work bead, create a JJ workspace, and submit the change."
 default_sling_formula = "mol-jj-worker-work"
 idle_timeout = "2h"

@@ -1162,6 +1162,7 @@ func removedLabels(original, current []string) []string {
 
 func (s *BdStore) runBDTransientWrite(args ...string) error {
 	var err error
+	args = s.bdTransientWriteArgs(args)
 	for attempt := 1; attempt <= bdTransientWriteAttempts; attempt++ {
 		_, err = s.runner(s.dir, "bd", args...)
 		if err == nil || !isBdTransientWriteError(err) || attempt == bdTransientWriteAttempts {
@@ -1172,6 +1173,31 @@ func (s *BdStore) runBDTransientWrite(args ...string) error {
 	return err
 }
 
+func (s *BdStore) bdTransientWriteArgs(args []string) []string {
+	if !s.isDoltliteBackend() {
+		return args
+	}
+	out := make([]string, 0, len(args)+2)
+	out = append(out, "--dolt-auto-commit", "off")
+	out = append(out, args...)
+	return out
+}
+
+func (s *BdStore) isDoltliteBackend() bool {
+	metaPath := filepath.Join(s.dir, ".beads", "metadata.json")
+	data, err := os.ReadFile(metaPath)
+	if err != nil {
+		return false
+	}
+	var meta struct {
+		Backend string `json:"backend"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(meta.Backend), "doltlite")
+}
+
 func isBdTransientWriteError(err error) bool {
 	if err == nil {
 		return false
@@ -1179,6 +1205,7 @@ func isBdTransientWriteError(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "Error 1213 (40001): serialization failure") ||
 		strings.Contains(msg, "this transaction conflicts with a committed transaction") ||
+		strings.Contains(msg, "failed to prepare catalog") ||
 		strings.Contains(msg, "i/o timeout") ||
 		strings.Contains(msg, "invalid connection") ||
 		strings.Contains(msg, "bad connection") ||

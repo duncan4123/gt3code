@@ -1,14 +1,11 @@
 [pack]
 name = "gascity-br"
+version = ""
 schema = 2
 
+[imports]
 [imports.flywheel]
 source = "packs/flywheel/all"
-
-[[agent]]
-name = "mayor"
-suspended = true
-prompt_template = "agents/mayor/prompt.template.md"
 
 [[named_session]]
 template = "mayor"

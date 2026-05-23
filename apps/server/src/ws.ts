@@ -123,6 +123,40 @@ function wsUrlPort(wsUrl: string | undefined): number | undefined {
   }
 }
 
+function wsUrlHost(wsUrl: string | undefined): string | undefined {
+  if (!wsUrl) {
+    return undefined;
+  }
+  try {
+    return new URL(wsUrl).hostname || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isLoopbackHost(host: string | undefined): boolean | undefined {
+  if (!host) {
+    return undefined;
+  }
+  return host === "localhost" || host === "::1" || host.startsWith("127.");
+}
+
+function looksLikeTailscaleHost(host: string | undefined): boolean | undefined {
+  if (!host) {
+    return undefined;
+  }
+  const lower = host.toLowerCase();
+  if (lower.endsWith(".ts.net")) {
+    return true;
+  }
+  const match = lower.match(/^100\.(\d{1,3})\./u);
+  if (!match) {
+    return false;
+  }
+  const secondOctet = Number(match[1]);
+  return secondOctet >= 64 && secondOctet <= 127;
+}
+
 function checkTcpListening(port: number | undefined): {
   readonly reachable?: boolean;
   readonly error?: string;
@@ -154,6 +188,50 @@ function currentGitBranch(cwd: string): string | undefined {
   });
   const branch = result.status === 0 ? result.stdout.trim() : "";
   return branch || undefined;
+}
+
+function readBeadStoreDiagnostics(label: string, rootDir: string) {
+  const beadsPath = path.join(rootDir, ".beads");
+  const metadataPath = path.join(beadsPath, "metadata.json");
+  const result: {
+    label: string;
+    path: string;
+    metadataPath: string;
+    exists: boolean;
+    backend?: string;
+    mode?: string;
+    database?: string;
+    doltDatabase?: string;
+    error?: string;
+  } = {
+    label,
+    path: beadsPath,
+    metadataPath,
+    exists: existsSync(beadsPath),
+  };
+  if (!existsSync(metadataPath)) {
+    return result;
+  }
+  try {
+    const raw = JSON.parse(readFileSync(metadataPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    const stringValue = (key: string) =>
+      typeof raw[key] === "string" ? raw[key] : undefined;
+    const backend = stringValue("backend");
+    const mode = stringValue("dolt_mode");
+    const database = stringValue("database");
+    const doltDatabase = stringValue("dolt_database");
+    if (backend) result.backend = backend;
+    if (mode) result.mode = mode;
+    if (database) result.database = database;
+    if (doltDatabase) result.doltDatabase = doltDatabase;
+  } catch (error) {
+    result.error =
+      error instanceof Error ? error.message : "Failed to read metadata.json";
+  }
+  return result;
 }
 
 function discoverGascityProcesses(input: {
@@ -273,7 +351,13 @@ function discoverGascityProcesses(input: {
   };
 }
 
-function makeGascityDiagnostics(cwd: string) {
+function makeGascityDiagnostics(config: {
+  readonly cwd: string;
+  readonly stateDir: string;
+  readonly tailscaleServeEnabled: boolean;
+  readonly tailscaleServePort: number;
+}) {
+  const cwd = config.cwd;
   const runtimeHome =
     process.env.T3CODE_GASCITY_HOME?.trim() ||
     process.env.GC_HOME?.trim() ||
@@ -305,6 +389,9 @@ function makeGascityDiagnostics(cwd: string) {
     : hintT3WsUrl
       ? "ws-url"
       : undefined;
+  const t3WsHost = wsUrlHost(t3WsUrl);
+  const t3WsIsLoopback = isLoopbackHost(t3WsHost);
+  const t3WsLooksLikeTailscale = looksLikeTailscaleHost(t3WsHost);
   const t3ServerPort = wsUrlPort(t3WsUrl);
   const t3WsReachability = checkTcpListening(t3ServerPort);
   const worktreesDir =
@@ -317,6 +404,19 @@ function makeGascityDiagnostics(cwd: string) {
     process.env.BD_BIN?.trim() || path.join(runtimeHome, "bin", "bd");
   const brBin =
     process.env.BR_BIN?.trim() || path.join(runtimeHome, "bin", "br");
+  const projectionDbPath = path.join(config.stateDir, "state-proj.sqlite");
+  const nativeDoltliteBeads = process.env.GC_NATIVE_DOLTLITE_BEADS?.trim();
+  const beadsBackend =
+    process.env.GC_BEADS_BACKEND?.trim() || process.env.BEADS_BACKEND?.trim();
+  const doltliteLibrary = process.env.DOLTLITE_LIBRARY?.trim();
+  const ldLibraryPath = process.env.LD_LIBRARY_PATH?.trim();
+  const beadStoreRoots = [
+    ["app", cwd],
+    ...(cityPath && cityPath !== cwd ? ([["city", cityPath]] as const) : []),
+    ["packaged beads-doltlite", path.join(cwd, "packages", "beads-doltlite")],
+    ["packaged gascity", path.join(cwd, "packages", "gascity")],
+    ["gascity source", path.resolve(cwd, "..", "gascity")],
+  ] as const;
   const processScan = discoverGascityProcesses({
     runtimeHome,
     gcBin,
@@ -342,6 +442,13 @@ function makeGascityDiagnostics(cwd: string) {
     ...(t3Home ? { t3Home } : {}),
     ...(t3WsUrl ? { t3WsUrl } : {}),
     ...(t3WsUrlSource ? { t3WsUrlSource } : {}),
+    ...(t3WsHost ? { t3WsHost } : {}),
+    ...(typeof t3WsIsLoopback === "boolean"
+      ? { t3WsIsLoopback }
+      : {}),
+    ...(typeof t3WsLooksLikeTailscale === "boolean"
+      ? { t3WsLooksLikeTailscale }
+      : {}),
     ...(typeof t3ServerPort === "number" ? { t3ServerPort } : {}),
     ...(typeof t3WsReachability.reachable === "boolean"
       ? {
@@ -352,7 +459,18 @@ function makeGascityDiagnostics(cwd: string) {
     ...(t3WsReachability.error
       ? { t3WsReachabilityError: t3WsReachability.error }
       : {}),
+    tailscaleServeEnabled: config.tailscaleServeEnabled,
+    tailscaleServePort: config.tailscaleServePort,
     ...(worktreesDir ? { worktreesDir } : {}),
+    projectionDbPath,
+    projectionDbExists: existsSync(projectionDbPath),
+    ...(nativeDoltliteBeads ? { nativeDoltliteBeads } : {}),
+    ...(beadsBackend ? { beadsBackend } : {}),
+    ...(doltliteLibrary ? { doltliteLibrary } : {}),
+    ...(ldLibraryPath ? { ldLibraryPath } : {}),
+    beadStores: beadStoreRoots.map(([label, root]) =>
+      readBeadStoreDiagnostics(label, root),
+    ),
     processes: processScan.processes,
     ...(processScan.error ? { processScanError: processScan.error } : {}),
   } as const;
@@ -692,7 +810,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         environment,
         auth,
         cwd: config.cwd,
-        gascity: makeGascityDiagnostics(config.cwd),
+        gascity: makeGascityDiagnostics(config),
         keybindingsConfigPath: config.keybindingsConfigPath,
         keybindings: keybindingsConfig.keybindings,
         issues: keybindingsConfig.issues,

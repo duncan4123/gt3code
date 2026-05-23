@@ -307,7 +307,8 @@ func isRetryableConcurrencyError(err error) bool {
 	return strings.Contains(msg, "sqlite_busy") ||
 		strings.Contains(msg, "database is locked") ||
 		strings.Contains(msg, "another connection committed") ||
-		strings.Contains(msg, "please retry your transaction")
+		strings.Contains(msg, "please retry your transaction") ||
+		strings.Contains(msg, "failed to prepare catalog")
 }
 
 // initSchema creates the database (if needed) and runs all pending migrations,

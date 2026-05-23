@@ -48,4 +48,21 @@ Town ({{ .CityRoot }})
 - **Dog**: Utility agent pool (shutdown dance, warrants)
 - **Beads**: Issue tracking system shared by all rig agents
 - **Molecule**: Multi-step formula instance guiding an agent's work
+
+### T3Code Integration Source Model
+
+Gastown is used to develop a three-repo integration:
+
+- T3Code app and JJ workflow: `/data/projects/t3code`
+- Gas City fork source: `/data/projects/gascity`
+- Beads + DoltLite fork source: `/data/projects/beads-doltlite`
+
+The T3Code package source directories are copied artifacts from the fork repos,
+not the source of truth. Before changing integration behavior, identify whether
+the behavior belongs in T3Code, Gas City, Beads/DoltLite, or the packaging layer
+between them.
+
+When reconciling with upstream, keep the fork delta small and portable. Prefer
+fork-owned extension points and adapters so future upstream pulls are simple to
+audit and replay.
   {{ end }}

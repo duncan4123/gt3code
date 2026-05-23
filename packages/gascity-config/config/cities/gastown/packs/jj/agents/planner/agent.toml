@@ -2,7 +2,7 @@ scope = "rig"
 provider = "codex"
 option_defaults = { model = "gpt-5.5" }
 wake_mode = "fresh"
-work_dir = ".t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/planner"
+work_dir = "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/planner"
 nudge = "Check mail, then create or refine stack-shaped work beads."
 idle_timeout = "1h"
 max_active_sessions = 1

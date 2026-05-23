@@ -51,7 +51,7 @@ func hookScript(eventType string) string {
 GC_BIN="${GC_BIN:-gc}"
 HOOK_LOG="${BEADS_DIR:-.beads}/hooks.log"
 DATA=$(cat)
-PAYLOAD=$(printf '{"bead":%%s}' "$DATA")
+PAYLOAD='{"bead":'"$DATA"'}'
 title=$(echo "$DATA" | grep -o '"title":"[^"]*"' | head -1 | cut -d'"' -f4)
 (
   "$GC_BIN" event emit %[2]s --subject "$1" --message "$title" --payload "$PAYLOAD" 2>>"$HOOK_LOG" \
@@ -92,7 +92,7 @@ func closeHookScript() string {
 GC_BIN="${GC_BIN:-gc}"
 HOOK_LOG="${BEADS_DIR:-.beads}/hooks.log"
 DATA=$(cat)
-PAYLOAD=$(printf '{"bead":%%s}' "$DATA")
+PAYLOAD='{"bead":'"$DATA"'}'
 title=$(echo "$DATA" | grep -o '"title":"[^"]*"' | head -1 | cut -d'"' -f4)
 (
   "$GC_BIN" event emit bead.closed --subject "$1" --message "$title" --payload "$PAYLOAD" 2>>"$HOOK_LOG" \
