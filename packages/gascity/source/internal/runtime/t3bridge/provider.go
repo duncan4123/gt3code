@@ -1001,7 +1001,7 @@ func (p *Provider) nextCommandID(prefix string) string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.reqSeq++
-	return fmt.Sprintf("%s-%d", prefix, p.reqSeq)
+	return fmt.Sprintf("%s-%d-%s", prefix, p.reqSeq, uuid.NewString())
 }
 
 // rpcCreateWorktree calls git.createWorktree via WebSocket. Returns (worktreePath, branch, error).
@@ -1319,6 +1319,7 @@ func threadHasRequiredGCMetadata(snapshot map[string]interface{}, threadID strin
 func (p *Provider) waitForThreadGCMetadata(threadID string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
+		p.clearSnapshotCache()
 		snapshot, err := p.rpcSnapshot()
 		if err == nil && threadHasRequiredGCMetadata(snapshot, threadID) {
 			return nil
@@ -1381,13 +1382,20 @@ func buildThreadEnv(env map[string]string) map[string]string {
 			threadEnv[key] = value
 		}
 	}
-	if host := threadEnv["GC_DOLT_HOST"]; host != "" {
-		threadEnv["BEADS_DOLT_SERVER_HOST"] = host
-	}
-	if port := threadEnv["GC_DOLT_PORT"]; port != "" {
-		threadEnv["BEADS_DOLT_PORT"] = port
-		threadEnv["BEADS_DOLT_SERVER_PORT"] = port
-		threadEnv["BEADS_DOLT_SERVER_MODE"] = "1"
+	if strings.EqualFold(threadEnv["GC_BEADS_BACKEND"], "doltlite") || strings.EqualFold(env["BEADS_BACKEND"], "doltlite") || strings.EqualFold(threadEnv["GC_NATIVE_DOLTLITE_BEADS"], "true") {
+		for _, key := range []string{
+			"GC_DOLT_HOST",
+			"GC_DOLT_PORT",
+			"GC_DOLT_SERVER_PORT",
+			"BEADS_DOLT_PORT",
+			"BEADS_DOLT_SERVER_HOST",
+			"BEADS_DOLT_SERVER_MODE",
+			"BEADS_DOLT_SERVER_PORT",
+			"BEADS_DOLT_SHARED_SERVER",
+		} {
+			delete(threadEnv, key)
+		}
+		return threadEnv
 	}
 	delete(threadEnv, "BEADS_DOLT_SHARED_SERVER")
 	return threadEnv
@@ -1442,14 +1450,17 @@ func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state string, se
 		if encodedEnv, err := json.Marshal(sessionEnv); err == nil {
 			meta["gc.sessionEnv"] = string(encodedEnv)
 		}
-		if port := sessionEnv["GC_DOLT_PORT"]; port != "" {
+		if port := sessionEnv["GC_DOLT_PORT"]; port != "" && !strings.EqualFold(sessionEnv["GC_BEADS_BACKEND"], "doltlite") && !strings.EqualFold(sessionEnv["BEADS_BACKEND"], "doltlite") {
 			meta["gc.doltPort"] = port
 		}
 	}
 	for key, value := range meta {
-		if str, ok := value.(string); ok && str == "" {
+		str := strings.TrimSpace(fmt.Sprint(value))
+		if str == "" {
 			delete(meta, key)
+			continue
 		}
+		meta[key] = str
 	}
 	return meta
 }
@@ -2087,7 +2098,12 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 				Model:       modelName,
 			}
 			p.setRecentStart(name, time.Now())
-			_ = p.dispatchThreadMeta(threadID, buildGCMetadata(envelope, providerName, "active", buildThreadEnv(cfg.Env)))
+			if err := p.dispatchThreadMeta(threadID, buildGCMetadata(envelope, providerName, "active", buildThreadEnv(cfg.Env))); err != nil {
+				return fail(fmt.Errorf("t3bridge: update gc metadata: %w", err))
+			}
+			if err := p.waitForThreadGCMetadata(threadID, 5*time.Second); err != nil {
+				return fail(err)
+			}
 			if worktreePath != "" {
 				_ = p.rpcUpdateThreadMeta(threadID, worktreeBranch, worktreePath)
 			}
@@ -2157,7 +2173,15 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	}
 	p.setRecentStart(name, time.Now())
 	fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) writing gc metadata thread=%s\n", name, threadID) //nolint:errcheck
-	_ = p.dispatchThreadMeta(threadID, initialGCMetadata)
+	p.clearSnapshotCache()
+	if err := p.waitForThreadGCMetadata(threadID, 5*time.Second); err != nil {
+		if err := p.dispatchThreadMeta(threadID, initialGCMetadata); err != nil {
+			return fail(fmt.Errorf("t3bridge: update gc metadata: %w", err))
+		}
+		if waitErr := p.waitForThreadGCMetadata(threadID, 5*time.Second); waitErr != nil {
+			return fail(waitErr)
+		}
+	}
 	_ = p.dispatchActivity(threadID, "gc.session.started", "GC session started", "info", map[string]interface{}{
 		"agent":       envelope.GC.Agent,
 		"rig":         envelope.GC.RigName,

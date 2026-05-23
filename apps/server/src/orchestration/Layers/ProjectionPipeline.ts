@@ -584,7 +584,10 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             pendingApprovalCount: 0,
             pendingUserInputCount: 0,
             hasActionableProposedPlan: 0,
-            customMetadata: "{}",
+            customMetadata:
+              event.payload.customMetadata !== undefined
+                ? JSON.stringify(event.payload.customMetadata)
+                : "{}",
             deletedAt: null,
           });
           return;

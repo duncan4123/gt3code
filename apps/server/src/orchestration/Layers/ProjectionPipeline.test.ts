@@ -102,6 +102,10 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           runtimeMode: "full-access",
           branch: null,
           worktreePath: null,
+          customMetadata: {
+            "gc.agent": "t3code/worker",
+            "gc.sessionName": "worker-ga-test",
+          },
           createdAt: now,
           updatedAt: now,
         },
@@ -156,6 +160,25 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         FROM projection_thread_messages
       `;
       assert.deepEqual(messageRows, [{ messageId: "message-1", text: "hello" }]);
+
+      const threadRows = yield* sql<{
+        readonly threadId: string;
+        readonly customMetadata: string;
+      }>`
+        SELECT
+          thread_id AS "threadId",
+          custom_metadata AS "customMetadata"
+        FROM projection_threads
+      `;
+      assert.deepEqual(threadRows, [
+        {
+          threadId: "thread-1",
+          customMetadata: JSON.stringify({
+            "gc.agent": "t3code/worker",
+            "gc.sessionName": "worker-ga-test",
+          }),
+        },
+      ]);
 
       const stateRows = yield* sql<{
         readonly projector: string;
