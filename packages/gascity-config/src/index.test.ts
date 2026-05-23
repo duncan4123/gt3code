@@ -222,11 +222,11 @@ describe("@t3tools/gascity-config", () => {
         expect(agent.wake_mode).toBe("fresh");
         expect(agent.max_active_sessions).toEqual(expect.any(Number));
         const defaults = expectStringRecord(agent.option_defaults);
-        expect(defaults.model).toBe(
-          agent.provider === "kimi-for-coding" ? "kimi-for-coding/k2p6" : "gpt-5.5",
-        );
         if (agent.provider === "kimi-for-coding") {
-          expect(defaults.agent).toBe("build");
+          expect(defaults.model).toBeUndefined();
+          expect(defaults.agent).toBeUndefined();
+        } else {
+          expect(defaults.model).toBe("gpt-5.5");
         }
       }
       const worker = tomlSection(

@@ -407,8 +407,6 @@ nudge = "Run gc prime, inspect submitted JJ changes, and land ready work seriall
 idle_timeout = "2h"
 wake_mode = "fresh"
 max_active_sessions = 1
-[patches.agent.option_defaults]
-model = "gpt-5.5"
 
 [[patches.agent]]
 dir = "test-rig"
@@ -420,8 +418,6 @@ nudge = "Run gc prime, inspect JJ workspace health, and repair stuck workflow st
 idle_timeout = "1h"
 wake_mode = "fresh"
 max_active_sessions = 1
-[patches.agent.option_defaults]
-model = "gpt-5.5"
 
 [[patches.agent]]
 dir = "t3code"
