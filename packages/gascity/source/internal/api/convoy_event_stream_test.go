@@ -100,9 +100,7 @@ func TestProjectWorkflowEventUsesRootStoreRefHint(t *testing.T) {
 		t.Fatalf("Create(child): %v", err)
 	}
 
-	payload, err := json.Marshal(struct {
-		Bead beads.Bead `json:"bead"`
-	}{Bead: child})
+	payload, err := json.Marshal(child)
 	if err != nil {
 		t.Fatalf("Marshal(child): %v", err)
 	}

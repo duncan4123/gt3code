@@ -2,13 +2,13 @@
 title: "GC Import Launch Implementation Plan"
 ---
 
-| Field     | Value                           |
-| --------- | ------------------------------- |
-| Status    | In Progress                     |
-| Date      | 2026-04-19                      |
-| Author(s) | Codex                           |
-| Issue     | `ga-nv693`                      |
-| Scope     | PackV2 `gc import` launch sweep |
+| Field | Value |
+|---|---|
+| Status | In Progress |
+| Date | 2026-04-19 |
+| Author(s) | Codex |
+| Issue | `ga-nv693` |
+| Scope | PackV2 `gc import` launch sweep |
 
 ## Summary
 
@@ -71,7 +71,6 @@ behavior. `D` lands after the code paths are real.
 work during load.
 
 **Acceptance criteria:**
-
 - `gc start`, `gc config show`, `gc config explain`, and supervisor city
   load do not fetch remote packs implicitly
 - missing remote import state fails with actionable remediation text
@@ -79,7 +78,6 @@ work during load.
   schema-2 code paths
 
 **Likely files:**
-
 - `cmd/gc/cmd_start.go`
 - `cmd/gc/cmd_config.go`
 - `cmd/gc/cmd_supervisor.go`
@@ -92,7 +90,6 @@ work during load.
 first-time bootstrap and stale/missing cache repair.
 
 **Acceptance criteria:**
-
 - existing `packs.lock` restores cache/install state
 - missing `packs.lock` resolves declared remote imports, writes
   `packs.lock`, and installs them
@@ -100,7 +97,6 @@ first-time bootstrap and stale/missing cache repair.
 - error text distinguishes offline/bootstrap failure cleanly
 
 **Likely files:**
-
 - `internal/packman/install.go`
 - `internal/packman/lockfile.go`
 - `cmd/gc/cmd_import.go`
@@ -122,14 +118,12 @@ story from code, tests, and docs. Keep internal packs on the
 `.gc/system/packs` path.
 
 **Acceptance criteria:**
-
 - bootstrap no longer seeds package-registry artifacts
 - implicit-import state is not required for PackV2 load
 - registry/import bootstrap artifacts are removed if unused
 - docs stop presenting implicit imports as a public dependency model
 
 **Likely files:**
-
 - `internal/bootstrap/bootstrap.go`
 - `internal/bootstrap/packs/registry/`
 - `internal/bootstrap/packs/import/`
@@ -145,7 +139,6 @@ story from code, tests, and docs. Keep internal packs on the
 and `gc rig add` behavior so newly added rigs inherit PackV2 defaults.
 
 **Acceptance criteria:**
-
 - loader/runtime model can parse and preserve
   `[defaults.rig.imports.<binding>]`
 - `gc rig add` uses those defaults when `--include` is omitted
@@ -153,7 +146,6 @@ and `gc rig add` behavior so newly added rigs inherit PackV2 defaults.
   `workspace.default_rig_includes` for the supported path
 
 **Likely files:**
-
 - `internal/config/config.go`
 - `internal/config/import*.go`
 - `cmd/gc/cmd_rig.go`
@@ -166,14 +158,12 @@ and `gc rig add` behavior so newly added rigs inherit PackV2 defaults.
 fields.
 
 **Acceptance criteria:**
-
 - Gastown wizard/init writes PackV2 imports in `pack.toml`
 - new Gastown cities still get default rig composition without
   `--include`
 - init artifact materialization follows the new source of truth
 
 **Likely files:**
-
 - `cmd/gc/cmd_init.go`
 - `cmd/gc/init_artifacts.go`
 - `internal/config/config.go`
@@ -186,13 +176,11 @@ fields.
 `[defaults.rig.imports.<binding>]`.
 
 **Acceptance criteria:**
-
 - migrate emits loadable runtime shape
 - doctor text points to the canonical syntax
 - stale references to `[rig_defaults]` are removed
 
 **Likely files:**
-
 - `internal/migrate/migrate.go`
 - `cmd/gc/doctor_v2_checks.go`
 - related tests and txtar fixtures
@@ -213,7 +201,6 @@ fields.
 behavior or sharp edges.
 
 **Acceptance criteria:**
-
 - watch/revision account for PackV2 imports
 - rig-scoped import authoring exists on `gc import`
 - graph inspection commands exist for import debugging
@@ -222,7 +209,6 @@ behavior or sharp edges.
 - unknown `pack.toml` fields fail with actionable errors
 
 **Likely files:**
-
 - `internal/config/revision.go`
 - `cmd/gc/cmd_import.go`
 - `cmd/gc/cmd_commands.go`
@@ -237,19 +223,18 @@ behavior or sharp edges.
 including one remediation command and one default-rig syntax.
 
 **Acceptance criteria:**
-
-- `docs/packv2/` reflects shipped behavior, not aspirational behavior
+- `engdocs/design/packv2/` reflects shipped behavior where it is used as a
+  rollout ledger, and public `docs/guides/` carry the user-facing guidance
 - `docs/guides/` no longer advertises legacy `[packs]` / implicit-import
   guidance as current for schema-2
 - conformance/skew docs are updated to remove known false statements
 
 **Likely files:**
-
-- `docs/packv2/doc-pack-v2.md`
-- `docs/packv2/doc-packman.md`
-- `docs/packv2/doc-loader-v2.md`
-- `docs/packv2/doc-conformance-matrix.md`
-- `docs/packv2/skew-analysis.md`
+- `engdocs/design/packv2/doc-pack-v2.md`
+- `engdocs/design/packv2/doc-packman.md`
+- `engdocs/design/packv2/doc-loader-v2.md`
+- `engdocs/design/packv2/doc-conformance-matrix.md`
+- `engdocs/design/packv2/skew-analysis.md`
 - `docs/guides/migrating-to-pack-vnext.md`
 - `docs/guides/shareable-packs.md`
 
@@ -307,13 +292,13 @@ At each natural checkpoint:
 
 ## Risks and Mitigations
 
-| Risk                                                      | Impact | Mitigation                                                                    |
-| --------------------------------------------------------- | ------ | ----------------------------------------------------------------------------- |
-| Legacy and PackV2 paths share code and regress old cities | High   | keep schema-2 behavior gated where needed; preserve legacy tests              |
-| Default-rig changes break Gastown init expectations       | High   | add end-to-end init + `gc rig add` coverage before removing fallback behavior |
-| Registry cleanup removes something still used indirectly  | Medium | trace bootstrap pack usage first; keep system-pack path intact                |
-| Backlog breadth causes merge conflicts across slices      | Medium | use disjoint worker ownership and integrate in checkpoints                    |
-| Docs drift behind code again                              | Medium | land doc convergence as a required slice, not postscript                      |
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Legacy and PackV2 paths share code and regress old cities | High | keep schema-2 behavior gated where needed; preserve legacy tests |
+| Default-rig changes break Gastown init expectations | High | add end-to-end init + `gc rig add` coverage before removing fallback behavior |
+| Registry cleanup removes something still used indirectly | Medium | trace bootstrap pack usage first; keep system-pack path intact |
+| Backlog breadth causes merge conflicts across slices | Medium | use disjoint worker ownership and integrate in checkpoints |
+| Docs drift behind code again | Medium | land doc convergence as a required slice, not postscript |
 
 ## Definition of Done
 

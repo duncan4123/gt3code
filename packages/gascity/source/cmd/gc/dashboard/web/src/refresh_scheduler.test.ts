@@ -30,12 +30,9 @@ describe("refresh scheduler", () => {
     let finishFirst!: () => void;
     const run = vi
       .fn()
-      .mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            finishFirst = resolve;
-          }),
-      )
+      .mockImplementationOnce(() => new Promise<void>((resolve) => {
+        finishFirst = resolve;
+      }))
       .mockResolvedValue(undefined);
     const scheduler = createRefreshScheduler({
       delayMs: 1_000,
@@ -66,12 +63,9 @@ describe("refresh scheduler", () => {
     let finishFirst!: () => void;
     const run = vi
       .fn()
-      .mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            finishFirst = resolve;
-          }),
-      )
+      .mockImplementationOnce(() => new Promise<void>((resolve) => {
+        finishFirst = resolve;
+      }))
       .mockResolvedValue(undefined);
     const scheduler = createRefreshScheduler({
       delayMs: 1_000,

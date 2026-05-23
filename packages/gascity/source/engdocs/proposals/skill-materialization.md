@@ -24,9 +24,9 @@ activation is **out of scope for v0.15.1** and lands on main afterwards.
   `cmd/gc/cmd_mcp.go`).
 - `materializeSkillStubs` writes 7 `gc-<topic>` stub directories containing
   `SKILL.md` files with a `!` `gc skills <topic>` `` shell-escape
-(`cmd/gc/skill_stubs.go:16-31`). Call sites:
-`cmd/gc/cmd_start.go:491`, `cmd/gc/cmd_supervisor.go:1443-1444`, both
-gated on `cfg.Workspace.Provider == "claude"`.
+  (`cmd/gc/skill_stubs.go:16-31`). Call sites:
+  `cmd/gc/cmd_start.go:491`, `cmd/gc/cmd_supervisor.go:1443-1444`, both
+  gated on `cfg.Workspace.Provider == "claude"`.
 - `runtime.CopyEntry{Probed, ContentHash}` content-based fingerprinting
   (`internal/runtime/runtime.go:211-233`, `internal/runtime/fingerprint.go`).
 - `runtime.Config.FingerprintExtra map[string]string` already participates
@@ -52,7 +52,7 @@ gated on `cfg.Workspace.Provider == "claude"`.
    don't drain.
 3. No cleanup on skill removal — the current stub materializer only writes.
 4. `Agent.Skills` / `SharedSkills` filter lists exist in config but don't
-   match the PackV2 design doc (`docs/packv2/doc-agent-v2.md:191`) which says
+   match the PackV2 design doc (`engdocs/design/packv2/doc-agent-v2.md:191`) which says
    every agent gets every city skill.
 
 ## Goals
@@ -78,11 +78,11 @@ gated on `cfg.Workspace.Provider == "claude"`.
   `skills/` (shipped with the `gc` binary, e.g., `core`) contribute. A
   user's `[imports.foo]` pointing at a third-party pack does **not** have
   its `skills/` walked in v0.15.1 (tracked in
-  `docs/packv2/doc-pack-v2.md:59-60`). The materializer's source set is
+  `engdocs/design/packv2/doc-pack-v2.md:59-60`). The materializer's source set is
   the union of these two categories; see "Skill source discovery" below
   for the enumeration rule.
 - **Skill promotion workflows** (`gc skill promote …`) — design-noted in
-  `docs/packv2/doc-agent-v2.md:207` as a later slice.
+  `engdocs/design/packv2/doc-agent-v2.md:207` as a later slice.
 - **Fold-in of `maintenance` and `dolt` into `core`.** v0.15.1 ships the
   `core` bootstrap pack initially containing only the gc-topic stubs. Folding
   the other builtin packs into `core` lands on main after v0.15.1.
@@ -180,11 +180,11 @@ Stage 2 PreStart injection runs only for runtimes that execute PreStart on
 the host filesystem with access to the host's `gc` binary and the host's
 skill source tree. The current runtimes and their gating:
 
-| Runtime      | Stage 2 eligible? | Reason                                                                                 |
-| ------------ | ----------------- | -------------------------------------------------------------------------------------- |
-| `subprocess` | yes               | PreStart runs locally before the subprocess spawn                                      |
-| `tmux`       | yes               | PreStart runs on the host                                                              |
-| `acp`        | no                | Out of scope for v0.15.1                                                               |
+| Runtime      | Stage 2 eligible? | Reason                                           |
+|--------------|-------------------|--------------------------------------------------|
+| `subprocess` | yes               | PreStart runs locally before the subprocess spawn |
+| `tmux`       | yes               | PreStart runs on the host                        |
+| `acp`        | no                | Out of scope for v0.15.1                         |
 | `k8s`        | no                | PreStart runs inside the pod; `gc` binary and host skill paths are not available there |
 
 `BuildDesiredState` checks the agent's resolved runtime provider and skips
@@ -196,16 +196,16 @@ workdir, or a sidecar init step).
 
 ### Vendor mapping
 
-| Provider   | Skill sink          | v0.15.1 status |
-| ---------- | ------------------- | -------------- |
-| `claude`   | `.claude/skills/`   | materialize    |
-| `codex`    | `.codex/skills/`    | materialize    |
-| `gemini`   | `.gemini/skills/`   | materialize    |
-| `opencode` | `.opencode/skills/` | materialize    |
-| `copilot`  | —                   | skip (no sink) |
-| `cursor`   | —                   | skip (no sink) |
-| `pi`       | —                   | skip (no sink) |
-| `omp`      | —                   | skip (no sink) |
+| Provider   | Skill sink           | v0.15.1 status    |
+|------------|----------------------|-------------------|
+| `claude`   | `.claude/skills/`    | materialize       |
+| `codex`    | `.codex/skills/`     | materialize       |
+| `gemini`   | `.gemini/skills/`    | materialize       |
+| `opencode` | `.opencode/skills/`  | materialize       |
+| `copilot`  | —                    | skip (no sink)    |
+| `cursor`   | —                    | skip (no sink)    |
+| `pi`       | —                    | skip (no sink)    |
+| `omp`      | —                    | skip (no sink)    |
 
 Implemented as a map keyed on `agent.Provider`; providers without an entry
 get no materialization. Each `materialize` path should be re-verified
@@ -230,7 +230,7 @@ come later if relocatable worktrees become a requirement.
 
 ### No attachment filtering
 
-Per `docs/packv2/doc-agent-v2.md:191`:
+Per `engdocs/design/packv2/doc-agent-v2.md:191`:
 
 > An agent gets city-wide skills + its own skills. Agent-specific wins on
 > name collision.
@@ -242,32 +242,32 @@ The existing attachment-list surfaces (introduced in v0.15.0, commits
 `7572464a` and `710bd3b5`) are dead code relative to the design doc and
 are removed outright. The full deletion surface:
 
-| Location                                                   | Symbols / fields                                                                                                                               |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `internal/config/config.go:1402-1405`                      | `Agent.Skills`, `Agent.MCP`                                                                                                                    |
-| `internal/config/config.go:1438-1443`                      | `Agent.SharedSkills`, `Agent.SharedMCP` (runtime-only)                                                                                         |
-| `internal/config/config.go:1273, 1276`                     | `AgentDefaults.Skills`, `AgentDefaults.MCP`                                                                                                    |
-| `internal/config/config.go:1833-1852`                      | `applyAgentSharedAttachmentDefaults`                                                                                                           |
-| `internal/config/config.go:1854-1891`                      | `mergeAgentDefaults` — reads `src.Skills` / `src.MCP` to merge defaults across pack/city layers; entries must be removed along with the fields |
-| `internal/config/patch.go:57-64`                           | `AgentPatch.Skills`, `AgentPatch.MCP`, `AgentPatch.SkillsAppend`, `AgentPatch.MCPAppend`                                                       |
-| `internal/config/patch.go:258-269`                         | Apply paths for the four patch fields                                                                                                          |
-| `internal/config/config.go:398-401`                        | `AgentOverride.Skills`, `AgentOverride.MCP`                                                                                                    |
-| `internal/config/config.go:428-431`                        | `AgentOverride.SkillsAppend`, `AgentOverride.MCPAppend`                                                                                        |
-| `internal/config/pack.go` apply function                   | Override apply paths for all four `Skills`/`MCP`/`SkillsAppend`/`MCPAppend`                                                                    |
-| `internal/migrate/migrate.go:83-85`                        | Migrate-struct `Skills` / `MCP` fields                                                                                                         |
-| `internal/migrate/migrate.go:658-706`                      | Migrate read + zero-value check for `Skills` / `MCP`                                                                                           |
-| `internal/config/field_sync_test.go:39-41, 66-68, 196-199` | Test expectations for `SharedSkills`, `SkillsAppend`, `MCPAppend` parity                                                                       |
-| `cmd/gc/pool.go:264-279` (deep-copy)                       | Pool deep-copy entries for the four fields                                                                                                     |
-| `cmd/gc/cmd_skill.go:97-107`                               | `attachmentSet` / `filterEntriesByName` filter path                                                                                            |
-| `cmd/gc/cmd_mcp.go` (equivalent filter)                    | MCP filter path                                                                                                                                |
-| `docs/schema/city-schema.json`                             | Schema entries for `skills`, `mcp`, `skills_append`, `mcp_append`                                                                              |
-| `docs/reference/config.md:162-200`                         | Reference-doc entries for the removed fields                                                                                                   |
-| `internal/config/compose_test.go:242-246`                  | Attachment-defaults compose test                                                                                                               |
-| `internal/config/config_test.go:118-139`                   | `TestParseAgentSkillsAndMCP` — delete test entirely                                                                                            |
-| `internal/config/config_test.go:172-234`                   | `AgentDefaults.Skills`/`MCP` parsing tests — delete                                                                                            |
-| `internal/config/config_test.go:4104-4128`                 | Attachment-inheritance integration assertions                                                                                                  |
-| `cmd/gc/pool_test.go:577-581`                              | Pool-copy test uses `Skills`/`SharedSkills`/`SkillsDir` — delete entries                                                                       |
-| `internal/migrate/migrate_test.go:366, 395, 397`           | Migrate fixture + allow-list entries for `Skills`/`SharedSkills`/`SkillsDir`                                                                   |
+| Location                                   | Symbols / fields                                            |
+|--------------------------------------------|-------------------------------------------------------------|
+| `internal/config/config.go:1402-1405`      | `Agent.Skills`, `Agent.MCP`                                 |
+| `internal/config/config.go:1438-1443`      | `Agent.SharedSkills`, `Agent.SharedMCP` (runtime-only)      |
+| `internal/config/config.go:1273, 1276`     | `AgentDefaults.Skills`, `AgentDefaults.MCP`                 |
+| `internal/config/config.go:1833-1852`      | `applyAgentSharedAttachmentDefaults`                        |
+| `internal/config/config.go:1854-1891`      | `mergeAgentDefaults` — reads `src.Skills` / `src.MCP` to merge defaults across pack/city layers; entries must be removed along with the fields |
+| `internal/config/patch.go:57-64`           | `AgentPatch.Skills`, `AgentPatch.MCP`, `AgentPatch.SkillsAppend`, `AgentPatch.MCPAppend` |
+| `internal/config/patch.go:258-269`         | Apply paths for the four patch fields                       |
+| `internal/config/config.go:398-401`        | `AgentOverride.Skills`, `AgentOverride.MCP`                 |
+| `internal/config/config.go:428-431`        | `AgentOverride.SkillsAppend`, `AgentOverride.MCPAppend`     |
+| `internal/config/pack.go` apply function   | Override apply paths for all four `Skills`/`MCP`/`SkillsAppend`/`MCPAppend` |
+| `internal/migrate/migrate.go:83-85`        | Migrate-struct `Skills` / `MCP` fields                      |
+| `internal/migrate/migrate.go:658-706`      | Migrate read + zero-value check for `Skills` / `MCP`        |
+| `internal/config/field_sync_test.go:39-41, 66-68, 196-199` | Test expectations for `SharedSkills`, `SkillsAppend`, `MCPAppend` parity |
+| `cmd/gc/pool.go:264-279` (deep-copy)       | Pool deep-copy entries for the four fields                  |
+| `cmd/gc/cmd_skill.go:97-107`               | `attachmentSet` / `filterEntriesByName` filter path         |
+| `cmd/gc/cmd_mcp.go` (equivalent filter)    | MCP filter path                                             |
+| `docs/schema/city-schema.json`             | Schema entries for `skills`, `mcp`, `skills_append`, `mcp_append` |
+| `docs/reference/config.md:162-200`         | Reference-doc entries for the removed fields                |
+| `internal/config/compose_test.go:242-246`  | Attachment-defaults compose test                            |
+| `internal/config/config_test.go:118-139`   | `TestParseAgentSkillsAndMCP` — delete test entirely         |
+| `internal/config/config_test.go:172-234`   | `AgentDefaults.Skills`/`MCP` parsing tests — delete         |
+| `internal/config/config_test.go:4104-4128` | Attachment-inheritance integration assertions               |
+| `cmd/gc/pool_test.go:577-581`              | Pool-copy test uses `Skills`/`SharedSkills`/`SkillsDir` — delete entries |
+| `internal/migrate/migrate_test.go:366, 395, 397` | Migrate fixture + allow-list entries for `Skills`/`SharedSkills`/`SkillsDir` |
 
 **Backwards compatibility for v0.15.1.** The TOML parser in v0.15.1 retains
 the field definitions as **tombstones** — accepted but unused — and emits a
@@ -372,15 +372,15 @@ symlink during cleanup+recreate.
 Cleanup only deletes when (entry is a symlink) AND (target begins with a
 gc-managed skills root). Regular files and dirs are always left alone.
 
-| Entry type        | Target          | In desired? | Action                                        |
-| ----------------- | --------------- | ----------- | --------------------------------------------- |
-| Symlink           | gc-managed root | Yes, match  | Keep                                          |
-| Symlink           | gc-managed root | Yes, drift  | Atomic replace                                |
-| Symlink           | gc-managed root | No          | Delete                                        |
-| Symlink           | gc-managed root | Dangling    | Delete                                        |
-| Symlink           | External path   | N/A         | Leave alone                                   |
-| Regular file      | —               | N/A         | Leave alone (legacy stub or user content)     |
-| Regular directory | —               | N/A         | Leave alone (legacy stub dir or user content) |
+| Entry type         | Target                   | In desired? | Action                     |
+|--------------------|--------------------------|-------------|----------------------------|
+| Symlink            | gc-managed root          | Yes, match  | Keep                       |
+| Symlink            | gc-managed root          | Yes, drift  | Atomic replace             |
+| Symlink            | gc-managed root          | No          | Delete                     |
+| Symlink            | gc-managed root          | Dangling    | Delete                     |
+| Symlink            | External path            | N/A         | Leave alone                |
+| Regular file       | —                        | N/A         | Leave alone (legacy stub or user content) |
+| Regular directory  | —                        | N/A         | Leave alone (legacy stub dir or user content) |
 
 A unit test enumerates this matrix directly.
 
@@ -389,7 +389,7 @@ A unit test enumerates this matrix directly.
 v0.15.0 cities have **regular directories** at
 `<workdir>/.claude/skills/gc-<topic>/` written by the old
 `materializeSkillStubs`, each containing a `SKILL.md` with the
-`!` `gc skills <topic>` ``shell-escape. The new`core` pack delivers
+`!` `gc skills <topic>` `` shell-escape. The new `core` pack delivers
 skills at the same names (`gc-agents`, `gc-city`, `gc-dashboard`,
 `gc-dispatch`, `gc-mail`, `gc-rigs`, `gc-work`), so the materializer
 must clear the legacy path before creating the new symlinks.
@@ -473,7 +473,6 @@ validator is scoped per `(scope-root, vendor)` pair; agents on different
 vendors don't collide even if they share an agent-local skill name.
 
 Acceptance tests cover at least:
-
 - Mixed-provider city with one agent per vendor.
 - Non-Claude workspace-default city with a Claude-provider agent (this is
   the case the old `Workspace.Provider == "claude"` gate mis-handled).
@@ -591,7 +590,7 @@ behavior is silent shadowing:
 bootstrap entry into `~/.gc/implicit-import.toml`, and
 `internal/bootstrap/packs/import/lib/implicit.py:154` (the `gc import`
 splice logic) plus the packman semantics
-(`docs/packv2/doc-packman.md:169`) treat explicit `[imports.X]` as
+(`engdocs/design/packv2/doc-packman.md:169`) treat explicit `[imports.X]` as
 taking precedence over the implicit splice. A user with `[imports.core]`
 therefore silently overrides the bootstrap entry, which on upgrade would
 silently replace the expected `gc-<topic>` skills with whatever is in
@@ -652,7 +651,6 @@ That is not part of this release.
 ## Testing
 
 **Unit:**
-
 - `internal/runtime/fingerprint_test.go` — extend with `FingerprintExtra`
   `skills:*` key coverage and per-key drift assertion.
 - New `cmd/gc/materialize_skills_test.go` — vendor-map lookup (8 providers,
@@ -664,7 +662,6 @@ That is not part of this release.
   removed fields.
 
 **Acceptance:**
-
 - `test/acceptance/skill_test.go` — extend with:
   - "city skill is materialized into every agent's sink (per-vendor)."
   - "agent-local skill is only in that agent's sink."
@@ -679,7 +676,6 @@ That is not part of this release.
   - "k8s-runtime agent spawns with no skill sink and logs the skip line."
 
 **Integration:**
-
 - `test/integration/skill_lifecycle_test.go` (new) — full cycle with a
   fake pool: modify `<city>/skills/` content, assert the agent drains
   and respawns with refreshed symlinks. Includes a multi-session pool
@@ -697,9 +693,9 @@ That is not part of this release.
    symlinks.
 4. **MCP activation.** Lands on main post-v0.15.1.
 5. **Skill promotion (`gc skill promote`).** Not in this hotfix. Tracked
-   in `docs/packv2/doc-agent-v2.md:207`.
+   in `engdocs/design/packv2/doc-agent-v2.md:207`.
 6. **Imported-pack skill catalogs.** Still current-city-pack-only. Tracked
-   in `docs/packv2/doc-pack-v2.md:59`.
+   in `engdocs/design/packv2/doc-pack-v2.md:59`.
 7. **Per-pool PreStart caching.** Optional perf improvement if pool
    scale-up invocation cost becomes noticeable.
 8. **`CoreFingerprintBreakdown` per-skill drift log.** Small ergonomic

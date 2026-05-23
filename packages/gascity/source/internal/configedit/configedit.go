@@ -210,12 +210,16 @@ func (e *Editor) write(cfg *config.City) error {
 // pattern extracted from the CLI's doAgentSuspend/doAgentResume.
 func AgentOrigin(raw, expanded *config.City, name string) Origin {
 	// Check raw config first.
-	if _, ok := findAgentForMutation(raw, name); ok {
-		return OriginInline
+	for _, a := range raw.Agents {
+		if config.AgentMatchesIdentity(&a, name) {
+			return OriginInline
+		}
 	}
 	// Check expanded config for pack-derived agents.
-	if _, ok := findAgentForMutation(expanded, name); ok {
-		return OriginDerived
+	for _, a := range expanded.Agents {
+		if config.AgentMatchesIdentity(&a, name) {
+			return OriginDerived
+		}
 	}
 	return OriginNotFound
 }
@@ -234,13 +238,8 @@ func RigOrigin(raw *config.City, name string) Origin {
 // SetAgentSuspended sets the suspended field on an inline agent.
 // Returns an error if the agent is not found in the config.
 func SetAgentSuspended(cfg *config.City, name string, suspended bool) error {
-	target, ok := findAgentForMutation(cfg, name)
-	if !ok {
-		return fmt.Errorf("%w: agent %q", ErrNotFound, name)
-	}
-	targetPatchName := target.PatchQualifiedName()
 	for i := range cfg.Agents {
-		if cfg.Agents[i].PatchQualifiedName() == targetPatchName {
+		if config.AgentMatchesIdentity(&cfg.Agents[i], name) {
 			cfg.Agents[i].Suspended = suspended
 			return nil
 		}
@@ -323,17 +322,9 @@ func (e *Editor) ResumeAgent(name string) error {
 // Returns [ErrUnmodified] when the change lives entirely in agent.toml
 // and raw was not touched, so EditExpanded skips the city.toml writeback.
 func mutateAgentSuspended(fs fsys.FS, cityRoot string, raw, expanded *config.City, name string, suspended bool) error {
-	if _, ok := findAgentForMutation(raw, name); ok {
-		return SetAgentSuspended(raw, name, suspended)
-	}
-
-	agent, ok := findAgentForMutation(expanded, name)
-	if !ok {
-		return fmt.Errorf("%w: agent %q", ErrNotFound, name)
-	}
-
-	patchName := agent.PatchQualifiedName()
 	switch AgentOrigin(raw, expanded, name) {
+	case OriginInline:
+		return SetAgentSuspended(raw, name, suspended)
 	case OriginDerived:
 		if agent, ok := findLocalDiscoveredAgent(fs, expanded, cityRoot, name); ok {
 			if err := WriteLocalDiscoveredAgentSuspended(fs, cityRoot, agent, suspended); err != nil {
@@ -345,12 +336,12 @@ func mutateAgentSuspended(fs fsys.FS, cityRoot string, raw, expanded *config.Cit
 			// the discovered agent's full (Dir, Name) identity so we
 			// only strip the matching patch, not a same-named entry
 			// targeting a different rig.
-			if StripAgentPatchSuspended(raw, agent.PatchQualifiedName()) {
+			if StripAgentPatchSuspended(raw, agent.QualifiedName()) {
 				return nil
 			}
 			return ErrUnmodified
 		}
-		return AddOrUpdateAgentPatch(raw, patchName, func(p *config.AgentPatch) {
+		return AddOrUpdateAgentPatch(raw, name, func(p *config.AgentPatch) {
 			p.Suspended = boolPtr(suspended)
 		})
 	case OriginNotFound:
@@ -362,7 +353,7 @@ func mutateAgentSuspended(fs fsys.FS, cityRoot string, raw, expanded *config.Cit
 func findLocalDiscoveredAgent(fs fsys.FS, expanded *config.City, cityRoot, name string) (config.Agent, bool) {
 	cityRoot = filepath.Clean(cityRoot)
 	for _, a := range expanded.Agents {
-		if !agentMatchesMutationName(a, name) {
+		if !config.AgentMatchesIdentity(&a, name) {
 			continue
 		}
 		if !LocalDiscoveredAgent(fs, cityRoot, a) {
@@ -371,33 +362,6 @@ func findLocalDiscoveredAgent(fs fsys.FS, expanded *config.City, cityRoot, name 
 		return a, true
 	}
 	return config.Agent{}, false
-}
-
-func findAgentForMutation(cfg *config.City, name string) (config.Agent, bool) {
-	for _, a := range cfg.Agents {
-		if agentMatchesMutationName(a, name) {
-			return a, true
-		}
-	}
-
-	dir, base := config.ParseQualifiedName(name)
-	if dir != "" {
-		return config.Agent{}, false
-	}
-	var matches []config.Agent
-	for _, a := range cfg.Agents {
-		if a.Name == base {
-			matches = append(matches, a)
-		}
-	}
-	if len(matches) == 1 {
-		return matches[0], true
-	}
-	return config.Agent{}, false
-}
-
-func agentMatchesMutationName(agent config.Agent, name string) bool {
-	return config.AgentMatchesIdentity(&agent, name) || agent.PatchQualifiedName() == name
 }
 
 // LocalDiscoveredAgent reports whether an agent's durable configuration
@@ -512,9 +476,9 @@ func isAgentPatchOnlyIdentity(p config.AgentPatch) bool {
 }
 
 // WriteLocalDiscoveredAgentSuspended writes the suspended state to
-// agents/<name>/agent.toml using an atomic temp-file rename. The
-// suspended key is always written explicitly so resume preserves
-// `suspended = false` durably.
+// agents/<name>/agent.toml using an atomic temp-file rename. When
+// suspended is false and the file would become empty (no other fields),
+// it is removed instead.
 //
 // Decoding into map[string]any (rather than a typed struct) preserves
 // any user-set fields the caller didn't ask about. TOML comments and
@@ -538,7 +502,18 @@ func WriteLocalDiscoveredAgentSuspended(fs fsys.FS, cityRoot string, agent confi
 		return fmt.Errorf("reading agents/%s/agent.toml: %w", agent.Name, err)
 	}
 
-	values["suspended"] = suspended
+	if suspended {
+		values["suspended"] = true
+	} else {
+		delete(values, "suspended")
+	}
+
+	if len(values) == 0 {
+		if err := fs.Remove(agentTomlPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("removing agents/%s/agent.toml: %w", agent.Name, err)
+		}
+		return nil
+	}
 
 	var buf bytes.Buffer
 	if err := toml.NewEncoder(&buf).Encode(values); err != nil {
@@ -670,9 +645,10 @@ func (e *Editor) CreateRig(r config.Rig) error {
 // distinguish "not set" from "set to zero value" to avoid the PATCH
 // zero-value trap (e.g., omitting suspended must not reset it to false).
 type RigUpdate struct {
-	Path      string
-	Prefix    string
-	Suspended *bool
+	Path          string
+	Prefix        string
+	DefaultBranch string
+	Suspended     *bool
 }
 
 // UpdateRig partially updates an existing rig. Only non-nil/non-empty
@@ -686,6 +662,9 @@ func (e *Editor) UpdateRig(name string, patch RigUpdate) error {
 				}
 				if patch.Prefix != "" {
 					cfg.Rigs[i].Prefix = patch.Prefix
+				}
+				if patch.DefaultBranch != "" {
+					cfg.Rigs[i].DefaultBranch = patch.DefaultBranch
 				}
 				if patch.Suspended != nil {
 					cfg.Rigs[i].Suspended = *patch.Suspended

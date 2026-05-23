@@ -402,9 +402,6 @@ suspended = true
 	if cfg.Agents[0].Suspended {
 		t.Error("expected mayor to not be suspended")
 	}
-	if !strings.Contains(string(mustReadFile(t, path)), "suspended = false") {
-		t.Fatal("expected inline agent suspended field to remain explicit false")
-	}
 }
 
 func TestSuspendAgent_LocalDiscovered(t *testing.T) {
@@ -481,8 +478,8 @@ schema = 2
 	if !strings.Contains(agentToml, "provider = \"codex\"") {
 		t.Fatalf("agent.toml = %q, want provider preserved", agentToml)
 	}
-	if !strings.Contains(agentToml, "suspended = false") {
-		t.Fatalf("agent.toml = %q, want suspended = false", agentToml)
+	if strings.Contains(agentToml, "suspended") {
+		t.Fatalf("agent.toml = %q, want suspended cleared", agentToml)
 	}
 
 	cfg := readExpandedTOML(t, path)
@@ -538,109 +535,6 @@ provider = "claude"
 	raw := string(mustReadFile(t, path))
 	if !strings.Contains(raw, "[[patches.agent]]") {
 		t.Fatalf("city.toml should gain agent patch:\n%s", raw)
-	}
-
-	cfg := readExpandedTOML(t, path)
-	if !findAgent(t, cfg, "worker").Suspended {
-		t.Fatal("worker should be suspended in expanded config")
-	}
-}
-
-func TestSuspendAgent_ImportedWorkspaceAgentUsesLocalPatchIdentity(t *testing.T) {
-	dir := t.TempDir()
-	path := writeTOML(t, dir, `[workspace]
-name = "test-city"
-`)
-	if err := os.WriteFile(filepath.Join(dir, "pack.toml"), []byte(`[pack]
-name = "test-city"
-schema = 2
-
-[imports.ops]
-source = "./packs/ops"
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	packDir := filepath.Join(dir, "packs", "ops")
-	if err := os.MkdirAll(packDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(packDir, "pack.toml"), []byte(`[pack]
-name = "ops"
-schema = 2
-
-[[agent]]
-name = "deacon"
-provider = "codex"
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	ed := configedit.NewEditor(fsys.OSFS{}, path)
-	if err := ed.SuspendAgent("deacon"); err != nil {
-		t.Fatalf("SuspendAgent: %v", err)
-	}
-
-	raw := string(mustReadFile(t, path))
-	if strings.Contains(raw, "ops.deacon") {
-		t.Fatalf("city.toml must not patch binding-qualified name:\n%s", raw)
-	}
-	if !strings.Contains(raw, "name = \"deacon\"") || !strings.Contains(raw, "suspended = true") {
-		t.Fatalf("city.toml should patch local agent identity:\n%s", raw)
-	}
-
-	cfg := readExpandedTOML(t, path)
-	if !findAgent(t, cfg, "deacon").Suspended {
-		t.Fatal("deacon should be suspended in expanded config")
-	}
-}
-
-func TestSuspendAgent_ImportedRigAgentUsesLocalPatchIdentity(t *testing.T) {
-	dir := t.TempDir()
-	path := writeTOML(t, dir, `[workspace]
-name = "test-city"
-
-[[rigs]]
-name = "repo"
-path = "."
-`)
-	if err := os.WriteFile(filepath.Join(dir, "pack.toml"), []byte(`[pack]
-name = "test-city"
-schema = 2
-
-[imports.ops]
-source = "./packs/ops"
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	packDir := filepath.Join(dir, "packs", "ops")
-	if err := os.MkdirAll(packDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(packDir, "pack.toml"), []byte(`[pack]
-name = "ops"
-schema = 2
-
-[[agent]]
-dir = "repo"
-name = "worker"
-provider = "codex"
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	ed := configedit.NewEditor(fsys.OSFS{}, path)
-	if err := ed.SuspendAgent("repo/worker"); err != nil {
-		t.Fatalf("SuspendAgent: %v", err)
-	}
-
-	raw := string(mustReadFile(t, path))
-	if strings.Contains(raw, "ops.worker") {
-		t.Fatalf("city.toml must not patch binding-qualified rig agent:\n%s", raw)
-	}
-	if !strings.Contains(raw, "dir = \"repo\"") ||
-		!strings.Contains(raw, "name = \"worker\"") ||
-		!strings.Contains(raw, "suspended = true") {
-		t.Fatalf("city.toml should patch local rig agent identity:\n%s", raw)
 	}
 
 	cfg := readExpandedTOML(t, path)
@@ -733,7 +627,7 @@ schema = 2
 	if !strings.Contains(raw, `provider = "codex"`) {
 		t.Fatalf("non-Suspended patch fields should be preserved:\n%s", raw)
 	}
-	if strings.Contains(raw, "name = \"worker\"\nsuspended =") {
+	if strings.Contains(raw, "suspended =") {
 		t.Fatalf("Suspended override should be removed from patch:\n%s", raw)
 	}
 }
@@ -863,9 +757,6 @@ suspended = true
 	if cfg.Rigs[0].Suspended {
 		t.Error("expected my-rig to not be suspended")
 	}
-	if !strings.Contains(string(mustReadFile(t, path)), "suspended = false") {
-		t.Fatal("expected rig suspended field to remain explicit false")
-	}
 }
 
 func mustReadFile(t *testing.T, path string) []byte {
@@ -919,9 +810,6 @@ suspended = true
 	cfg := readTOML(t, path)
 	if cfg.Workspace.Suspended {
 		t.Error("expected workspace to not be suspended")
-	}
-	if !strings.Contains(string(mustReadFile(t, path)), "suspended = false") {
-		t.Fatal("expected workspace suspended field to remain explicit false")
 	}
 }
 

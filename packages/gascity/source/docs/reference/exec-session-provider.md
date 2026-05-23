@@ -30,11 +30,11 @@ No shell invocation — the script is exec'd directly.
 
 ## Exit Codes
 
-| Code | Meaning                                                     |
-| ---- | ----------------------------------------------------------- |
-| 0    | Success                                                     |
-| 1    | Failure (stderr contains error message)                     |
-| 2    | Unknown operation (treated as success — forward compatible) |
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Failure (stderr contains error message) |
+| 2 | Unknown operation (treated as success — forward compatible) |
 
 Exit code 2 is the forward-compatibility mechanism. When Gas City adds new
 operations in the future, old scripts return exit 2 and the provider treats
@@ -43,21 +43,21 @@ care about.
 
 ## Operations
 
-| Operation           | Invocation                        | Stdin                  | Stdout                  |
-| ------------------- | --------------------------------- | ---------------------- | ----------------------- |
-| `start`             | `script start <name>`             | JSON config            | —                       |
-| `stop`              | `script stop <name>`              | —                      | —                       |
-| `interrupt`         | `script interrupt <name>`         | —                      | —                       |
-| `is-running`        | `script is-running <name>`        | —                      | `true` or `false`       |
-| `attach`            | `script attach <name>`            | tty passthrough        | tty passthrough         |
-| `process-alive`     | `script process-alive <name>`     | process names (1/line) | `true` or `false`       |
-| `nudge`             | `script nudge <name>`             | message text           | —                       |
-| `set-meta`          | `script set-meta <name> <key>`    | value on stdin         | —                       |
-| `get-meta`          | `script get-meta <name> <key>`    | —                      | value (empty = not set) |
-| `remove-meta`       | `script remove-meta <name> <key>` | —                      | —                       |
-| `peek`              | `script peek <name> <lines>`      | —                      | captured text           |
-| `list-running`      | `script list-running <prefix>`    | —                      | one name per line       |
-| `get-last-activity` | `script get-last-activity <name>` | —                      | RFC3339 or empty        |
+| Operation | Invocation | Stdin | Stdout |
+|-----------|-----------|-------|--------|
+| `start` | `script start <name>` | JSON config | — |
+| `stop` | `script stop <name>` | — | — |
+| `interrupt` | `script interrupt <name>` | — | — |
+| `is-running` | `script is-running <name>` | — | `true` or `false` |
+| `attach` | `script attach <name>` | tty passthrough | tty passthrough |
+| `process-alive` | `script process-alive <name>` | process names (1/line) | `true` or `false` |
+| `nudge` | `script nudge <name>` | message text | — |
+| `set-meta` | `script set-meta <name> <key>` | value on stdin | — |
+| `get-meta` | `script get-meta <name> <key>` | — | value (empty = not set) |
+| `remove-meta` | `script remove-meta <name> <key>` | — | — |
+| `peek` | `script peek <name> <lines>` | — | captured text |
+| `list-running` | `script list-running <prefix>` | — | one name per line |
+| `get-last-activity` | `script get-last-activity <name>` | — | RFC3339 or empty |
 
 ### Start Config (JSON on stdin)
 
@@ -67,7 +67,8 @@ The `start` operation receives a JSON object on stdin:
 {
   "work_dir": "/path/to/working/directory",
   "command": "claude --dangerously-skip-permissions",
-  "env": { "GC_AGENT": "mayor", "GC_CITY": "/home/user/bright-lights" },
+  "env": {"GC_AGENT": "mayor", "GC_CITY": "/home/user/bright-lights"},
+  "lifecycle": "one_shot",
   "process_names": ["claude", "node"],
   "nudge": "initial prompt text",
   "pre_start": ["mkdir -p /workspace", "git clone repo /workspace"]
@@ -89,6 +90,10 @@ hints or ignore them:
   process tree after session creation, or ignore it for fire-and-forget
   behavior (like the subprocess provider does).
 
+- **`lifecycle`** — `"one_shot"` marks a short-lived command that is
+  expected to exit after handling its prompt. Providers should not require
+  a persistent post-start process for one-shot starts.
+
 - **`nudge`** — text that the tmux adapter types into the session after
   the agent is ready. Scripts that support interactive input can handle
   this in `start` (type the text after session creation) or leave it to
@@ -105,7 +110,7 @@ hints or ignore them:
   filesystem after the session is created and ready, before returning.
   Scripts should execute each command inside the session environment
   (e.g. `kubectl exec -- sh -c '<cmd>'` for K8s, `docker exec -- sh -c
-'<cmd>'` for Docker, or plain `sh -c '<cmd>'` for local providers).
+  '<cmd>'` for Docker, or plain `sh -c '<cmd>'` for local providers).
   Non-fatal: warn on stderr if a command fails, but don't abort start.
 
 - **`session_setup_script`** — path to a script on the controller
@@ -123,8 +128,8 @@ the exec protocol):
 - `emits_permission_warning` — bypass-permissions dialog handling
 - `fingerprint_extra` — config change detection metadata
 
-The distinction: readiness polling and delay are the _caller's_
-responsibility. Session setup commands are the _script's_ responsibility
+The distinction: readiness polling and delay are the *caller's*
+responsibility. Session setup commands are the *script's* responsibility
 — they run on the target filesystem, not the controller.
 
 ### Conventions

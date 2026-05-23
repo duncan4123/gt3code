@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -22,7 +21,6 @@ import (
 	"time"
 
 	"github.com/gastownhall/gascity/internal/beads"
-	beadsexec "github.com/gastownhall/gascity/internal/beads/exec"
 	"github.com/gastownhall/gascity/internal/events"
 	"github.com/gastownhall/gascity/internal/runtime"
 	"github.com/google/uuid"
@@ -47,13 +45,6 @@ const (
 	bridgeWSTimeout          = 3 * time.Second
 	snapshotCacheTTL         = 10 * time.Second
 )
-
-func debugf(format string, args ...interface{}) {
-	if os.Getenv("GC_T3BRIDGE_DEBUG") == "" {
-		return
-	}
-	fmt.Fprintf(os.Stderr, format, args...)
-}
 
 // Provider wraps an exec.Provider, moving the T3-specific lifecycle and turn
 // operations into native Go WebSocket calls while leaving a small helper
@@ -129,7 +120,10 @@ func resolveWsURLCandidates() []string {
 	if runtimeURL, err := readRuntimeWSURL(); err == nil {
 		add(runtimeURL)
 	}
-	t3Home := resolveT3BaseDir()
+	t3Home := os.Getenv("T3_HOME")
+	if t3Home == "" {
+		t3Home = filepath.Join(os.Getenv("HOME"), ".t3")
+	}
 	if urlBytes, err := os.ReadFile(filepath.Join(t3Home, "ws-url")); err == nil {
 		add(string(urlBytes))
 	}
@@ -226,16 +220,7 @@ func resolveT3ServerDir() string {
 	if v := os.Getenv("T3_SERVER_DIR"); strings.TrimSpace(v) != "" {
 		return strings.TrimSpace(v)
 	}
-	if v := os.Getenv("T3CODE_HOME"); strings.TrimSpace(v) != "" {
-		return filepath.Join(strings.TrimSpace(v), "apps", "server")
-	}
-	if v := os.Getenv("T3_HOME"); strings.TrimSpace(v) != "" {
-		return filepath.Join(strings.TrimSpace(v), "apps", "server")
-	}
-	if v := os.Getenv("T3_BASE_DIR"); strings.TrimSpace(v) != "" {
-		return filepath.Join(strings.TrimSpace(v), "apps", "server")
-	}
-	return filepath.Join(resolveT3BaseDir(), "apps", "server")
+	return "/data/projects/t3code/apps/server"
 }
 
 func resolveT3BaseDir() string {
@@ -686,9 +671,6 @@ func snapshotThreadBySessionName(snapshot map[string]interface{}, name string) m
 		if deletedAt, ok := thread["deletedAt"]; ok && deletedAt != nil {
 			continue
 		}
-		if archivedAt, ok := thread["archivedAt"]; ok && archivedAt != nil {
-			continue
-		}
 		meta := threadCustomMetadata(thread)
 		if SessionNameFromMetadata(meta) != name {
 			continue
@@ -1008,7 +990,10 @@ func (p *Provider) rpcSnapshot() (map[string]interface{}, error) {
 }
 
 func (p *Provider) nextCommandID(prefix string) string {
-	return fmt.Sprintf("%s-%s", prefix, uuid.NewString())
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.reqSeq++
+	return fmt.Sprintf("%s-%d", prefix, p.reqSeq)
 }
 
 // rpcCreateWorktree calls git.createWorktree via WebSocket. Returns (worktreePath, branch, error).
@@ -1112,6 +1097,14 @@ func (p *Provider) dispatchThreadCreate(
 		command["customMetadata"] = customMetadata
 	}
 	return p.rpcDispatchCommand(command)
+}
+
+func (p *Provider) dispatchThreadArchive(threadID string) error {
+	return p.rpcDispatchCommand(map[string]interface{}{
+		"type":      "thread.archive",
+		"commandId": p.nextCommandID("t3bridge-archive"),
+		"threadId":  threadID,
+	})
 }
 
 func (p *Provider) dispatchThreadSessionStop(threadID string) error {
@@ -1261,24 +1254,6 @@ func projectIsActive(snapshot map[string]interface{}, projectID string) bool {
 	return false
 }
 
-func projectMatchesWorkspaceRoot(snapshot map[string]interface{}, projectID, workspaceRoot string) bool {
-	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(workspaceRoot) == "" {
-		return false
-	}
-	for _, project := range snapshotProjects(snapshot) {
-		id, _ := project["id"].(string)
-		if id != projectID {
-			continue
-		}
-		if deletedAt, ok := project["deletedAt"]; ok && deletedAt != nil {
-			return false
-		}
-		root, _ := project["workspaceRoot"].(string)
-		return filepath.Clean(root) == filepath.Clean(workspaceRoot)
-	}
-	return false
-}
-
 func threadIsActive(snapshot map[string]interface{}, threadID string) bool {
 	for _, thread := range snapshotThreads(snapshot) {
 		id, _ := thread["id"].(string)
@@ -1411,10 +1386,9 @@ func buildThreadEnv(env map[string]string) map[string]string {
 }
 
 func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state string, sessionEnv map[string]string) map[string]interface{} {
-	cityName := normalizedGCCityName(envelope, sessionEnv)
 	groupKind := "workspace"
-	groupID := cityName
-	groupLabel := strings.ToUpper(cityName)
+	groupID := envelope.GC.CityName
+	groupLabel := strings.ToUpper(strings.TrimSpace(envelope.GC.CityName))
 	if strings.TrimSpace(envelope.GC.RigName) != "" {
 		groupKind = "rig"
 		groupID = envelope.GC.RigName
@@ -1433,7 +1407,7 @@ func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state string, se
 		"gc.sessionName":       envelope.GC.SessionName,
 		"gc.rig":               envelope.GC.RigName,
 		"gc.rigPath":           envelope.GC.RigPath,
-		"gc.city":              cityName,
+		"gc.city":              envelope.GC.CityName,
 		"gc.bead":              envelope.Assignment.BeadID,
 		"gc.beadTitle":         envelope.Assignment.BeadTitle,
 		"gc.convoy":            envelope.Assignment.ConvoyID,
@@ -1470,132 +1444,6 @@ func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state string, se
 		}
 	}
 	return meta
-}
-
-func repairStartupEnvelopeFromRuntimeEnv(envelope *StartupEnvelope, env map[string]string) {
-	if envelope == nil {
-		return
-	}
-	if envelope.GC.CityPath == "" {
-		envelope.GC.CityPath = env["GC_CITY_PATH"]
-	}
-	if envelope.GC.CityName == "" {
-		envelope.GC.CityName = cleanGCCityName(filepath.Base(filepath.Clean(envelope.GC.CityPath)))
-	}
-	if envelope.GC.SessionName == "" {
-		envelope.GC.SessionName = env["GC_SESSION_NAME"]
-	}
-	if envelope.GC.Template == "" {
-		envelope.GC.Template = env["GC_TEMPLATE"]
-	}
-	if envelope.GC.Agent == "" {
-		envelope.GC.Agent = envelope.GC.Template
-		if envelope.GC.Agent == "" {
-			envelope.GC.Agent = env["GC_AGENT"]
-		}
-	}
-
-	rigName := strings.TrimSpace(envelope.GC.RigName)
-	if rigName == "" {
-		rigName = strings.TrimSpace(env["GC_RIG"])
-	}
-	if rigName == "" {
-		for _, candidate := range []string{envelope.GC.Template, envelope.GC.Agent, env["GC_TEMPLATE"], env["GC_ALIAS"], env["GC_AGENT"]} {
-			if slash := strings.Index(candidate, "/"); slash > 0 {
-				rigName = strings.TrimSpace(candidate[:slash])
-				break
-			}
-		}
-	}
-	if rigName == "" {
-		return
-	}
-	envelope.GC.RigName = rigName
-
-	rigPath := strings.TrimSpace(envelope.GC.RigPath)
-	if rigPath == "" {
-		rigPath = strings.TrimSpace(env["GC_RIG_ROOT"])
-	}
-	if rigPath == "" || !isRepositoryRoot(rigPath) {
-		if bound := resolveSiteRigPath(envelope.GC.CityPath, rigName); bound != "" {
-			rigPath = bound
-		}
-	}
-	envelope.GC.RigPath = rigPath
-}
-
-func resolveSiteRigPath(cityPath, rigName string) string {
-	if strings.TrimSpace(cityPath) == "" || strings.TrimSpace(rigName) == "" {
-		return ""
-	}
-	data, err := os.ReadFile(filepath.Join(cityPath, ".gc", "site.toml"))
-	if err != nil {
-		return ""
-	}
-	inRig := false
-	var name, path string
-	flush := func() string {
-		if inRig && name == rigName && path != "" {
-			return path
-		}
-		return ""
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "[[rig]]" {
-			if matched := flush(); matched != "" {
-				return matched
-			}
-			inRig = true
-			name, path = "", ""
-			continue
-		}
-		if !inRig {
-			continue
-		}
-		if strings.HasPrefix(trimmed, "name") {
-			name = parseSimpleTOMLStringValue(trimmed)
-		}
-		if strings.HasPrefix(trimmed, "path") {
-			path = parseSimpleTOMLStringValue(trimmed)
-		}
-	}
-	return flush()
-}
-
-func parseSimpleTOMLStringValue(line string) string {
-	parts := strings.SplitN(line, "=", 2)
-	if len(parts) != 2 {
-		return ""
-	}
-	return strings.Trim(strings.TrimSpace(parts[1]), `"`)
-}
-
-func normalizedGCCityName(envelope StartupEnvelope, sessionEnv map[string]string) string {
-	for _, value := range []string{
-		envelope.GC.CityName,
-		sessionEnv["GC_CITY_NAME"],
-		envelope.GC.CityPath,
-		sessionEnv["GC_CITY_PATH"],
-		sessionEnv["GC_CITY_ROOT"],
-		sessionEnv["GC_CITY"],
-	} {
-		if name := cleanGCCityName(value); name != "" && !strings.ContainsAny(name, `/\`) {
-			return name
-		}
-		if base := cleanGCCityName(filepath.Base(filepath.Clean(value))); base != "" {
-			return base
-		}
-	}
-	return "gc"
-}
-
-func cleanGCCityName(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" || value == "." || value == ".." || value == string(filepath.Separator) {
-		return ""
-	}
-	return value
 }
 
 func stateChangePayload(state string, extra map[string]interface{}) map[string]interface{} {
@@ -1684,73 +1532,13 @@ func deriveThreadTitle(name string, envelope StartupEnvelope) string {
 }
 
 func deriveProjectWorkspaceRoot(workDir string, envelope StartupEnvelope) string {
-	if root := cleanRepositoryRoot(envelope.GC.RigPath); root != "" {
+	if root := strings.TrimSpace(envelope.GC.RigPath); root != "" {
 		return root
 	}
-	if strings.TrimSpace(envelope.GC.RigPath) != "" {
-		return ""
+	if root := strings.TrimSpace(envelope.GC.CityPath); root != "" {
+		return root
 	}
-
-	for _, candidate := range []string{
-		envelope.GC.CityPath,
-		envelope.Runtime.WorkDir,
-		workDir,
-	} {
-		if root := nearestRepositoryRoot(candidate); root != "" {
-			return root
-		}
-	}
-	return ""
-}
-
-func cleanRepositoryRoot(path string) string {
-	root := strings.TrimSpace(path)
-	if root == "" {
-		return ""
-	}
-	root = filepath.Clean(root)
-	if !isRepositoryRoot(root) {
-		return ""
-	}
-	return root
-}
-
-func nearestRepositoryRoot(path string) string {
-	current := strings.TrimSpace(path)
-	if current == "" {
-		return ""
-	}
-	current = filepath.Clean(current)
-	for {
-		if isRepositoryRoot(current) {
-			return current
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			return ""
-		}
-		current = parent
-	}
-}
-
-func isRepositoryRoot(path string) bool {
-	if strings.TrimSpace(path) == "" {
-		return false
-	}
-	for _, marker := range []string{".git", ".jj"} {
-		if _, err := os.Stat(filepath.Join(path, marker)); err == nil {
-			return true
-		}
-	}
-	return false
-}
-
-func deriveProjectRootError(name string, cfg runtime.Config, envelope StartupEnvelope) error {
-	if strings.TrimSpace(envelope.GC.RigPath) != "" {
-		return fmt.Errorf("t3bridge: configured rig %q for session %q is not a repository root: %s", envelope.GC.RigName, name, envelope.GC.RigPath)
-	}
-	candidates := []string{envelope.GC.CityPath, envelope.Runtime.WorkDir, cfg.WorkDir}
-	return fmt.Errorf("t3bridge: cannot resolve repository-backed T3 project root for session %q from %s", name, strings.Join(candidates, ", "))
+	return strings.TrimSpace(workDir)
 }
 
 func deriveProjectTitle(name, workspaceRoot string, envelope StartupEnvelope) string {
@@ -1864,86 +1652,16 @@ func resolveConfigProviderModel(cfg *execStartConfig) (string, string, bool) {
 	return provider, model, true
 }
 
-type watcherBeadStore struct {
-	store      beads.Store
-	prime      func(context.Context)
-	applyEvent func(string, json.RawMessage)
-}
-
-func beadStoreForWatcher(workDir string, env map[string]string) watcherBeadStore {
-	provider := strings.TrimSpace(env["GC_BEADS"])
-	if strings.HasPrefix(provider, "exec:") {
-		store := beadsexec.NewStore(strings.TrimSpace(strings.TrimPrefix(provider, "exec:")))
-		store.SetEnv(beadStoreEnvForWatcher(workDir, env))
-		return watcherBeadStore{store: store}
-	}
-
+func beadStoreForWatcher(workDir string, env map[string]string) *beads.CachingStore {
 	bd := beads.NewBdStore(workDir, beads.ExecCommandRunnerWithEnv(env))
-	cache := beads.NewCachingStore(bd, nil)
-	return watcherBeadStore{
-		store: cache,
-		prime: func(ctx context.Context) {
-			_ = cache.Prime(ctx)
-		},
-		applyEvent: cache.ApplyEvent,
-	}
+	return beads.NewCachingStore(bd, nil)
 }
 
-func beadStoreEnvForWatcher(workDir string, env map[string]string) map[string]string {
-	out := make(map[string]string, len(env)+4)
-	for key, value := range env {
-		out[key] = value
-	}
-	storeRoot := strings.TrimSpace(out["GC_STORE_ROOT"])
-	if storeRoot == "" {
-		storeRoot = strings.TrimSpace(out["GC_BEADS_SCOPE_ROOT"])
-	}
-	if storeRoot == "" {
-		storeRoot = strings.TrimSpace(out["GC_RIG_ROOT"])
-	}
-	if storeRoot == "" {
-		if beadsDir := strings.TrimSpace(out["BEADS_DIR"]); beadsDir != "" {
-			storeRoot = filepath.Dir(beadsDir)
-		}
-	}
-	if storeRoot == "" {
-		storeRoot = workDir
-	}
-	if storeRoot != "" {
-		out["GC_STORE_ROOT"] = storeRoot
-	}
-	if strings.TrimSpace(out["GC_STORE_SCOPE"]) == "" {
-		if rigRoot := strings.TrimSpace(out["GC_RIG_ROOT"]); rigRoot != "" && storeRoot == rigRoot {
-			out["GC_STORE_SCOPE"] = "rig"
-		} else {
-			out["GC_STORE_SCOPE"] = "city"
-		}
-	}
-	if strings.TrimSpace(out["BEADS_DIR"]) == "" && storeRoot != "" {
-		out["BEADS_DIR"] = filepath.Join(storeRoot, ".beads")
-	}
-	return out
-}
-
-func beadEventRelevant(ev events.Event, bead beads.Bead, identifiers []string, currentBead, currentConvoy string) bool {
-	for _, identifier := range identifiers {
-		if identifier == "" {
-			continue
-		}
-		if ev.Actor == identifier {
-			return true
-		}
-		if bead.Assignee == identifier {
-			return true
-		}
-		if bead.Metadata["gc.routed_to"] == identifier {
-			return true
-		}
-	}
-	if currentConvoy != "" && ev.Subject == currentConvoy {
+func beadEventRelevant(ev events.Event, bead beads.Bead, agentName, currentBead string) bool {
+	if ev.Actor == agentName {
 		return true
 	}
-	if currentBead != "" && bead.ParentID == currentBead {
+	if bead.Assignee == agentName {
 		return true
 	}
 	if currentBead == "" {
@@ -2000,18 +1718,18 @@ func activityFromBeadEvent(ev events.Event, bead beads.Bead) (string, string, ma
 	}
 }
 
-func (p *Provider) refreshAssignmentProjection(threadID string, envelope StartupEnvelope, providerName string, bead beads.Bead, store beads.Store) {
-	convoyID := envelope.Assignment.ConvoyID
-	convoyTitle := envelope.Assignment.ConvoyTitle
-	convoyStatus := envelope.Assignment.ConvoyStatus
+func (p *Provider) refreshAssignmentProjection(threadID string, envelope StartupEnvelope, providerName string, bead beads.Bead, cache *beads.CachingStore) {
+	convoyID := ""
+	convoyTitle := ""
+	convoyStatus := ""
 	convoyClosedCount := envelope.Assignment.ConvoyClosedCount
 	convoyTotalCount := envelope.Assignment.ConvoyTotalCount
-	if store != nil && bead.ParentID != "" {
-		if parent, err := store.Get(bead.ParentID); err == nil && parent.Type == "convoy" {
+	if bead.ParentID != "" {
+		if parent, err := cache.Get(bead.ParentID); err == nil && parent.Type == "convoy" {
 			convoyID = parent.ID
 			convoyTitle = parent.Title
 			convoyStatus = parent.Status
-			if children, err := store.Children(parent.ID); err == nil {
+			if children, err := cache.Children(parent.ID); err == nil {
 				total := len(children)
 				closed := 0
 				for _, child := range children {
@@ -2038,37 +1756,6 @@ func (p *Provider) refreshAssignmentProjection(threadID string, envelope Startup
 		next.Assignment.MoleculeID = bead.Metadata["molecule_id"]
 	}
 	_ = p.dispatchThreadMeta(threadID, buildGCMetadata(next, providerName, "active", nil))
-	if branch, worktreePath := beadGitContext(bead.Metadata); branch != "" || worktreePath != "" {
-		_ = p.rpcUpdateThreadMeta(threadID, branch, worktreePath)
-	}
-}
-
-func (p *Provider) dispatchThreadTitleFromBead(threadID string, bead beads.Bead) {
-	if strings.TrimSpace(bead.Title) == "" {
-		return
-	}
-	_ = p.rpcDispatchCommand(map[string]interface{}{
-		"type":      "thread.meta.update",
-		"commandId": p.nextCommandID("t3bridge-title"),
-		"threadId":  threadID,
-		"title":     bead.Title,
-	})
-}
-
-func beadGitContext(metadata map[string]string) (branch, worktreePath string) {
-	branch = firstMetadataValue(metadata, "branch", "source_branch", "git_branch")
-	worktreePath = firstMetadataValue(metadata, "work_dir", "worktree", "worktree_path")
-	return branch, worktreePath
-}
-
-func firstMetadataValue(metadata map[string]string, keys ...string) string {
-	for _, key := range keys {
-		value := strings.TrimSpace(metadata[key])
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 func (p *Provider) runEventWatcher(ctx context.Context, name string, cfg runtime.Config, binding threadBinding, envelope StartupEnvelope, providerName string) {
@@ -2087,13 +1774,8 @@ func (p *Provider) runEventWatcher(ctx context.Context, name string, cfg runtime
 	}
 	defer recorder.Close()
 
-	beadStore := beadStoreForWatcher(cfg.WorkDir, cfg.Env)
-	if beadStore.store == nil {
-		return
-	}
-	if beadStore.prime != nil {
-		beadStore.prime(ctx)
-	}
+	cache := beadStoreForWatcher(cfg.WorkDir, cfg.Env)
+	_ = cache.Prime(ctx)
 
 	afterSeq, err := recorder.LatestSeq()
 	if err != nil {
@@ -2105,15 +1787,8 @@ func (p *Provider) runEventWatcher(ctx context.Context, name string, cfg runtime
 	}
 	defer watcher.Close()
 
-	eventIdentifiers := watcherEventIdentifiers(cfg.Env)
+	agentName := cfg.Env["GC_AGENT"]
 	currentBead := cfg.Env["GC_BEAD"]
-	currentConvoy := cfg.Env["GC_CONVOY"]
-	if currentBead != "" {
-		if bead, err := beadStore.store.Get(currentBead); err == nil {
-			p.refreshAssignmentProjection(binding.ThreadID, envelope, providerName, bead, beadStore.store)
-			p.dispatchThreadTitleFromBead(binding.ThreadID, bead)
-		}
-	}
 
 	for {
 		ev, err := watcher.Next()
@@ -2123,47 +1798,26 @@ func (p *Provider) runEventWatcher(ctx context.Context, name string, cfg runtime
 		if ev.Type != events.BeadUpdated && ev.Type != events.BeadClosed && ev.Type != events.BeadCreated {
 			continue
 		}
-		if beadStore.applyEvent != nil {
-			beadStore.applyEvent(ev.Type, ev.Payload)
-		}
-		bead, err := beadStore.store.Get(ev.Subject)
+		cache.ApplyEvent(ev.Type, ev.Payload)
+		bead, err := cache.Get(ev.Subject)
 		if err != nil {
 			continue
 		}
-		if !beadEventRelevant(ev, bead, eventIdentifiers, currentBead, currentConvoy) {
+		if !beadEventRelevant(ev, bead, agentName, currentBead) {
 			continue
 		}
-		p.refreshAssignmentProjection(binding.ThreadID, envelope, providerName, bead, beadStore.store)
+		p.refreshAssignmentProjection(binding.ThreadID, envelope, providerName, bead, cache)
 		kind, summary, payload := activityFromBeadEvent(ev, bead)
 		if kind == "gc.bead.claimed" && bead.Title != "" {
-			p.dispatchThreadTitleFromBead(binding.ThreadID, bead)
+			_ = p.rpcDispatchCommand(map[string]interface{}{
+				"type":      "thread.meta.update",
+				"commandId": p.nextCommandID("t3bridge-title"),
+				"threadId":  binding.ThreadID,
+				"title":     bead.Title,
+			})
 		}
 		_ = p.dispatchActivity(binding.ThreadID, kind, summary, "info", payload)
 	}
-}
-
-func watcherEventIdentifiers(env map[string]string) []string {
-	raw := []string{
-		env["GC_AGENT"],
-		env["GC_ALIAS"],
-		env["GC_SESSION_ID"],
-		env["GC_SESSION_NAME"],
-		env["GC_TEMPLATE"],
-	}
-	seen := make(map[string]struct{}, len(raw))
-	identifiers := make([]string, 0, len(raw))
-	for _, value := range raw {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		identifiers = append(identifiers, value)
-	}
-	return identifiers
 }
 
 func (p *Provider) ensureEventWatcher(name string, cfg runtime.Config, binding threadBinding, envelope StartupEnvelope, providerName string) {
@@ -2196,25 +1850,25 @@ func (p *Provider) IsRunning(name string) bool {
 	snapshot, err := p.rpcSnapshot()
 	if err != nil {
 		if p.withinRecentStart(name, 30*time.Second) {
-			debugf("t3bridge: IsRunning(%s) — snapshot soft-unavailable during startup grace → true (%v)\n", name, err)
+			fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) — snapshot soft-unavailable during startup grace → true (%v)\n", name, err)
 			return true
 		}
-		debugf("t3bridge: IsRunning(%s) — snapshot error: %v\n", name, err)
+		fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) — snapshot error: %v\n", name, err)
 		return false
 	}
 	thread := snapshotThreadBySessionName(snapshot, name)
 	binding := snapshotThreadBinding(thread)
 	if binding == nil {
-		debugf("t3bridge: IsRunning(%s) — no snapshot binding\n", name)
+		fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) — no snapshot binding\n", name)
 		return false
 	}
 	status := p.threadSessionStatus(binding.ThreadID)
 	if (status == "none" || status == "gone") && p.withinRecentStart(name, 30*time.Second) {
-		debugf("t3bridge: IsRunning(%s) threadID=%s — startup grace period → true\n", name, binding.ThreadID)
+		fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) threadID=%s — startup grace period → true\n", name, binding.ThreadID)
 		return true
 	}
 	result := status == "running" || status == "ready"
-	debugf("t3bridge: IsRunning(%s) threadID=%s status=%q → %v\n", name, binding.ThreadID, status, result)
+	fmt.Fprintf(os.Stderr, "t3bridge: IsRunning(%s) threadID=%s status=%q → %v\n", name, binding.ThreadID, status, result)
 	return result
 }
 
@@ -2239,8 +1893,7 @@ func (p *Provider) ListRunning(prefix string) ([]string, error) {
 		if name == "" {
 			continue
 		}
-		switch meta["gc.state"] {
-		case "archived", "drained", "stopped":
+		if meta["gc.state"] == "archived" {
 			continue
 		}
 		if prefix != "" && !strings.HasPrefix(name, prefix) {
@@ -2299,7 +1952,6 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 			envelope.Startup.InitialNudge = cfg.Nudge
 		}
 	}
-	repairStartupEnvelopeFromRuntimeEnv(&envelope, cfg.Env)
 	if envelope.Runtime.Branch != "" {
 		hasWorktree = true
 		cwd = envelope.GC.RigPath
@@ -2367,10 +2019,6 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	}
 	cfg.Env["GC_STARTUP_ENVELOPE"] = string(envelopeJSON)
 
-	if err := runPreStart(ctx, cfg); err != nil {
-		return fail(err)
-	}
-
 	snapshot, err := p.rpcSnapshot()
 	if err != nil {
 		return fail(fmt.Errorf("t3bridge: load snapshot: %w", err))
@@ -2381,9 +2029,6 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 
 	threadTitle := deriveThreadTitle(name, envelope)
 	projectWorkspaceRoot := deriveProjectWorkspaceRoot(cfg.WorkDir, envelope)
-	if projectWorkspaceRoot == "" {
-		return fail(deriveProjectRootError(name, cfg, envelope))
-	}
 	projectTitle := deriveProjectTitle(name, projectWorkspaceRoot, envelope)
 
 	projectID := ""
@@ -2391,12 +2036,11 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 
 	if existingBinding != nil {
 		fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) found existing binding thread=%s project=%s\n", name, existingBinding.ThreadID, existingBinding.ProjectID) //nolint:errcheck
-		projectMatchesRoot := projectMatchesWorkspaceRoot(snapshot, existingBinding.ProjectID, projectWorkspaceRoot)
 		reuse := DecideThreadReuse(ReuseCheck{
 			Desired:       envelope,
 			Stored:        storedEnvelopeFromThread(existingThread),
 			ThreadActive:  threadIsActive(snapshot, existingBinding.ThreadID),
-			ProjectActive: projectMatchesRoot,
+			ProjectActive: projectIsActive(snapshot, existingBinding.ProjectID),
 		})
 
 		switch reuse.Decision {
@@ -2440,8 +2084,9 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 		default:
 			fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) discard existing thread=%s decision=%s\n", name, existingBinding.ThreadID, reuse.Decision) //nolint:errcheck
 			if existingBinding.ThreadID != "" {
-				_ = p.dispatchThreadMeta(existingBinding.ThreadID, map[string]interface{}{"gc.state": "stopped"})
+				_ = p.dispatchThreadMeta(existingBinding.ThreadID, map[string]interface{}{"gc.state": "archived"})
 				_ = p.dispatchThreadSessionStop(existingBinding.ThreadID)
+				_ = p.dispatchThreadArchive(existingBinding.ThreadID)
 			}
 		}
 	}
@@ -2570,7 +2215,7 @@ func (p *Provider) Stop(name string) error {
 	_ = p.dispatchThreadSessionStop(binding.ThreadID)
 
 	if drained == "1" {
-		_ = p.dispatchThreadMeta(binding.ThreadID, map[string]interface{}{"gc.state": "drained"})
+		_ = p.dispatchThreadMeta(binding.ThreadID, map[string]interface{}{"gc.state": "archived"})
 		p.removeWorktreeForThread(thread)
 	}
 	p.clearRecentStart(name)
@@ -2877,28 +2522,6 @@ func (p *Provider) SendKeys(name string, keys ...string) error {
 }
 
 func (p *Provider) RunLive(_ string, _ runtime.Config) error {
-	return nil
-}
-
-func runPreStart(ctx context.Context, cfg runtime.Config) error {
-	if len(cfg.PreStart) == 0 {
-		return nil
-	}
-	env := os.Environ()
-	for k, v := range cfg.Env {
-		env = append(env, k+"="+v)
-	}
-	for i, command := range cfg.PreStart {
-		stepCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		cmd := exec.CommandContext(stepCtx, "sh", "-c", command)
-		cmd.Dir = cfg.WorkDir
-		cmd.Env = env
-		output, err := cmd.CombinedOutput()
-		cancel()
-		if err != nil {
-			return fmt.Errorf("t3bridge pre_start[%d]: %w: %s", i, err, strings.TrimSpace(string(output)))
-		}
-	}
 	return nil
 }
 

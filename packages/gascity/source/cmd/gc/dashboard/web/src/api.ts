@@ -19,7 +19,9 @@ import { cityScope as currentCityScope } from "./state";
 // (dev with the Vite proxy) set this to an empty string and rely on
 // relative URLs.
 export function supervisorBaseURL(): string {
-  const meta = document.querySelector<HTMLMetaElement>('meta[name="supervisor-url"]');
+  const meta = document.querySelector<HTMLMetaElement>(
+    'meta[name="supervisor-url"]',
+  );
   const raw = meta?.content ?? "";
   return raw.replace(/\/+$/, "");
 }
@@ -41,7 +43,8 @@ export type DashboardSchema = components["schemas"];
 // discriminator for the typed payload union.
 export type CityEventRecord = DashboardSchema["TypedEventStreamEnvelope"];
 export type CityEventStreamEnvelope = DashboardSchema["EventStreamEnvelope"];
-export type SupervisorEventRecord = DashboardSchema["TypedTaggedEventStreamEnvelope"];
+export type SupervisorEventRecord =
+  DashboardSchema["TypedTaggedEventStreamEnvelope"];
 export type SupervisorEventStreamEnvelope = DashboardSchema["TaggedEventStreamEnvelope"];
 export type HeartbeatEvent = DashboardSchema["HeartbeatEvent"];
 export type SessionRecord = DashboardSchema["SessionResponse"];
