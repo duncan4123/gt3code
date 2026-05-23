@@ -12,7 +12,7 @@ JJ tracks code state. Jorje is the review surface.
 - Treat `jj_change` as the durable code-change ID.
 - Treat `work_dir` as the active JJ workspace for a bead.
 - Use one JJ workspace per active code-writing bead.
-- Keep agent state and bead workspaces under `{{.WorktreesRoot}}/gascity/...`,
+- Keep agent state and bead workspaces under `.t3-dev/worktrees/gascity/...`,
   inside the T3 install's shared worktree root but outside the served source tree.
 - Workers submit changes; only the lander moves target bookmarks.
 - Prefer stacked changes over broad mixed changes.

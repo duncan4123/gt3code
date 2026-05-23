@@ -1,6 +1,5 @@
 [workspace]
 provider = "codex"
-suspended = false
 install_agent_hooks = ["codex"]
 
 [[rigs]]
@@ -44,7 +43,6 @@ suspended = true
 [[rigs]]
 name = "t3-jj"
 prefix = "tj"
-suspended = true
 includes = ["packs/flywheel/all", "packs/jj"]
 
 [[rigs.overrides]]
