@@ -179,12 +179,12 @@ func newSessionProviderForCity(cfg *config.City, cityPath string) runtime.Provid
 
 func newStatusSessionProviderForCity(cfg *config.City, cityPath string) runtime.Provider {
 	ctx := sessionProviderContextForCity(cfg, cityPath, os.Getenv("GC_SESSION"))
-	return newSessionProviderFromContext(ctx, nil)
+	return newBoundedStatusProvider(newSessionProviderFromContext(ctx, nil))
 }
 
 func newStatusSessionProviderForCityWithSnapshot(cfg *config.City, cityPath string, sessionBeads *sessionBeadSnapshot) runtime.Provider {
 	ctx := sessionProviderContextForCity(cfg, cityPath, os.Getenv("GC_SESSION"))
-	return newSessionProviderFromContext(ctx, sessionBeads)
+	return newBoundedStatusProvider(newSessionProviderFromContext(ctx, sessionBeads))
 }
 
 func registerStatusProviderACPRoutes(sp runtime.Provider, snapshot *sessionBeadSnapshot, cityName string, cfg *config.City) {

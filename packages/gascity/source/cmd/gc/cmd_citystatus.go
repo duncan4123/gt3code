@@ -17,18 +17,19 @@ import (
 
 // StatusJSON is the JSON output format for "gc status --json".
 type StatusJSON struct {
-	SchemaVersion string            `json:"schema_version"`
-	OK            bool              `json:"ok"`
-	CityName      string            `json:"city_name"`
-	Workspace     WorkspaceJSON     `json:"workspace"`
-	CityPath      string            `json:"city_path"`
-	Controller    ControllerJSON    `json:"controller"`
-	Running       bool              `json:"running"`
-	Suspended     bool              `json:"suspended"`
-	Health        HealthJSON        `json:"health"`
-	Agents        []StatusAgentJSON `json:"agents"`
-	Rigs          []StatusRigJSON   `json:"rigs"`
-	Summary       StatusSummaryJSON `json:"summary"`
+	SchemaVersion   string            `json:"schema_version"`
+	OK              bool              `json:"ok"`
+	CityName        string            `json:"city_name"`
+	Workspace       WorkspaceJSON     `json:"workspace"`
+	CityPath        string            `json:"city_path"`
+	EffectiveAPIURL string            `json:"effective_api_url,omitempty"`
+	Controller      ControllerJSON    `json:"controller"`
+	Running         bool              `json:"running"`
+	Suspended       bool              `json:"suspended"`
+	Health          HealthJSON        `json:"health"`
+	Agents          []StatusAgentJSON `json:"agents"`
+	Rigs            []StatusRigJSON   `json:"rigs"`
+	Summary         StatusSummaryJSON `json:"summary"`
 }
 
 type WorkspaceJSON struct {
