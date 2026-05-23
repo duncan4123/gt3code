@@ -149,9 +149,14 @@ func workflowSQLSnapshot(user, password, host string, port int, database, rootID
 
 	depMap := make(map[string][]beads.Dep)
 	for depRows.Next() {
-		var d beads.Dep
-		if err := depRows.Scan(&d.IssueID, &d.DependsOnID, &d.Type); err != nil {
+		var issueID, dependsOnID, depType sql.NullString
+		if err := depRows.Scan(&issueID, &dependsOnID, &depType); err != nil {
 			return nil, nil, nil, fmt.Errorf("dep scan: %w", err)
+		}
+		d := beads.Dep{
+			IssueID:     issueID.String,
+			DependsOnID: dependsOnID.String,
+			Type:        depType.String,
 		}
 		depMap[d.IssueID] = append(depMap[d.IssueID], d)
 	}

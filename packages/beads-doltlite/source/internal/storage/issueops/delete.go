@@ -113,13 +113,17 @@ func DeleteIssuesInTx(ctx context.Context, tx *sql.Tx, ids []string, cascade boo
 				}
 
 				for rows.Next() {
-					var depOnID, issueID string
+					var issueID string
+					var depOnID sql.NullString
 					if err := rows.Scan(&depOnID, &issueID); err != nil {
 						_ = rows.Close()
 						return nil, fmt.Errorf("scan dependent: %w", err)
 					}
+					if !depOnID.Valid {
+						continue
+					}
 					if !idSet[issueID] {
-						externalBySource[depOnID] = append(externalBySource[depOnID], issueID)
+						externalBySource[depOnID.String] = append(externalBySource[depOnID.String], issueID)
 					}
 				}
 				_ = rows.Close()

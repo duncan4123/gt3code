@@ -272,12 +272,16 @@ func markBlockedFromDepsInTx(
 			}
 
 			for childRows.Next() {
-				var childID, parentID string
+				var childID string
+				var parentID sql.NullString
 				if err := childRows.Scan(&childID, &parentID); err != nil {
 					_ = childRows.Close()
 					return fmt.Errorf("compute blocked IDs: scan child: %w", err)
 				}
-				spawnerChildren[parentID] = append(spawnerChildren[parentID], childID)
+				if !parentID.Valid {
+					continue
+				}
+				spawnerChildren[parentID.String] = append(spawnerChildren[parentID.String], childID)
 				childIDs[childID] = struct{}{}
 			}
 			_ = childRows.Close()
@@ -394,10 +398,15 @@ func loadBlockingDepsForIssueIDsInTx(ctx context.Context, tx *sql.Tx, depTables 
 			}
 			for rows.Next() {
 				var rec blockingDepRecord
-				if err := rows.Scan(&rec.issueID, &rec.dependsOnID, &rec.depType, &rec.metadata); err != nil {
+				var dependsOnID sql.NullString
+				if err := rows.Scan(&rec.issueID, &dependsOnID, &rec.depType, &rec.metadata); err != nil {
 					_ = rows.Close()
 					return nil, fmt.Errorf("compute blocked IDs: scan dep: %w", err)
 				}
+				if !dependsOnID.Valid {
+					continue
+				}
+				rec.dependsOnID = dependsOnID.String
 				deps = append(deps, rec)
 			}
 			_ = rows.Close()
@@ -470,12 +479,16 @@ func loadParentIDsForChildrenInTx(ctx context.Context, tx *sql.Tx, depTables []s
 				return nil, fmt.Errorf("candidate parents from %s: %w", depTable, err)
 			}
 			for rows.Next() {
-				var childID, parentID string
+				var childID string
+				var parentID sql.NullString
 				if err := rows.Scan(&childID, &parentID); err != nil {
 					_ = rows.Close()
 					return nil, fmt.Errorf("scan candidate parent: %w", err)
 				}
-				childParents[childID] = parentID
+				if !parentID.Valid {
+					continue
+				}
+				childParents[childID] = parentID.String
 			}
 			_ = rows.Close()
 			if err := rows.Err(); err != nil {
@@ -515,12 +528,16 @@ func GetChildrenWithParentsInTx(ctx context.Context, tx *sql.Tx, parentIDs []str
 				return nil, fmt.Errorf("get children with parents from %s: %w", depTable, err)
 			}
 			for rows.Next() {
-				var childID, parentID string
+				var childID string
+				var parentID sql.NullString
 				if err := rows.Scan(&childID, &parentID); err != nil {
 					_ = rows.Close()
 					return nil, fmt.Errorf("scan children with parents: %w", err)
 				}
-				result[childID] = parentID
+				if !parentID.Valid {
+					continue
+				}
+				result[childID] = parentID.String
 			}
 			_ = rows.Close()
 			if err := rows.Err(); err != nil {

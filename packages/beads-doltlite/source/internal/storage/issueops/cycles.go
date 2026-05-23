@@ -26,13 +26,17 @@ func DetectCyclesInTx(ctx context.Context, tx *sql.Tx) ([][]*types.Issue, error)
 			return nil, fmt.Errorf("detect cycles: query %s: %w", depTable, err)
 		}
 		for rows.Next() {
-			var issueID, dependsOnID, depType string
+			var issueID, depType string
+			var dependsOnID sql.NullString
 			if err := rows.Scan(&issueID, &dependsOnID, &depType); err != nil {
 				_ = rows.Close()
 				return nil, fmt.Errorf("detect cycles: scan %s: %w", depTable, err)
 			}
+			if !dependsOnID.Valid {
+				continue
+			}
 			if types.DependencyType(depType) == types.DepBlocks || types.DependencyType(depType) == types.DepConditionalBlocks {
-				graph[issueID] = append(graph[issueID], dependsOnID)
+				graph[issueID] = append(graph[issueID], dependsOnID.String)
 			}
 		}
 		_ = rows.Close()

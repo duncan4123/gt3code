@@ -228,11 +228,15 @@ func (r *dependencySQLRepositoryImpl) queryDeps(ctx context.Context, q string, a
 	for rows.Next() {
 		var d types.Dependency
 		var typ string
-		var createdBy, metadata, threadID sql.NullString
+		var dependsOnID, createdBy, metadata, threadID sql.NullString
 		var createdAt sql.NullTime
-		if err := rows.Scan(&d.IssueID, &d.DependsOnID, &typ, &createdAt, &createdBy, &metadata, &threadID); err != nil {
+		if err := rows.Scan(&d.IssueID, &dependsOnID, &typ, &createdAt, &createdBy, &metadata, &threadID); err != nil {
 			return fmt.Errorf("scan: %w", err)
 		}
+		if !dependsOnID.Valid {
+			continue
+		}
+		d.DependsOnID = dependsOnID.String
 		d.Type = types.DependencyType(typ)
 		if createdAt.Valid {
 			d.CreatedAt = createdAt.Time

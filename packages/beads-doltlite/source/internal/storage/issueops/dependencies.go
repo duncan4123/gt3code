@@ -633,10 +633,15 @@ func GetDependenciesWithMetadataInTx(ctx context.Context, tx *sql.Tx, issueID st
 		}
 		for rows.Next() {
 			var d depMeta
-			if scanErr := rows.Scan(&d.depID, &d.depType); scanErr != nil {
+			var depID sql.NullString
+			if scanErr := rows.Scan(&depID, &d.depType); scanErr != nil {
 				_ = rows.Close()
 				return nil, fmt.Errorf("get dependencies: scan: %w", scanErr)
 			}
+			if !depID.Valid {
+				continue
+			}
+			d.depID = depID.String
 			deps = append(deps, d)
 		}
 		_ = rows.Close()
@@ -753,12 +758,14 @@ func GetDependenciesInTx(ctx context.Context, tx *sql.Tx, issueID string) ([]*ty
 			return nil, fmt.Errorf("get dependencies from %s: %w", depTable, err)
 		}
 		for rows.Next() {
-			var id string
+			var id sql.NullString
 			if scanErr := rows.Scan(&id); scanErr != nil {
 				_ = rows.Close()
 				return nil, fmt.Errorf("get dependencies: scan: %w", scanErr)
 			}
-			ids = append(ids, id)
+			if id.Valid {
+				ids = append(ids, id.String)
+			}
 		}
 		_ = rows.Close()
 		if err := rows.Err(); err != nil {

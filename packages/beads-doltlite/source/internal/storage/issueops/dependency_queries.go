@@ -321,10 +321,15 @@ func queryBlockedByInfo(
 		var blockerIDs []string
 		for rows.Next() {
 			var row blockingInfoRow
-			if scanErr := rows.Scan(&row.issueID, &row.blockerID, &row.depType); scanErr != nil {
+			var blockerID sql.NullString
+			if scanErr := rows.Scan(&row.issueID, &blockerID, &row.depType); scanErr != nil {
 				_ = rows.Close()
 				return fmt.Errorf("get blocking info: scan blocked-by: %w", scanErr)
 			}
+			if !blockerID.Valid {
+				continue
+			}
+			row.blockerID = blockerID.String
 			depRows = append(depRows, row)
 			blockerIDs = append(blockerIDs, row.blockerID)
 		}
@@ -395,18 +400,22 @@ func queryBlocksInfo(
 				return fmt.Errorf("get blocks info from %s: %w", depTable, err)
 			}
 			for rows.Next() {
-				var blockerID, blockedID, depType string
+				var blockedID, depType string
+				var blockerID sql.NullString
 				if scanErr := rows.Scan(&blockerID, &blockedID, &depType); scanErr != nil {
 					_ = rows.Close()
 					return fmt.Errorf("get blocking info: scan blocks: %w", scanErr)
 				}
-				if statusByID[blockerID] == types.StatusClosed {
+				if !blockerID.Valid {
+					continue
+				}
+				if statusByID[blockerID.String] == types.StatusClosed {
 					continue
 				}
 				if depType == "parent-child" {
 					continue
 				}
-				blocksMap[blockerID] = append(blocksMap[blockerID], blockedID)
+				blocksMap[blockerID.String] = append(blocksMap[blockerID.String], blockedID)
 			}
 			_ = rows.Close()
 			if err := rows.Err(); err != nil {
@@ -556,13 +565,17 @@ func GetNewlyUnblockedByCloseInTx(ctx context.Context, tx *sql.Tx, closedIssueID
 				return nil, fmt.Errorf("check remaining blockers from %s: %w", depTable, err)
 			}
 			for depRows.Next() {
-				var candidateID, blockerID string
+				var candidateID string
+				var blockerID sql.NullString
 				if err := depRows.Scan(&candidateID, &blockerID); err != nil {
 					_ = depRows.Close()
 					return nil, fmt.Errorf("scan remaining blocker: %w", err)
 				}
-				remainingByCandidate[candidateID] = append(remainingByCandidate[candidateID], blockerID)
-				remainingBlockerSet[blockerID] = struct{}{}
+				if !blockerID.Valid {
+					continue
+				}
+				remainingByCandidate[candidateID] = append(remainingByCandidate[candidateID], blockerID.String)
+				remainingBlockerSet[blockerID.String] = struct{}{}
 			}
 			_ = depRows.Close()
 			if err := depRows.Err(); err != nil {
@@ -632,10 +645,15 @@ func IsBlockedInTx(ctx context.Context, tx *sql.Tx, issueID string) (bool, []str
 		}
 		for rows.Next() {
 			var e depEdge
-			if err := rows.Scan(&e.dependsOnID, &e.depType); err != nil {
+			var dependsOnID sql.NullString
+			if err := rows.Scan(&dependsOnID, &e.depType); err != nil {
 				_ = rows.Close()
 				return false, nil, fmt.Errorf("scan blocker edge: %w", err)
 			}
+			if !dependsOnID.Valid {
+				continue
+			}
+			e.dependsOnID = dependsOnID.String
 			edges = append(edges, e)
 		}
 		_ = rows.Close()
@@ -680,10 +698,13 @@ func IsBlockedInTx(ctx context.Context, tx *sql.Tx, issueID string) (bool, []str
 func scanDependencyRow(rows *sql.Rows) (*types.Dependency, error) {
 	var dep types.Dependency
 	var createdAt sql.NullTime
-	var metadata, threadID sql.NullString
+	var dependsOnID, metadata, threadID sql.NullString
 
-	if err := rows.Scan(&dep.IssueID, &dep.DependsOnID, &dep.Type, &createdAt, &dep.CreatedBy, &metadata, &threadID); err != nil {
+	if err := rows.Scan(&dep.IssueID, &dependsOnID, &dep.Type, &createdAt, &dep.CreatedBy, &metadata, &threadID); err != nil {
 		return nil, fmt.Errorf("scan dependency: %w", err)
+	}
+	if dependsOnID.Valid {
+		dep.DependsOnID = dependsOnID.String
 	}
 
 	if createdAt.Valid {

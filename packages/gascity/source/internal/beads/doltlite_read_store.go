@@ -749,9 +749,13 @@ func (s *DoltliteReadStore) queryDeps(where, value string) ([]Dep, error) {
 
 func scanDep(rows interface{ Scan(...any) error }) (Dep, error) {
 	var dep Dep
-	if err := rows.Scan(&dep.IssueID, &dep.DependsOnID, &dep.Type); err != nil {
+	var issueID, dependsOnID, depType sql.NullString
+	if err := rows.Scan(&issueID, &dependsOnID, &depType); err != nil {
 		return dep, err
 	}
+	dep.IssueID = issueID.String
+	dep.DependsOnID = dependsOnID.String
+	dep.Type = depType.String
 	if dep.Type == "" {
 		dep.Type = "blocks"
 	}
