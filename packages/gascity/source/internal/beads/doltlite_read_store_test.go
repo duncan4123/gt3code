@@ -5,12 +5,13 @@ package beads
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 	"time"
+
+	gcbeads "github.com/steveyegge/beads/gascitystore"
 )
 
 func TestDoltliteReadStoreListsSessionBeads(t *testing.T) {
@@ -354,10 +355,22 @@ func newTestDoltliteReadStore(t *testing.T) (*DoltliteReadStore, func()) {
 		t.Fatalf("write metadata: %v", err)
 	}
 
+	native, err := gcbeads.Open(context.Background(), dir, "gascity-test")
+	if err != nil {
+		t.Fatalf("open native doltlite store: %v", err)
+	}
+	if err := native.Close(); err != nil {
+		t.Fatalf("close schema init store: %v", err)
+	}
 	setTestDoltliteConfig(t, filepath.Join(beadsDir, "doltlite", "hq.db"))
+	native, err = gcbeads.Open(context.Background(), dir, "gascity-test")
+	if err != nil {
+		t.Fatalf("reopen native doltlite store: %v", err)
+	}
+	defer native.Close() //nolint:errcheck // test cleanup
 
 	now := time.Now().UTC()
-	created := []testDoltliteIssue{
+	created := []gcbeads.Issue{
 		{
 			ID:          "gc-session",
 			Title:       "session",
@@ -427,7 +440,7 @@ func newTestDoltliteReadStore(t *testing.T) (*DoltliteReadStore, func()) {
 			Status:    "open",
 			IssueType: "task",
 			CreatedAt: now,
-			Dependencies: []Dep{{
+			Dependencies: []gcbeads.Dependency{{
 				DependsOnID: "gc-blocker",
 				Type:        "blocks",
 			}},
@@ -479,7 +492,7 @@ func newTestDoltliteReadStore(t *testing.T) (*DoltliteReadStore, func()) {
 		},
 	}
 	for _, issue := range created {
-		if err := insertTestDoltliteIssue(t, filepath.Join(beadsDir, "doltlite", "hq.db"), issue); err != nil {
+		if _, err := native.Create(context.Background(), issue); err != nil {
 			t.Fatalf("create %s: %v", issue.ID, err)
 		}
 	}
@@ -515,120 +528,17 @@ func hasTestBead(rows []Bead, id string) bool {
 	return false
 }
 
-type testDoltliteIssue struct {
-	ID           string
-	Title        string
-	Status       string
-	IssueType    string
-	Priority     *int
-	CreatedAt    time.Time
-	Assignee     string
-	ParentID     string
-	Description  string
-	Labels       []string
-	Metadata     map[string]string
-	Dependencies []Dep
-}
-
 func setTestDoltliteConfig(t *testing.T, dbPath string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		t.Fatalf("mkdir doltlite dir: %v", err)
-	}
 	db, err := sql.Open("sqlite3", dbPath+"?_busy_timeout=10000")
 	if err != nil {
 		t.Fatalf("open doltlite db for config: %v", err)
 	}
 	defer db.Close() //nolint:errcheck // test cleanup
-	if _, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS config (
-			key TEXT PRIMARY KEY,
-			value TEXT NOT NULL
-		);
-		CREATE TABLE IF NOT EXISTS issues (
-			id TEXT PRIMARY KEY,
-			title TEXT NOT NULL,
-			status TEXT NOT NULL,
-			issue_type TEXT NOT NULL,
-			priority INTEGER,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL,
-			assignee TEXT,
-			description TEXT NOT NULL DEFAULT '',
-			design TEXT NOT NULL DEFAULT '',
-			acceptance_criteria TEXT NOT NULL DEFAULT '',
-			notes TEXT NOT NULL DEFAULT '',
-			metadata TEXT NOT NULL DEFAULT '{}'
-		);
-		CREATE TABLE IF NOT EXISTS labels (
-			issue_id TEXT NOT NULL,
-			label TEXT NOT NULL
-		);
-		CREATE TABLE IF NOT EXISTS dependencies (
-			issue_id TEXT NOT NULL,
-			depends_on_id TEXT NOT NULL,
-			type TEXT NOT NULL
-		);
-	`); err != nil {
-		t.Fatalf("create doltlite test schema: %v", err)
-	}
 	if _, err := db.Exec("INSERT OR REPLACE INTO config (`key`, value) VALUES ('issue_prefix', 'gc')"); err != nil {
 		t.Fatalf("set issue_prefix config: %v", err)
 	}
 	if _, err := db.Exec("INSERT OR REPLACE INTO config (`key`, value) VALUES ('types.custom', 'session,agent,role,rig,message,convoy,molecule,gate,merge-request')"); err != nil {
 		t.Fatalf("set custom types config: %v", err)
 	}
-}
-
-func insertTestDoltliteIssue(t *testing.T, dbPath string, issue testDoltliteIssue) error {
-	t.Helper()
-	db, err := sql.Open("sqlite3", dbPath+"?_busy_timeout=10000")
-	if err != nil {
-		return err
-	}
-	defer db.Close() //nolint:errcheck // test cleanup
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback() //nolint:errcheck // test cleanup
-
-	metadata, err := json.Marshal(issue.Metadata)
-	if err != nil {
-		return err
-	}
-	priority := any(nil)
-	if issue.Priority != nil {
-		priority = *issue.Priority
-	}
-	created := issue.CreatedAt.UTC().Format(time.RFC3339Nano)
-	if _, err := tx.Exec(`
-		INSERT INTO issues (
-			id, title, status, issue_type, priority, created_at, updated_at,
-			assignee, description, design, acceptance_criteria, notes, metadata
-		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', ?)
-	`, issue.ID, issue.Title, issue.Status, issue.IssueType, priority, created, created, issue.Assignee, issue.Description, string(metadata)); err != nil {
-		return err
-	}
-	for _, label := range issue.Labels {
-		if _, err := tx.Exec("INSERT INTO labels (issue_id, label) VALUES (?, ?)", issue.ID, label); err != nil {
-			return err
-		}
-	}
-	if issue.ParentID != "" {
-		if _, err := tx.Exec("INSERT INTO dependencies (issue_id, depends_on_id, type) VALUES (?, ?, 'parent-child')", issue.ID, issue.ParentID); err != nil {
-			return err
-		}
-	}
-	for _, dep := range issue.Dependencies {
-		depType := dep.Type
-		if depType == "" {
-			depType = "blocks"
-		}
-		if _, err := tx.Exec("INSERT INTO dependencies (issue_id, depends_on_id, type) VALUES (?, ?, ?)", issue.ID, dep.DependsOnID, depType); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
 }
