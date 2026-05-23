@@ -546,6 +546,109 @@ provider = "claude"
 	}
 }
 
+func TestSuspendAgent_ImportedWorkspaceAgentUsesLocalPatchIdentity(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTOML(t, dir, `[workspace]
+name = "test-city"
+`)
+	if err := os.WriteFile(filepath.Join(dir, "pack.toml"), []byte(`[pack]
+name = "test-city"
+schema = 2
+
+[imports.ops]
+source = "./packs/ops"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	packDir := filepath.Join(dir, "packs", "ops")
+	if err := os.MkdirAll(packDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packDir, "pack.toml"), []byte(`[pack]
+name = "ops"
+schema = 2
+
+[[agent]]
+name = "deacon"
+provider = "codex"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ed := configedit.NewEditor(fsys.OSFS{}, path)
+	if err := ed.SuspendAgent("deacon"); err != nil {
+		t.Fatalf("SuspendAgent: %v", err)
+	}
+
+	raw := string(mustReadFile(t, path))
+	if strings.Contains(raw, "ops.deacon") {
+		t.Fatalf("city.toml must not patch binding-qualified name:\n%s", raw)
+	}
+	if !strings.Contains(raw, "name = \"deacon\"") || !strings.Contains(raw, "suspended = true") {
+		t.Fatalf("city.toml should patch local agent identity:\n%s", raw)
+	}
+
+	cfg := readExpandedTOML(t, path)
+	if !findAgent(t, cfg, "deacon").Suspended {
+		t.Fatal("deacon should be suspended in expanded config")
+	}
+}
+
+func TestSuspendAgent_ImportedRigAgentUsesLocalPatchIdentity(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTOML(t, dir, `[workspace]
+name = "test-city"
+
+[[rigs]]
+name = "repo"
+path = "."
+`)
+	if err := os.WriteFile(filepath.Join(dir, "pack.toml"), []byte(`[pack]
+name = "test-city"
+schema = 2
+
+[imports.ops]
+source = "./packs/ops"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	packDir := filepath.Join(dir, "packs", "ops")
+	if err := os.MkdirAll(packDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packDir, "pack.toml"), []byte(`[pack]
+name = "ops"
+schema = 2
+
+[[agent]]
+dir = "repo"
+name = "worker"
+provider = "codex"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ed := configedit.NewEditor(fsys.OSFS{}, path)
+	if err := ed.SuspendAgent("repo/worker"); err != nil {
+		t.Fatalf("SuspendAgent: %v", err)
+	}
+
+	raw := string(mustReadFile(t, path))
+	if strings.Contains(raw, "ops.worker") {
+		t.Fatalf("city.toml must not patch binding-qualified rig agent:\n%s", raw)
+	}
+	if !strings.Contains(raw, "dir = \"repo\"") ||
+		!strings.Contains(raw, "name = \"worker\"") ||
+		!strings.Contains(raw, "suspended = true") {
+		t.Fatalf("city.toml should patch local rig agent identity:\n%s", raw)
+	}
+
+	cfg := readExpandedTOML(t, path)
+	if !findAgent(t, cfg, "worker").Suspended {
+		t.Fatal("worker should be suspended in expanded config")
+	}
+}
+
 // TestResumeAgent_StripsLegacyPatchSuspended covers the migration case
 // where a city.toml has a stale [[patches.agent]] suspended override
 // from older code. Resuming a convention-discovered agent must strip

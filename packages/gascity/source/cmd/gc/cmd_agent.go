@@ -695,7 +695,7 @@ func doAgentSuspendOrResume(fs fsys.FS, cityPath, name string, suspended bool, s
 		// the resolved agent's qualified identity (dir/name) so a bare
 		// CLI input does not accidentally clear or skip a rig-scoped
 		// patch.
-		if configedit.StripAgentPatchSuspended(cfg, resolved.QualifiedName()) {
+		if configedit.StripAgentPatchSuspended(cfg, resolved.PatchQualifiedName()) {
 			if err := writeCityConfigForEditFS(fs, tomlPath, cfg); err != nil {
 				fmt.Fprintf(stderr, "gc agent %s: %v\n", verb, err) //nolint:errcheck // best-effort stderr
 				return 1
@@ -704,7 +704,7 @@ func doAgentSuspendOrResume(fs fsys.FS, cityPath, name string, suspended bool, s
 		fmt.Fprintf(stdout, "%s agent '%s'\n", past, name) //nolint:errcheck // best-effort stdout
 		return 0
 	}
-	if err := configedit.AddOrUpdateAgentPatch(cfg, resolved.QualifiedName(), func(p *config.AgentPatch) {
+	if err := configedit.AddOrUpdateAgentPatch(cfg, resolved.PatchQualifiedName(), func(p *config.AgentPatch) {
 		p.Suspended = &suspended
 	}); err != nil {
 		fmt.Fprintf(stderr, "gc agent %s: %v\n", verb, err) //nolint:errcheck // best-effort stderr

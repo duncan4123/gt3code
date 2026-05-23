@@ -210,16 +210,12 @@ func (e *Editor) write(cfg *config.City) error {
 // pattern extracted from the CLI's doAgentSuspend/doAgentResume.
 func AgentOrigin(raw, expanded *config.City, name string) Origin {
 	// Check raw config first.
-	for _, a := range raw.Agents {
-		if config.AgentMatchesIdentity(&a, name) {
-			return OriginInline
-		}
+	if _, ok := findAgentForMutation(raw, name); ok {
+		return OriginInline
 	}
 	// Check expanded config for pack-derived agents.
-	for _, a := range expanded.Agents {
-		if config.AgentMatchesIdentity(&a, name) {
-			return OriginDerived
-		}
+	if _, ok := findAgentForMutation(expanded, name); ok {
+		return OriginDerived
 	}
 	return OriginNotFound
 }
@@ -238,8 +234,13 @@ func RigOrigin(raw *config.City, name string) Origin {
 // SetAgentSuspended sets the suspended field on an inline agent.
 // Returns an error if the agent is not found in the config.
 func SetAgentSuspended(cfg *config.City, name string, suspended bool) error {
+	target, ok := findAgentForMutation(cfg, name)
+	if !ok {
+		return fmt.Errorf("%w: agent %q", ErrNotFound, name)
+	}
+	targetPatchName := target.PatchQualifiedName()
 	for i := range cfg.Agents {
-		if config.AgentMatchesIdentity(&cfg.Agents[i], name) {
+		if cfg.Agents[i].PatchQualifiedName() == targetPatchName {
 			cfg.Agents[i].Suspended = suspended
 			return nil
 		}
@@ -322,9 +323,17 @@ func (e *Editor) ResumeAgent(name string) error {
 // Returns [ErrUnmodified] when the change lives entirely in agent.toml
 // and raw was not touched, so EditExpanded skips the city.toml writeback.
 func mutateAgentSuspended(fs fsys.FS, cityRoot string, raw, expanded *config.City, name string, suspended bool) error {
-	switch AgentOrigin(raw, expanded, name) {
-	case OriginInline:
+	if _, ok := findAgentForMutation(raw, name); ok {
 		return SetAgentSuspended(raw, name, suspended)
+	}
+
+	agent, ok := findAgentForMutation(expanded, name)
+	if !ok {
+		return fmt.Errorf("%w: agent %q", ErrNotFound, name)
+	}
+
+	patchName := agent.PatchQualifiedName()
+	switch AgentOrigin(raw, expanded, name) {
 	case OriginDerived:
 		if agent, ok := findLocalDiscoveredAgent(fs, expanded, cityRoot, name); ok {
 			if err := WriteLocalDiscoveredAgentSuspended(fs, cityRoot, agent, suspended); err != nil {
@@ -336,12 +345,12 @@ func mutateAgentSuspended(fs fsys.FS, cityRoot string, raw, expanded *config.Cit
 			// the discovered agent's full (Dir, Name) identity so we
 			// only strip the matching patch, not a same-named entry
 			// targeting a different rig.
-			if StripAgentPatchSuspended(raw, agent.QualifiedName()) {
+			if StripAgentPatchSuspended(raw, agent.PatchQualifiedName()) {
 				return nil
 			}
 			return ErrUnmodified
 		}
-		return AddOrUpdateAgentPatch(raw, name, func(p *config.AgentPatch) {
+		return AddOrUpdateAgentPatch(raw, patchName, func(p *config.AgentPatch) {
 			p.Suspended = boolPtr(suspended)
 		})
 	case OriginNotFound:
@@ -353,7 +362,7 @@ func mutateAgentSuspended(fs fsys.FS, cityRoot string, raw, expanded *config.Cit
 func findLocalDiscoveredAgent(fs fsys.FS, expanded *config.City, cityRoot, name string) (config.Agent, bool) {
 	cityRoot = filepath.Clean(cityRoot)
 	for _, a := range expanded.Agents {
-		if !config.AgentMatchesIdentity(&a, name) {
+		if !agentMatchesMutationName(a, name) {
 			continue
 		}
 		if !LocalDiscoveredAgent(fs, cityRoot, a) {
@@ -362,6 +371,33 @@ func findLocalDiscoveredAgent(fs fsys.FS, expanded *config.City, cityRoot, name 
 		return a, true
 	}
 	return config.Agent{}, false
+}
+
+func findAgentForMutation(cfg *config.City, name string) (config.Agent, bool) {
+	for _, a := range cfg.Agents {
+		if agentMatchesMutationName(a, name) {
+			return a, true
+		}
+	}
+
+	dir, base := config.ParseQualifiedName(name)
+	if dir != "" {
+		return config.Agent{}, false
+	}
+	var matches []config.Agent
+	for _, a := range cfg.Agents {
+		if a.Name == base {
+			matches = append(matches, a)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0], true
+	}
+	return config.Agent{}, false
+}
+
+func agentMatchesMutationName(agent config.Agent, name string) bool {
+	return config.AgentMatchesIdentity(&agent, name) || agent.PatchQualifiedName() == name
 }
 
 // LocalDiscoveredAgent reports whether an agent's durable configuration

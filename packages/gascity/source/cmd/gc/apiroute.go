@@ -71,5 +71,5 @@ func resolveAgentForAPI(cityPath, name string) string {
 	if !ok {
 		return name
 	}
-	return resolved.QualifiedName()
+	return resolved.PatchQualifiedName()
 }

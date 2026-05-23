@@ -101,6 +101,16 @@ func (a *Agent) QualifiedName() string {
 	return a.Dir + "/" + name
 }
 
+// PatchQualifiedName returns the local identity used by [[patches.agent]].
+// Import bindings are deliberately omitted: an imported city-scoped agent with
+// runtime identity "gastown.deacon" is patched as name="deacon".
+func (a *Agent) PatchQualifiedName() string {
+	if a.Dir == "" {
+		return a.Name
+	}
+	return a.Dir + "/" + a.Name
+}
+
 // ParseQualifiedName splits an agent identity into (dir, name).
 // "hello-world/polecat" → ("hello-world", "polecat").
 // "hello-world/gastown.polecat" → ("hello-world", "gastown.polecat").
