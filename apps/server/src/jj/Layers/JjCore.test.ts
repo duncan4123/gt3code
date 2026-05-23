@@ -259,6 +259,37 @@ it.layer(TestLayer)("JjCore", (it) => {
         expect(rootStatus.refName).toBe("main");
       }),
     );
+
+    it.effect("lists jj workspaces created outside T3 as selectable refs", () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTempDir("t3code-jj-core-external-workspace-");
+        yield* initJjRepo(repoDir);
+        const workspaceDir = path.join(path.dirname(repoDir), "agent-workspace");
+
+        yield* runJj(repoDir, [
+          "workspace",
+          "add",
+          "--name",
+          "gc-t3-demo-worker",
+          "--revision",
+          "main",
+          workspaceDir,
+        ]);
+
+        const jjCore = yield* JjCore;
+        const result = yield* jjCore.listBranches({ cwd: repoDir, query: "gc-t3-demo" });
+        const workspaceRef = result.refs.find((ref) => ref.workspaceName === "gc-t3-demo-worker");
+
+        expect(workspaceRef).toMatchObject({
+          name: "workspace/gc-t3-demo-worker",
+          kind: "workspace",
+          worktreePath: workspaceDir,
+          current: false,
+        });
+        expect(workspaceRef?.changeId).toBeTruthy();
+        expect(workspaceRef?.commitId).toBeTruthy();
+      }),
+    );
   });
 
   describe("filterIgnoredPaths", () => {

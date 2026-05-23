@@ -547,6 +547,8 @@ export function BranchToolbarBranchSelector({
       refName.worktreePath && activeProjectCwd && refName.worktreePath !== activeProjectCwd;
     const badge = refName.current
       ? "current"
+      : refName.kind === "workspace"
+        ? "workspace"
       : hasSecondaryWorktree
         ? "worktree"
         : refName.isRemote

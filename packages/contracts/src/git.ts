@@ -75,6 +75,10 @@ export type GitRunStackedActionToast = typeof GitRunStackedActionToast.Type;
 
 export const VcsRef = Schema.Struct({
   name: TrimmedNonEmptyStringSchema,
+  kind: Schema.optional(Schema.Literals(["ref", "workspace"])),
+  workspaceName: Schema.optional(TrimmedNonEmptyStringSchema),
+  changeId: Schema.optional(TrimmedNonEmptyStringSchema),
+  commitId: Schema.optional(TrimmedNonEmptyStringSchema),
   isRemote: Schema.optional(Schema.Boolean),
   remoteName: Schema.optional(TrimmedNonEmptyStringSchema),
   current: Schema.Boolean,

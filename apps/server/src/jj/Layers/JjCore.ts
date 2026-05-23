@@ -49,6 +49,14 @@ interface ParsedBookmark {
   readonly remoteName: string | null;
 }
 
+interface ParsedWorkspaceRef {
+  readonly name: string;
+  readonly root: string;
+  readonly changeId: string;
+  readonly commitId: string;
+  readonly bookmarks: ReadonlyArray<string>;
+}
+
 interface BranchUpstreamInfo {
   readonly remoteName: string;
   readonly remoteBranch: string;
@@ -210,6 +218,36 @@ function parseBookmarkEntries(stdout: string): ParsedBookmark[] {
     .filter((row) => row.name.length > 0);
 }
 
+function parseWorkspaceListEntries(stdout: string): ParsedWorkspaceRef[] {
+  return stdout
+    .split(/\r?\n/g)
+    .flatMap((line) => {
+      if (line.trim().length === 0) {
+        return [];
+      }
+      const [rawName, rawRoot, rawChangeId, rawCommitId, rawBookmarks = ""] = line.split("\t");
+      const name = rawName?.trim() ?? "";
+      const root = rawRoot?.trim() ?? "";
+      const changeId = rawChangeId?.trim() ?? "";
+      const commitId = rawCommitId?.trim() ?? "";
+      if (!name || !root || !changeId || !commitId) {
+        return [];
+      }
+      return [
+        {
+          name,
+          root,
+          changeId,
+          commitId,
+          bookmarks: rawBookmarks
+            .split(/\s+/g)
+            .map((bookmark) => bookmark.trim())
+            .filter((bookmark) => bookmark.length > 0),
+        } satisfies ParsedWorkspaceRef,
+      ];
+    });
+}
+
 function parseCommitId(stdout: string): string | null {
   const row = parseJsonLines<{ commit_id?: string }>(stdout)[0];
   const commitId = row?.commit_id?.trim() ?? "";
@@ -294,6 +332,17 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
       ),
       Effect.catch(() => Effect.succeed(EMPTY_WORKSPACE_REGISTRY)),
       Effect.map(normalizeWorkspaceRegistry),
+    );
+
+  const readWorkspaceRefs = (cwd: string): Effect.Effect<ReadonlyArray<ParsedWorkspaceRef>, never> =>
+    runJjStdout("JjCore.readWorkspaceRefs", cwd, [
+      "workspace",
+      "list",
+      "-T",
+      'name ++ "\\t" ++ root ++ "\\t" ++ target.change_id().short() ++ "\\t" ++ target.commit_id().short() ++ "\\t" ++ target.bookmarks() ++ "\\n"',
+    ]).pipe(
+      Effect.map(parseWorkspaceListEntries),
+      Effect.catch(() => Effect.succeed([])),
     );
 
   const writeWorkspaceRegistry = (
@@ -889,6 +938,7 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
         "root",
         "status",
         "util",
+        "workspace",
       ].includes(args[0] ?? "")
     ) {
       const result = yield* runJjCommand({
@@ -1268,7 +1318,7 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
       };
     }
 
-    const [bookmarkState, currentStatus, workspaceRoot, registry] = yield* Effect.all(
+    const [bookmarkState, currentStatus, workspaceRoot, registry, workspaceRefs] = yield* Effect.all(
       [
         resolveBookmarkState(input.cwd),
         statusDetails(input.cwd),
@@ -1277,6 +1327,7 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
           Effect.flatMap((root) => readWorkspaceRegistry(root)),
           Effect.catch(() => Effect.succeed(EMPTY_WORKSPACE_REGISTRY)),
         ),
+        readWorkspaceRefs(input.cwd),
       ],
       { concurrency: "unbounded" },
     );
@@ -1285,15 +1336,33 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
       bookmarkState.localBookmarks.map((bookmark) => bookmark.name),
       bookmarkState.remoteBookmarks,
     );
+    const workspacesByBookmark = new Map<string, ParsedWorkspaceRef>();
+    for (const workspace of workspaceRefs) {
+      for (const bookmark of workspace.bookmarks) {
+        if (!workspacesByBookmark.has(bookmark)) {
+          workspacesByBookmark.set(bookmark, workspace);
+        }
+      }
+    }
+
     const localBranches: GitBranch[] = bookmarkState.localBookmarks
       .map(
         (bookmark) =>
           ({
             name: bookmark.name,
+            kind: "ref",
             current: bookmark.name === currentStatus.branch,
             isRemote: false,
             isDefault: bookmark.name === defaultBranch,
-            worktreePath: registry.branches[bookmark.name] ?? null,
+            worktreePath:
+              workspacesByBookmark.get(bookmark.name)?.root ?? registry.branches[bookmark.name] ?? null,
+            ...(workspacesByBookmark.get(bookmark.name)
+              ? {
+                  workspaceName: workspacesByBookmark.get(bookmark.name)?.name,
+                  changeId: workspacesByBookmark.get(bookmark.name)?.changeId,
+                  commitId: workspacesByBookmark.get(bookmark.name)?.commitId,
+                }
+              : {}),
           }) satisfies GitBranch,
       )
       .toSorted((left, right) => {
@@ -1308,6 +1377,7 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
         (bookmark) =>
           ({
             name: `${bookmark.remoteName}/${bookmark.name}`,
+            kind: "ref",
             current: false,
             isRemote: true,
             remoteName: bookmark.remoteName ?? undefined,
@@ -1323,6 +1393,10 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
 
       return {
         name: branch.name,
+        kind: branch.kind,
+        ...(branch.workspaceName !== undefined ? { workspaceName: branch.workspaceName } : {}),
+        ...(branch.changeId !== undefined ? { changeId: branch.changeId } : {}),
+        ...(branch.commitId !== undefined ? { commitId: branch.commitId } : {}),
         current: branch.current,
         isRemote: branch.isRemote,
         isDefault: branch.isDefault,
@@ -1330,9 +1404,36 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
       } satisfies GitBranch;
     });
 
+    const bookmarkBackedWorkspaceNames = new Set(
+      workspaceRefs
+        .filter((workspace) => workspace.bookmarks.length > 0)
+        .map((workspace) => workspace.name),
+    );
+    const workspaceRefsWithoutBookmark: GitBranch[] = workspaceRefs
+      .filter((workspace) => !bookmarkBackedWorkspaceNames.has(workspace.name))
+      .map(
+        (workspace) =>
+          ({
+            name: `workspace/${workspace.name}`,
+            kind: "workspace",
+            workspaceName: workspace.name,
+            changeId: workspace.changeId,
+            commitId: workspace.commitId,
+            current: canonicalizePath(workspace.root) === workspaceRoot,
+            isRemote: false,
+            isDefault: false,
+            worktreePath: workspace.root,
+          }) satisfies GitBranch,
+      )
+      .toSorted((left, right) => left.name.localeCompare(right.name));
+
     const paginated = paginateBranches({
       branches: filterBranchesForListQuery(
-        dedupeRemoteBranchesWithLocalMatches([...adjustedLocalBranches, ...remoteBranches]),
+        dedupeRemoteBranchesWithLocalMatches([
+          ...adjustedLocalBranches,
+          ...workspaceRefsWithoutBookmark,
+          ...remoteBranches,
+        ]),
         input.query,
       ),
       cursor: input.cursor,
