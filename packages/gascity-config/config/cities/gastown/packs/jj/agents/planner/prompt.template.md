@@ -18,7 +18,7 @@ small, ordered work beads that can become a JJ stack.
 ## Metadata To Set
 
 ```text
-target=integration/t3code-agent-controls-sidebar
+target=staging/current
 target_remote=jorje
 stack_id=<stable stack label>
 stack_index=<1-based order>

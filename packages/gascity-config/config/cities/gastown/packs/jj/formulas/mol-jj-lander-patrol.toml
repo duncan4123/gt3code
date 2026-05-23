@@ -1,7 +1,7 @@
 description = """
 JJ lander patrol.
 
-The lander serializes accepted changes onto the target bookmark. Workers
+The lander serializes accepted changes onto the pack target bookmark. Workers
 submit JJ change IDs; the lander validates, rebases, moves the target
 bookmark, pushes, and closes beads.
 
@@ -14,7 +14,7 @@ contract = "graph.v2"
 [vars]
 [vars.target]
 description = "Target bookmark to land onto"
-default = "integration/t3code-agent-controls-sidebar"
+default = "staging/current"
 
 [vars.target_remote]
 description = "Remote that owns the target bookmark"
@@ -77,7 +77,8 @@ id = "land-change"
 title = "Land change serially"
 needs = ["validate-change"]
 description = """
-Only land one change per patrol iteration.
+Only land one change per patrol iteration. This lands to `staging/current`.
+Do not move `live/current`; live promotion is a human-controlled step.
 
 ```bash
 cd "$WORK_DIR"

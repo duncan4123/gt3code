@@ -13,7 +13,7 @@ contract = "graph.v2"
 [vars]
 [vars.target]
 description = "Target bookmark to build on"
-default = "integration/t3code-agent-controls-sidebar"
+default = "staging/current"
 
 [vars.target_remote]
 description = "Remote that owns the target bookmark"
