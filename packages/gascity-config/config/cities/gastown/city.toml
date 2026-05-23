@@ -63,7 +63,7 @@ model = "gpt-5.5"
 name = "kimi-for-coding"
 dir = "beads-doltlite"
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "kimi-for-coding"
+provider = "codex"
 max_active_sessions = 5
 min_active_sessions = 0
 default_sling_formula = "mol-do-work"
@@ -89,7 +89,7 @@ name = "kimi-for-coding"
 dir = "t3code"
 suspended = true
 prompt_template = ".gc/system/packs/core/assets/prompts/pool-worker.md"
-provider = "kimi-for-coding"
+provider = "codex"
 max_active_sessions = 5
 min_active_sessions = 0
 default_sling_formula = "mol-do-work"
@@ -407,8 +407,7 @@ idle_timeout = "2h"
 wake_mode = "fresh"
 max_active_sessions = 1
 [patches.agent.option_defaults]
-agent = "build"
-model = "kimi-for-coding/k2p6"
+model = "gpt-5.5"
 
 [[patches.agent]]
 dir = "test-rig"
@@ -421,8 +420,7 @@ idle_timeout = "1h"
 wake_mode = "fresh"
 max_active_sessions = 1
 [patches.agent.option_defaults]
-agent = "build"
-model = "kimi-for-coding/k2p6"
+model = "gpt-5.5"
 
 [[patches.agent]]
 dir = "t3code"
