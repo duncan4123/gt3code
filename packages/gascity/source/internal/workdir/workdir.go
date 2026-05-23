@@ -16,12 +16,13 @@ import (
 
 // PathContext holds template variables for work_dir expansion.
 type PathContext struct {
-	Agent     string
-	AgentBase string
-	Rig       string
-	RigRoot   string
-	CityRoot  string
-	CityName  string
+	Agent         string
+	AgentBase     string
+	Rig           string
+	RigRoot       string
+	CityRoot      string
+	CityName      string
+	WorktreesRoot string
 }
 
 // CityName returns the effective workspace name for workdir/template expansion.
@@ -71,17 +72,30 @@ func RigRootForName(rigName string, rigs []config.Rig) string {
 	return ""
 }
 
+func WorktreesRoot(cityPath string) string {
+	for _, key := range []string{"GC_WORKTREES_DIR", "T3CODE_WORKTREES_DIR"} {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	if t3Home := strings.TrimSpace(os.Getenv("T3CODE_HOME")); t3Home != "" {
+		return filepath.Join(t3Home, "worktrees")
+	}
+	return filepath.Join(cityPath, ".gc", "worktrees")
+}
+
 // PathContextForQualifiedName builds template context for work_dir expansion.
 func PathContextForQualifiedName(cityPath, cityName, qualifiedName string, a config.Agent, rigs []config.Rig) PathContext {
 	rigName := ConfiguredRigName(cityPath, a, rigs)
 	_, agentBase := config.ParseQualifiedName(qualifiedName)
 	return PathContext{
-		Agent:     qualifiedName,
-		AgentBase: agentBase,
-		Rig:       rigName,
-		RigRoot:   RigRootForName(rigName, rigs),
-		CityRoot:  cityPath,
-		CityName:  cityName,
+		Agent:         qualifiedName,
+		AgentBase:     agentBase,
+		Rig:           rigName,
+		RigRoot:       RigRootForName(rigName, rigs),
+		CityRoot:      cityPath,
+		CityName:      cityName,
+		WorktreesRoot: WorktreesRoot(cityPath),
 	}
 }
 

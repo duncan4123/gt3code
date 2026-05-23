@@ -12,6 +12,7 @@
 #   GC_CITY_RUNTIME_DIR — canonical hidden runtime root (optional)
 #   GC_PACK_STATE_DIR — canonical pack runtime root for dolt (optional)
 #   GC_DOLT       — set to "skip" to no-op all operations (exit 2)
+#   GC_BEADS_BACKEND — "dolt" (default) or "doltlite"
 #   GC_DOLT_HOST  — dolt server host (empty = local server)
 #   GC_DOLT_PORT  — dolt server port (default: ephemeral, hashed from city path)
 #   GC_DOLT_USER  — dolt user (default: root)
@@ -29,6 +30,7 @@ DOLT_PASSWORD="${GC_DOLT_PASSWORD:-}"
 DOLT_LOGLEVEL="${GC_DOLT_LOGLEVEL:-warning}"
 LSOF_TIMEOUT_SECONDS="${GC_LSOF_TIMEOUT_SECONDS:-2}"
 CONCURRENT_START_READY_TIMEOUT_MS="${GC_DOLT_CONCURRENT_START_READY_TIMEOUT_MS:-45000}"
+BEADS_BACKEND="${GC_BEADS_BACKEND:-${BEADS_BACKEND:-dolt}}"
 
 # Derived paths (set after GC_CITY_PATH validation).
 GC_DIR=""
@@ -52,6 +54,10 @@ resolve_gc_helper_bin() {
         printf '%s\n' "$GC_BIN"
     fi
     return 0
+}
+
+is_doltlite_backend() {
+    [ "$BEADS_BACKEND" = "doltlite" ]
 }
 
 resolve_gc_bin() {
@@ -378,6 +384,45 @@ read_existing_dolt_database() {
     grep -o '"dolt_database"[[:space:]]*:[[:space:]]*"[^"]*"' "$meta_file" 2>/dev/null |         sed 's/.*"dolt_database"[[:space:]]*:[[:space:]]*"//;s/"//' || true
 }
 
+read_metadata_string_field() {
+    local meta_file="$1" key="$2"
+    [ -f "$meta_file" ] || return 0
+
+    if command -v jq >/dev/null 2>&1; then
+        jq -r --arg key "$key" '.[$key] // empty' "$meta_file" 2>/dev/null || true
+        return 0
+    fi
+
+    grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$meta_file" 2>/dev/null |
+        sed "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"//;s/\"//" || true
+}
+
+metadata_is_doltlite() {
+    local meta_file="$1"
+    [ "$(read_metadata_string_field "$meta_file" backend)" = "doltlite" ]
+}
+
+write_doltlite_metadata() {
+    local dir="$1" database="$2" metadata_path tmp project_id
+    metadata_path="$dir/.beads/metadata.json"
+    mkdir -p "$dir/.beads"
+    project_id=$(read_metadata_string_field "$metadata_path" project_id)
+    if [ -z "$project_id" ]; then
+        project_id="$(basename "$dir")"
+    fi
+    tmp="$metadata_path.tmp.$$"
+    cat > "$tmp" <<EOF
+{
+  "backend": "doltlite",
+  "database": "doltlite",
+  "dolt_database": "$database",
+  "project_id": "$project_id"
+}
+EOF
+    chmod 600 "$tmp"
+    mv "$tmp" "$metadata_path"
+}
+
 identity_toml_present() {
     local dir="$1"
     [ -f "$dir/.beads/identity.toml" ]
@@ -515,6 +560,9 @@ ensure_types_custom_in_yaml() {
         {
             for (i = 1; i <= NF; i++) {
                 t = $i
+                sub(/^[ \t]+/, "", t)
+                sub(/[ \t]+$/, "", t)
+                gsub(/"/, "", t)
                 sub(/^[ \t]+/, "", t)
                 sub(/[ \t]+$/, "", t)
                 if (t == "") continue
@@ -2033,6 +2081,47 @@ run_bd_init_pinned() {
         --server-host "$host" --server-port "$DOLT_PORT" "$dir" || die "bd init failed for $dir"
 }
 
+run_bd_doltlite() {
+    local dir="$1"
+    shift
+    (
+        cd "$dir" || exit 1
+        export BEADS_DIR="$dir/.beads"
+        export BEADS_BACKEND="doltlite"
+        export GC_BEADS_BACKEND="doltlite"
+        unset GC_DOLT_HOST GC_DOLT_PORT GC_DOLT_USER GC_DOLT_PASSWORD GC_DOLT
+        unset BEADS_DOLT_DATABASE BEADS_DOLT_PORT
+        unset BEADS_DOLT_SERVER_DATABASE BEADS_DOLT_SERVER_HOST BEADS_DOLT_SERVER_MODE BEADS_DOLT_SERVER_PORT BEADS_DOLT_SERVER_USER BEADS_DOLT_PASSWORD
+        export BEADS_DOLT_AUTO_START=0
+        "${BD_BIN:-bd}" "$@"
+    )
+}
+
+doltlite_maintenance_due() {
+    local dir="$1"
+    local stamp="$dir/.beads/doltlite/.gc-maintenance.stamp"
+    local interval="${GC_DOLTLITE_MAINTENANCE_INTERVAL_SECONDS:-86400}"
+    local now last
+    [ "$interval" -gt 0 ] 2>/dev/null || return 0
+    [ -f "$stamp" ] || return 0
+    now=$(date +%s 2>/dev/null || echo 0)
+    last=$(stat -c %Y "$stamp" 2>/dev/null || echo 0)
+    [ $((now - last)) -ge "$interval" ]
+}
+
+run_doltlite_existing_db_maintenance() {
+    local dir="$1"
+    local stamp="$dir/.beads/doltlite/.gc-maintenance.stamp"
+    if ! doltlite_maintenance_due "$dir"; then
+        return 0
+    fi
+    echo "gc-beads-bd: running doltlite maintenance for $dir" >&2
+    run_bd_doltlite "$dir" flatten --force --json >/dev/null 2>&1 || echo "warning: bd flatten failed for $dir" >&2
+    run_bd_doltlite "$dir" gc --skip-decay --force --json >/dev/null 2>&1 || echo "warning: bd gc failed for $dir" >&2
+    mkdir -p "$dir/.beads/doltlite" 2>/dev/null || true
+    date +%s > "$stamp" 2>/dev/null || true
+}
+
 ensure_beads_dir_permissions() {
     local dir="$1"
     local beads_dir="$dir/.beads"
@@ -2134,6 +2223,29 @@ op_init() {
     # beads with that type. "step" is required for non-root formula step
     # beads (#1039). Must match doctor.RequiredCustomTypes.
     local custom_types="${GC_BEADS_CUSTOM_TYPES:-molecule,convoy,message,event,gate,merge-request,agent,role,rig,session,spec,convergence,step}"
+
+    if is_doltlite_backend; then
+        local database db_path
+        database="$dolt_database"
+        if [ -z "$database" ]; then
+            database="$prefix"
+        fi
+        if ! valid_sql_name "$database"; then
+            die "invalid doltlite database name: $database (must be alphanumeric, hyphens, underscores)"
+        fi
+        ensure_beads_dir_permissions "$dir"
+        db_path="$dir/.beads/doltlite/$database.db"
+        if [ ! -f "$metadata_path" ] || [ ! -f "$db_path" ]; then
+            run_bd_doltlite "$dir" init --quiet --backend=doltlite -p "$prefix" --database "$database" --skip-hooks --skip-agents || die "bd init failed for $dir"
+        elif ! metadata_is_doltlite "$metadata_path" || [ "$(read_existing_dolt_database "$metadata_path")" != "$database" ]; then
+            write_doltlite_metadata "$dir" "$database"
+        else
+            run_doltlite_existing_db_maintenance "$dir"
+        fi
+        run_bd_doltlite "$dir" config set issue_prefix "$prefix" 2>/dev/null || true
+        run_bd_doltlite "$dir" config set types.custom "$custom_types" 2>/dev/null || true
+        exit 0
+    fi
 
     # If already initialized on disk, ensure the database is also registered
     # with the running server. gc's normalizeCanonicalBdScopeFilesForInit

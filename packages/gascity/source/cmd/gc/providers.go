@@ -518,6 +518,25 @@ func rawBeadsProviderFromConfig(cityPath string) string {
 	return "bd"
 }
 
+func configuredBeadsBackendValue(cityPath string) string {
+	if v := strings.TrimSpace(os.Getenv("GC_BEADS_BACKEND")); v != "" {
+		return v
+	}
+	return strings.TrimSpace(peekBeadsBackend(filepath.Join(cityPath, "city.toml")))
+}
+
+func beadsBackend(cityPath string) string {
+	backend := strings.ToLower(configuredBeadsBackendValue(cityPath))
+	if backend == "" {
+		return "dolt"
+	}
+	return backend
+}
+
+func cityUsesDoltliteBeadsBackend(cityPath string) bool {
+	return beadsBackend(cityPath) == "doltlite"
+}
+
 func providerUsesBdStoreContract(provider string) bool {
 	provider = strings.TrimSpace(provider)
 	if provider == "" || provider == "bd" {
@@ -531,6 +550,10 @@ func providerUsesBdStoreContract(provider string) bool {
 
 func cityUsesBdStoreContract(cityPath string) bool {
 	return providerUsesBdStoreContract(rawBeadsProvider(cityPath))
+}
+
+func cityUsesManagedDoltBeadsLifecycle(cityPath string) bool {
+	return cityUsesBdStoreContract(cityPath) && !cityUsesDoltliteBeadsBackend(cityPath)
 }
 
 func rawBeadsProviderForScope(scopeRoot, cityPath string) string {

@@ -1021,6 +1021,35 @@ func TestEnsureBeadsProvider_bd_skip(t *testing.T) {
 	}
 }
 
+func TestEnsureBeadsProviderBdDoltliteDoesNotStartManagedDolt(t *testing.T) {
+	dir := t.TempDir()
+	script := gcBeadsBdScriptPath(dir)
+	if err := os.MkdirAll(filepath.Dir(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "city.toml"), []byte(`[workspace]
+name = "demo"
+
+[beads]
+provider = "bd"
+backend = "doltlite"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho unexpected managed dolt start >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	setScopedBeadsProviderForTest(t, dir, "bd")
+
+	if cityUsesManagedDoltBeadsLifecycle(dir) {
+		t.Fatal("doltlite-backed bd city should not use managed Dolt lifecycle")
+	}
+	if err := ensureBeadsProvider(dir); err != nil {
+		t.Fatalf("ensureBeadsProvider = %v, want nil", err)
+	}
+}
+
 func TestEnsureBeadsProvider_bdAcceptsHealthyServerAfterStartError(t *testing.T) {
 	dir := t.TempDir()
 	script := gcBeadsBdScriptPath(dir)

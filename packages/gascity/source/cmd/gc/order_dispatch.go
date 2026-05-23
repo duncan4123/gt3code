@@ -45,6 +45,7 @@ const (
 	orderTrackingSweepMetadataReason       = "stale-order-tracking"
 	orderTrackingSweepMetadataInitiator    = "order-tracking-sweep"
 	orderTrackingWatchdogMetadataInitiator = "controller-watchdog"
+	orderOpenWorkProbeLimit                = 50
 
 	// orphanedOrderTrackingCloseReason is the canonical close_reason
 	// stamped on orphan-sweep closes. It satisfies bd's
@@ -1015,6 +1016,7 @@ func (m *memoryOrderDispatcher) rigSuspendedByName(rigName string) bool {
 func (m *memoryOrderDispatcher) hasOpenWorkStrict(store beads.Store, scopedName string) (bool, error) {
 	results, err := store.List(beads.ListQuery{
 		Label: "order-run:" + scopedName,
+		Limit: orderOpenWorkProbeLimit,
 		Sort:  beads.SortCreatedDesc,
 		// Tracking beads are ephemeral while wisp roots are issue-tier, so
 		// the single-flight gate must union both tiers.

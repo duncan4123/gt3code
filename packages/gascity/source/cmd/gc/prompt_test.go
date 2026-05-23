@@ -1112,6 +1112,20 @@ func TestRenderPromptCityRootFragmentsPerAgentWins(t *testing.T) {
 	}
 }
 
+func TestRenderPromptCityLocalPackTemplateFragments(t *testing.T) {
+	f := fsys.NewFake()
+	f.Files["/city/packs/jj/template-fragments/jj-workflow.template.md"] = []byte(
+		`{{ define "jj-workflow" }}jj workflow from pack{{ end }}`)
+	f.Files["/city/packs/jj/agents/worker/prompt.template.md"] = []byte(
+		`{{ template "jj-workflow" . }}`)
+	got := renderPrompt(f, "/city", "", "packs/jj/agents/worker/prompt.template.md", PromptContext{},
+		"", io.Discard, nil, nil, nil)
+	if got != "jj workflow from pack" {
+		t.Errorf("renderPrompt(city-local pack template-fragments) = %q, want %q",
+			got, "jj workflow from pack")
+	}
+}
+
 // TestRenderPromptCityRootFragmentsAbsentNoEffect is the regression-safety
 // check: when the city root has no template-fragments/ or prompts/shared/,
 // rendered output is byte-identical to pre-fix behavior (i.e. the new

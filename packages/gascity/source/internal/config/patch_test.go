@@ -698,6 +698,41 @@ func TestPatchesIsEmpty(t *testing.T) {
 	if (&Patches{Agents: []AgentPatch{{Name: "x"}}}).IsEmpty() {
 		t.Error("Patches with agents should not be empty")
 	}
+	if (&Patches{NamedSessions: []NamedSessionPatch{{Template: "mayor"}}}).IsEmpty() {
+		t.Error("Patches with named sessions should not be empty")
+	}
+}
+
+func TestLoadWithIncludes_PatchesNamedSession(t *testing.T) {
+	fs := fsys.NewFake()
+	fs.Files["/city/city.toml"] = []byte(`
+[workspace]
+name = "test"
+
+[[agent]]
+name = "mayor"
+
+[[named_session]]
+template = "mayor"
+mode = "on_demand"
+
+[[patches.named_session]]
+template = "mayor"
+mode = "always"
+`)
+	cfg, _, err := LoadWithIncludes(fs, "/city/city.toml")
+	if err != nil {
+		t.Fatalf("LoadWithIncludes: %v", err)
+	}
+	if len(cfg.NamedSessions) != 1 {
+		t.Fatalf("NamedSessions len = %d, want 1", len(cfg.NamedSessions))
+	}
+	if got := cfg.NamedSessions[0].Template; got != "mayor" {
+		t.Errorf("Template = %q, want mayor", got)
+	}
+	if got := cfg.NamedSessions[0].Mode; got != "always" {
+		t.Errorf("Mode = %q, want always", got)
+	}
 }
 
 func TestApplyPatches_AgentSessionSetup(t *testing.T) {
