@@ -68,6 +68,9 @@ Workers create one JJ workspace per bead under:
 ${T3CODE_WORKTREES_DIR}/gascity/<city>/<rig>/jj/workspaces/
 ```
 
+This path should resolve inside the persistent install/control state tree, not
+inside `/data/projects/t3code-live`.
+
 Workers record at least:
 
 ```text
