@@ -264,7 +264,7 @@ it.layer(TestLayer)("JjCore", (it) => {
       Effect.gen(function* () {
         const repoDir = yield* makeTempDir("t3code-jj-core-external-workspace-");
         yield* initJjRepo(repoDir);
-        const workspaceDir = path.join(path.dirname(repoDir), "agent-workspace");
+        const workspaceDir = `${repoDir}-agent-workspace`;
 
         yield* runJj(repoDir, [
           "workspace",

@@ -216,7 +216,7 @@ describe("@t3tools/gascity-config", () => {
         expect(agent.provider).toEqual(expect.any(String));
         expect(agent.work_dir).toEqual(
           expect.stringContaining(
-            "{{.WorktreesRoot}}/gascity/{{.CityName}}/{{.Rig}}/jj/agents",
+            ".t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents",
           ),
         );
         expect(agent.wake_mode).toBe("fresh");

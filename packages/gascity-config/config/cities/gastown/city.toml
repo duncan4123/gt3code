@@ -164,6 +164,7 @@ suspended = true
 [[rigs]]
 name = "t3code"
 prefix = "t3"
+suspended = false
 includes = ["../../packs/gastown", "packs/jj"]
 
 [[rigs.overrides]]
