@@ -422,11 +422,13 @@ max_active_sessions = 1
 [[patches.agent]]
 dir = "t3code"
 name = "worker"
+append_fragments = ["t3code-fork-context"]
 wake_mode = "resume"
 
 [[patches.agent]]
 dir = "t3code"
 name = "lander"
+append_fragments = ["t3code-fork-context"]
 wake_mode = "resume"
 
 [[patches.named_session]]

@@ -2,6 +2,26 @@
 
 ## Gas City Maintenance Context
 
+### T3 Code Integration Mission
+
+This city supports the T3 Code + Gas City integration. Maintenance work should
+preserve a reliable doltlite-backed Beads ledger and keep Gas City orchestration
+usable from T3 Code.
+
+Keep fork changes easy to update from upstream. Prefer fork-owned files, pack
+overlays, adapters, and narrow integration modules over broad edits to
+upstream-like source. If a feature is missing or regressed, search older
+branches, commits, and nearby packages for prior working code before rebuilding
+it from scratch.
+
+Important package boundaries:
+
+- `apps/server` and `apps/web`: T3 Code runtime and UI integration
+- `packages/gascity` and `packages/gascity-config`: Gas City runtime, city,
+  packs, agents, and templates
+- `packages/beads-doltlite` and `packages/doltlite*`: Beads/doltlite backend
+- `packages/contracts` and `packages/shared`: shared contracts/helpers
+
 ```
 City ({{ .CityRoot }})
 ├── city.toml         ← deployment/runtime config
