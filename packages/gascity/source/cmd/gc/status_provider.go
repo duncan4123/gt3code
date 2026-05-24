@@ -8,7 +8,7 @@ import (
 	"github.com/gastownhall/gascity/internal/runtime"
 )
 
-var statusProviderCallTimeout = 50 * time.Millisecond
+var statusProviderCallTimeout = 500 * time.Millisecond
 var statusProviderDegradeWindow = 30 * time.Second
 
 type statusProvider struct {
