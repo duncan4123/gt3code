@@ -3,6 +3,7 @@ import {
   type ChatAttachment,
   type OrchestrationEvent,
   ThreadId,
+  parseGcMeta,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -175,6 +176,17 @@ function deriveHasActionableProposedPlan(input: {
 
   const latestPlan = sorted.at(-1) ?? null;
   return latestPlan !== null && latestPlan.implementedAt === null;
+}
+
+function coerceCustomMetadata(value: unknown): Record<string, string> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, entryValue]) =>
+      typeof entryValue === "string" ? [[key, entryValue] as const] : [],
+    ),
+  );
 }
 
 function retainProjectionMessagesAfterRevert(
@@ -461,6 +473,157 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const path = yield* Path.Path;
     const serverConfig = yield* ServerConfig;
 
+    const upsertGcLookupRows = Effect.fn("upsertGcLookupRows")(function* (input: {
+      readonly threadId: string;
+      readonly customMetadataJson: string;
+      readonly updatedAt: string;
+    }) {
+      let customMetadata: Record<string, string>;
+      try {
+        customMetadata = coerceCustomMetadata(JSON.parse(input.customMetadataJson || "{}"));
+      } catch {
+        customMetadata = {};
+      }
+
+      const gcMeta = parseGcMeta(customMetadata);
+      if (!gcMeta.isGcManaged || !gcMeta.agent) {
+        yield* sql`
+          DELETE FROM gc_agent_sessions
+          WHERE thread_id = ${input.threadId}
+        `.pipe(Effect.mapError(toPersistenceSqlError("gcLookup.deleteAgentSession")));
+        return;
+      }
+
+      if (gcMeta.bead) {
+        const priority = Number.parseInt(gcMeta.beadPriority ?? "", 10);
+        yield* sql`
+          INSERT INTO gc_beads (
+            id,
+            title,
+            status,
+            priority,
+            issue_type,
+            assignee,
+            metadata_json,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            ${gcMeta.bead},
+            ${gcMeta.beadTitle ?? gcMeta.bead},
+            ${gcMeta.beadStatus ?? "open"},
+            ${Number.isFinite(priority) ? priority : 2},
+            ${gcMeta.beadType ?? "task"},
+            ${gcMeta.beadAssignee ?? null},
+            ${JSON.stringify(customMetadata)},
+            ${input.updatedAt},
+            ${input.updatedAt}
+          )
+          ON CONFLICT (id)
+          DO UPDATE SET
+            title = excluded.title,
+            status = excluded.status,
+            priority = excluded.priority,
+            issue_type = excluded.issue_type,
+            assignee = excluded.assignee,
+            metadata_json = excluded.metadata_json,
+            updated_at = excluded.updated_at
+        `.pipe(Effect.mapError(toPersistenceSqlError("gcLookup.upsertBead")));
+      }
+
+      if (gcMeta.convoy) {
+        yield* sql`
+          INSERT INTO gc_convoys (
+            id,
+            title,
+            status,
+            formula,
+            closed_count,
+            total_count,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            ${gcMeta.convoy},
+            ${gcMeta.convoyTitle ?? gcMeta.convoy},
+            ${gcMeta.convoyStatus ?? "open"},
+            ${gcMeta.formula ?? null},
+            ${Number.parseInt(gcMeta.convoyClosedCount ?? "0", 10) || 0},
+            ${Number.parseInt(gcMeta.convoyTotalCount ?? "0", 10) || 0},
+            ${input.updatedAt},
+            ${input.updatedAt}
+          )
+          ON CONFLICT (id)
+          DO UPDATE SET
+            title = excluded.title,
+            status = excluded.status,
+            formula = excluded.formula,
+            closed_count = excluded.closed_count,
+            total_count = excluded.total_count,
+            updated_at = excluded.updated_at
+        `.pipe(Effect.mapError(toPersistenceSqlError("gcLookup.upsertConvoy")));
+
+        if (gcMeta.bead) {
+          yield* sql`
+            INSERT INTO gc_convoy_members (
+              convoy_id,
+              issue_id,
+              thread_id,
+              agent,
+              status
+            )
+            VALUES (
+              ${gcMeta.convoy},
+              ${gcMeta.bead},
+              ${input.threadId},
+              ${gcMeta.agent},
+              ${gcMeta.beadStatus ?? gcMeta.state ?? "pending"}
+            )
+            ON CONFLICT (convoy_id, issue_id)
+            DO UPDATE SET
+              thread_id = excluded.thread_id,
+              agent = excluded.agent,
+              status = excluded.status
+          `.pipe(Effect.mapError(toPersistenceSqlError("gcLookup.upsertConvoyMember")));
+        }
+      }
+
+      yield* sql`
+        INSERT INTO gc_agent_sessions (
+          thread_id,
+          agent,
+          rig,
+          city,
+          bead_id,
+          molecule,
+          formula,
+          state,
+          updated_at
+        )
+        VALUES (
+          ${input.threadId},
+          ${gcMeta.agent},
+          ${gcMeta.rig ?? null},
+          ${gcMeta.city ?? null},
+          ${gcMeta.bead ?? null},
+          ${gcMeta.molecule ?? null},
+          ${gcMeta.formula ?? null},
+          ${gcMeta.state ?? "active"},
+          ${input.updatedAt}
+        )
+        ON CONFLICT (thread_id)
+        DO UPDATE SET
+          agent = excluded.agent,
+          rig = excluded.rig,
+          city = excluded.city,
+          bead_id = excluded.bead_id,
+          molecule = excluded.molecule,
+          formula = excluded.formula,
+          state = excluded.state,
+          updated_at = excluded.updated_at
+      `.pipe(Effect.mapError(toPersistenceSqlError("gcLookup.upsertAgentSession")));
+    });
+
     const applyProjectsProjection: ProjectorDefinition["apply"] = Effect.fn(
       "applyProjectsProjection",
     )(function* (event, _attachmentSideEffects) {
@@ -567,6 +730,10 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     )(function* (event, attachmentSideEffects) {
       switch (event.type) {
         case "thread.created":
+          const customMetadata =
+            event.payload.customMetadata !== undefined
+              ? JSON.stringify(event.payload.customMetadata)
+              : "{}";
           yield* projectionThreadRepository.upsert({
             threadId: event.payload.threadId,
             projectId: event.payload.projectId,
@@ -584,11 +751,13 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             pendingApprovalCount: 0,
             pendingUserInputCount: 0,
             hasActionableProposedPlan: 0,
-            customMetadata:
-              event.payload.customMetadata !== undefined
-                ? JSON.stringify(event.payload.customMetadata)
-                : "{}",
+            customMetadata,
             deletedAt: null,
+          });
+          yield* upsertGcLookupRows({
+            threadId: event.payload.threadId,
+            customMetadataJson: customMetadata,
+            updatedAt: event.payload.updatedAt,
           });
           return;
 
@@ -648,6 +817,11 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
               ? { worktreePath: event.payload.worktreePath }
               : {}),
             customMetadata,
+            updatedAt: event.payload.updatedAt,
+          });
+          yield* upsertGcLookupRows({
+            threadId: event.payload.threadId,
+            customMetadataJson: customMetadata,
             updatedAt: event.payload.updatedAt,
           });
           return;

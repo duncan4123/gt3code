@@ -105,6 +105,20 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           customMetadata: {
             "gc.agent": "t3code/worker",
             "gc.sessionName": "worker-ga-test",
+            "gc.rig": "t3code",
+            "gc.city": "gastown",
+            "gc.bead": "t3-test1",
+            "gc.beadTitle": "Restore convoy storage",
+            "gc.beadStatus": "in_progress",
+            "gc.beadType": "task",
+            "gc.beadPriority": "1",
+            "gc.beadAssignee": "t3code/worker",
+            "gc.convoy": "convoy-test1",
+            "gc.convoyTitle": "Storage convoy",
+            "gc.convoyStatus": "open",
+            "gc.convoyClosedCount": "0",
+            "gc.convoyTotalCount": "2",
+            "gc.formula": "maintenance",
           },
           createdAt: now,
           updatedAt: now,
@@ -176,8 +190,59 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           customMetadata: JSON.stringify({
             "gc.agent": "t3code/worker",
             "gc.sessionName": "worker-ga-test",
+            "gc.rig": "t3code",
+            "gc.city": "gastown",
+            "gc.bead": "t3-test1",
+            "gc.beadTitle": "Restore convoy storage",
+            "gc.beadStatus": "in_progress",
+            "gc.beadType": "task",
+            "gc.beadPriority": "1",
+            "gc.beadAssignee": "t3code/worker",
+            "gc.convoy": "convoy-test1",
+            "gc.convoyTitle": "Storage convoy",
+            "gc.convoyStatus": "open",
+            "gc.convoyClosedCount": "0",
+            "gc.convoyTotalCount": "2",
+            "gc.formula": "maintenance",
           }),
         },
+      ]);
+
+      const gcSessionRows = yield* sql<{
+        readonly threadId: string;
+        readonly agent: string;
+        readonly beadId: string | null;
+        readonly formula: string | null;
+      }>`
+        SELECT
+          thread_id AS "threadId",
+          agent,
+          bead_id AS "beadId",
+          formula
+        FROM gc_agent_sessions
+      `;
+      assert.deepEqual(gcSessionRows, [
+        {
+          threadId: "thread-1",
+          agent: "t3code/worker",
+          beadId: "t3-test1",
+          formula: "maintenance",
+        },
+      ]);
+
+      const gcConvoyRows = yield* sql<{
+        readonly id: string;
+        readonly title: string;
+        readonly totalCount: number;
+      }>`
+        SELECT
+          id,
+          title,
+          total_count AS "totalCount"
+        FROM gc_convoys
+      `;
+      assert.deepEqual(gcConvoyRows, [
+        { id: "convoy-test1", title: "Storage convoy", totalCount: 2 },
       ]);
 
       const stateRows = yield* sql<{
@@ -683,8 +748,8 @@ it.layer(
       });
 
       yield* sql`
-        CREATE TRIGGER fail_thread_messages_projection_state_update
-        BEFORE UPDATE ON projection_state
+        CREATE TEMP TRIGGER fail_thread_messages_projection_state_update
+        BEFORE UPDATE ON proj.projection_state
         WHEN NEW.projector = 'projection.thread-messages'
         BEGIN
           SELECT RAISE(ABORT, 'forced-projection-state-failure');
