@@ -47,6 +47,7 @@ const EMPTY_WORKSPACE_REGISTRY: WorkspaceRegistry = { branches: {} };
 interface ParsedBookmark {
   readonly name: string;
   readonly remoteName: string | null;
+  readonly targetExists: boolean;
 }
 
 interface ParsedWorkspaceRef {
@@ -207,13 +208,14 @@ function parseBookmarkEntries(stdout: string): ParsedBookmark[] {
   const rows = parseJsonLines<{
     name?: string;
     remote?: string;
-    target?: string[];
+    target?: Array<string | null>;
   }>(stdout);
 
   return rows
     .map((row) => ({
       name: row.name?.trim() ?? "",
       remoteName: normalizeOptionalString(row.remote),
+      targetExists: (row.target ?? []).some((target) => typeof target === "string" && target.length > 0),
     }))
     .filter((row) => row.name.length > 0);
 }
@@ -536,7 +538,8 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
       Effect.map((entries) => {
         const localBookmarks = entries.filter((entry) => entry.remoteName === null);
         const remoteBookmarks = entries.filter(
-          (entry) => entry.remoteName !== null && entry.remoteName !== "git",
+          (entry) =>
+            entry.remoteName !== null && entry.remoteName !== "git" && entry.targetExists,
         );
         return {
           localBookmarks,
