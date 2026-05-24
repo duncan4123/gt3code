@@ -1,0 +1,614 @@
+2026-05-24 15:06:41 +10:00 | 964091e2cacd | live/current push-mqpoxzqvsrou | fix(gascity): align packaged doltlite jj pack setup
+2026-05-24 13:26:24 +10:00 | 1caee72fb5d8 | push-mlrunxst* staging/current* | t3-smj5k: fix gc hook payload json
+2026-05-24 13:23:45 +10:00 | 27933ab39315 | push-kmwxxqltkyqu* | docs: explain t3code gascity integration context
+2026-05-24 11:44:45 +10:00 | c1335a1b64ed | push-kmwxxqltkyqu@jorje | docs: explain t3code gascity integration context
+2026-05-24 05:14:29 +10:00 | ddae5cde9eed | gc-polecat-furiosa-t3-1jjvd0ec gc-polecat-furiosa-t3-1jjvd0ec@codeberg | fix(gc-sidebar): watch exact agent sessions
+2026-05-24 05:14:15 +10:00 | 59629e632506 | push-mlrunxst@jorje | t3-smj5k: fix gc hook payload json
+2026-05-24 05:09:41 +10:00 | 92e439046b9a | push-ppomuwqvnmou@jorje | t3-aix: tolerate empty bead hook stdin
+2026-05-24 03:59:33 +10:00 | 51df70a64729 | push-lyntsroulwur@jorje | t3-y5q: clarify JJ workspace location
+2026-05-24 02:37:09 +10:00 | 53768f2d76af | checkpoint/before-gascity-jj-history-split-20260524 | live: run latest t3code work
+2026-05-24 02:34:05 +10:00 | 0470f6e46436 | checkpoint/before-gascity-history-map-20260524 | live: run latest t3code work
+2026-05-23 23:20:08 +10:00 | 1f6a73da1788 | push-krvzxxtnqqty | t3-3zy9sjpt: harden city toml patch validation
+2026-05-23 19:35:30 +10:00 | 88ad9b108bf0 | push-knnwzqzp | t3-6kl0u: fix gc ready null deps scan
+2026-05-23 03:00:49 +10:00 | 131f1fafeb89 | push-wxumqormnsos | fix sqlite dependency id migration
+2026-05-22 23:54:34 +10:00 | 0c7e7f036127 | checkpoint/t3code-before-package-sync-20260522@duncan4123 | chore: export package source changes
+2026-05-21 17:05:08 +10:00 | 86c3a48f94e0 | push-upkvpvqoxxus | t3-75mnwo28: render gc threads immediately
+2026-05-21 17:03:31 +10:00 | 1d847c37891b | push-kzysrkpwsrrt@jorje | tj-8an.2: clarify empty-queue recovery
+2026-05-21 16:24:45 +00:00 | 993571a4916d | cursor/react-component-health-c155@upstream | Add React Scan root shell recordings
+2026-05-21 16:07:18 +00:00 | cb6fa9c8ea1e | cursor/effect-codebase-idioms-cbd0@upstream | Use schema decoding for Effect parsing paths
+2026-05-21 14:59:54 +10:00 | 6a9bff11505a | push-qprusytwwlys | t3-7wjunivs: link worker to convoy
+2026-05-21 11:17:15 +10:00 | ee9d02f18013 | integration/t3code-agent-controls-sidebar push-tvllvsytsnnz@jorje | tj-v38.3: document workspace refresh sequence
+2026-05-21 10:20:45 +10:00 | b3449fa2827d | rescue/current-accidental-sidebar | 
+2026-05-21 10:06:51 +10:00 | 3afd0ffba724 | push-xzrzlwny* | t3-dwmee0ub: add sidebar visibility regression tests
+2026-05-20 18:31:43 +10:00 | 82e85a093604 | rescue/pre-worker-sidebar | 
+2026-05-20 18:31:41 +10:00 | 23bc2f10e43c | push-rokvzonllkyx* | t3-62is79dn: record dashboard generated API decision
+2026-05-20 18:30:54 +10:00 | e8beebc4acfa | push-ltpsuolqqypv* | t3-91hpvvcz: isolate exec beads env
+2026-05-20 18:28:45 +10:00 | 639ac9e2d4ae | push-ooyqwlvltpms* | t3-9vlboqfe: keep gc project threads visible
+2026-05-20 18:27:46 +10:00 | 059b5cdf9fc3 | push-sotwvysy* | t3-3ukgwu01: restrict archived settings threads
+2026-05-20 18:26:50 +10:00 | 6ed514947f1a | push-xttntotuxxvn* | t3-1iyul0oa: split sidebar api support
+2026-05-20 18:15:23 +10:00 | b8a7717e1d00 | push-wtwpoumywsyw | t3-2mhqfju5: record CI release plumbing decision
+2026-05-20 18:14:46 +10:00 | a0c4244358d2 | push-zovuozutuvpz | t3-2mhqfju5: audit CI release plumbing
+2026-05-20 16:12:09 +00:00 | b89ba0651b27 | cursor/react-component-health-fb9a@upstream | Format image preview dialog callback
+2026-05-20 16:07:23 +00:00 | 551913494936 | cursor/effect-codebase-idioms-6aa1@upstream | Use idiomatic Effect parsing and durations
+2026-05-20 15:10:41 +02:00 | 1e929ad74fc7 | t3code/mobile-remote-connect@upstream | Handle intentional WS closes and heartbeat freshness
+2026-05-20 13:28:35 +02:00 | f446519d785b | t3code/290bc166@upstream | Fix OpenCode compatibility cap
+2026-05-20 13:22:13 +00:00 | 7c3f8ee714df | cursor/terminal-id-consistency-218a@upstream | Fix persisted terminal id migration and stale test terminal ids
+2026-05-20 12:35:10 +10:00 | e47299a8e61f | push-ltpsuolqqypv@jorje | t3-91hpvvcz: isolate exec beads env
+2026-05-20 12:35:00 +10:00 | 9fa2c91d5a85 | push-xttntotuxxvn@jorje | t3-1iyul0oa: split sidebar api support
+2026-05-20 12:32:43 +10:00 | 84cf0acfca0e | push-rokvzonllkyx@jorje | t3-62is79dn: record dashboard generated API decision
+2026-05-20 12:01:40 +00:00 | 75d703ba561a | cursor/heartbeat-check-logic-962e@upstream | fix: delegate isHeartbeatFresh to WsTransport activity tracking
+2026-05-20 11:43:35 +10:00 | e37656d71d5e | push-ptltwqxpqoox | t3-2tiv4kt8: split workspace and rig controls
+2026-05-20 11:43:15 +10:00 | 9046beb4e096 | push-pmkplsuozuuk | t3-9ssce6f3: split t3bridge runtime follow-up
+2026-05-20 11:40:11 +10:00 | 66b273ff6938 | push-xzrzlwny@jorje | t3-dwmee0ub: add sidebar visibility regression tests
+2026-05-20 11:38:02 +10:00 | dc256ee82f33 | push-mzrrxqqnsrql | t3-1glem35c: filter docs examples artifacts
+2026-05-20 11:28:25 +00:00 | 7294763bfef6 | cursor/review-highlighting-variant-config-2798@upstream | fix: respect EXPO_PUBLIC_REVIEW_HIGHLIGHTER_ENGINE in native diff and default unset APP_VARIANT to development
+2026-05-20 10:42:02 +02:00 | 8da08596ca6d | t3code/a55b49df@upstream t3code/sync-with-main-1@upstream | Add background activity policy and host power monitoring
+2026-05-20 10:40:45 +02:00 | 5af56065a94b | t3code/21cd8943@upstream | Add targeted provider compatibility updates
+2026-05-20 09:32:45 +00:00 | 973bdec065d1 | cursor/opencode-compatibility-policy-2953@upstream | fix: correct OpenCode policy version range classifications
+2026-05-20 09:10:09 +00:00 | 0883def1a89d | cursor/bundled-policy-handling-0268@upstream | fix: fall back to bundled policy when remote document has no matching policy
+2026-05-19 22:14:32 +10:00 | 3f03612d9b5b | integration/t3code-gc-sidebar-runtime | fix(gc): restore sidebar controls and session wake
+2026-05-19 20:34:34 +10:00 | 47c54e2e278f | push-ooyqwlvltpms@jorje | t3-9vlboqfe: keep gc project threads visible
+2026-05-19 20:13:01 +10:00 | 44c3e6718118 | push-sotwvysy@jorje | t3-3ukgwu01: restrict archived settings threads
+2026-05-19 16:19:07 +00:00 | 71777a142378 | cursor/react-component-health-dd5b@upstream | Add React Scan reconnect recordings
+2026-05-19 16:17:36 +00:00 | bed9031f0292 | cursor/effect-codebase-idioms-a88e@upstream | Use Effect idioms in diagnostics
+2026-05-19 09:42:10 +10:00 | ed58d54a11f3 | push-gc-sidebar-thread-visibility | fix(gc): keep sidebar threads visible
+2026-05-18 22:55:22 +10:00 | f35409e41c17 | push-lzsrpmpnzsok | t3-gctrace-start-verify: record verification plan
+2026-05-18 22:45:34 +10:00 | 915dc3553178 | push-xspyssyznkry | t3-gctrace-start-impl: arm gc trace from start runner
+2026-05-18 22:12:44 +10:00 | 3c71e33fc5af | gc-crew-b31305f5b9e1 rescue/feature-set-repair-20260518* | fix(gc): restore sidebar controls and fast sessions
+2026-05-18 16:50:03 +10:00 | d9de808d9110 | rescue/feature-set-repair-20260518@duncan4123 | fix(gc): restore sidebar controls and fast sessions
+2026-05-18 16:19:00 +00:00 | 7a0c606fb5f0 | cursor/react-component-health-dccc@upstream | Add react-scan command palette recordings
+2026-05-18 16:04:04 +00:00 | d6708e4efe45 | cursor/effect-codebase-idioms-ff1a@upstream | Use Effect schemas in diagnostics parsing
+2026-05-18 00:51:25 +10:00 | ed74403e5614 | gc-refinery-755c6628cf25 | fix(gc): restore project-wrapped agent sidebar controls
+2026-05-17 22:12:28 +10:00 | 06401099099d | gc-crew-21365f17d398 gc-crew-d0fbcdcb03ee gc-refinery-0f752f2a88ef rescue/feature-set-repair-20260518@codeberg rescue/feature-set-repair-20260518@jorje | refactor(gc): isolate sidebar integration
+2026-05-17 18:54:10 +10:00 | ac5dc4d8d43e | push-ssvmtqsztvvk | t3-7052oq9e: add rig write probe
+2026-05-17 16:11:07 +00:00 | 43501dcb3e94 | cursor/react-component-health-4648@upstream | Add expanded image React Scan recordings
+2026-05-17 16:04:40 +00:00 | 0593260f66be | cursor/effect-codebase-idioms-d099@upstream | Format workspace entries duration cleanup
+2026-05-17 09:17:09 +10:00 | 8925943ba3c3 | rescue/feature-set-repair-20260516 | feat(gc): add Gas City sidebar controls
+2026-05-16 16:15:21 +00:00 | d3fa2a2553ef | cursor/react-component-health-9dbc@upstream | Add SSH prompt react-scan recordings
+2026-05-16 16:09:56 +00:00 | 182f9b606d41 | cursor/effect-codebase-idioms-cdad@upstream | Use schema guards for desktop ssh errors
+2026-05-16 15:22:40 +10:00 | 27b3aa96d8d2 | t3code/rebased-gc-candidate-20260516 | feat(gc): wire sidebar controls and gc provider contracts
+2026-05-16 15:20:10 +10:00 | b6c8bfcdff5a | t3code/rebased-recent-candidate-20260516 | test: stabilize validation under monorepo load
+2026-05-16 12:30:38 +10:00 | c3e4cf97b78c | push-rsmsvummlukv* | tr-conly3w4.1: clarify worker session rebinding
+2026-05-16 12:30:38 +10:00 | 6f96c0099680 | push-mrmsyowyyqlz* | tr-0esp0gcl: clarify Gas City runtime rebuild note
+2026-05-16 12:30:38 +10:00 | 0716cb3b13de | push-rxzouulzvpux* | t3-gctrace-research: document start trace integration path
+2026-05-16 12:13:02 +10:00 | 71524ca0f7bc | rescue/pre-history-edit-20260516 | 
+2026-05-16 11:53:21 +10:00 | 949d5bb086d6 | rescue/rebase-foundation-20260516 t3code/rebase-base-20260516 | test: stabilize validation under monorepo load
+2026-05-15 18:04:53 +10:00 | f4249d8b6b1d | push-rxzouulzvpux@jorje | t3-gctrace-research: document start trace integration path
+2026-05-15 16:09:29 +00:00 | 1c5a80e76712 | cursor/effect-codebase-idioms-92a5@upstream | Use schema guards for desktop SSH checks
+2026-05-15 16:09:12 +00:00 | d9380cdecb68 | cursor/react-component-health-4e89@upstream | Optimize expanded image dialog rerenders
+2026-05-15 09:33:04 +10:00 | 603627f7d94f | push-mrmsyowyyqlz@jorje | tr-0esp0gcl: clarify Gas City runtime rebuild note
+2026-05-15 09:08:25 +10:00 | 3189e1b9af5d | push-rsmsvummlukv@jorje | tr-conly3w4.1: clarify worker session rebinding
+2026-05-15 08:40:47 +10:00 | 3ae17e144a04 | push-korlqruyuxxq@jorje | tj-9n4: tighten JJ worker queue claim startup
+2026-05-15 07:43:20 +10:00 | e2c1454b485f | push-lqultpyqpnlo@jorje | tj-v38.2: add workspace refresh checks to JJ skill
+2026-05-15 06:40:13 +00:00 | d1e85c4e8fde | main@upstream upstream-main-20260516 | chore(release): prepare v0.0.24
+2026-05-15 06:26:33 +10:00 | 4a98b5b78729 | push-xxvutwnzqryv@jorje | tj-8an.1: clarify empty-queue recovery
+2026-05-15 03:39:27 +10:00 | f17ef85c7c36 | push-lppypktrltxl@jorje | tj-xpq: use gc sling for JJ patrol startup
+2026-05-14 23:10:27 +10:00 | 0325b631caf0 | push-qpxrmponwyro@jorje | tj-oth: refresh jj worker handoff guidance
+2026-05-14 22:26:17 +10:00 | 18d35c1be9eb | t3code-workspace-base* | fix(gascity): prefer managed supervisor api url
+2026-05-14 17:13:59 +10:00 | 73e608876fc3 | push-umyopnvlmonk@jorje | tj-22x: clarify worker routing env fallback
+2026-05-14 16:45:38 +10:00 | 1fbdbd29c506 | push-vpxwytvzqyro@jorje | tj-hj8: treat max-only agents as pool controls
+2026-05-14 16:17:07 +00:00 | 785c91c05ec8 | cursor/react-component-health-b58d@upstream | Add react-scan after recording
+2026-05-14 16:06:08 +00:00 | 6dfcdaa42781 | cursor/effect-codebase-idioms-e7d9@upstream | Use idiomatic Effect primitives in config and SSH readiness
+2026-05-14 15:03:23 +10:00 | 766e0bcfd202 | push-txwnwwnouzyu@jorje | tj-r63.1: normalize convoy sidebar agent controls
+2026-05-14 14:18:13 +10:00 | abaf4a5affad | t3code-workspace-base@codeberg t3code-workspace-base@duncan4123 t3code-workspace-base@jorje | chore(config): tune gascity-br rig activation
+2026-05-14 11:59:37 +10:00 | bb2112b18c82 | push-lvowwnrwosqp@jorje | tj-joh: preserve worker target_remote metadata
+2026-05-14 11:23:23 +10:00 | 960e78f2ad0f | integration/t3code-agent-controls-sidebar@codeberg integration/t3code-agent-controls-sidebar@duncan4123 | fix(config): remove invalid gastown mayor patch
+2026-05-13 22:37:29 +00:00 | 6d184f066026 | cursor/background-activity-settings-b519@upstream | Fix legacy patch fields overriding explicit backgroundActivity and extract duplicated settings utilities
+2026-05-13 21:33:39 +00:00 | e24a57b546c3 | cursor/snapshot-test-compatibility-e1d9@upstream | Fix test: use unmapped driver so no bundled policy matches
+2026-05-13 20:38:00 +10:00 | 824f287f2536 | t3code-jj-bookmark-test@jorje | tj-wur: document worker prerequisites and sync metadata
+2026-05-13 20:36:35 +10:00 | 679e62e28b76 | push-lpmvulwoqrzu@jorje | tj-sru: add remote sync and latest-base metadata to worker workspace step
+2026-05-13 19:09:48 +10:00 | 0386f95827e9 | push-nntrunuwntsn@jorje | tj-wur: document worker prerequisites and sync metadata
+2026-05-13 18:02:20 +10:00 | 7131f348c706 | push-pktxnsyvrzwn@jorje | tj-9fc: improve target-bookmark fallback guidance
+2026-05-13 16:16:49 +00:00 | 95a569af5563 | cursor/react-component-health-4fc0@upstream | Add react-scan provider dialog recordings
+2026-05-13 16:10:17 +00:00 | d6bbc5af31d3 | cursor/effect-codebase-idioms-62ee@upstream | Provide TestClock to Tailscale timeout test
+2026-05-13 16:09:02 +10:00 | 785da19d8967 | push-nkulmunnqqyw@jorje | tj-cia: clarify configured target bookmark guidance
+2026-05-13 15:43:35 +00:00 | b0048f7a730e | cursor/unused-provider-function-dd50@upstream | Remove unused exported function resolveRemoteProviderCompatibilityDocument
+2026-05-13 15:07:07 +10:00 | 1d04657c9d88 | jj-pack@jorje push-t3bridge-br-metadata@codeberg push-t3bridge-br-metadata@duncan4123 push-t3bridge-br-metadata@jorje | fix(gascity): sync br t3bridge metadata
+2026-05-13 14:55:08 +10:00 | 18a1766fb0e6 | push-trprltuypvyq@jorje | tj-gm4: clarify remote smoke task metadata
+2026-05-13 14:42:15 +00:00 | fad51d16d8ce | cursor/advisory-status-reset-8f3d@upstream | fix: preserve pre-advisory provider status during compatibility advisory removal
+2026-05-13 12:55:14 +00:00 | 3edc33ea14db | cursor/negative-cache-ttl-7b69@upstream | fix: use shorter TTL for negative cache entries in provider compatibility
+2026-05-13 12:04:46 +10:00 | b7326b02c4d7 | push-vpxokuslkqyp@jorje | tj-wur: document remote auth and target bookmark prerequisites
+2026-05-13 12:04:46 +10:00 | 436faad63063 | review-tj-gm4@jorje | tj-gm4: add remote smoke metadata guidance
+2026-05-13 11:53:39 +00:00 | a788468c7fe4 | cursor/remote-advisory-status-demotion-6b43@upstream | fix: allow remote advisory to demote status set by bundled advisory
+2026-05-13 11:25:00 +10:00 | 58adc0622b0f | manual-jj-smoke-target@jorje push-nprxmvlqlpvr@jorje | manual-jorje-smoke: worker review change
+2026-05-13 10:35:36 +10:00 | 6f20136bb9df | push-kvvoqwswtryz@jorje | tj-wur: document worker remote-sync guardrails
+2026-05-13 10:14:46 +00:00 | 14123261febd | cursor/compatibility-message-override-1dd0@upstream | Fix compatibility message overriding more-severe probe error message
+2026-05-13 10:04:14 +10:00 | 444ed0b39636 | push-zrzzwnywoyyy@jorje | tj-2eb: improve workspace target fallback and sync metadata
+2026-05-12 21:48:41 +10:00 | 11acc778135a | push-vyrstmpsuupu@jorje | tj-gm4: clarify planner target bookmark fallback
+2026-05-12 21:14:31 +00:00 | 2b0453d6253f | cursor/source-file-discovery-exclusion-bb47@upstream | fix: exclude ios/android directories only at mobile app root in collectSources
+2026-05-12 20:54:40 +00:00 | 7c3f9b483bc7 | cursor/diff-view-content-width-785a@upstream | fix: use measured text width instead of grapheme count for diff content width and word-diff highlight positioning
+2026-05-12 16:33:14 +10:00 | 5a15298401ba | push-zxouowqkuxqs push-zxouowqkuxqs@duncan4123 | tj-2ay: verify per-bead JJ workspace
+2026-05-12 16:09:21 +10:00 | d63a2caaa9f2 | push-wpnrlkzqnuqv@duncan4123 | feat(gascity): add jj agent workflow pack
+2026-05-12 13:47:44 +00:00 | b3ce952ec982 | cursor/opendcode-process-cleanup-3d57@upstream | fix: use Effect.ignore instead of Effect.asVoid in killDirectChild to prevent SIGKILL phase short-circuit
+2026-05-12 12:20:04 +10:00 | f0c2c121b1c6 | push-wpnrlkzqnuqv@jorje | feat(gascity): add jj agent workflow pack
+2026-05-12 11:51:55 +10:00 | 7178d2984597 | push-umwwkrkrypoz push-umwwkrkrypoz@duncan4123 | feat(gascity): add jj flywheel pack
+2026-05-12 06:33:08 -07:00 | b538723e987a | t3code/investigate-opencode-leak@upstream | Harden OpenCode probe teardown and cleanup
+2026-05-12 01:33:14 +10:00 | 0016b9591258 | integration/t3code-agent-controls-sidebar@origin | feat(gascity): support multicity packs
+2026-05-11 16:26:53 +00:00 | f9a634de632a | cursor/react-performance-optimization-3ecc@upstream | Format react-scan evidence JSON
+2026-05-11 16:15:11 +00:00 | 642ab4ed423d | cursor/idiomatic-effect-patterns-eb01@upstream | Adopt Effect duration and datetime helpers
+2026-05-10 16:13:14 +00:00 | 6240442f65cb | cursor/idiomatic-effect-patterns-cfd7@upstream | Add structured environment label errors
+2026-05-10 14:38:40 +10:00 | a392f259c130 | temp/polecat-t3-0ymnxug8.1 temp/polecat-t3-0ymnxug8.1@duncan4123 | docs: inventory gc agent controls
+2026-05-09 16:12:39 +00:00 | ce5a9bbd156a | cursor/react-performance-optimization-dca4@upstream | Stabilize discovered SSH host row callback
+2026-05-09 16:10:53 +00:00 | cfd7af146415 | cursor/idiomatic-effect-patterns-69ae@upstream | Handle child process unref result
+2026-05-09 10:51:47 -07:00 | c06f7ed45ca3 | t3code/195ddd89@upstream | fix desktop context menu zoom positioning
+2026-05-09 00:24:21 +10:00 | ae547a064cc1 | polecat/t3-0ymnxug8.1 polecat/t3-0ymnxug8.1@duncan4123 polecat/t3-0ymnxug8.1@origin | docs: inventory gc agent controls
+2026-05-08 22:57:16 -07:00 | 3c32bc8fd1f5 | main@duncan4123 | [codex] Fix hosted channel bootstrap (#2613)
+2026-05-08 22:26:15 -07:00 | d53ccc924603 | codex/fix-vercel-turbo-env@upstream | fix hosted channel bootstrap
+2026-05-08 21:36:28 +10:00 | 6bcbe23a75c0 | backup/t3-0ymnxug8.1-pretarget backup/t3-0ymnxug8.1-pretarget@duncan4123 | docs: inventory gc agent controls
+2026-05-08 21:31:19 +10:00 | c55bddc06d1b | polecat/t3-0ymnxug8.2 polecat/t3-0ymnxug8.2@duncan4123 polecat/t3-0ymnxug8.2@origin temp/polecat-t3-0ymnxug8.2 temp/polecat-t3-0ymnxug8.2@duncan4123 | docs: audit gc sidebar surface
+2026-05-08 20:29:45 +00:00 | 4682d2d692a4 | cursor/style-default-value-cap-cdc5@upstream | fix: lower fileHeaderCountGap default from 6 to 4 to match usage-site cap
+2026-05-08 18:57:39 +00:00 | a4a2302607dd | cursor/duplicated-helper-function-0902@upstream | refactor: extract encodeJsonStringForDiagnostics into @t3tools/shared/schemaJson
+2026-05-08 17:11:12 +00:00 | f991605be707 | cursor/react-performance-optimization-48e7@upstream | Add react-scan recordings for provider dialog
+2026-05-08 16:52:38 +10:00 | e446f3e06ff7 | ship ship@duncan4123 | fix(gc): route nudges through supervisor fast path
+2026-05-08 16:19:06 +00:00 | da1c2152a6ed | cursor/react-performance-scan-6a79@upstream | Fix composer image callback deps
+2026-05-08 16:13:27 +00:00 | 41737ab838b8 | cursor/idiomatic-effect-patterns-1b98@upstream | Normalize decider random test result
+2026-05-08 12:48:26 -07:00 | bd7dbf3df105 | codex/pr-2605-screenshot@upstream | add pr 2605 full page screenshot
+2026-05-08 02:56:18 +10:00 | 13241fed4675 | main polecat/ccm-mfa polecat/ccm-mfa@duncan4123 polecat/ccm-mfa@origin temp-main temp-main@duncan4123 wip-ccm-mfa wip-ccm-mfa@duncan4123 | docs: add polecat smoke proof (ccm-mfa)
+2026-05-08 01:45:38 -07:00 | 32ebbe1a4c19 | t3code/09efeb7d@upstream | Force app-server processes to exit promptly on teardown
+2026-05-07 19:21:14 +00:00 | 2e8b8740a1cc | cursor/idiomatic-effect-patterns-4a46@upstream | Use Effect Random for orchestration event ids
+2026-05-07 17:59:57 +00:00 | 6ff98af8e063 | cursor/react-performance-scan-9e5f@upstream | Format SSH prompt reducer state
+2026-05-07 00:31:16 -07:00 | 86f867e175f5 | t3code/summarize-unstaged-changes@upstream | Add Pi reasoning work log plan
+2026-05-06 23:26:06 +00:00 | d0b1e7d28510 | cursor/ci-lint-execution-environment-4d3d@upstream | fix: use bun instead of node to run mobile-native-static-check.ts in CI
+2026-05-06 16:08:27 -07:00 | bb538d76c554 | t3code/vscode-theme-plan@upstream | Optimize thread navigation render work
+2026-05-06 14:36:18 +10:00 | 13a8db7c3222 | gc-gastown.hq-polecat-2-be2d220c3fe4 gc-gastown.hq-polecat-2-be2d220c3fe4@duncan4123 | fix(gc): repair doltlite scope normalization
+2026-05-06 13:55:04 +10:00 | 762e0b30e03a | gc-gastown.hq-polecat-2-be2d220c3fe4@origin | fix(gc): repair doltlite scope normalization
+2026-05-06 13:47:46 +10:00 | 88283046b6fc | gc-gastown.hq-polecat-1-003cf20d7b79 gc-gastown.hq-polecat-1-003cf20d7b79@duncan4123 gc-gastown.hq-polecat-1-003cf20d7b79@origin | docs: audit doltlite worktree store drift
+2026-05-06 11:47:45 -07:00 | e11dba8fe407 | t3code/effect-rpc-electron-ipc@upstream | Consolidate Electron IPC POC protocol in shared contracts
+2026-05-06 07:35:59 +10:00 | 4ccab3b660a2 | gc-crew-9cdfac62dd1e gc-crew-9cdfac62dd1e@duncan4123 gc-crew-9cdfac62dd1e@origin | fix: bound bd store open hangs
+2026-05-06 03:32:40 +00:00 | 2d8abd6312a9 | cursor/idiomatic-effect-patterns-a27c@upstream | Fix deterministic random helper typing
+2026-05-05 21:37:08 -07:00 | e8f6c83f49e2 | feature/desktop-workspace-open@upstream | Add desktop workspace open flow
+2026-05-05 21:00:42 -07:00 | fd4c35421212 | t3code/remove-rpc-indirection@upstream | Route environment RPC through shared atom registry
+2026-05-05 20:35:04 -07:00 | b4d9130a130b | t3code/service-analytics-tracking@upstream | Add analytics tracking for server and RPC actions
+2026-05-05 20:31:38 +00:00 | 8a815adc8bcf | cursor/user-theme-palette-51f1@upstream | Add user theme palette settings
+2026-05-05 14:41:50 +10:00 | ff21b17a8a8a | gc-gastown.hq-refinery-76a014fcaf4c gc-gastown.hq-refinery-76a014fcaf4c@duncan4123 | fix(gascity): support runtime help
+2026-05-05 14:17:15 +10:00 | 19a3ee17a3d8 | gc-gastown.hq-polecat-2-408fcd55a91d gc-gastown.hq-polecat-2-408fcd55a91d@duncan4123 gc-gastown.hq-polecat-2-408fcd55a91d@origin | docs: tweak README notes
+2026-05-05 06:42:24 +10:00 | 14343a2d1ab0 | gc-hq-polecat-smoke-c0fd27fb1d97 gc-hq-polecat-smoke-c0fd27fb1d97@duncan4123 gc-hq-polecat-smoke-c0fd27fb1d97@origin | fix: add doltlite doctor checks
+2026-05-05 06:16:41 +10:00 | 3f271abcf8e2 | gc-hq-refinery-e0b08d4b3626 gc-hq-refinery-e0b08d4b3626@duncan4123 | fix(gascity): extend beads init timeout
+2026-05-04 23:51:12 -07:00 | 2f2ee1efc6cd | t3code/6f2315db@upstream | Add desktop update release notes tooltip
+2026-05-04 20:59:47 -07:00 | a02ed3dd8126 | t3code/c7b9a307@upstream | Delete apps/web/src/components/settings/MainSettingsForm.test.ts
+2026-05-04 17:29:42 +00:00 | ee9cabf43096 | cursor/chat-composer-mobile-bugs-6955@upstream | fix: prevent mobile composer collapse when portaled floating layers are open
+2026-05-04 16:48:45 +00:00 | 12084242b036 | cursor/chat-composer-dead-ref-bb10@upstream | Remove dead mobileComposerExpandFrameRef and cancelPendingExpandFocus
+2026-05-04 16:42:27 +10:00 | 06911b4cce24 | gc-gastown.hq-polecat-1-34a7633d2c6f gc-gastown.hq-polecat-1-34a7633d2c6f@duncan4123 gc-gastown.hq-polecat-5394dbb06fb3 gc-gastown.hq-polecat-5394dbb06fb3@duncan4123 gc-gastown.hq-polecat-adhoc-07ccb5e17e-a0edc9c8adc1 gc-gastown.hq-polecat-adhoc-07ccb5e17e-a0edc9c8adc1@duncan4123 gc-gastown.hq-polecat-manual-25f8be09f8b0 gc-gastown.hq-polecat-manual-25f8be09f8b0@duncan4123 gc-gastown.hq-polecat-smoke-8eb602d56712 gc-gastown.hq-polecat-smoke-8eb602d56712@duncan4123 gc-hq-polecat-smoke-a3c6e64e6154 gc-hq-polecat-smoke-a3c6e64e6154@duncan4123 | fix: link bd builds against doltlite
+2026-05-04 09:54:51 -07:00 | 699caa754c00 | t3code/mobile-composer-keyboard-race@upstream | Fix mobile composer keyboard focus race
+2026-05-04 04:02:43 +00:00 | 5dae987581fe | cursor/display-link-retain-cycle-7e8e@upstream | Fix CADisplayLink retain cycle by invalidating on view removal
+2026-05-04 03:43:35 +00:00 | a24129976ded | cursor/oxlint-rule-scope-5c56@upstream | Replace global unicorn/no-array-sort disable with targeted inline suppression
+2026-05-04 03:25:46 +00:00 | cff06d3d4d6f | cursor/activity-sort-and-theme-redraw-cfcf@upstream | Fix descending sort for activity dates and add theme redraw
+2026-05-04 02:40:16 -05:00 | b0b1fb4f2c66 | yash/branching2@upstream | feat: branching messages
+2026-05-04 01:56:34 +00:00 | 0ddea1601f99 | cursor/first-visible-row-comparison-c8ba@upstream | fix: use <= in firstVisibleRowIndex binary search to skip zero-height rows at viewport edge
+2026-05-04 01:22:07 -07:00 | 9b74682d5905 | t3code/acp-registry@upstream | Rank ACP registry agent search results
+2026-05-04 01:07:13 +00:00 | f485be5715e0 | cursor/publish-dialog-visibility-reset-ae93@upstream | fix: reset publishProvider, publishVisibility, and publishProtocol on dialog close
+2026-05-04 00:33:41 +10:00 | cd5872e65f15 | main@context-mode | fix: upgrade from doltlite fork
+2026-05-03 13:36:36 +10:00 | 0f17a3bf01d3 | integrate/upstream-1.0.104-doltlite-dashboard@context-mode | chore: roll out context-mode 1.0.105
+2026-05-03 05:47:06 +00:00 | 4136680b7708 | cursor/t3-review-diff-rendering-bde4@upstream | Fix dead code and overscan filter in T3ReviewDiffView
+2026-05-02 23:31:09 +00:00 | 87975b1c9688 | cursor/vcs-path-normalization-9845@upstream | fix: avoid double normalizeCwd in refreshStatus path
+2026-05-02 23:00:43 -07:00 | e0314cf2b201 | t3code/pr-2284/t3code/git-audit-stability@upstream | Rename branch UI to ref-aware VCS helpers
+2026-05-02 21:34:37 +00:00 | 00f33428b1f3 | cursor/dead-sapling-branch-0d08@upstream | Remove dead 'sapling' branch in resolveVcsTerms
+2026-05-02 20:15:07 +00:00 | 408123a5441c | cursor/unknown-vcs-kind-fallback-0307@upstream | fix: treat unknown VCS kind as supporting git workflow actions
+2026-05-02 19:03:07 -07:00 | a251619fe093 | t3code/jj-driver-vsc@upstream | Fix JJ rebase drift
+2026-05-02 16:47:03 +00:00 | 02cac6dd6139 | cursor/vcs-error-channel-3cdb@upstream | fix: use Effect.flatMap for decodeJjCurrentChange to route errors to typed channel
+2026-05-02 09:06:51 +00:00 | 31735f3ec7ba | cursor/shared-vcs-utilities-15aa@upstream | Extract duplicated VCS path utilities into shared VcsPathUtils module
+2026-05-01 08:51:26 +00:00 | 78fb05040a03 | cursor/acp-registry-auth-adapter-d1f6@upstream | Fix ACP Registry agents using incorrect Cursor-specific auth
+2026-05-01 05:37:54 +00:00 | e72d364ef8fa | cursor/t3reviewdiffview-observer-issue-134d@upstream | Fix: suppress didSet observer during incremental token merge
+2026-05-01 00:27:36 +00:00 | 4751b3d485ea | cursor/cursor-model-capability-fallback-7a21@upstream | fix: add config-options fallback to discoverCursorModelCapabilitiesViaAcp
+2026-04-30 17:39:35 -07:00 | d371a1dc8a74 | t3code/cursor-model-probe@upstream | Merge origin/main into cursor model probe
+2026-04-29 16:57:04 -07:00 | e7f96a63a479 | codex/fix-claude-context-window-limit@upstream | Clamp Claude context usage to selected window
+2026-04-29 16:37:52 -07:00 | 387a577e3c7f | t3code/b5adb16f@upstream | Fix Windows gh PR title args
+2026-04-29 16:33:15 -07:00 | f7607138c54e | t3code/c171adfb@upstream | Fix macOS helper bundle identities
+2026-04-29 16:33:06 -07:00 | 9678d3b14402 | t3code/e1713ff7@upstream | Fix visited timestamp under clock skew
+2026-04-27 18:34:06 +00:00 | 11e9d78da441 | cursor/logical-key-fallback-consistency-1f88@upstream | fix: use deriveLogicalProjectKeyFromSettings as fallback in syncProjects call sites
+2026-04-27 11:16:24 -07:00 | e80d4a479ce1 | t3code/project-grouping-ux@upstream | Simplify logical project grouping
+2026-04-26 00:47:04 +00:00 | 1178cca8a16e | cursor/reorder-favorite-models-b251@upstream | Cover model ordering and visibility settings
+2026-04-24 13:09:18 +10:00 | 202b8dc7b64c | codex/sidebar-pool-followup codex/sidebar-pool-followup@duncan4123 codex/sidebar-pool-followup@origin | feat(gc): expose sidebar pool controls
+2026-04-23 22:00:49 +10:00 | dfc1ab6a5473 | gc/t3-ymf gc/t3-ymf@duncan4123 gc/t3-ymf@origin | chore: salvage orphaned polecat worktree
+2026-04-21 00:54:13 +10:00 | f3cae12156b4 | verbatim verbatim@duncan4123 verbatim@origin | fix gc sidebar grouping and pool controls
+2026-04-20 18:39:01 +10:00 | 52644e218bfb | t3code/sidebar-integration-audit t3code/sidebar-integration-audit@duncan4123 | fix(auth): prefer real ws auth before loopback fallback
+2026-04-20 11:20:50 -07:00 | c54cf0a8d172 | t3code/acp-server-registry@upstream | Merge origin/main into t3code/acp-server-registry
+2026-04-19 18:48:17 -07:00 | 788a70087aa5 | feature/update-claude-sdk@upstream | Update Claude agent SDK integration
+2026-04-17 17:57:41 -07:00 | 89c6025328bc | t3code/origin-worktree-picker@upstream | Add fetch-latest-origin worktree support
+2026-04-17 08:18:34 +00:00 | 5d70913a22c9 | cursor/web-port-icon-and-errors-a31c@upstream | Fix sidebar web port icon and remove unreachable fallback in WebPortInspector
+2026-04-17 05:43:59 +00:00 | f6ccddbfd36a | cursor/command-palette-test-logic-f1af@upstream | Fix getBrowsePrefetchPaths tests to use reachable state combinations
+2026-04-17 05:15:13 +00:00 | 689afc5e896c | cursor/command-palette-memo-dependency-797d@upstream | Remove unused highlightedItemValue from filterBrowseEntries
+2026-04-17 01:09:06 -07:00 | b0bc101eb6d4 | codething/50e6e9da@upstream | Refactor process inspector control flow
+2026-04-16 22:31:52 -07:00 | 11192b698d71 | t3code/hover-permission-prefetch@upstream | Prefetch browse paths in command palette
+2026-04-16 20:28:16 -07:00 | 3631d0a8ee90 | t3code/fix-windows-build@upstream | Install Spectre MSVC libs for Windows release builds
+2026-04-16 06:36:04 +00:00 | f252a0a26f86 | cursor/production-cleartext-traffic-2802@upstream | Gate cleartext HTTP traffic settings to non-production variants
+2026-04-16 00:47:58 +00:00 | c0aed107dcc5 | cursor/terminal-and-palette-state-ec1e@upstream | Fix missing terminal focus bump after close and clarify toggleOpen predicate
+2026-04-15 17:40:23 -07:00 | b5281f994ef5 | t3code/composable-chat-layout@upstream | Add composable chat and workspace layout modes
+2026-04-15 16:40:51 -07:00 | b3291cf83ea6 | t3code/252f5fed@upstream | Respect installed version update channel
+2026-04-15 12:26:50 +10:00 | 3e266251610e | t3code/gc-huma-client t3code/gc-huma-client@duncan4123 | fix: persist gc session bindings in t3
+2026-04-15 10:38:53 -07:00 | 2e96efd94bf1 | codex/mobile-libghostty-terminal@upstream | Add mobile native terminal
+2026-04-15 00:53:04 +00:00 | fc52f7f4cf9c | cursor/workspace-commands-palette-check-6252@upstream | Fix: move command palette open check before workspace command dispatch
+2026-04-14 22:03:38 +00:00 | 59b1d755d961 | cursor/connection-route-duplication-ff0a@upstream | fix: deduplicate connection route by delegating to feature component
+2026-04-14 21:16:18 +00:00 | 677fe73be80a | cursor/worktree-path-condition-d4c2@upstream | Fix inverted worktree path condition in NewTaskDraftScreen
+2026-04-14 21:07:07 +00:00 | 9d24bfb15f57 | cursor/qr-scanner-lock-useref-f35f@upstream | fix: use useRef instead of useState for QR scanner lock to prevent duplicate scans
+2026-04-14 09:03:00 +00:00 | 12dd1bcb9739 | cursor/dead-code-and-debug-logs-ad44@upstream | Remove dead CARD_SHADOW exports and debug console.log statements
+2026-04-14 07:46:15 +00:00 | 07aefa635b5c | cursor/update-message-and-duplicate-screen-8250@upstream | Fix update-check ordering and remove unused NewConnectionRouteScreen
+2026-04-14 07:18:50 +00:00 | fb5f02f8461e | cursor/fast-mode-provider-logic-2a26@upstream | Fix fast mode option being applied to all providers indiscriminately
+2026-04-14 02:49:37 +00:00 | dc4ee0b9325e | cursor/dead-code-and-navigation-53b7@upstream | Remove dead code and fix sidebar split/tab navigation conflict
+2026-04-13 17:20:02 +00:00 | 03c098d24838 | cursor/app-harness-dispose-method-9249@upstream | Add dispose method to PerfAppHarness for lightweight error-path cleanup
+2026-04-13 10:06:25 -07:00 | e9fa2b75dc03 | t3code/performance-regression-tests@upstream | Add server perf latency baselines
+2026-04-12 08:27:49 +00:00 | c93fcf98f820 | cursor/ternary-activity-object-duplication-a799@upstream | Remove redundant ternary in appendSetupScriptActivity
+2026-04-12 02:31:59 +10:00 | 53fae7407039 | wip/worktree-checkpoint-2026-04-11 wip/worktree-checkpoint-2026-04-11@duncan4123 wip/worktree-checkpoint-2026-04-11@origin | feat: share gc and diff sidebar slot
+2026-04-12 01:20:20 -07:00 | 58f45db79263 | t3code/context-window-meter@upstream | Merge origin/main into t3code/context-window-meter
+2026-04-12 00:50:26 -07:00 | 22349cd4b4fa | t3code/pr-1943/t3code/port-token-clamp@upstream | use better types
+2026-04-12 00:01:00 -07:00 | 968db3cb59d7 | t3code/revert-core-ui-palette@upstream | Raise toast stacking above core UI
+2026-04-11 23:25:32 +00:00 | 980432cbd902 | cursor/editor-protocol-target-utility-e3c1@upstream | Extract makeWindowsEditorProtocolTarget into shared editorProtocol module
+2026-04-11 16:14:44 -07:00 | b909b94722ed | t3code/open-service-effect-api@upstream | progress?
+2026-04-11 11:58:17 -07:00 | 366651fa4f0f | t3code/move-timeline-to-virtuoso@upstream | Switch message timeline to full Virtuoso virtualization
+2026-04-11 06:04:05 +00:00 | cbe73cb407b4 | cursor/git-core-and-cleanup-b4fe@upstream | Remove debug test artifacts and use consistent byte tracking in processChunk
+2026-04-11 01:10:53 +00:00 | d4c9511f80a3 | cursor/provider-session-handoff-5274@upstream | Fix unguarded cache clear on provider exit and overly broad compaction item heuristic
+2026-04-10 18:03:45 -07:00 | 84b54f72844c | t3code/provider-switch-compaction@upstream | Merge branch 'main' into t3code/provider-switch-compaction
+2026-04-10 14:37:10 -07:00 | 0477142263ec | feature/claude-1m-context@upstream | Limit included 1M context to supported Claude models
+2026-04-10 12:57:40 -07:00 | 625da23b476a | t3code/claude-stream-interrupts@upstream | Harden Claude stream interruption handling
+2026-04-10 08:11:19 +00:00 | 7885e2ba382b | cursor/gh-cli-windows-shims-b8b7@upstream | Fix: resolve shell option on Windows to support .cmd/.bat shims
+2026-04-10 08:10:51 +00:00 | 05f0d160a1ce | cursor/process-runner-nullish-expression-c2fa@upstream | Add parentheses to nullish coalescing expression for clarity
+2026-04-10 03:20:08 +00:00 | 7a848c2ecdc4 | cursor/client-settings-hydration-merge-43fc@upstream | fix: merge persisted settings with current snapshot during hydration
+2026-04-10 01:06:46 -07:00 | ce1b679cc951 | codex/fix-github-cli-command-injection-vulnerability@upstream | Disable shell by default in process runner
+2026-04-08 01:44:50 +10:00 | 173c01b8b122 | merge/t3-gn8-main merge/t3-gn8-main@duncan4123 polecat/t3-e8y polecat/t3-e8y@duncan4123 | fix(gc): replace Layer.scoped with Layer.effect for effect@4.0.0-beta.43
+2026-04-07 14:30:22 +10:00 | 8ebeecdc7a3f | t3code/greeting-1 t3code/greeting-1@duncan4123 | chore: gitignore local tooling config and gc pack symlinks
+2026-04-07 13:21:57 +10:00 | ac6caec33cdd | fix/effect-acp-client-test-timeout fix/effect-acp-client-test-timeout@duncan4123 | fix(effect-acp): raise test timeout for subprocess-spawning client tests
+2026-04-06 19:22:13 +10:00 | 2eb9f3210643 | gc-polecat-c4745ec16061 gc-polecat-c4745ec16061@duncan4123 | feat: merge upstream context-window-meter and acp-server-registry branches
+2026-04-06 18:33:30 +01:00 | 53b572ff67c7 | t3code/pr-1708/web/atomic-store-refactor@upstream | Merge branch 'main' into web/atomic-store-refactor
+2026-04-06 16:28:44 +00:00 | aad2fb41da25 | cursor/branch-search-query-polling-ea9e@upstream | fix: only poll branch search when picker menu is open
+2026-04-06 14:24:05 -07:00 | 4db64afccc9c | davis/default-codex-model-stuff@upstream | Use Codex defaults for custom model capabilities
+2026-04-05 20:08:03 +10:00 | e6729092bf1d | t3code/greeting t3code/greeting@duncan4123 t3code/mcp-tools-display t3code/mcp-tools-display@duncan4123 t3code/server-upstream-review t3code/server-upstream-review@duncan4123 | fix: remove periodic dolt_gc — triggers prolly-tree corruption (doltlite#247)
+2026-04-05 14:35:03 +10:00 | 40d7b818bf6f | t3code/bundle-gc-data-projects t3code/bundle-gc-data-projects@duncan4123 t3code/organize-web-changes t3code/organize-web-changes@duncan4123 t3code/server-gc-integration t3code/server-gc-integration@duncan4123 | docs: add pipeline db and README
+2026-04-05 00:28:39 +00:00 | b1ad5fac52ff | cursor/port-logic-improvements-fd50@upstream | Fix duplicated port logic and negative web port probe caching
+2026-04-05 00:03:18 +00:00 | 89b175a1cbe0 | cursor/windows-process-family-detection-a991@upstream | fix: perform full BFS traversal for Windows subprocess detection
+2026-04-04 23:50:48 +00:00 | e11ef1b1195b | cursor/web-port-and-terminal-issues-902d@upstream | fix: prevent double-wrapping of WebPortInspectionError and remove unused extraWebPortCount
+2026-04-04 23:28:35 +00:00 | 2d3f25de8a5d | cursor/web-port-probe-cache-pruning-1dce@upstream | Prune expired entries from webPortProbeCache during cache reads
+2026-04-04 20:40:03 +00:00 | 755bf3aa0d42 | cursor/terminal-process-issues-d3a5@upstream | Fix Windows process tree traversal, remove dead code, deduplicate normalizeRunningPorts
+2026-04-03 06:58:46 +11:00 | 3b45f15b0e61 | t3code/doltmcp-availability-check t3code/doltmcp-availability-check@duncan4123 t3code/mcp-servers-running t3code/mcp-servers-running@duncan4123 | fix: reconcile rebase fallout
+2026-04-03 02:31:22 +00:00 | 776d8b494322 | cursor/service-logic-and-db-metrics-326e@upstream | fix: remove redundant metricModel reassignment and per-statement DB query metrics
+2026-04-02 21:41:17 +11:00 | fd5b10e3ce0c | backup/verbatim-pre-upstream-20260403 backup/verbatim-pre-upstream-20260403@duncan4123 | Add sidebar thread search and actions
+2026-04-02 15:33:56 +00:00 | 82b826072fbf | cursor/perf-harness-stability-e582@upstream | fix: use 'close' event for seed process and deduplicate buildPerfServerEnv
+2026-04-02 12:53:12 +11:00 | 82f594cc3b4e | t3code/gc-integration-synthesis t3code/gc-integration-synthesis@duncan4123 | fix: isolate dolt maintenance from runtime sql client
+2026-04-02 12:08:15 -07:00 | c775cceda5d7 | t3code/perf-control-plane-priority-lane@upstream | Use dispatchable client schema for priority lane
+2026-04-02 08:27:04 +00:00 | 89497fed15a5 | cursor/performance-test-utilities-fb16@upstream | fix: evict rejected template dir promises and extract shared perf process utilities
+2026-04-02 07:42:21 +00:00 | e26c2abd9745 | cursor/perf-provider-environment-flag-50fe@upstream | fix: only enable perf provider env when providerScenarioId is set
+2026-04-02 02:21:12 -07:00 | 3bec3d2c8de7 | t3code/perf-projection-thread-message-hot-path@upstream | Optimize streaming message projection path
+2026-04-02 02:21:09 -07:00 | b24b5fb8ce23 | t3code/perf-checkpoint-reactor-fanout@upstream | Trim checkpoint reactor stream fanout
+2026-04-01 23:16:03 +00:00 | c27256209082 | cursor/quick-action-push-logic-5ce1@upstream | fix: use 'push' instead of 'commit_push' for clean working tree on default branch
+2026-04-01 22:19:57 +00:00 | 5407e0b61e1e | cursor/archived-threads-loading-state-2bba@upstream | fix: remove empty-array placeholderData so archived threads loading state is reachable
+2026-04-01 21:18:51 +00:00 | 51aaa5d57927 | cursor/event-batch-recovery-logic-e527@upstream | Fix premature sequence advancement and missing archived-threads invalidation on snapshot recovery
+2026-04-01 21:12:09 +00:00 | 0e9b05e98448 | cursor/code-quality-improvements-0b61@upstream | Fix perf test bugs: duplicate rAF loop, committed artifacts, percentile edge case
+2026-04-01 17:46:30 +11:00 | b63e27e210a3 | t3code/check-unfinished-work t3code/check-unfinished-work@duncan4123 | fix: use node instead of bun for dev server — bun can't load better-sqlite3
+2026-04-01 17:43:11 +00:00 | 95dd2b671c4e | cursor/snapshot-sequence-and-loading-0728@upstream | Fix snapshot sync bypassing recovery coordinator and dead loading state
+2026-04-01 17:39:38 +11:00 | 73974facf3b5 | gc-reintegration-v1 gc-reintegration-v1@duncan4123 | wip: uncommitted gc-reintegration-v1 changes
+2026-04-01 16:29:16 +00:00 | 8f6690f85471 | cursor/issue-resolution-7dc1@upstream | Fix supervised approval command visibility
+2026-04-01 15:17:31 -07:00 | 4b155dbec80c | codex/backend-perf-archive-read-path@upstream | Remove dead orchestration snapshot RPC
+2026-04-01 12:28:14 -07:00 | 92bccb66f0e3 | feature/docs/agents-punctuation@upstream | Fix AGENTS test command punctuation
+2026-04-01 11:34:39 -07:00 | 8329d127afbf | feature/docs/orchestration-guidance@upstream | Clarify orchestration state-mapping guidance
+2026-04-01 09:35:15 -07:00 | 7e4c80c55bd6 | codex/effect-fn-apps-server-src-orchestration-projector@upstream | Merge branch 'main' into codex/effect-fn-apps-server-src-orchestration-projector
+2026-04-01 09:28:43 -07:00 | f7807e5e8a55 | codex/effect-fn-apps-server-scripts-cli@upstream | Fix publish command acquire/use-release indentation
+2026-04-01 09:12:34 -07:00 | 563808b6cfe2 | codex/effect-fn-apps-server-src-orchestration-layers-orchestrationengine@upstream | fix OrchestrationEngine pre-transaction error handling
+2026-04-01 07:20:00 +00:00 | cc70bd3830f8 | cursor/settingspanels-unused-constant-4c57@upstream | Remove unused EMPTY_SERVER_PROVIDERS constant from SettingsPanels.tsx
+2026-04-01 00:28:03 -07:00 | 085290535f0d | codex/effect-fn-packages-shared-src-drainableworker@upstream | migrate Effect.fn in packages/shared/src/DrainableWorker.ts
+2026-04-01 00:27:59 -07:00 | 92b4ee81b986 | codex/effect-fn-docs-effect-fn-checklist@upstream | finish effect fn checklist
+2026-04-01 00:27:56 -07:00 | 447642d3f6a5 | codex/effect-fn-apps-server-src-terminal-layers-manager@upstream | migrate Effect.fn in apps/server/src/terminal/Layers/Manager.ts
+2026-04-01 00:27:49 -07:00 | 8aa8f981c592 | codex/effect-fn-apps-server-src-telemetry-identify@upstream | migrate Effect.fn in apps/server/src/telemetry/Identify.ts
+2026-04-01 00:26:55 -07:00 | 7350dc32c9c3 | codex/effect-fn-apps-server-src-open@upstream | migrate Effect.fn in apps/server/src/open.ts
+2026-04-01 00:26:51 -07:00 | 8ce265e4174a | codex/effect-fn-apps-server-src-keybindings@upstream | migrate Effect.fn in apps/server/src/keybindings.ts
+2026-04-01 00:23:27 -07:00 | f8b6e5b330f1 | effect-atom@upstream | deeper in atom
+2026-04-01 00:17:19 -07:00 | 33b347391d2c | t3code/viteplus-migrate@upstream | Merge origin/main into t3code/viteplus-migrate
+2026-04-01 00:03:33 -07:00 | 346402e6ea2d | t3code/server-settings-schema@upstream | Merge remote-tracking branch 'origin/main' into t3code/server-settings-schema
+2026-03-31 23:38:37 +00:00 | 3792dcb889a3 | cursor/launcher-argument-handling-7e2e@upstream | Fix windowsVerbatimArguments dropped in waited spawn path and remove unused DesktopLauncherError export
+2026-03-31 21:09:26 +00:00 | 2d90d516bdbb | cursor/workspace-turbo-cache-ignore-35e7@upstream | fix: restore .turbo to IGNORED_DIRECTORY_NAMES alongside .vite
+2026-03-31 20:29:38 +00:00 | b8c3b02fdf68 | cursor/launcher-plan-logic-de9a@upstream | fix: detect immediate exit failures in detached launches and handle empty app lists
+2026-03-31 10:49:13 +11:00 | 3b6a25a90009 | fork fork@duncan4123 fork@origin | feat: add branch connection experiment
+2026-03-31 07:44:40 +00:00 | 7ec01e28bdd7 | cursor/plan-helpers-runtime-parameter-b28b@upstream | Remove unused runtime parameter from plan helper functions
+2026-03-31 05:42:33 +00:00 | b416bef8002b | cursor/json-schema-dead-code-5825@upstream | Remove dead-code utility functions from json-schema.ts
+2026-03-31 00:20:32 -07:00 | 88cb025815d2 | t3code/appearance-system@upstream | Drop translucent sidebar theme setting
+2026-03-30 23:06:09 +00:00 | 6a4835613757 | cursor/running-thread-pin-overlap-fdfa@upstream | Fix pin hover button overlapping thread meta on running threads
+2026-03-30 22:54:37 +00:00 | 0e0490b6b18f | cursor/stale-schema-reference-a8df@upstream | fix: reset schemaDeclarationRef on JSON parse failure
+2026-03-30 22:43:57 +00:00 | 1b6e8ab339e8 | cursor/trimmed-string-passthrough-e8f5@upstream | Fix makeTrimmedStringSetting to actually trim whitespace
+2026-03-30 21:55:32 +00:00 | 782716bd8391 | cursor/json-schema-spread-order-64f1@upstream | fix: place spread before explicit metadata in buildJsonSchemaDocument
+2026-03-30 21:31:43 +00:00 | b2932708c650 | cursor/server-settings-schema-order-2901@upstream | fix: swap spread order so explicit metadata always takes precedence
+2026-03-30 20:48:50 +00:00 | 08e518171764 | cursor/unpinned-items-re-pinning-6a90@upstream | Fix unpinned items being re-pinned on next server sync
+2026-03-30 20:24:08 +11:00 | 75247d396e18 | fix/event-store-version-race fix/event-store-version-race@duncan4123 fix/event-store-version-race@origin | fix: retry on stream_version race in OrchestrationEventStore.append
+2026-03-30 18:22:32 -07:00 | c8e866813d6d | t3code/project-pinning-priority@upstream | Migrate projection pins to pinned_at timestamps
+2026-03-30 17:54:10 +11:00 | 0e69968c2125 | doctor-dolittle doctor-dolittle@duncan4123 doctor-dolittle@origin | docs: add pipeline db and README
+2026-03-30 12:31:41 -07:00 | 67e3f2c7d572 | t3code/project-pinning-precedence@upstream | Prioritize pinned projects in sidebar sorting
+2026-03-29 20:03:39 -07:00 | a94819851d5f | feature/fix-send-phase-reset@upstream | Track settled thread sends before clearing them
+2026-03-29 19:02:02 +00:00 | 57ebd82da68f | cursor/appearance-and-settings-logic-5bff@upstream | Fix appearance/settings bugs: remove harmful effect cleanup, fix theme migration ordering, remove redundant reset call
+2026-03-29 07:53:15 +00:00 | b9268a3495f2 | cursor/git-workspace-context-2269@upstream | fix: draft thread effectiveCwd fallback to project cwd and remove redundant ensureGitWorkspace
+2026-03-29 00:45:41 -07:00 | ae625d277cc7 | t3code/missing-cwd-handling@upstream | Handle missing workspaces across server and UI
+2026-03-28 16:56:06 -07:00 | 415a840fdc5e | feature/tolerate-unsupported-providers@upstream | Tolerate unsupported persisted provider kinds
+2026-03-27 00:39:58 -07:00 | b8c367df4a54 | t3code/browser-auth-approval@upstream | Bypass browser pairing when desktop bridge is present
+2026-03-26 06:16:33 +00:00 | 361b51678a98 | cursor/branch-rename-settings-error-7196@upstream | Fix settings error escaping error handlers in branch rename
+2026-03-26 05:17:00 +00:00 | a70e7d7e490e | cursor/duplicate-server-settings-layer-11f1@upstream | fix: reuse serverSettingsLayer instead of creating duplicate instance
+2026-03-26 05:06:53 +00:00 | 42afbb2266fc | cursor/codex-child-process-environment-3c61@upstream | Fix child process env: spread process.env before CODEX_HOME override
+2026-03-26 04:19:04 +11:00 | 5796546f4d1f | develop@context-mode | feat: add doltlite bead schema and draft convoy MCP tools
+2026-03-26 00:07:31 +00:00 | 2388e7d43fc8 | cursor/deep-merge-array-corruption-98cb@upstream | fix: prevent deepMerge from corrupting arrays by treating them as leaf values
+2026-03-25 23:14:07 +00:00 | 98e6f51693d0 | cursor/empty-string-binary-path-8307@upstream | fix: use || instead of ?? for binary path fallback to handle empty string default
+2026-03-25 22:05:34 +00:00 | bba0a8a3d0d4 | cursor/server-settings-providers-merge-8e00@upstream | fix: deep-merge providers in updateSettings to prevent resetting sibling provider settings
+2026-03-25 21:33:08 +00:00 | f74ee02af124 | cursor/empty-string-binary-path-543a@upstream | fix: use || instead of ?? for binaryPath to handle empty string default
+2026-03-25 21:07:23 +00:00 | f8c9d7118703 | cursor/settings-binary-path-issues-fea4@upstream | fix: prevent empty-string binary paths from breaking CLI spawning and migrate old flat binary path keys
+2026-03-25 20:37:13 +00:00 | e35da91f4962 | cursor/assistant-delivery-mode-consistency-bceb@upstream | Fix stale assistantDeliveryMode references after delivery mode refactor
+2026-03-25 19:43:59 +00:00 | 5b654fcb7a5f | cursor/anchored-toast-alignment-23f7@upstream | fix: add missing justify-between to anchored toast title row
+2026-03-25 19:41:25 +00:00 | 30497a89f2f9 | cursor/toast-description-type-guard-be44@upstream | fix: add typeof string type guard for toast description in anchored toast
+2026-03-25 16:27:16 +11:00 | 70bf441a11c5 | feature/gc-api-integration feature/gc-api-integration@duncan4123 | Merge remote-tracking branch 'upstream/main' into feature/gc-api-integration
+2026-03-25 08:56:56 +00:00 | 06b5fc27b522 | cursor/server-bootstrap-configuration-610d@upstream | Fix inherited env vars overriding bootstrap config and Windows fd resolution
+2026-03-25 06:52:03 +00:00 | 8717fe98f13f | cursor/activity-payload-schema-3559@upstream | fix: add missing status and data fields to ToolStartedOrCompletedActivityPayload
+2026-03-25 06:21:44 +11:00 | 7623b0fd5c14 | t3code/80537d7d t3code/80537d7d@duncan4123 | feat(gc): add gc.isSessionAlive endpoint and fix stuck session working state
+2026-03-25 05:36:13 +00:00 | 896a4631c972 | cursor/projection-schema-duplication-f64a@upstream | Deduplicate DB row schemas for projects and threads
+2026-03-25 02:10:44 +11:00 | f614bf41d7ab | feature/gc-api-integration@origin polecat/t3-3kx.2 polecat/t3-3kx.2@duncan4123 | fix: prevent session stuck at "running" when turn.completed has mismatched turnId
+2026-03-25 01:49:47 +11:00 | 24c893998d46 | gc-refinery-788ce557e19c gc-refinery-788ce557e19c@duncan4123 | feat: add GC connection status indicator to sidebar
+2026-03-25 01:44:49 +11:00 | 64ae7cef35cd | fix/stuck-session-on-turn-completion fix/stuck-session-on-turn-completion@duncan4123 fix/stuck-session-on-turn-completion@origin | fix: prevent session stuck at "running" when turn.completed has mismatched turnId
+2026-03-24 23:17:56 +00:00 | 7d1604932bf2 | cursor/equal-equals-model-selection-6774@upstream | Fix: replace Equal.equals with JSON.stringify comparison for ModelSelection
+2026-03-24 22:57:33 +00:00 | 919971ae24e4 | cursor/migrations-log-message-d1eb@upstream | Fix migration log message showing 'undefined' when no toMigrationInclusive is provided
+2026-03-24 22:48:01 +00:00 | 2c97a21b072b | cursor/sendturn-payload-persistence-3efe@upstream | fix: preserve existing runtimePayload fields when sendTurn upserts binding
+2026-03-24 21:50:55 +00:00 | 5b3e7107599c | cursor/provider-adapter-issues-fbeb@upstream | Fix duplicate tool lifecycle computations, extract shared utils, preserve null in toCanonicalJsonValue
+2026-03-24 21:44:42 +00:00 | de46c2f9bd6a | cursor/claudeagent-restart-comparison-f009@upstream | Fix sameModelSelectionOptions to compare only options, not full ModelSelection
+2026-03-24 21:19:55 +00:00 | e7ae3f40f466 | cursor/startprovidersession-dead-parameter-e5dd@upstream | Remove dead provider parameter from startProviderSession closure
+2026-03-24 20:44:51 +00:00 | fac4623d467e | cursor/task-activity-tone-mismatch-f494@upstream | fix: allow 'error' tone for task.completed activity in schema
+2026-03-24 20:38:06 +00:00 | e4e68e63de26 | cursor/unhandled-claude-messages-5bad@upstream | Fix spurious runtime warnings for removed Claude SDK system message subtypes
+2026-03-24 20:37:52 +00:00 | 73c8d110dbad | cursor/model-options-handling-158f@upstream | Fix redundant extractModelSelectionOptions call and prevent silent model options injection on session restart
+2026-03-24 19:10:49 +00:00 | e09809f495b3 | cursor/sidebar-thread-sort-nan-dd65@upstream | Fix NaN from NEGATIVE_INFINITY subtraction in sortThreadsForSidebar
+2026-03-24 19:07:10 +00:00 | 14070d6c4586 | cursor/model-selection-session-logic-d4e4@upstream | Fix spurious session restarts on runtime-mode-set and remove dead fallback chain in plan implementation
+2026-03-24 19:02:53 +00:00 | e0f5c02e35eb | cursor/model-options-data-consistency-f406@upstream | fix: deduplicate toProviderModelOptions and store SQL NULL for absent model options
+2026-03-24 18:49:37 +00:00 | 659ca5e71bcd | cursor/project-sort-nan-tiebreaker-9778@upstream | Fix NaN comparator skipping tiebreaker in project sorting
+2026-03-24 18:41:45 +00:00 | 917ab971b0a2 | cursor/sidebar-unnecessary-export-f65a@upstream | Remove unnecessary export from getThreadSortTimestamp
+2026-03-24 18:20:28 +00:00 | 569dd7bcabb4 | cursor/model-picker-options-preservation-29a5@upstream | Fix model picker clearing reasoning effort and fast mode options
+2026-03-24 17:02:14 +00:00 | 87caa1b78f50 | cursor/escape-sequence-history-leak-3640@upstream | Fix three-byte escape sequences leaking final byte into history
+2026-03-24 08:26:40 +00:00 | e1599eebd9a6 | cursor/trace2-watcher-reliability-cd77@upstream | fix: trace2 watcher basename matching and concurrent flush/watcher race
+2026-03-24 08:24:12 +00:00 | e0d6b2ab7169 | cursor/draft-clearing-duplication-2867@upstream | Remove duplicate clearThreadDraft in favor of clearDraftThread
+2026-03-23 19:12:50 -07:00 | db02da69baac | davis/empty-dir-create@upstream | Handle missing workspace directories when creating folders
+2026-03-23 15:07:56 +11:00 | 0933ad51bae7 | feature/gc-context-ui feature/gc-context-ui@duncan4123 feature/gc-context-ui@origin gc-polecat-1-6be64da5092f gc-polecat-1-6be64da5092f@duncan4123 | fix(ClaudeAdapter): prevent Node crash from stale session resume
+2026-03-21 20:21:50 +11:00 | b2328d358f4b | worktree-worktree-feature-test worktree-worktree-feature-test@duncan4123 | feat: GC agent lifecycle awareness in T3 sidebar (t3-50e)
+2026-03-19 19:52:12 -07:00 | bc812e9b2d90 | codething/648ca884-claude@upstream | Handle Claude stream interruption and collapse duplicate work log update
+2026-03-19 12:06:36 -07:00 | 243e8a44a9f2 | t3code/pr-977/main@upstream | Merge branch 'main' into t3code/pr-977/main
+2026-03-18 15:54:55 -07:00 | e6d856b93e63 | split-stack/subagent-work-units@upstream | Add subagent work units across providers
+2026-03-18 13:25:17 -07:00 | 268d4f7cf819 | split-stack/claude-sibling@upstream | Merge main and use source proposed plans in the sidebar
+2026-03-18 06:38:38 +00:00 | 82756816ef4a | cursor/t3-code-custom-themes-2fa8@upstream | Fix custom theme override validation
+2026-03-17 21:46:31 +00:00 | 63ff52e33a00 | cursor/reactor-and-adapter-issues-6b25@upstream | Fix resume cursor dropped on effort change and simplify redundant tool classification
+2026-03-17 21:20:25 +00:00 | a325efe38a65 | cursor/provider-model-options-comparison-d5ce@upstream | fix: replace JSON.stringify comparison with structural deep-equal for ProviderModelOptions
+2026-03-17 20:36:33 +00:00 | cda0e97dae08 | cursor/claude-test-model-mismatch-c245@upstream | Fix Claude tests to create threads with Claude model
+2026-03-17 20:08:37 +00:00 | ec7629b2b19d | cursor/allowedhost-validation-issues-58b4@upstream | Fix AllowedHost to store parsed host instead of raw input
+2026-03-17 12:54:25 -07:00 | 11091bf337ea | t3code/verify-websocket-origin-header@upstream | Refactor allowed host parsing for origin validation
+2026-03-17 00:42:01 +00:00 | 7b5056168800 | cursor/providercommandreactor-variable-redundancy-0e6d@upstream | Remove redundant preferredProvider variable that always equals threadProvider
+2026-03-17 00:34:13 +00:00 | ae48a8590753 | cursor/provider-turn-interrupt-handling-a740@upstream | Fix: re-propagate interrupt causes in sendTurnForThread catchCause handler
+2026-03-17 00:16:45 +00:00 | a98a939d9b04 | cursor/preferred-provider-fallback-c4c9@upstream | Remove dead code in preferredProvider fallback chain
+2026-03-16 23:17:38 +00:00 | 5b9f3fb2e97e | cursor/model-fallback-on-provider-switch-976a@upstream | fix: fall back to target provider's default model on provider switch
+2026-03-16 22:56:35 +00:00 | 241180f0459e | cursor/approval-events-thread-id-51cf@upstream | Fix approval/user-input events using orchestration ID instead of provider thread ID
+2026-03-16 22:48:53 +00:00 | fab42af65c43 | cursor/provider-stream-and-kind-03d6@upstream | Fix dead code in content_block_stop handler and hardcoded provider names
+2026-03-16 19:23:15 +00:00 | f5a4bbcb1c34 | cursor/claude-tool-handler-completion-7f08@upstream | Fix empty content_block_stop handler to finalize tool input and emit item.updated
+2026-03-16 19:21:53 +00:00 | b8b3926669e0 | cursor/claude-adapter-issues-650f@upstream | Fix isReadOnlyToolName web search misclassification, deduplicate auth parsing, and filter process.env for Claude
+2026-03-16 18:20:19 +00:00 | 0cebffe67a54 | cursor/various-bug-fixes-8669@upstream | fix: snapshot Map before iteration, preserve raw custom model slugs, remove wrong model assertion
+2026-03-16 17:45:31 +00:00 | e2ac73d4e99c | cursor/claude-code-provider-issues-0812@upstream | style: apply formatter whitespace changes
+2026-03-11 02:34:34 +00:00 | 2fedbbc83c35 | cursor/effect-v4-httprouter-setup-e073@upstream | move ws package to server dev dependencies
+2026-03-11 01:16:18 +00:00 | ac7da4e9a8bd | macroscope/codex/fix-dev-project-add-timeout@upstream | Guard against empty WebSocket URLs in WsTransport constructor
+2026-03-10 18:26:29 -07:00 | e5b2ce15188b | t3code/effectful-server-entrypoint-migration@upstream | Fix rebased runtime integration
+2026-03-10 01:18:30 -07:00 | 73338630652e | t3code/pr-649/fix/skip-auth-check-custom-model-providers@upstream | Merge remote-tracking branch 'origin/main' into t3code/pr-649/fix/skip-auth-check-custom-model-providers
+2026-03-09 16:35:34 +00:00 | 95ebece7ed21 | cursor/sidebar-folder-picker-logic-aaf2@upstream | fix: add !isMobile check to shouldBrowseForProjectImmediately condition
+2026-03-09 13:00:27 -07:00 | eca89790d4d6 | fix/perf-improvements@upstream | Use Debouncer for composer draft persistence writes
+2026-03-09 11:22:43 -07:00 | bbb88d1f6b08 | statemachine@upstream | Merge origin/main into statemachine
+2026-03-08 18:34:52 -07:00 | ea505a2d533f | theo/spell-check-context@upstream | spell check menu
+2026-03-08 17:26:18 -07:00 | e29fcbd25980 | feature/feat/harness-ws-server@upstream | Add harness WebSocket contracts and server adapter package
+2026-03-08 16:23:15 -07:00 | 29480e0d1907 | theo/fix-git-links@upstream | fix git links again
+2026-03-06 18:33:35 -06:00 | f3b41bce3ac3 | yash/branching@upstream | tests
+2026-03-06 07:19:40 +00:00 | e05cc8885cfc | cursor/boolean-flag-override-issue-cf58@upstream | fix: remove lossy Boolean filter from resolveBooleanFlag
+2026-03-06 06:10:35 +00:00 | 7ffed19c493f | cursor/provider-picker-session-status-c1cf@upstream | fix: restore Claude Code in provider picker, preserve turn error status, deduplicate summarizeToolOutput call
+2026-03-06 05:44:09 +00:00 | 19701022893f | cursor/redundant-threadid-assignment-9cab@upstream | Remove redundant threadId conditional spread in session construction
+2026-03-06 05:05:06 +00:00 | 848958424058 | cursor/claude-event-logging-threadid-ec10@upstream | fix: add missing threadId to native event logger in ClaudeCodeAdapter
+2026-03-06 04:27:37 +00:00 | 2efc9d6c0c86 | cursor/claude-adapter-issues-97ec@upstream | fix: manage SDK stream fiber lifecycle and remove identity helper
+2026-03-06 04:18:47 +00:00 | 68b256ee89b8 | cursor/adapter-logging-requests-96e5@upstream | Fix CursorAdapter: route native events to per-thread log and drain pending requests on exit
+2026-03-06 03:26:24 +00:00 | a1cb4e4bd56a | cursor/projects-sidebar-reordering-4b13@upstream | Fix sidebar project reorder dragging
+2026-03-06 03:03:40 +00:00 | 02739bb95f34 | cursor/projects-sidebar-reordering-3957@upstream | Add sidebar project reordering
+2026-03-06 00:24:24 +00:00 | be9ec914b2b0 | cursor/process-exit-scope-handling-3a78@upstream | Fix: close scope on unexpected process exit to prevent resource leaks
+2026-03-05 23:58:41 +00:00 | 74d445af4d3a | cursor/chat-view-diff-cleanup-2d5f@upstream | Fix inconsistent path normalization in diff handler and remove dead showParentheses prop
+2026-03-05 23:05:17 +00:00 | 30035f91ddd2 | cursor/detached-process-listener-cleanup-65bb@upstream | Remove unused event listener after promise settlement in spawnDetachedProcess
+2026-03-05 22:53:16 +00:00 | 894ae64a7844 | cursor/server-process-pathing-issues-d8c7@upstream | Fix writeMessage guard to check session map and remove redundant stripLineColumnSuffix
+2026-03-05 22:02:29 -08:00 | 05f4cb216b49 | codething/648ca884-cursor@upstream | chore: restore cursor acp probe artifacts on cursor stack
+2026-03-05 21:30:32 -06:00 | 59d508ed52ea | t3code/resizable-chat-sidebar@upstream | feat: resizable sidebar
+2026-03-05 21:03:50 +00:00 | 04ffe3b247d7 | cursor/process-runner-issues-7de7@upstream | Fix processRunner exports, runtimeEnvironment leak, and null exit code message
+2026-03-05 20:52:59 +00:00 | 6b8805bc3b9e | cursor/server-utilities-and-manager-10b1@upstream | Fix duplicated utility functions and unsafe constructor fallback
+2026-03-05 19:23:57 +00:00 | e3a4c867b54d | cursor/app-server-cause-error-69f8@upstream | fix: use Cause.squash to extract error from Effect Cause in attachProcessListeners
+2026-03-05 17:41:55 -08:00 | aae0832ccb29 | t3code/improve-windows-wsl-interop@upstream | Harden Codex session shutdown and WSL interop handling
+2026-03-05 09:18:18 +00:00 | 976009abbd07 | cursor/provider-health-check-timeout-08cf@upstream | Fix timeout handling in health check and remove unused spawnProcess export
+2026-03-03 03:34:58 +00:00 | 211756c4de08 | cursor/documentation-dummy-placeholder-d2cf@upstream | Remove dummy placeholder section from AGENTS.md
+2026-03-03 00:07:04 +00:00 | de7f50ec6ba3 | cursor/git-checkout-refresh-scope-48b6@upstream | fix: use forkDetach for background upstream refresh to prevent scope interruption
+2026-03-02 23:33:51 +11:00 | 1c57525dbb84 | sfncore-patches@context-mode | feat: add database parameter to index/search/batch_execute tools
+2026-03-02 20:22:06 -08:00 | 89a47ec956a3 | t3code/dummy-agents-md-change-1@upstream | Add dummy testing note to project snapshot in AGENTS.md
+2026-03-02 20:21:25 -08:00 | 434efad834fe | feature/docs/agents-dummy-change@upstream | Add placeholder docs line for edit validation
+2026-03-02 20:20:31 -08:00 | e7c453e06f55 | t3code/dummy-agents-md-change@upstream | Add no-op placeholder note to task completion requirements
+2026-03-02 20:20:05 -08:00 | a5763b616420 | feature/docs/dummy-placeholder@upstream | Add dummy placeholder section to AGENTS.md
+2026-03-02 20:01:56 -08:00 | 0c246e727f0f | feature/docs/dummy-marker-note@upstream | Add dated dummy marker note to AGENTS docs
+2026-03-02 19:57:47 -08:00 | 4a582975a46f | feature/docs/agents-dummy-marker@upstream | Add dummy change marker to AGENTS documentation
+2026-03-02 19:56:53 -08:00 | ac9a052545ef | feature/docs/agents-placeholder-note@upstream | Add second placeholder note to AGENTS.md
+2026-03-02 19:33:09 -08:00 | 31fe69e10771 | feature/docs/agents-dummy-note@upstream | Add no-op dummy note to AGENTS docs
+2026-03-02 19:30:15 -08:00 | e627ec496133 | feature/chore/agents-dummy-test-comment@upstream | Add dummy testing comment to AGENTS guide
+2026-03-02 18:40:49 +00:00 | 004658797e33 | cursor/store-reactivity-and-updates-d19b@upstream | Fix store reactivity: stable dispatch ref, reactive terminal state, no-op guard
+2026-03-02 18:39:58 -08:00 | bde01155469b | feature/stacked-20260303@upstream | Fix Windows command detection and branch checkout error flow
+2026-03-02 18:26:03 +00:00 | cffc3013cd3b | cursor/chat-composer-height-consistency-1fb1@upstream | fix: use consistent border-box measurement in composer ResizeObserver
+2026-03-02 16:00:08 -08:00 | 810595168279 | feature/add-vscode-open-in-support@upstream | fmt
+2026-03-02 15:37:14 -08:00 | 31b515cd6c1e | t3code/cap-composer-max-size@upstream | Allow chat composer to shrink within constrained layouts
+2026-03-02 13:54:02 -08:00 | 4dbd6316dbbd | t3code/file-mention-pills-textarea@upstream | Improve composer menu highlighting and suppress triggers near mentions
+2026-03-02 13:48:42 -08:00 | a2abe07b75f8 | t3code/sidebar-thread-rename-menu@upstream | Fix destructive menu icon showing app logo on non-macOS
+2026-03-02 13:03:01 -08:00 | ae56cd150228 | t3code/zustand-store-granular-selectors@upstream | Restore lost useMemo calls in ChatView and fix threadActivities referential stability
+2026-03-02 10:23:53 -08:00 | c283d2a85ba4 | t3code/enable-draft-thread-terminals@upstream | refactor(web): remove reducer pattern, use Zustand + pure functions
+2026-03-02 10:10:15 -08:00 | 61a8ca2c3142 | t3code/fix-thread-scroll-restoration@upstream | refactor: remove redundant workLogCount stick-to-bottom effect
+2026-03-02 06:44:05 +00:00 | d497cd72f75f | cursor/branch-toolbar-draft-errors-c18b@upstream | Fix BranchToolbar errors silently dropped for draft threads
+2026-03-02 02:28:01 +00:00 | ba5aa10de34f | cursor/explicit-false-flag-filtering-3ee9@upstream | Fix resolveBooleanFlag dropping explicit false values
+2026-03-01 23:51:07 -08:00 | 70248fafe633 | t3code/auto-increment-web-dev-port@upstream | Allow non-required dev ports to exceed max in offset search
+2026-03-01 23:15:19 -08:00 | aad5d29fe842 | t3code/silence-favicon-fallback-errors@upstream | Serve fallback project favicon when no icon file is found
+2026-03-01 22:26:54 -08:00 | 9e99b8efdc43 | codething/2f21514d@upstream | Preserve draft env mode across thread and branch context updates
+2026-03-01 19:50:05 -08:00 | 839feaf2506b | codething/2b37f0ce@upstream | fix: address latest git action review feedback
+2026-03-01 19:49:26 -08:00 | 150e171a8838 | codething/34345440@upstream | Remove unused attachment route path helpers
+2026-03-01 19:44:39 -08:00 | acfeb0617d3e | feature/stacked-20260302-2@upstream | Update contracts description to effect/Schema in AGENTS.md
+2026-03-01 19:27:33 -08:00 | e4d8ed91afd0 | feature/stacked-20260302@upstream | Document required checks and clarify package roles
+2026-03-01 18:34:30 -08:00 | c9da3b7f0440 | codething/4e64c33f@upstream | fix?
+2026-03-01 11:44:28 +00:00 | 32779bd83af7 | cursor/v2-event-provider-adapters-a783@upstream | feat: update ingestion, registry, and server layers for V2 events + Cursor adapter
+2026-03-01 11:30:28 +00:00 | 14865dc7a66c | cursor/v2-event-provider-adapters-068b@upstream | Implement v2 canonical provider runtime adapters
+2026-03-01 10:30:46 -08:00 | d3aa5ae0aae6 | codething/d5f6fa42@upstream | Fix diff panel padding and top spacing for virtualized files
+2026-02-28 23:06:27 -08:00 | f79734786ed7 | t3code/shrink-title-align-traffic-lights@upstream | Refine sidebar wordmark size and title alignment
+2026-02-28 21:47:48 -08:00 | 7a897e9b1fb1 | codething/deb940ee@upstream | Handle remote checkout conflicts without duplicate local branch
+2026-02-28 21:23:50 -08:00 | 9a30a50807bd | codething/c9c1fa54@upstream | Open diff files in editor from diff header clicks
+2026-02-28 19:32:34 -08:00 | f1407ff04981 | theo/claude@upstream | claude code added
+2026-02-28 19:10:08 -08:00 | 3681d6f7576a | codething/c163ad70@upstream | Document Cursor ACP mapping in canonical runtime event spec
+2026-02-28 16:22:17 -08:00 | fb5aee327adc | codething/442a51f1@upstream | Remove redundant PR status title attribute
+2026-02-28 15:31:20 -08:00 | 67ea6000a053 | theo/publish-alpha@upstream | publish alpha
+2026-02-28 15:31:06 -08:00 | a950fde73adf | codething/ecef18ea@upstream | Use local mobile app icons for dev and production
+2026-02-28 15:15:20 -08:00 | c0f8c29b96c5 | codething/dfc16aa0@upstream | even better
+2026-02-28 14:41:46 -08:00 | 7efaceae8a15 | theo/custom-models@upstream | better fake version
+2026-02-28 11:10:18 -08:00 | 7f2a95fe14c1 | codething/10276f55@upstream | Prefer open PR when resolving git status PR
+2026-02-28 07:27:25 +00:00 | a478a24002e7 | cursor/development-environment-setup-c92f@upstream | Revert AGENTS.md and dev-runner.mjs changes
+2026-02-28 02:15:52 +00:00 | 87cfb96ee12c | cursor/current-turn-virtualization-a6dc@upstream | Disable virtualization for the current in-progress turn
+2026-02-28 01:54:19 +00:00 | 7dc0ff156f1e | cursor/terminal-exit-error-handling-eafe@upstream | Handle terminal exit without hard write errors
+2026-02-28 01:53:56 +00:00 | 25ea66c30d04 | cursor/command-failure-tolerance-a10d@upstream | Make terminal write/resize tolerant of exited processes
+2026-02-28 00:44:51 +00:00 | 91d174407d75 | cursor/development-environment-setup-6599@upstream | Add desktop dev mode gotcha to AGENTS.md
+2026-02-27 22:01:02 +00:00 | 0d5dc77a4df2 | blacksmith-migration-3a43047@upstream | Migrate workflows to Blacksmith
+2026-02-27 21:55:23 -08:00 | de5270e2d7fc | codething/89a46af0@upstream | Persist provider runtime mode settings
+2026-02-27 21:33:39 -08:00 | 4b3825e50059 | codething/4efb5794@upstream | Merge remote-tracking branch 'origin/main' into codething/10276f55
+2026-02-27 21:33:34 -08:00 | 54f8aef6a290 | codething/bc36f69b@upstream | Refactor release workflow to infer tag from semantic version bump
+2026-02-27 21:27:19 -08:00 | cd7081bd8874 | codething/9de4002b@upstream | simplify layers
+2026-02-27 19:14:30 -08:00 | 88ab776bd318 | cursor/current-turn-virtualization-d1ab@upstream | clamp
+2026-02-27 18:02:09 -08:00 | e6fd90df22c6 | codething/0cbde587@upstream | Guard delayed terminal exit callback
+2026-02-27 15:11:33 -08:00 | 0147ab7aada6 | theo/favicons@upstream | Handle favicon links when href precedes rel
+2026-02-27 13:57:58 -08:00 | e09f859fa732 | theo/copy-on-hover@upstream | copy on hover, better button treatments
+2026-02-27 13:49:59 -08:00 | 4e3e689c5a36 | codething/64ab84d3@upstream | Replace thread latestTurnId with structured latestTurn metadata
+2026-02-27 10:37:27 -08:00 | df323f859052 | codething/c44d2b35@upstream | Sync diff renderer theme with app theme changes
+2026-02-27 05:43:17 +00:00 | 7491351d101f | cursor/approval-policy-schema-f9f3@upstream | Fix inconsistent default approval policy and make schema fields backward-compatible
+2026-02-27 04:55:53 +00:00 | ba4545ceb5ea | cursor/chat-send-state-issues-394b@upstream | Fix send state set outside try-finally and remove redundant setSendPhase call
+2026-02-27 04:36:44 +00:00 | 80c2dac8163b | cursor/optimistic-message-cleanup-4512@upstream | Fix: always remove optimistic message on dispatch error to prevent ghost messages
+2026-02-26 21:23:23 -08:00 | 7d0226ce6afa | codething/2c75aea7@upstream | migr
+2026-02-26 21:01:54 -08:00 | 8effcf380afe | codething/ad120d1f@upstream | Provide NodeServices layer in wsServer bootstrap test
+2026-02-26 20:49:17 -08:00 | 7b0ae4313956 | codething/7144546f@upstream | Prevent duplicate sends and sync worktree branch state
+2026-02-26 20:40:09 -08:00 | 581d5335827c | codething/9d0ddddb@upstream | rm redundant gen
+2026-02-26 20:22:03 -08:00 | 5121dad19397 | codething/1a01c92e@upstream | Show optimistic user messages in chat timeline
+2026-02-26 19:35:32 -08:00 | c9017090e504 | codething/2860c0a0@upstream | Track per-terminal subprocess activity in thread state
+2026-02-26 19:35:12 -08:00 | 23d2a8affcd0 | codething/c09808bd@upstream | gitignore
+2026-02-26 19:26:56 -08:00 | be2bb4f4c35a | codething/a38b78be@upstream | uncache
+2026-02-26 18:57:40 -08:00 | c0e3c1a93ac8 | codething/17b762a0@upstream | Add Mark unread thread action to sidebar context menu
+2026-02-26 18:52:49 -08:00 | 9a2fc6fcb1aa | codething/62a0cc86@upstream | Remove mobile Cmd/Ctrl+B sidebar toggle shortcut
+2026-02-26 18:38:50 -08:00 | bc8573d736cd | codething/9857e4f3@upstream | return yield
+2026-02-26 17:38:19 -08:00 | 8a567ba3d59c | codething/8b171322@upstream | Scope diff patch cache key by theme
+2026-02-26 17:29:30 -08:00 | b44353fa5d51 | codething/4d0317ed@upstream | Enhance active sidebar thread styling
+2026-02-26 14:24:03 -08:00 | 51dbea28c228 | codething/orchestration-engine@upstream | keybindings
+2026-02-22 19:35:21 +00:00 | 081388252262 | cursor/event-processing-refinements-e21b@upstream | Fix event processing: decouple listener failures from dispatch, skip persistence for streaming deltas, remove unused PubSub
+2026-02-22 09:58:57 +00:00 | 308c1ee95c3d | cursor/orchestration-listener-issues-fafc@upstream | Fix listener failure propagation and remove unused PubSub instances
+2026-02-22 09:46:16 +00:00 | 9299f6580fe8 | cursor/orchestration-thread-state-29ba@upstream | Fix three bugs in orchestration thread state management
+2026-02-22 09:30:51 +00:00 | 68b267e9a77a | cursor/event-persistence-synchronization-2379@upstream | Fix provider event loss, streaming delta persistence, and branch sync dual-write
+2026-02-22 04:41:46 +00:00 | 0a5a92ded0c9 | cursor/core-application-issues-bb5a@upstream | Fix streaming token persistence, double project deletion, session threadId overwrite, and bootstrap duplication
+2026-02-22 03:20:09 +00:00 | 17cec0b11dde | cursor/identified-issues-cleanup-7188@upstream | Fix 4 bugs: remove dead PubSub code, ensure engine starts before accepting connections, restore checkpoint turn count inference logic, remove no-op syncCheckpointTurnCounts
+2026-02-22 01:39:26 +00:00 | 320868a0750b | cursor/wsserver-assistant-message-capture-ceea@upstream | Fix assistant message capture: use item/completed events instead of broken condition
+2026-02-22 01:28:10 +00:00 | 052fd8a52dd3 | cursor/orchestration-and-ui-state-ec3e@upstream | Fix multiple bugs: failed turn status, duplicate project, navigation race, session lifecycle, snapshot consistency, timeline IDs, test stateDir, and DB close
+2026-02-22 01:27:02 +00:00 | 8816ba5f810b | cursor/multiple-application-bugs-a162@upstream | Fix 5 bugs: project deletion in browser mode, hardcoded model string, dead code, server state overwrite, stale query caches
+2026-02-22 01:17:15 +00:00 | 38db5d59ec7f | cursor/application-logic-issues-14a4@upstream | Fix fall-through bug, mismatched message IDs, and hardcoded model string
+2026-02-21 17:19:18 -08:00 | dbbc225fe6d6 | codething/event-sourced-core-engine@upstream | Add provider orchestrator and Codex adapter
+2026-02-21 17:09:07 -08:00 | ac44561cafdc | codething/server-side-persistence@upstream | Move persistence to server-side with Effect and SQLite
+2026-02-21 10:58:01 -08:00 | 91a12190a1f4 | codething/48364d50@upstream | mv
+2026-02-21 10:45:16 -08:00 | f8aadcff890d | codething/142d0619@upstream | Add durable provider event catch-up by sequence
+2026-02-20 12:56:40 +00:00 | c3975c1b224b | cursor/livestore-sync-engine-migration-7f06@upstream | Warn when mirror reports unsuccessful state-event writes
+2026-02-20 10:55:33 -08:00 | 605c74bb8c6c | codething/f4318ba8@upstream | Improve mobile chat layout and add responsive sidebar primitives
+2026-02-20 10:52:36 +00:00 | 40f9885dceed | cursor/effect-persistence-layer-41a2@upstream | Validate persistence repository rows with Effect Schema decoders
+2026-02-20 09:10:36 +00:00 | aac6796d8c97 | cursor/rollback-error-preservation-1488@upstream | Wrap migration ROLLBACK in try/catch to preserve original error
+2026-02-20 06:14:16 +00:00 | 3065fcb5cfda | cursor/multiple-bug-fixes-10f8@upstream | Fix thread creation without API, threadsUpdate fallthrough, and duplicate updateBranch calls
+2026-02-20 02:17:14 +00:00 | 35f57d051950 | cursor/thread-state-consistency-0d07@upstream | Fix sync effects firing on mount and thread upsert wiping turn diff summaries
+2026-02-20 00:32:34 +00:00 | 6d5662151212 | cursor/chat-view-keyboard-scrolling-dfc9@upstream | Fix keyboard scroll-up failing to disable auto-scroll
+2026-02-20 00:29:10 +00:00 | ab955ddbb946 | cursor/reported-issues-0365@upstream | Fix terminal state infinite loop, test ordering assertion, and redundant updateBranch call
+2026-02-20 00:21:21 +00:00 | 8578146fb91f | cursor/pr-detection-logic-040f@upstream | Fix findLatestPr to prioritize open PRs and remove unused icon imports
+2026-02-20 00:12:50 +00:00 | 082ec99238cf | cursor/chat-view-auto-scroll-bug-cbbd@upstream | Fix: guard onMessagesWheel against non-scrollable containers
+2026-02-20 00:09:44 +00:00 | f039878edd64 | codething/c71d8ea1@upstream | Remove duplicate inline wheel handler, use existing onTurnStripWheel useCallback in useEffect
+2026-02-20 00:08:54 +00:00 | 432668d25325 | cursor/diffpanel-unused-callback-a81c@upstream | Remove duplicate inline wheel handler, use existing onTurnStripWheel useCallback in useEffect
+2026-02-19 23:55:27 +00:00 | da1cd3307da2 | cursor/diff-panel-state-persistence-c196@upstream | fix: retain diff search params when navigating between threads
+2026-02-19 18:27:46 +00:00 | f87f01fb81fd | cursor/diff-search-param-stripping-e5d1@upstream | Extract stripDiffSearchParams helper to deduplicate diff param stripping logic
+2026-02-19 16:17:58 -08:00 | 3031dfd12268 | codething/b1c10980@upstream | Respect user scroll intent across wheel, pointer, and touch
+2026-02-19 15:39:47 -08:00 | 8a72a2a91d52 | codething/53bdee92@upstream | Merge origin/main into codething/53bdee92
+2026-02-19 09:20:06 +00:00 | 9bf6ec74c1be | cursor/wheel-event-preventdefault-6a97@upstream | fix: attach wheel handler with { passive: false } to enable preventDefault
+2026-02-19 08:27:12 +00:00 | e3ffde0dcf92 | cursor/broad-query-invalidation-c8cb@upstream | Fix broad query invalidation on checkpoint/captured events
+2026-02-19 08:02:03 +00:00 | 207920b40ce5 | cursor/checkpoint-dedup-and-queries-b91c@upstream | Fix fingerprint dedup blocking retry on empty sync result and unnecessary checkpoint diff invalidation
+2026-02-19 07:18:29 +00:00 | 77c6ec7b6e50 | cursor/diff-event-fallback-logic-0764@upstream | Fix: only set hasTurnDiffUpdate flag when diff payload is non-empty
+2026-02-19 06:32:57 +00:00 | 470cabc11059 | cursor/chat-diff-panel-context-009d@upstream | Wrap DiffPanel in DiffWorkerPoolProvider in _chat.tsx layout
+2026-02-19 04:41:38 +00:00 | db3b9e08075f | cursor/diff-panel-and-manager-issues-f138@upstream | Fix redundant truthiness check and misleading incremental diff fallback
+2026-02-19 04:19:44 +00:00 | e29a7705f92a | codething/ecb6d645@upstream | Fix CWD override semantics and greedy regex in diff path parsing
+2026-02-19 02:13:07 +00:00 | 2b1d1fa3d23a | cursor/session-cwd-and-git-diff-3486@upstream | Fix CWD override semantics and greedy regex in diff path parsing
+2026-02-19 00:40:50 -08:00 | 2eabd82f0ba7 | codething/58d1ebc2@upstream | Prebundle @pierre/diffs dependencies in Vite
+2026-02-19 00:18:42 +00:00 | 2996c3361741 | cursor/media-query-listener-support-e449@upstream | fix: fall back to addListener for older Safari/WebKit MediaQueryList support
+2026-02-19 00:11:02 -08:00 | cd9ef00636c7 | codething/3adde026@upstream | Mark active thread visited on selection
+2026-02-19 00:09:45 -08:00 | 5bbb7d7cefe3 | codething/43b351af@upstream | Use checkpoint diffs for turn files and ignore late summary rederives
+2026-02-19 00:07:09 -08:00 | 2d3263d69d1c | codething/4ed1311b@upstream | Force-remove dirty git worktrees during orphan cleanup
+2026-02-18 23:53:22 +00:00 | a233939fc87e | cursor/export-cleanup-diff-queries-f04e@upstream | Remove unused export from splitUnifiedDiffByFile and gate checkpoint diff hydration on diffOpen
+2026-02-18 23:41:24 -08:00 | cdde1fffca38 | codething/eb6f6614@upstream | Virtualize chat timeline rendering for large threads
+2026-02-18 22:07:38 -08:00 | 077de8888547 | codething/6416806f@upstream | Surface worktree removal failures after thread deletion
+2026-02-18 20:33:09 +00:00 | b0f138e526a8 | cursor/persisted-diff-loaded-flag-ba97@upstream | fix: don't persist checkpointDiffLoaded flag that prevents diff re-fetching after restart
+2026-02-18 19:20:46 +00:00 | c378ef0b39ba | cursor/panel-loading-and-cleanup-4307@upstream | Fix perpetual loading in DiffPanel and remove dead code in providerManager
+2026-02-18 18:47:11 +00:00 | 04e6a947fc6b | cursor/stale-diff-panel-targets-a450@upstream | fix: clear stale diff panel targets in DELETE_PROJECT and SYNC_PROJECTS reducers
+2026-02-18 18:28:25 +00:00 | 141f6d2ed984 | cursor/core-application-bugs-4b5b@upstream | Fix 5 bugs: dropped events, lastVisitedAt, bootstrap thread, duplicate config, delete race
+2026-02-18 18:07:38 +00:00 | 1f7fcb707ee6 | cursor/active-thread-race-condition-ff7a@upstream | Fix race condition navigating to stale thread on Electron app launch
+2026-02-18 11:06:27 +00:00 | 49a1effa7408 | cursor/add-thread-hydration-2a63@upstream | fix: set threadsHydrated in ADD_THREAD to prevent blank page on thread creation
+2026-02-18 11:04:36 +00:00 | e586d56ae842 | cursor/togglegroup-deselection-state-618b@upstream | Fix ToggleGroup deselection setting undefined diff render mode
+2026-02-18 09:44:16 +00:00 | 14124ed7e37f | cursor/chat-view-diff-turn-fallback-f579@upstream | Fix fallback selecting first turn when selectedDiffTurnId is null
+2026-02-18 09:30:49 -08:00 | fa4f8dd73c92 | codething/fbd0ab44@upstream | Document private Tailscale SSH tunnel setup for remote T3 access
+2026-02-18 08:58:33 +00:00 | 278066697484 | codething/7a5ed533@upstream | refactor: extract shared normalizeProjectScripts into @t3tools/contracts
+2026-02-18 08:57:36 +00:00 | e4e943d6ef66 | cursor/shared-script-normalization-a967@upstream | refactor: extract shared normalizeProjectScripts into @t3tools/contracts
+2026-02-18 08:43:24 +00:00 | 5a6696b233a9 | cursor/thread-and-session-stability-0b76@upstream | Fix revert checkpoint ordering and checkpoint hydration retry loop
+2026-02-18 08:34:24 +00:00 | d169cfd54dcd | cursor/project-scripts-dead-code-25e8@upstream | Remove dead code: unused shell env injection functions
+2026-02-18 08:11:35 +00:00 | d87b49e12b3b | cursor/turn-diffs-derivation-70b0@upstream | Fix O(n²) turn diff re-derivation and deduplicate useTurnDiffSummaries hook
+2026-02-18 07:29:34 +00:00 | 74cb1b6f8415 | cursor/terminal-stability-and-cleanup-7270@upstream | Fix terminal stability bugs: remove autoFocus from effect deps, stabilize memo, remove dead export
+2026-02-18 06:41:23 +00:00 | c3faa288b8e2 | cursor/reused-terminal-dimensions-14c4@upstream | Fix hardcoded terminal dimensions corrupting reused terminal display
+2026-02-18 06:04:08 +00:00 | b15f55eccd05 | cursor/keybindings-error-message-wrapping-c901@upstream | Fix double-wrapped error message in keybindings config loader
+2026-02-18 05:48:06 +00:00 | a84b28420c00 | cursor/scripts-display-and-persistence-10c6@upstream | Fix no-op ternary for setup scripts and deduplicate persistence logic
+2026-02-18 05:38:55 +00:00 | 8e1ca36b4657 | cursor/project-script-issues-55d4@upstream | Fix Windows %% escaping, deduplicate script persistence and normalization logic
+2026-02-18 05:27:53 +00:00 | 707889950deb | cursor/bootstrap-persistence-deadlock-dec4@upstream | Fix: remove bootstrapStartedRef that deadlocks persistence in StrictMode
+2026-02-18 04:41:36 +00:00 | 8aa4d3d18d0a | cursor/stale-thread-child-components-ca90@upstream | fix: use useLayoutEffect for SET_ACTIVE_THREAD to prevent stale child renders
+2026-02-18 04:12:11 +00:00 | 07669d7d1ca8 | cursor/project-and-script-issues-f6d9@upstream | Fix stale scripts sync, worktree env closure, and terminal limit check
+2026-02-18 04:07:06 +00:00 | 92145392889a | cursor/unused-wait-on-dependency-f331@upstream | Remove unused wait-on devDependency from apps/desktop
+2026-02-18 00:34:57 +00:00 | 583765b88300 | cursor/composer-cursor-state-3c1e@upstream | fix: move setComposerCursor outside rAF to prevent stale trigger flash
+2026-02-17 23:44:24 +00:00 | e42d1b3d4e74 | cursor/desktop-perf-reload-race-9161@upstream | Fix reload race: use main-process webContents.reload() instead of renderer window.location.reload()
+2026-02-17 21:26:22 -08:00 | db5681ec87b6 | codething/6941868b@upstream | Migrate web keyboard shortcuts to TanStack hotkeys manager
+2026-02-17 21:23:10 +00:00 | b61aba948353 | cursor/prompt-path-tag-wiring-7615@upstream | Wire buildPromptInput and buildUserVisiblePrompt into onSend flow
+2026-02-17 21:15:51 -08:00 | 4d976b8bf7aa | codething/5b1d96b5@upstream | Persist renderer state on server via SQLite and WS APIs
+2026-02-17 20:47:15 +00:00 | 2e5933cec624 | cursor/query-normalization-regex-7395@upstream | Fix normalizeQuery regex to preserve leading dots in dotfile names
+2026-02-17 20:34:48 +00:00 | edf9d2cac3ab | cursor/basenameofpath-shared-utility-dc51@upstream | Extract basenameOfPath into shared utility in lib/utils.ts
+2026-02-17 20:16:36 +00:00 | cfabf9bd034f | cursor/thread-terminal-drawer-width-c0a8@upstream | Restore minimum width and horizontal scroll for split terminal panes
+2026-02-17 19:59:11 -08:00 | b0eef5cc957c | codething/b1a7277c@upstream | Strengthen desktop perf trace reporting and seed requirements
+2026-02-17 19:46:34 -08:00 | f0bf4276d550 | codething/58603bc6@upstream | rm unused
+2026-02-17 19:45:11 +00:00 | 645e6dbe3c9b | cursor/thread-snapshot-turns-fallback-4f9c@upstream | Fix missing root-level fallback for turns in parseThreadSnapshot
+2026-02-17 19:19:52 +00:00 | 82715e839cdd | cursor/chat-composer-issues-fcd8@upstream | fix: integrate prompt-building helpers in onSend and resolve dual highlight conflict
+2026-02-17 18:54:09 +00:00 | d9c24fafd303 | cursor/turn-summary-diff-overwrite-9477@upstream | Fix reversed iteration overwriting newest diff and message values
+2026-02-17 17:49:48 +00:00 | fb0081983ba5 | cursor/composer-multiline-enter-467b@upstream | Fix: Shift+Enter inserts newline even when composer suggestions are open
+2026-02-17 16:59:57 -08:00 | 15959097e559 | codething/92a48535@upstream | Refresh git upstream before status and tune Git query polling
+2026-02-17 14:27:09 -08:00 | 86a2cbc3d436 | codething/1c0075e8@upstream | Guard branch sync when no active thread is selected
+2026-02-17 12:10:06 -08:00 | dcc6d9d9ae51 | codething/d847b414@upstream | Cap thread terminals at four and disable add/split controls
+2026-02-17 11:31:22 -08:00 | e44822173958 | codething/5204821d@upstream | Add git-backed filesystem checkpoints for provider session rollback
+2026-02-17 09:04:21 +00:00 | 4df79f1c404b | cursor/desktop-performance-ci-e9ce@upstream | Include fallback values in perf env warnings
+2026-02-17 01:59:09 +00:00 | a13ed5078cd5 | cursor/dev-electron-path-shadowing-d83c@upstream | Fix path helper shadowing Node's path module in dev-electron script
+2026-02-17 01:31:38 +00:00 | 354a8c30c50a | cursor/desktop-ci-and-startup-ccaa@upstream | fix: update CI preload artifact name to .cjs and add freshness grace period for dev startup
+2026-02-15 23:06:28 -08:00 | 907508614c35 | codething/48203257@upstream | doc
+2026-02-15 19:57:30 -08:00 | 93edf3492d55 | codething/233423f9@upstream | Fix top-right toast enter and exit transforms
+2026-02-15 18:54:24 -08:00 | 70752a067592 | codething/8c14cb40@upstream | Auto-dismiss thread toasts after 10s of visible time
+2026-02-15 17:02:38 -08:00 | b7bbcb205409 | codething/70a71c65@upstream | Ignore non-keydown terminal shortcuts
+2026-02-15 16:23:11 -08:00 | c9fae23efe5c | codething/d7b34bf2@upstream | Memoize ChatView selection handlers with useCallback
+2026-02-15 16:20:15 -08:00 | 4c49b8a514f1 | codething/9493a863@upstream | Block deletion of projects that still have threads
+2026-02-15 15:33:18 -08:00 | 59b1d5d20fbe | codething/f54ac31e@upstream | Prevent config refetches and tighten Windows platform detection
+2026-02-15 10:52:27 -08:00 | 0476e50b1260 | codething/25696837@upstream | Respect chat scroll position during streaming updates
+2026-02-15 01:17:31 -08:00 | 724ecbed7ef7 | fix/too-aggresive-pull-action@upstream | fetch in background
+2026-02-15 01:00:57 -08:00 | ee56d5b6c85c | codething/b0c3a7ef@upstream | Update cached branch list after branch checkout
+2026-02-15 00:47:31 -08:00 | 147f433d38a1 | git-in@upstream | Scope branch refresh fetch to checked-out upstream refspec
+2026-02-14 23:33:58 -08:00 | 0d4a38f0793c | foo@upstream | kewl
+2026-02-13 19:31:45 -08:00 | ecea657eb0a3 | codething/2e2908ea@upstream | Filter app runtime env vars from terminal spawn environment
+2026-02-13 16:18:59 -08:00 | 84ee10d7edb4 | codething/3a47e5fc@upstream | Add dynamic PR toast actions for Git run results
+2026-02-13 15:20:00 -08:00 | cfa9fa566dd3 | codething/6c8437ef@upstream | Fix Electron dev env and streamline Git action toast
+2026-02-13 15:18:24 -08:00 | 9a129b7b8a69 | codething/f4a33e9a@upstream | Add "Small Arrival" poem in new poem.md file
+2026-02-13 15:14:18 -08:00 | 85b4655f21c9 | codething/9b9d79b5@upstream | Add New Poem markdown file
+2026-02-13 00:44:27 -08:00 | 0a0f436ce23b | codething/25389242@upstream | fmt
+2026-02-12 23:28:10 -08:00 | 51c0cb5c78b5 | codething/abd5c05a@upstream | Handle branch recency lookup failures in branch listing
+2026-02-12 22:53:41 -08:00 | e5b69a334225 | codething/b0e2dc22@upstream | Guard orphaned worktree deletion behind project context
+2026-02-12 22:39:16 -08:00 | e817a0e70231 | codething/d2c6ac5a@upstream | Simplify terminal toggle to only update visibility state
+2026-02-12 22:22:24 -08:00 | fea186cf9320 | codething/696df84f@upstream | Show pulsing terminal icon for active thread processes
+2026-02-12 21:36:07 -08:00 | f4df41a0d76a | codething/6df7db48@upstream | Add dev runner for deterministic multi-instance port offsets
+2026-02-12 21:22:30 -08:00 | 93d0ac444c44 | codething/0e78a4e3@upstream | Clear terminal history on close and prefer git cwd
+2026-02-12 19:35:41 -08:00 | daed549cc301 | codething/040eab7f@upstream | lint
+2026-02-12 18:36:05 -08:00 | cab54fe7f407 | codething/68f0e731@upstream | whoop
+2026-02-12 00:38:28 -08:00 | 58c10bb5ea01 | theo/standardize-messages@upstream | progress but not really
+2026-02-11 18:08:34 -08:00 | 42b2a881b04e | feat/terminal@upstream | Fix ChatView height scroll
+2026-02-11 13:36:03 -08:00 | eef290154ef7 | juliusmarminge/sidebar-delete-thread@upstream | Add context menu to delete threads from sidebar
+2026-02-10 16:07:25 +00:00 | d41af12fde97 | cursor/new-application-architecture-f8d0@upstream | Assert smoke runtime imports shared fake codex helper
+2026-02-09 22:19:49 -08:00 | 5120f7fec702 | theo/rebrand@upstream | renames
+2026-02-09 21:12:51 -08:00 | 67636da106e2 | theo/electron-restoration@upstream | Promise catching fixes
+2026-02-09 20:16:10 -08:00 | 8cc7135e3d0b | cursor/codex-web-app-architecture-f06f@upstream | turborepo and better logging
+2026-02-09 01:13:25 -08:00 | 0a535ae07ce2 | juliusmarminge/use-base-components@upstream | Fix select trigger styling in dark mode and add open state highlight
+2026-02-09 01:11:06 -08:00 | a6606e8cc147 | juliusmarminge/barcelona@upstream | unused
+2026-02-08 23:32:02 -08:00 | 71948e82cda2 | juliusmarminge/resolve-merge-conflicts@upstream | Merge main and resolve conflicts
+2026-02-08 23:24:04 -08:00 | 36314bb3bbca | juliusmarminge/open-in-editor@upstream | Merge origin/main and resolve conflicts

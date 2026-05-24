@@ -24,6 +24,7 @@ interface TraceRecordLike {
   readonly durationMs?: unknown;
   readonly exit?: unknown;
   readonly events?: unknown;
+  readonly attributes?: unknown;
 }
 
 interface TraceEventLike {
@@ -144,6 +145,35 @@ function readEventAttributes(event: TraceEventLike): Readonly<Record<string, unk
   return typeof event.attributes === "object" && event.attributes !== null
     ? (event.attributes as Readonly<Record<string, unknown>>)
     : {};
+}
+
+function readRecordAttributes(record: TraceRecordLike): Readonly<Record<string, unknown>> {
+  return typeof record.attributes === "object" && record.attributes !== null
+    ? (record.attributes as Readonly<Record<string, unknown>>)
+    : {};
+}
+
+function isLongLivedSubscriptionSpan(name: string, record: TraceRecordLike): boolean {
+  if (
+    name.startsWith("ws.rpc.") &&
+    (name.includes(".subscribe") || name.endsWith("subscribeTerminalEvents"))
+  ) {
+    return true;
+  }
+
+  if (name.startsWith("RpcClient.") && name.includes(".subscribe")) {
+    return true;
+  }
+
+  if (name !== "http.server GET") {
+    return false;
+  }
+
+  const attributes = readRecordAttributes(record);
+  const route = toStringValue(attributes["http.route"]);
+  const path = toStringValue(attributes["url.path"]);
+  const upgrade = toStringValue(attributes["http.request.header.upgrade"]);
+  return route === "/ws" || path === "/ws" || upgrade?.toLowerCase() === "websocket";
 }
 
 function makeEmptyDiagnostics(input: {
@@ -304,10 +334,13 @@ export function aggregateTraceDiagnostics(
       spansByName.set(name, spanSummary);
 
       const spanItem = { name, durationMs, endedAt, traceId, spanId };
-      if (durationMs >= slowSpanThresholdMs) {
+      const isExpectedLongLivedSpan = isLongLivedSubscriptionSpan(name, parsed);
+      if (durationMs >= slowSpanThresholdMs && !isExpectedLongLivedSpan) {
         slowSpanCount += 1;
       }
-      insertBoundedSlowestSpan(slowestSpans, spanItem);
+      if (!isExpectedLongLivedSpan) {
+        insertBoundedSlowestSpan(slowestSpans, spanItem);
+      }
 
       if (isFailure && !suppressFailure) {
         latestFailures.push({ ...spanItem, cause });

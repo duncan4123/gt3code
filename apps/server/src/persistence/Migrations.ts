@@ -50,6 +50,7 @@ import Migration0034 from "./Migrations/034_ContentlessProjectionThreadMessagesF
 import Migration0036 from "./Migrations/036_ContentlessProjectionThreadMessagesFts.ts";
 import Migration0037 from "./Migrations/037_RebuildContentlessProjectionThreadMessagesFts.ts";
 import Migration0038 from "./Migrations/038_MoveHotTablesToBtreeSidecar.ts";
+import Migration0039 from "./Migrations/039_GcLookupTables.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -99,6 +100,7 @@ export const migrationEntries = [
   [36, "ContentlessProjectionThreadMessagesFts", Migration0036],
   [37, "RebuildContentlessProjectionThreadMessagesFts", Migration0037],
   [38, "MoveHotTablesToBtreeSidecar", Migration0038],
+  [39, "GcLookupTables", Migration0039],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

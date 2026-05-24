@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { runMigrations } from "../Migrations.ts";
+import { ensureHotSidecarSchema } from "../Migrations/038_MoveHotTablesToBtreeSidecar.ts";
+import { ensureGcLookupTables } from "../Migrations/039_GcLookupTables.ts";
 import { ServerConfig } from "../../config.ts";
 import { layer } from "../NodeSqliteClient.ts";
 
@@ -53,6 +55,10 @@ const makeSetup = (projPath: string | null) =>
     }
 
     yield* runMigrations();
+    if (projPath) {
+      yield* ensureHotSidecarSchema;
+    }
+    yield* ensureGcLookupTables;
   }));
 
 export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(function* (
@@ -91,6 +97,8 @@ const memorySetup = Layer.effectDiscard(
     yield* sql`PRAGMA foreign_keys = ON;`;
     yield* sql.unsafe(`ATTACH DATABASE '${escapeSqliteStringLiteral(projPath)}' AS proj`);
     yield* runMigrations();
+    yield* ensureHotSidecarSchema;
+    yield* ensureGcLookupTables;
   }),
 );
 
