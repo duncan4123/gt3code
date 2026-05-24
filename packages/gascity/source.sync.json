@@ -4,7 +4,7 @@
   "sourceRepo": "/data/projects/gascity",
   "remote": "git@github-duncan:duncan4123/gascity.git",
   "syncedBranch": "integrate/beads-doltlite-gascity-pr",
-  "syncedCommit": "7d5dea57a",
+  "syncedCommit": "81a660b32",
   "upstreamRepo": "https://github.com/gastownhall/gascity",
   "upstreamBranch": "main",
   "relatedBranches": [
@@ -25,6 +25,7 @@
     ".jj",
     ".direnv",
     ".beads",
+    ".beads.backup-*",
     ".codex",
     ".gc",
     ".opencode",
