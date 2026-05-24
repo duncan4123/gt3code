@@ -539,6 +539,18 @@ function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): bool
   return typeof payload?.detail === "string" && payload.detail.startsWith("ExitPlanMode:");
 }
 
+function extractRuntimeMessage(
+  activity: OrchestrationThreadActivity,
+  payload: Readonly<Record<string, unknown>> | null,
+): string | null {
+  if (activity.kind !== "runtime.warning" && activity.kind !== "runtime.error") {
+    return null;
+  }
+  return typeof payload?.message === "string" && payload.message.length > 0
+    ? payload.message
+    : null;
+}
+
 function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
   const payload =
     activity.payload && typeof activity.payload === "object"
@@ -569,10 +581,11 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       : null
     : extractToolDetail(payload, title ?? activity.summary);
   const toolCallId = isTaskActivity ? null : extractToolCallId(payload);
+  const runtimeMessage = extractRuntimeMessage(activity, payload);
   const entry: DerivedWorkLogEntry = {
     id: activity.id,
     createdAt: activity.createdAt,
-    label: taskLabel || activity.summary,
+    label: taskLabel || runtimeMessage || activity.summary,
     tone:
       activity.kind === "task.progress"
         ? "thinking"

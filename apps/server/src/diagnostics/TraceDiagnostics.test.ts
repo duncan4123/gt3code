@@ -20,6 +20,7 @@ function record(input: {
   readonly durationMs: number;
   readonly exit?: { readonly _tag: "Success" | "Failure" | "Interrupted"; readonly cause?: string };
   readonly events?: ReadonlyArray<unknown>;
+  readonly attributes?: Readonly<Record<string, unknown>>;
 }) {
   return JSON.stringify({
     type: "effect-span",
@@ -31,7 +32,7 @@ function record(input: {
     startTimeUnixNano: ns(input.startMs),
     endTimeUnixNano: ns(input.startMs + input.durationMs),
     durationMs: input.durationMs,
-    attributes: {},
+    attributes: input.attributes ?? {},
     events: input.events ?? [],
     links: [],
     exit: input.exit ?? { _tag: "Success" },
@@ -297,6 +298,67 @@ describe("TraceDiagnostics", () => {
     }),
   );
 
+  it.effect("excludes long-lived subscriptions from slow span diagnostics", () =>
+    Effect.sync(() => {
+      const diagnostics = TraceDiagnostics.aggregateTraceDiagnostics({
+        traceFilePath: "/tmp/server.trace.ndjson",
+        readAt: DateTime.makeUnsafe("2026-05-05T10:00:00.000Z"),
+        files: [
+          {
+            path: "/tmp/server.trace.ndjson",
+            text: [
+              record({
+                name: "http.server GET",
+                traceId: "trace-ws",
+                spanId: "span-http-ws",
+                startMs: 1_000,
+                durationMs: 3_727_600,
+                attributes: {
+                  "http.route": "/ws",
+                  "http.request.header.upgrade": "websocket",
+                },
+              }),
+              record({
+                name: "ws.rpc.orchestration.subscribeShell",
+                traceId: "trace-shell",
+                spanId: "span-shell",
+                startMs: 1_000,
+                durationMs: 3_727_600,
+              }),
+              record({
+                name: "RpcClient.orchestration.subscribeThread",
+                traceId: "trace-thread",
+                spanId: "span-thread",
+                startMs: 1_000,
+                durationMs: 3_727_600,
+              }),
+              record({
+                name: "orchestration.dispatch",
+                traceId: "trace-dispatch",
+                spanId: "span-dispatch",
+                startMs: 2_000,
+                durationMs: 2_500,
+              }),
+            ].join("\n"),
+          },
+        ],
+      });
+
+      assert.equal(diagnostics.recordCount, 4);
+      assert.equal(diagnostics.slowSpanCount, 1);
+      assert.deepStrictEqual(
+        diagnostics.slowestSpans.map((span) => span.name),
+        ["orchestration.dispatch"],
+      );
+      assert.equal(
+        diagnostics.topSpansByCount.find(
+          (span) => span.name === "ws.rpc.orchestration.subscribeShell",
+        )?.count,
+        1,
+      );
+    }),
+  );
+
   it.effect("suppresses self process diagnostics timeout failures", () =>
     Effect.sync(() => {
       const diagnostics = TraceDiagnostics.aggregateTraceDiagnostics({
@@ -314,8 +376,7 @@ describe("TraceDiagnostics", () => {
                 durationMs: 1_200,
                 exit: {
                   _tag: "Failure",
-                  cause:
-                    "ProcessDiagnosticsError: Failed to query process diagnostics. timed out.",
+                  cause: "ProcessDiagnosticsError: Failed to query process diagnostics. timed out.",
                 },
               }),
               record({
