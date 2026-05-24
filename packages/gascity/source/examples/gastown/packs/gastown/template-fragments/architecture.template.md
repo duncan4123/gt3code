@@ -1,6 +1,30 @@
 {{ define "architecture" }}
 ## Gas Town Architecture
 
+### Current Integration Mission
+
+This city is part of the Gas City + T3 Code integration work. Gas City owns
+the orchestration SDK; T3 Code hosts visible agent threads through the
+`t3bridge` runtime provider; beads/bd with DoltLite backs the work ledger.
+
+Keep fork work easy to update from upstream:
+- Prefer fork-owned files, adapters, and provider boundaries over broad edits
+  to upstream-owned SDK code.
+- Keep T3 Code assumptions inside the `t3bridge` runtime/config path.
+- Keep DoltLite assumptions inside beads/backend boundaries.
+- Before rebuilding a missing feature, search old branches and commits. This
+  repo has lost working integration code during branch churn, so history often
+  contains the prior fix.
+
+Good archaeology commands:
+
+```bash
+git log --all --oneline --decorate --grep '<keyword>'
+git log --all --oneline --decorate -- <path>
+git show <commit>:<path>
+git diff upstream/main...HEAD -- <path>
+```
+
 ```
 Town ({{ .CityRoot }})
 ├── controller        ← Go process: lifecycle management

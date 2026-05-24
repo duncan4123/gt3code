@@ -50,7 +50,13 @@ function loadManifest(file: string): Manifest {
 }
 
 function shouldSkip(relativePath: string, excludes: Array<string>): boolean {
-  return excludes.some((exclude) => relativePath === exclude || relativePath.startsWith(`${exclude}/`));
+  return excludes.some((exclude) => {
+    if (exclude.endsWith("*")) {
+      const prefix = exclude.slice(0, -1);
+      return relativePath.startsWith(prefix);
+    }
+    return relativePath === exclude || relativePath.startsWith(`${exclude}/`);
+  });
 }
 
 function materializeSource(manifest: Manifest, destination: string): string {
