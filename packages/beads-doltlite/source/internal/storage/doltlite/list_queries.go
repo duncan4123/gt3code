@@ -14,7 +14,17 @@ func (s *DoltliteStore) SearchIssues(ctx context.Context, query string, filter t
 	var result []*types.Issue
 	err := s.withConn(ctx, false, func(tx *sql.Tx) error {
 		var err error
-		result, err = issueops.SearchIssuesInTxWithDialect(ctx, tx, query, filter, issueops.SQLDialectSQLite)
+		result, err = issueops.SearchIssuesInTx(ctx, tx, query, filter)
+		return err
+	})
+	return result, err
+}
+
+func (s *DoltliteStore) SearchIssuesWithCounts(ctx context.Context, query string, filter types.IssueFilter) ([]*types.IssueWithCounts, error) {
+	var result []*types.IssueWithCounts
+	err := s.withConn(ctx, false, func(tx *sql.Tx) error {
+		var err error
+		result, err = issueops.SearchIssuesWithCountsInTx(ctx, tx, query, filter)
 		return err
 	})
 	return result, err
@@ -25,7 +35,7 @@ func (s *DoltliteStore) ListWisps(ctx context.Context, filter types.WispFilter) 
 	var result []*types.Issue
 	err := s.withConn(ctx, false, func(tx *sql.Tx) error {
 		var err error
-		result, err = issueops.SearchIssuesInTxWithDialect(ctx, tx, "", issueFilter, issueops.SQLDialectSQLite)
+		result, err = issueops.SearchIssuesInTx(ctx, tx, "", issueFilter)
 		return err
 	})
 	return result, err

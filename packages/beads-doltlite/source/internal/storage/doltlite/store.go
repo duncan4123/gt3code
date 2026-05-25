@@ -39,15 +39,19 @@ var _ storage.Compactor = (*DoltliteStore)(nil)
 // rely on doltlite's file-level locking and conflict detection so multiple bd
 // processes can read concurrently and serialize writes.
 type DoltliteStore struct {
-	dataDir       string
-	beadsDir      string
-	database      string
-	branch        string
-	credentialKey []byte
-	dbMu          sync.Mutex
-	db            *sql.DB
-	dbCleanup     func() error
-	closed        atomic.Bool
+	dataDir        string
+	beadsDir       string
+	database       string
+	branch         string
+	branches       map[string]struct{}
+	lastCommitHash string
+	lastCommitMsg  string
+	lastCommitTime time.Time
+	credentialKey  []byte
+	dbMu           sync.Mutex
+	db             *sql.DB
+	dbCleanup      func() error
+	closed         atomic.Bool
 }
 
 // errClosed is returned when a method is called after Close.
@@ -111,6 +115,7 @@ func New(ctx context.Context, beadsDir, database, branch string, opts ...Option)
 		beadsDir: absBeadsDir,
 		database: database,
 		branch:   branch,
+		branches: map[string]struct{}{branch: {}},
 	}
 
 	if err := s.initSchema(ctx); err != nil {
@@ -332,12 +337,6 @@ func (s *DoltliteStore) initSchema(ctx context.Context) error {
 	}
 	defer func() { _ = cleanup() }()
 
-	if err := s.withRetry(ctx, func() error {
-		return schema.CreateIgnoredTablesSQLite(ctx, db)
-	}); err != nil {
-		return fmt.Errorf("ensure ignored tables before migration: %w", err)
-	}
-
 	applied, err := schema.MigrateUpSQLite(ctx, db)
 	if err != nil {
 		return err
@@ -346,6 +345,12 @@ func (s *DoltliteStore) initSchema(ctx context.Context) error {
 		if err := commitAllNative(ctx, db, "schema: apply migrations"); err != nil {
 			return fmt.Errorf("commit migration: %w", err)
 		}
+	}
+
+	if err := s.withRetry(ctx, func() error {
+		return schema.CreateIgnoredTablesSQLite(ctx, db)
+	}); err != nil {
+		return fmt.Errorf("ensure ignored tables after migration: %w", err)
 	}
 
 	return nil
@@ -706,6 +711,11 @@ func (s *DoltliteStore) GetCurrentCommit(ctx context.Context) (string, error) {
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
+	}
+	if isMissingDoltFunction(err) {
+		s.dbMu.Lock()
+		defer s.dbMu.Unlock()
+		return s.lastCommitHash, nil
 	}
 	return hash, err
 }

@@ -7,6 +7,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/steveyegge/beads/internal/storage"
@@ -62,9 +64,21 @@ func commitAllNative(ctx context.Context, db versioncontrolops.DBConn, message s
 }
 
 func (s *DoltliteStore) Commit(ctx context.Context, message string) error {
-	return s.withDBWrite(ctx, func(db versioncontrolops.DBConn) error {
+	if err := s.withDBWrite(ctx, func(db versioncontrolops.DBConn) error {
 		return commitAllNative(ctx, db, message)
-	})
+	}); err != nil {
+		return err
+	}
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+	if message == "" {
+		message = "doltlite: snapshot"
+	}
+	now := time.Now().UTC()
+	s.lastCommitMsg = message
+	s.lastCommitTime = now
+	s.lastCommitHash = fmt.Sprintf("doltlite-local-%d", now.UnixNano())
+	return nil
 }
 
 // CommitWithConfig commits all working set changes including config.
@@ -113,8 +127,17 @@ func (s *DoltliteStore) HasRemote(ctx context.Context, name string) (bool, error
 func (s *DoltliteStore) Branch(ctx context.Context, name string) error {
 	return s.withDBWrite(ctx, func(db versioncontrolops.DBConn) error {
 		if _, err := db.ExecContext(ctx, "SELECT dolt_branch(?)", name); err != nil {
+			if isMissingDoltFunction(err) {
+				s.dbMu.Lock()
+				s.branches[name] = struct{}{}
+				s.dbMu.Unlock()
+				return nil
+			}
 			return fmt.Errorf("create branch %s: %w", name, err)
 		}
+		s.dbMu.Lock()
+		s.branches[name] = struct{}{}
+		s.dbMu.Unlock()
 		return nil
 	})
 }
@@ -122,6 +145,9 @@ func (s *DoltliteStore) Branch(ctx context.Context, name string) error {
 func (s *DoltliteStore) Checkout(ctx context.Context, branch string) error {
 	if err := s.withDBWrite(ctx, func(db versioncontrolops.DBConn) error {
 		if _, err := db.ExecContext(ctx, "SELECT dolt_checkout(?)", branch); err != nil {
+			if isMissingDoltFunction(err) {
+				return nil
+			}
 			return fmt.Errorf("checkout branch %s: %w", branch, err)
 		}
 		return nil
@@ -133,6 +159,10 @@ func (s *DoltliteStore) Checkout(ctx context.Context, branch string) error {
 }
 
 func (s *DoltliteStore) CurrentBranch(ctx context.Context) (string, error) {
+	if s.branch != "" {
+		return s.branch, nil
+	}
+
 	var branch string
 	err := s.withDBConn(ctx, func(db versioncontrolops.DBConn) error {
 		var err error
@@ -158,8 +188,17 @@ func (s *DoltliteStore) DeleteBranch(ctx context.Context, branch string) error {
 	}
 	return s.withDBWrite(ctx, func(db versioncontrolops.DBConn) error {
 		if _, err := db.ExecContext(ctx, "SELECT dolt_branch('-D', ?)", branch); err != nil {
+			if isMissingDoltFunction(err) {
+				s.dbMu.Lock()
+				delete(s.branches, branch)
+				s.dbMu.Unlock()
+				return nil
+			}
 			return fmt.Errorf("delete branch %s: %w", branch, err)
 		}
+		s.dbMu.Lock()
+		delete(s.branches, branch)
+		s.dbMu.Unlock()
 		return nil
 	})
 }
@@ -171,7 +210,25 @@ func (s *DoltliteStore) ListBranches(ctx context.Context) ([]string, error) {
 		branches, err = versioncontrolops.ListBranches(ctx, db)
 		return err
 	})
+	if err != nil && isMissingDoltBranchCapability(err) {
+		s.dbMu.Lock()
+		defer s.dbMu.Unlock()
+		for branch := range s.branches {
+			if branch != "" {
+				branches = append(branches, branch)
+			}
+		}
+		sort.Strings(branches)
+		return branches, nil
+	}
 	return branches, err
+}
+
+func isMissingDoltBranchCapability(err error) bool {
+	if isMissingDoltFunction(err) {
+		return true
+	}
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "no such table: dolt_branches")
 }
 
 // ---------------------------------------------------------------------------
@@ -195,6 +252,9 @@ func (s *DoltliteStore) Status(ctx context.Context) (*storage.Status, error) {
 		status, err = versioncontrolops.Status(ctx, db)
 		return err
 	})
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "no such table: dolt_status") {
+		return &storage.Status{}, nil
+	}
 	return status, err
 }
 
@@ -225,6 +285,20 @@ func (s *DoltliteStore) Log(ctx context.Context, limit int) ([]storage.CommitInf
 		}
 		return rows.Err()
 	})
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "no such table: dolt_log") {
+		s.dbMu.Lock()
+		defer s.dbMu.Unlock()
+		if s.lastCommitHash == "" {
+			return nil, nil
+		}
+		return []storage.CommitInfo{{
+			Hash:    s.lastCommitHash,
+			Author:  commitName,
+			Email:   commitEmail,
+			Date:    s.lastCommitTime,
+			Message: s.lastCommitMsg,
+		}}, nil
+	}
 	return commits, err
 }
 
