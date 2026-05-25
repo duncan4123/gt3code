@@ -1202,9 +1202,13 @@ func isBdTransientWriteError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "Error 1213 (40001): serialization failure") ||
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "error 1213 (40001): serialization failure") ||
 		strings.Contains(msg, "this transaction conflicts with a committed transaction") ||
+		strings.Contains(msg, "database is locked") ||
+		strings.Contains(msg, "database table is locked") ||
+		strings.Contains(msg, "database busy") ||
+		strings.Contains(msg, "sqlite_busy") ||
 		strings.Contains(msg, "failed to prepare catalog") ||
 		strings.Contains(msg, "i/o timeout") ||
 		strings.Contains(msg, "invalid connection") ||

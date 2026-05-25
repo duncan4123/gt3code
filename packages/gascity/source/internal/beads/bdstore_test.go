@@ -2231,6 +2231,25 @@ func TestBdStoreSetMetadataBatchRetriesDoltSerializationFailure(t *testing.T) {
 	}
 }
 
+func TestBdStoreSetMetadataBatchRetriesDoltliteDatabaseLocked(t *testing.T) {
+	calls := 0
+	runner := func(_, _ string, _ ...string) ([]byte, error) {
+		calls++
+		if calls == 1 {
+			return nil, fmt.Errorf("exit status 1: Error updating bd-42: database is locked")
+		}
+		return []byte(`{"id":"bd-42"}`), nil
+	}
+	s := beads.NewBdStore("/city", runner)
+	err := s.SetMetadataBatch("bd-42", map[string]string{"state": "active"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+}
+
 func TestBdStoreSetMetadataCLINotFound(t *testing.T) {
 	runner := func(_, _ string, _ ...string) ([]byte, error) {
 		return nil, fmt.Errorf("exit status 1: Error updating x: issue not found: bd-42")
