@@ -7,6 +7,7 @@ import { getBundledGascityConfigLayout } from "@t3tools/gascity-config";
 import {
   checkPortAvailabilityOnHosts,
   createDevRunnerEnv,
+  evaluateLiveWorkspaceGuard,
   findFirstAvailableOffset,
   resolveModePortOffsets,
   resolveOffset,
@@ -51,6 +52,39 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         assert.ok(error.includes("Invalid T3CODE_PORT_OFFSET"));
       }),
     );
+  });
+
+  describe("evaluateLiveWorkspaceGuard", () => {
+    it("accepts a clean workspace whose parent is live/current", () => {
+      const failures = evaluateLiveWorkspaceGuard({
+        diffSummary: "",
+        parentBookmarks: ["live/current*"],
+      });
+
+      assert.deepStrictEqual(failures, []);
+    });
+
+    it("rejects working-copy changes in the served workspace", () => {
+      const failures = evaluateLiveWorkspaceGuard({
+        diffSummary:
+          "M packages/gascity-config/config/cities/gastown/city.toml\n",
+        parentBookmarks: ["live/current*"],
+      });
+
+      assert.equal(failures.length, 1);
+      assert.match(failures[0], /unlanded working-copy changes/);
+    });
+
+    it("rejects a served workspace based on staging/current", () => {
+      const failures = evaluateLiveWorkspaceGuard({
+        diffSummary: "",
+        parentBookmarks: ["staging/current*"],
+      });
+
+      assert.equal(failures.length, 1);
+      assert.match(failures[0], /not live\/current/);
+      assert.match(failures[0], /staging\/current/);
+    });
   });
 
   describe("createDevRunnerEnv", () => {
