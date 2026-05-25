@@ -6,21 +6,12 @@ The pack replaces branch/worktree handoff with JJ workspaces, change IDs, and
 Jorje reviews:
 
 - `planner` breaks broad work into stack-shaped beads.
-- `worker` owns one bead, creates one JJ workspace/change, runs only focused
-  checks when requested, and submits it to sentinel.
-- `sentinel` watches stale workspaces, stuck reviews, dead sessions, and
-  submitted-change readiness. It does not run builds or complete test suites.
+- `worker` owns one bead, creates one JJ workspace/change, and submits it.
 - `lander` is the single writer that lands approved changes to `staging/current`.
-  It is the only role allowed to run builds or complete test suites.
+- `sentinel` watches stale workspaces, stuck reviews, and dead sessions.
 
 Gas City and Doltlite-backed `bd` beads remain the queue and ownership system.
 JJ is the code-change system. Jorje is the review surface.
-
-The pack ships shared skills under `skills/`, including:
-
-- `jj`: T3Code/GasCity-specific JJ workspace and landing rules.
-- `jujutsu`: general Jujutsu VCS safety and command workflow guidance, adapted
-  from `danverbraganza/jujutsu-skill`.
 
 Agent state and bead workspaces live inside the T3 install's shared worktree
 root by default:
@@ -59,8 +50,20 @@ includes = ["packs/jj"]
 promotion target and the only bookmark the runnable live workspace should edit.
 
 ```text
-worker workspaces -> sentinel-approved JJ changes -> staging/current -> live/current
+worker workspaces -> submitted JJ changes -> staging/current -> live/current
 ```
+
+The served `/data/projects/t3code` checkout must stay as a clean empty child of
+`live/current`:
+
+```text
+@  workspace
+○  live/current
+```
+
+Never run the app from `staging/current`, a worker change, or a dirty workspace.
+`bun dev` refuses to start unless this invariant holds, except when explicitly
+overridden with `T3CODE_ALLOW_NON_LIVE_DEV=1`.
 
 The pack must create agent workspaces under the install/control tree, not in
 the live checkout:

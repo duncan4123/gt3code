@@ -162,7 +162,7 @@ function assertServedWorkspaceRunsLive(
           "",
           ...failures,
           "",
-          "The served /data/projects/t3code checkout must stay as a clean empty child of live/current.",
+          `The served checkout at ${repoRoot} must stay as a clean empty child of live/current.`,
           "Fix by moving the served workspace back to live/current, for example:",
           '  jj new -r live/current -m "workspace"',
           "",
