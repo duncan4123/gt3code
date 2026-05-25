@@ -92,7 +92,7 @@ var (
 var (
 	controllerStatusStandaloneFallbackTimeout = 250 * time.Millisecond
 	statusObservationTimeout                  = 750 * time.Millisecond
-	statusSessionSnapshotTimeout              = 3 * time.Second
+	statusSessionSnapshotTimeout              = config.DefaultStatusSessionSnapshotTimeout
 )
 
 // newStatusCmd creates the "gc status [path]" command.
@@ -150,7 +150,7 @@ func cmdCityStatus(args []string, jsonOutput bool, stdout, stderr io.Writer) int
 		}
 		return code
 	}
-	statusSnapshot := loadStatusSessionSnapshot(store, stderr)
+	statusSnapshot := loadStatusSessionSnapshot(store, statusSessionSnapshotTimeoutForConfig(cfg), stderr)
 	sp := newStatusSessionProviderForCityWithSnapshot(cfg, cityPath, statusSnapshot)
 	dops := newDrainOps(sp)
 	if jsonOutput {
@@ -201,9 +201,12 @@ type statusObservationTarget struct {
 	suspended          bool
 }
 
-func loadStatusSessionSnapshot(store beads.Store, stderr io.Writer) *sessionBeadSnapshot {
+func loadStatusSessionSnapshot(store beads.Store, timeout time.Duration, stderr io.Writer) *sessionBeadSnapshot {
 	if store == nil {
 		return newSessionBeadSnapshot(nil)
+	}
+	if timeout <= 0 {
+		timeout = config.DefaultStatusSessionSnapshotTimeout
 	}
 	type snapshotResult struct {
 		snapshot *sessionBeadSnapshot
@@ -227,12 +230,23 @@ func loadStatusSessionSnapshot(store beads.Store, stderr io.Writer) *sessionBead
 			return newSessionBeadSnapshot(nil)
 		}
 		return result.snapshot
-	case <-time.After(statusSessionSnapshotTimeout):
+	case <-time.After(timeout):
 		if stderr != nil {
-			fmt.Fprintf(stderr, "gc status: loading session snapshot timed out after %s; continuing with runtime-only status\n", statusSessionSnapshotTimeout) //nolint:errcheck // best-effort stderr
+			fmt.Fprintf(stderr, "gc status: loading session snapshot timed out after %s; continuing with runtime-only status\n", timeout) //nolint:errcheck // best-effort stderr
 		}
-		return newSessionBeadSnapshotWithError(nil, fmt.Errorf("loading session snapshot timed out after %s", statusSessionSnapshotTimeout))
+		return newSessionBeadSnapshotWithError(nil, fmt.Errorf("loading session snapshot timed out after %s", timeout))
 	}
+}
+
+func statusSessionSnapshotTimeoutForConfig(cfg *config.City) time.Duration {
+	if cfg == nil {
+		return statusSessionSnapshotTimeout
+	}
+	timeout := cfg.Status.SessionSnapshotTimeoutDuration()
+	if timeout <= 0 {
+		return statusSessionSnapshotTimeout
+	}
+	return timeout
 }
 
 func statusObservationTargetForIdentity(
@@ -292,7 +306,7 @@ func doCityStatus(
 	if code != 0 {
 		return code
 	}
-	return doCityStatusWithStoreAndSnapshot(sp, dops, cfg, cityPath, store, loadStatusSessionSnapshot(store, stderr), stdout, stderr)
+	return doCityStatusWithStoreAndSnapshot(sp, dops, cfg, cityPath, store, loadStatusSessionSnapshot(store, statusSessionSnapshotTimeoutForConfig(cfg), stderr), stdout, stderr)
 }
 
 func doCityStatusWithStoreAndSnapshot(
@@ -342,7 +356,7 @@ func doCityStatusJSON(
 	if code != 0 {
 		return code
 	}
-	return doCityStatusJSONWithStoreAndSnapshot(sp, cfg, cityPath, store, loadStatusSessionSnapshot(store, stderr), stdout, stderr)
+	return doCityStatusJSONWithStoreAndSnapshot(sp, cfg, cityPath, store, loadStatusSessionSnapshot(store, statusSessionSnapshotTimeoutForConfig(cfg), stderr), stdout, stderr)
 }
 
 func doCityStatusJSONWithStoreAndSnapshot(

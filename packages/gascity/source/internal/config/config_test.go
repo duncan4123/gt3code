@@ -4206,6 +4206,30 @@ func TestDefaultSlingTargetRoundTrip(t *testing.T) {
 // SessionConfig accessor tests
 // ---------------------------------------------------------------------------
 
+func TestStatusSessionSnapshotTimeoutDefault(t *testing.T) {
+	s := StatusConfig{}
+	got := s.SessionSnapshotTimeoutDuration()
+	if got != DefaultStatusSessionSnapshotTimeout {
+		t.Errorf("SessionSnapshotTimeoutDuration() = %v, want %v", got, DefaultStatusSessionSnapshotTimeout)
+	}
+}
+
+func TestStatusSessionSnapshotTimeoutCustom(t *testing.T) {
+	s := StatusConfig{SessionSnapshotTimeout: "30s"}
+	got := s.SessionSnapshotTimeoutDuration()
+	if got != 30*time.Second {
+		t.Errorf("SessionSnapshotTimeoutDuration() = %v, want 30s", got)
+	}
+}
+
+func TestStatusSessionSnapshotTimeoutInvalid(t *testing.T) {
+	s := StatusConfig{SessionSnapshotTimeout: "not-a-duration"}
+	got := s.SessionSnapshotTimeoutDuration()
+	if got != DefaultStatusSessionSnapshotTimeout {
+		t.Errorf("SessionSnapshotTimeoutDuration() = %v, want %v (default for invalid)", got, DefaultStatusSessionSnapshotTimeout)
+	}
+}
+
 func TestSessionSetupTimeoutDefault(t *testing.T) {
 	s := SessionConfig{}
 	got := s.SetupTimeoutDuration()

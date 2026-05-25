@@ -189,6 +189,8 @@ type City struct {
 	Beads BeadsConfig `toml:"beads,omitempty"`
 	// Session configures the session provider backend.
 	Session SessionConfig `toml:"session,omitempty"`
+	// Status configures CLI/API status collection behavior.
+	Status StatusConfig `toml:"status,omitempty"`
 	// Mail configures the mail provider backend.
 	Mail MailConfig `toml:"mail,omitempty"`
 	// Events configures the events provider backend.
@@ -1137,6 +1139,32 @@ type BeadsConfig struct {
 	// Backend selects the bd storage engine when Provider is "bd".
 	// Empty defaults to "dolt"; T3Code uses "doltlite" for local dev stores.
 	Backend string `toml:"backend,omitempty"`
+}
+
+// StatusConfig holds settings for status collection commands.
+type StatusConfig struct {
+	// SessionSnapshotTimeout bounds how long status waits for the session bead
+	// snapshot before returning degraded runtime-only status.
+	SessionSnapshotTimeout string `toml:"session_snapshot_timeout,omitempty" jsonschema:"default=10s"`
+}
+
+// DefaultStatusSessionSnapshotTimeout is the default `gc status` wait budget
+// for reading session beads. It is intentionally larger than an individual
+// runtime probe because DoltLite-backed stores can be briefly locked during
+// controller reconciliation.
+const DefaultStatusSessionSnapshotTimeout = 10 * time.Second
+
+// SessionSnapshotTimeoutDuration parses SessionSnapshotTimeout.
+// Defaults to DefaultStatusSessionSnapshotTimeout when empty or invalid.
+func (s *StatusConfig) SessionSnapshotTimeoutDuration() time.Duration {
+	if s.SessionSnapshotTimeout == "" {
+		return DefaultStatusSessionSnapshotTimeout
+	}
+	dur, err := time.ParseDuration(s.SessionSnapshotTimeout)
+	if err != nil {
+		return DefaultStatusSessionSnapshotTimeout
+	}
+	return dur
 }
 
 // SessionConfig holds session provider settings.
