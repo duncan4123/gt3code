@@ -37,12 +37,23 @@ import {
 } from "@t3tools/gascity-config";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const liveWorkspaceSuffix = "/.t3-dev/workspaces/t3code/live";
+const installRoot = repoRoot.endsWith(liveWorkspaceSuffix)
+  ? repoRoot.slice(0, -liveWorkspaceSuffix.length)
+  : repoRoot;
 const gastownGascityRepoRoot = resolve(
-  process.env.T3CODE_GASCITY_REPO_DIR ?? join(repoRoot, "..", "gascity"),
+  process.env.T3CODE_GASCITY_REPO_DIR ?? join(installRoot, "..", "gascity"),
 );
-const defaultT3Home = join(repoRoot, ".t3-dev");
+const defaultT3Home = join(installRoot, ".t3-dev");
 const defaultRuntimeRoot = join(defaultT3Home, "gascity");
-const defaultCityRoot = getBundledGascityConfigLayout("gascity-br").rootDir;
+const defaultCityRoot = join(
+  installRoot,
+  "packages",
+  "gascity-config",
+  "config",
+  "cities",
+  "gastown",
+);
 const configuredCitiesRoot = dirname(defaultCityRoot);
 const command = process.argv[2] ?? "help";
 const passthroughArgs = process.argv.slice(3);
@@ -56,6 +67,12 @@ interface RuntimePaths {
   readonly brBeadsScriptPath: string;
   readonly doltliteLibraryPath: string;
   readonly worktreesDir: string;
+}
+
+function runtimeGcRealBinaryPath(runtime: RuntimePaths): string {
+  return process.platform === "win32"
+    ? runtime.gcBinaryPath
+    : join(dirname(runtime.gcBinaryPath), "gc.real");
 }
 
 const brBeadsScriptSourcePath = findBrBeadsProviderScriptPath();
@@ -426,7 +443,8 @@ function installRuntime(options: {
   const runtime = getRuntimePaths();
   stopRuntimeSupervisorForUpdate(runtime, "installing Gas City tools");
   mkdirSync(dirname(runtime.gcBinaryPath), { recursive: true });
-  copyRuntimeBinary(gcBinarySource, runtime.gcBinaryPath);
+  copyRuntimeBinary(gcBinarySource, runtimeGcRealBinaryPath(runtime));
+  writeGcCommandWrapper(runtime);
   copyRuntimeBinary(bdBinarySource, runtime.bdBinaryPath);
   copyRuntimeBinary(brBinarySource, runtime.brBinaryPath);
   copyRuntimeBinary(brBeadsScriptSourcePath, runtime.brBeadsScriptPath);
@@ -500,7 +518,7 @@ function runtimeMatchesSources(
   if (!existsSync(runtime.cityDir)) return false;
   if (
     !sources.gcBinarySource ||
-    !sameFileHash(sources.gcBinarySource, runtime.gcBinaryPath)
+    !sameFileHash(sources.gcBinarySource, runtimeGcRealBinaryPath(runtime))
   ) {
     return false;
   }
@@ -683,11 +701,20 @@ function processMatchesRuntimeSupervisor(
     if (!cmdline.includes(" supervisor run")) {
       return false;
     }
-    if (cmdline.includes(`${gcBinaryPath} supervisor run`)) {
+    const gcRealBinaryPath = join(dirname(gcBinaryPath), "gc.real");
+    if (
+      cmdline.includes(`${gcBinaryPath} supervisor run`) ||
+      cmdline.includes(`${gcRealBinaryPath} supervisor run`)
+    ) {
       return true;
     }
     const exePath = readlinkSync(`/proc/${pid}/exe`);
-    return exePath === gcBinaryPath || exePath === `${gcBinaryPath} (deleted)`;
+    return (
+      exePath === gcBinaryPath ||
+      exePath === `${gcBinaryPath} (deleted)` ||
+      exePath === gcRealBinaryPath ||
+      exePath === `${gcRealBinaryPath} (deleted)`
+    );
   } catch {
     return false;
   }
@@ -1041,6 +1068,110 @@ function ensureRuntimeCommandLinks(runtime: RuntimePaths): void {
       ensureRuntimeCommandLink(join(binDir, command), target);
     }
   }
+}
+
+function writeGcCommandWrapper(runtime: RuntimePaths): void {
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const binDir = dirname(runtime.gcBinaryPath);
+  const supervisorEnvKeys = [
+    "T3_HOME",
+    "T3CODE_HOME",
+    "T3_WS_URL",
+    "T3CODE_GASCITY_HOME",
+    "GC_BIN",
+    "BD_BIN",
+    "BR_BIN",
+    "T3CODE_WORKTREES_DIR",
+    "GC_WORKTREES_DIR",
+    "GC_API_URL",
+    "GC_BEADS_BACKEND",
+    "BEADS_BACKEND",
+    "GC_NATIVE_DOLTLITE_BEADS",
+    "DOLTLITE_LIBRARY",
+    "LD_LIBRARY_PATH",
+    "DYLD_LIBRARY_PATH",
+  ].join(",");
+  const staleDoltEnvKeys = [
+    "BEADS_DOLT_AUTO_START",
+    "BEADS_DOLT_DATABASE",
+    "BEADS_DOLT_SHARED_SERVER",
+    "BEADS_DOLT_PORT",
+    "BEADS_DOLT_SERVER_DATABASE",
+    "BEADS_DOLT_SERVER_HOST",
+    "BEADS_DOLT_SERVER_MODE",
+    "BEADS_DOLT_SERVER_PASSWORD",
+    "BEADS_DOLT_SERVER_PORT",
+    "BEADS_DOLT_SERVER_USER",
+    "DOLT_HOST",
+    "DOLT_PASSWORD",
+    "DOLT_PORT",
+    "DOLT_USER",
+    "GC_DOLT_HOST",
+    "GC_DOLT_PASSWORD",
+    "GC_DOLT_PORT",
+    "GC_DOLT_USER",
+  ];
+
+  writeFileSync(
+    runtime.gcBinaryPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+
+bin_dir=${shellQuote(binDir)}
+real_gc="$bin_dir/gc.real"
+
+if [ ! -x "$real_gc" ]; then
+  printf 'T3 Code Gas City binary not found: %s\\n' "$real_gc" >&2
+  exit 127
+fi
+
+export T3_HOME="\${T3_HOME:-${defaultT3Home}}"
+export T3CODE_HOME="\${T3CODE_HOME:-$T3_HOME}"
+export T3CODE_GASCITY_HOME="\${T3CODE_GASCITY_HOME:-${runtime.rootDir}}"
+export GC_HOME="\${GC_HOME:-$T3CODE_GASCITY_HOME}"
+export GC_CITY_PATH="\${GC_CITY_PATH:-${runtime.cityDir}}"
+export GC_CITY="\${GC_CITY:-$GC_CITY_PATH}"
+export GC_BIN="\${GC_BIN:-${runtime.gcBinaryPath}}"
+export BD_BIN="\${BD_BIN:-${runtime.bdBinaryPath}}"
+export BR_BIN="\${BR_BIN:-${runtime.brBinaryPath}}"
+export DOLTLITE_LIBRARY="\${DOLTLITE_LIBRARY:-${runtime.doltliteLibraryPath}}"
+export T3CODE_WORKTREES_DIR="\${T3CODE_WORKTREES_DIR:-${runtime.worktreesDir}}"
+export GC_WORKTREES_DIR="\${GC_WORKTREES_DIR:-$T3CODE_WORKTREES_DIR}"
+export GC_BEADS_BACKEND="\${GC_BEADS_BACKEND:-doltlite}"
+export BEADS_BACKEND="\${BEADS_BACKEND:-doltlite}"
+export GC_NATIVE_DOLTLITE_BEADS="\${GC_NATIVE_DOLTLITE_BEADS:-true}"
+export GC_SUPERVISOR_ENV="\${GC_SUPERVISOR_ENV:-${supervisorEnvKeys}}"
+
+${staleDoltEnvKeys.map((key) => `unset ${key}`).join("\n")}
+
+case ":\${PATH:-}:" in
+  *":$bin_dir:"*) ;;
+  *) export PATH="$bin_dir:\${PATH:-}" ;;
+esac
+
+case ":\${LD_LIBRARY_PATH:-}:" in
+  *":$bin_dir:"*) ;;
+  *) export LD_LIBRARY_PATH="$bin_dir:\${LD_LIBRARY_PATH:-}" ;;
+esac
+
+if [ -z "\${GC_API_URL:-}" ]; then
+  supervisor_toml="$GC_HOME/supervisor.toml"
+  if [ -f "$supervisor_toml" ]; then
+    port="$(sed -nE 's/^[[:space:]]*port[[:space:]]*=[[:space:]]*"?([0-9]+)"?[[:space:]]*$/\\1/p' "$supervisor_toml" | head -n 1)"
+    if [ -n "$port" ]; then
+      export GC_API_URL="http://127.0.0.1:$port"
+    fi
+  fi
+fi
+export GC_API_URL="\${GC_API_URL:-http://127.0.0.1:8372}"
+
+exec "$real_gc" "$@"
+`,
+  );
+  chmodSync(runtime.gcBinaryPath, 0o755);
 }
 
 function ensureRuntimeDoltliteLibraryLinks(runtime: RuntimePaths): void {

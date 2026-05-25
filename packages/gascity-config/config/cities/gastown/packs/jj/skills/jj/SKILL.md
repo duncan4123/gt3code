@@ -1,9 +1,3 @@
----
-name: jj
-description: T3Code/GasCity-specific JJ workspace, Jorje review, and landing rules for the JJ agent pack.
-allowed-tools: Bash(jj *), Bash(gc *), Bash(bd *)
----
-
 # JJ Stack Skill
 
 Use this skill in JJ-backed Gas City rigs, especially when working with
@@ -28,6 +22,8 @@ jj status
 - Worker and agent workspaces must stay outside the served T3 checkout.
 - Lander agents are the only agents that move pack target bookmarks.
 - Pack targets land on `staging/current`; humans promote to `live/current`.
+- The served `/data/projects/t3code` checkout must remain a clean empty child
+  of `live/current`. Do not run `jj new staging/current` or edit files there.
 - Sentinel agents repair stuck state; they do not land code.
 - Preserve `jj_change`, `jj_workspace`, and `work_dir` metadata on beads.
 - Do not run `jj file track .` from the served root checkout.
@@ -46,4 +42,5 @@ jj git push --remote jorje -c @
 jj bookmark set staging/current -r CHANGE
 jj git push --remote jorje --bookmark staging/current
 jj bookmark set live/current -r staging/current
+jj new -r live/current -m "workspace"
 ```
