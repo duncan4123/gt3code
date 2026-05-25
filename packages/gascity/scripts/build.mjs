@@ -27,6 +27,10 @@ const doltliteLibrary =
       : "libdoltlite.so";
 const outputPath = path.join(packageRoot, "bin", `${platform}-${arch}`, executable);
 const outputLibraryPath = path.join(packageRoot, "bin", `${platform}-${arch}`, doltliteLibrary);
+const outputLibrarySonamePath =
+  platform === "linux"
+    ? path.join(packageRoot, "bin", `${platform}-${arch}`, "libdoltlite.so.0")
+    : undefined;
 const stampPath = path.join(
   packageRoot,
   "bin",
@@ -63,7 +67,7 @@ const stamp = {
 };
 if (
   isFresh({
-    outputs: [outputPath, outputLibraryPath],
+    outputs: [outputPath, outputLibraryPath, outputLibrarySonamePath].filter(Boolean),
     stampPath,
     stamp,
     inputRoots: [sourceRoot, beadsSourceRoot],
@@ -97,7 +101,7 @@ const result = spawnSync("go", ["build", "-buildvcs=false", "-o", outputPath, ".
 });
 
 if ((result.status ?? 1) === 0) {
-  copyFileSync(path.join(doltliteBuildDir, doltliteLibrary), outputLibraryPath);
+  copyDoltliteRuntimeLibrary();
   writeFileSync(stampPath, JSON.stringify({ ...stamp, builtAt: new Date().toISOString() }) + "\n");
   console.log(`copied ${outputLibraryPath}`);
 }
@@ -148,6 +152,14 @@ function hasDoltliteBuildArtifacts(buildDir) {
   return (
     existsSync(path.join(buildDir, doltliteLibrary)) && existsSync(path.join(buildDir, "sqlite3.h"))
   );
+}
+
+function copyDoltliteRuntimeLibrary() {
+  const source = path.join(doltliteBuildDir, doltliteLibrary);
+  copyFileSync(source, outputLibraryPath);
+  if (outputLibrarySonamePath) {
+    copyFileSync(source, outputLibrarySonamePath);
+  }
 }
 
 function appendFlag(existing, value) {

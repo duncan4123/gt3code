@@ -30,6 +30,7 @@
   "scripts": {
     "prepare": "effect-language-service patch",
     "dev": "node scripts/dev-runner.ts dev",
+    "dev:doltlite": "env -u BEADS_DOLT_AUTO_START -u BEADS_DOLT_DATABASE -u BEADS_DOLT_SHARED_SERVER -u BEADS_DOLT_PORT -u BEADS_DOLT_SERVER_DATABASE -u BEADS_DOLT_SERVER_HOST -u BEADS_DOLT_SERVER_MODE -u BEADS_DOLT_SERVER_PORT -u GC_DOLT_HOST -u GC_DOLT_PORT GC_CITY_PATH=packages/gascity-config/config/cities/gastown node scripts/dev-runner.ts dev",
     "dev:server": "node scripts/dev-runner.ts dev:server",
     "dev:web": "node scripts/dev-runner.ts dev:web",
     "dev:desktop": "node scripts/dev-runner.ts dev:desktop",
