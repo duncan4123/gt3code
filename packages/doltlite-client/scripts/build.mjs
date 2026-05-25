@@ -18,6 +18,8 @@ const library =
       ? "libdoltlite.dylib"
       : "libdoltlite.so";
 const outDir = path.join(packageRoot, "bin", `${platform}-${arch}`);
+const libraryPath = path.join(outDir, library);
+const librarySonamePath = platform === "linux" ? path.join(outDir, "libdoltlite.so.0") : undefined;
 const sourceRoot = path.join(packageRoot, "source");
 const doltliteBuildDir = resolveDoltliteBuildDir();
 
@@ -42,7 +44,7 @@ const result = spawnSync("go", ["build", "-o", path.join(outDir, executable), ".
 });
 if ((result.status ?? 1) !== 0) process.exit(result.status ?? 1);
 
-copyFileSync(path.join(doltliteBuildDir, library), path.join(outDir, library));
+copyDoltliteRuntimeLibrary();
 console.log(`built ${path.join(outDir, executable)}`);
 
 function resolveDoltliteBuildDir() {
@@ -61,4 +63,12 @@ function resolveDoltliteBuildDir() {
 
 function appendFlag(existing, value) {
   return [existing, value].filter(Boolean).join(" ");
+}
+
+function copyDoltliteRuntimeLibrary() {
+  const source = path.join(doltliteBuildDir, library);
+  copyFileSync(source, libraryPath);
+  if (librarySonamePath) {
+    copyFileSync(source, librarySonamePath);
+  }
 }

@@ -161,6 +161,7 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
           GC_DOLT_HOST: "127.0.0.1",
           BEADS_DOLT_PORT: "3307",
           BEADS_DOLT_SERVER_HOST: "127.0.0.1",
+          BEADS_DOLT_SERVER_MODE: "1",
           BEADS_DOLT_SHARED_SERVER: "true",
         },
         t3Home: undefined,
@@ -170,6 +171,7 @@ it.layer(NodeServices.layer)("bundled-gascity-env", (it) => {
       assert.equal(env.GC_DOLT_HOST, undefined);
       assert.equal(env.BEADS_DOLT_PORT, undefined);
       assert.equal(env.BEADS_DOLT_SERVER_HOST, undefined);
+      assert.equal(env.BEADS_DOLT_SERVER_MODE, undefined);
       assert.equal(env.BEADS_DOLT_SHARED_SERVER, undefined);
       assert.equal(env.GC_BEADS_BACKEND, undefined);
       assert.equal(env.BEADS_BACKEND, undefined);
