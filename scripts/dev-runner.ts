@@ -3,6 +3,8 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@t3tools/shared/Net";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join as joinPath } from "node:path";
 import * as Config from "effect/Config";
@@ -57,11 +59,124 @@ type PortAvailabilityCheck<R = never> = (
 ) => Effect.Effect<boolean, never, R>;
 
 const DEV_RUNNER_MODES = Object.keys(MODE_ARGS) as Array<DevMode>;
+const LIVE_WORKSPACE_TARGET_BOOKMARK = "live/current";
+const LIVE_WORKSPACE_GUARD_BYPASS = "T3CODE_ALLOW_NON_LIVE_DEV";
 
 class DevRunnerError extends Data.TaggedError("DevRunnerError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
+
+export interface LiveWorkspaceGuardInput {
+  readonly diffSummary: string;
+  readonly parentBookmarks: ReadonlyArray<string>;
+  readonly targetBookmark?: string;
+}
+
+export function evaluateLiveWorkspaceGuard({
+  diffSummary,
+  parentBookmarks,
+  targetBookmark = LIVE_WORKSPACE_TARGET_BOOKMARK,
+}: LiveWorkspaceGuardInput): ReadonlyArray<string> {
+  const failures: Array<string> = [];
+  const trimmedDiff = diffSummary.trim();
+
+  if (trimmedDiff.length > 0) {
+    failures.push(
+      [
+        "The served workspace has unlanded working-copy changes.",
+        trimmedDiff
+          .split("\n")
+          .slice(0, 20)
+          .map((line) => `  ${line}`)
+          .join("\n"),
+      ].join("\n"),
+    );
+  }
+
+  const normalizedBookmarks = new Set(
+    parentBookmarks
+      .map((bookmark) => bookmark.trim().replace(/\*$/, ""))
+      .filter((bookmark) => bookmark.length > 0),
+  );
+
+  if (!normalizedBookmarks.has(targetBookmark)) {
+    failures.push(
+      `The served workspace parent is not ${targetBookmark}. Parent bookmarks: ${
+        normalizedBookmarks.size > 0
+          ? [...normalizedBookmarks].join(", ")
+          : "(none)"
+      }.`,
+    );
+  }
+
+  return failures;
+}
+
+function runJjStdout(args: ReadonlyArray<string>): string {
+  return execFileSync("jj", [...args], {
+    cwd: joinPath(import.meta.dirname, ".."),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+function assertServedWorkspaceRunsLive(
+  env: NodeJS.ProcessEnv,
+): Effect.Effect<void, DevRunnerError> {
+  return Effect.try({
+    try: () => {
+      if (env[LIVE_WORKSPACE_GUARD_BYPASS] === "1") {
+        return;
+      }
+
+      const repoRoot = joinPath(import.meta.dirname, "..");
+      if (!existsSync(joinPath(repoRoot, ".jj"))) {
+        return;
+      }
+
+      const diffSummary = runJjStdout(["diff", "--summary"]);
+      const parentBookmarks = runJjStdout([
+        "log",
+        "-r",
+        "@-",
+        "--no-graph",
+        "--template",
+        'bookmarks.join("\\n") ++ "\\n"',
+      ])
+        .split("\n")
+        .filter((line) => line.trim().length > 0);
+
+      const failures = evaluateLiveWorkspaceGuard({
+        diffSummary,
+        parentBookmarks,
+      });
+
+      if (failures.length === 0) {
+        return;
+      }
+
+      throw new Error(
+        [
+          "Refusing to start T3 Code dev server from a non-live JJ workspace.",
+          "",
+          ...failures,
+          "",
+          "The served /data/projects/t3code checkout must stay as a clean empty child of live/current.",
+          "Fix by moving the served workspace back to live/current, for example:",
+          '  jj new -r live/current -m "workspace"',
+          "",
+          "If you are deliberately debugging another line, set T3CODE_ALLOW_NON_LIVE_DEV=1.",
+        ].join("\n"),
+      );
+    },
+    catch: (cause) =>
+      new DevRunnerError({
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
+  });
+}
 
 const optionalStringConfig = (
   name: string,
@@ -509,6 +624,8 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     if (input.dryRun) {
       return;
     }
+
+    yield* assertServedWorkspaceRunsLive(env);
 
     yield* writeT3BridgeWsUrlHint(env);
 
