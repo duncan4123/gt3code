@@ -2,57 +2,9 @@
 global_fragments = ["command-glossary", "operational-awareness"]
 
 [[rigs]]
-name = "gascity"
-prefix = "gc"
-suspended = true
-includes = ["../../packs/doltlite-gastown"]
-
-[[rigs.overrides]]
-agent = "polecat"
-suspended = true
-
-[[rigs.overrides]]
-agent = "refinery"
-suspended = true
-
-[[rigs.overrides]]
-agent = "witness"
-suspended = false
-
-[[rigs]]
-name = "beads-doltlite"
-prefix = "bd"
-suspended = true
-includes = ["../../packs/doltlite-gastown"]
-
-[[rigs.overrides]]
-agent = "polecat"
-suspended = true
-
-[[rigs.overrides]]
-agent = "refinery"
-suspended = false
-
-[[rigs.overrides]]
-agent = "witness"
-suspended = true
-
-[[rigs]]
 name = "t3code"
 prefix = "t3"
-includes = ["../../packs/doltlite-gastown", "packs/jj"]
-
-[[rigs.overrides]]
-agent = "polecat"
-suspended = false
-
-[[rigs.overrides]]
-agent = "refinery"
-suspended = false
-
-[[rigs.overrides]]
-agent = "witness"
-suspended = false
+includes = ["packs/jj"]
 
 [[rigs.overrides]]
 agent = "lander"
@@ -69,40 +21,6 @@ suspended = false
 [[rigs.overrides]]
 agent = "worker"
 suspended = false
-
-[[rigs]]
-name = "test-rig"
-prefix = "tr"
-suspended = true
-includes = ["../../packs/doltlite-gastown", "packs/jj"]
-
-[[rigs.overrides]]
-agent = "polecat"
-suspended = true
-
-[[rigs.overrides]]
-agent = "refinery"
-suspended = true
-
-[[rigs.overrides]]
-agent = "witness"
-suspended = true
-
-[[rigs.overrides]]
-agent = "planner"
-suspended = true
-
-[[rigs.overrides]]
-agent = "worker"
-suspended = true
-
-[[rigs.overrides]]
-agent = "lander"
-suspended = true
-
-[[rigs.overrides]]
-agent = "sentinel"
-suspended = true
 
 [patches]
 
@@ -143,158 +61,6 @@ GC_MODEL = "gpt-5.4-mini"
 model = "gpt-5.4-mini"
 
 [[patches.agent]]
-dir = "gascity"
-name = "refinery"
-suspended = false
-provider = "codex"
-wake_mode = "resume"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "gascity"
-name = "witness"
-suspended = false
-provider = "codex"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "gascity"
-name = "polecat"
-suspended = false
-provider = "codex"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "beads-doltlite"
-name = "polecat"
-suspended = true
-provider = "codex"
-wake_mode = "fresh"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "beads-doltlite"
-name = "refinery"
-suspended = false
-provider = "codex"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "beads-doltlite"
-name = "witness"
-suspended = false
-provider = "codex"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "t3code"
-name = "witness"
-suspended = true
-provider = "kimi-for-coding"
-[patches.agent.option_defaults]
-agent = "build"
-model = "kimi-for-coding/k2p6"
-
-[[patches.agent]]
-dir = "t3code"
-name = "refinery"
-suspended = true
-provider = "kimi-for-coding"
-wake_mode = "resume"
-[patches.agent.option_defaults]
-agent = "build"
-model = "kimi-for-coding/k2p6"
-
-[[patches.agent]]
-dir = "t3code"
-name = "polecat"
-suspended = true
-provider = "codex"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "test-rig"
-name = "witness"
-suspended = true
-provider = "codex"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "test-rig"
-name = "refinery"
-suspended = true
-provider = "codex"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "test-rig"
-name = "polecat"
-suspended = true
-provider = "codex"
-wake_mode = "resume"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "test-rig"
-name = "planner"
-work_dir = "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/planner"
-suspended = false
-provider = "codex"
-nudge = "Check mail, then create or refine stack-shaped work beads."
-idle_timeout = "1h"
-wake_mode = "fresh"
-max_active_sessions = 1
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "test-rig"
-name = "worker"
-work_dir = "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/workers/{{.AgentBase}}"
-suspended = false
-provider = "codex"
-nudge = "Run gc hook; claim one routed work bead, create a JJ workspace, and submit the change."
-idle_timeout = "2h"
-default_sling_formula = "mol-jj-worker-work"
-wake_mode = "fresh"
-max_active_sessions = 4
-min_active_sessions = 1
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = "test-rig"
-name = "lander"
-work_dir = "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/lander"
-suspended = false
-provider = "kimi-for-coding"
-nudge = "Run gc prime, inspect submitted JJ changes, and land ready work serially."
-idle_timeout = "2h"
-wake_mode = "fresh"
-max_active_sessions = 1
-
-[[patches.agent]]
-dir = "test-rig"
-name = "sentinel"
-work_dir = "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/sentinel"
-suspended = false
-provider = "kimi-for-coding"
-nudge = "Run gc prime, inspect JJ workspace health, and repair stuck workflow state."
-idle_timeout = "1h"
-wake_mode = "fresh"
-max_active_sessions = 1
-
-[[patches.agent]]
 dir = "t3code"
 name = "worker"
 append_fragments = ["t3code-fork-context"]
@@ -305,6 +71,11 @@ dir = "t3code"
 name = "lander"
 append_fragments = ["t3code-fork-context"]
 wake_mode = "resume"
+
+[[patches.agent]]
+dir = ""
+name = "hq-witness"
+wake_mode = "fresh"
 
 [[patches.named_session]]
 template = "mayor"
@@ -318,31 +89,6 @@ mode = "always"
 template = "boot"
 mode = "always"
 
-[[patches.named_session]]
-dir = "gascity"
-template = "refinery"
-mode = "always"
-
-[[patches.named_session]]
-dir = "beads-doltlite"
-template = "refinery"
-mode = "always"
-
-[[patches.named_session]]
-dir = "t3code"
-template = "refinery"
-mode = "always"
-
-[[patches.named_session]]
-dir = "test-rig"
-template = "refinery"
-mode = "always"
-
-[[patches.named_session]]
-dir = "test-rig"
-template = "planner"
-mode = "always"
-
 [beads]
 provider = "bd"
 backend = "doltlite"
@@ -350,32 +96,11 @@ backend = "doltlite"
 [session]
 provider = "t3bridge"
 
-[orders]
-# T3Code's packaged gastown uses the DoltLite Beads file backend. These
-# mechanical maintenance orders currently run during supervisor startup and
-# some still assume the legacy Dolt SQL-server pack. Keep startup dedicated to
-# bringing T3Bridge-backed agents online; re-enable DoltLite-safe maintenance
-# orders one by one after they are bounded and provider-aware.
-skip = [
-  "beads-health",
-  "cross-rig-deps",
-  "digest-generate",
-  "dolt-health",
-  "dolt-remotes-patrol",
-  "doltlite-compact",
-  "gate-sweep",
-  "mol-dog-backup",
-  "mol-dog-compactor",
-  "mol-dog-doctor",
-  "mol-dog-jsonl",
-  "mol-dog-phantom-db",
-  "mol-dog-reaper",
-  "mol-dog-stale-db",
-  "orphan-sweep",
-  "prune-branches",
-  "spawn-storm-detect",
-  "wisp-compact",
-]
+[status]
+session_snapshot_timeout = "30s"
 
 [daemon]
 formula_v2 = true
+
+[orders]
+skip = ["beads-health", "cross-rig-deps", "digest-generate", "dolt-health", "dolt-remotes-patrol", "doltlite-compact", "gate-sweep", "mol-dog-backup", "mol-dog-compactor", "mol-dog-doctor", "mol-dog-jsonl", "mol-dog-phantom-db", "mol-dog-reaper", "mol-dog-stale-db", "orphan-sweep", "prune-branches", "spawn-storm-detect", "wisp-compact"]
