@@ -1,8 +1,7 @@
 scope = "rig"
 provider = "kimi-for-coding"
-option_defaults = {}
 wake_mode = "fresh"
 work_dir = "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/lander"
-nudge = "Run gc prime, inspect submitted JJ changes, and land ready work serially."
+nudge = "Run gc prime, inspect sentinel-approved JJ changes, optionally run landing gates, and land serially."
 idle_timeout = "2h"
 max_active_sessions = 1
