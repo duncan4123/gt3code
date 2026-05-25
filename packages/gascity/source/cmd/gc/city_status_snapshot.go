@@ -112,7 +112,7 @@ func cityStatusStorePresent(cityPath string) bool {
 }
 
 func collectCityStatusSnapshot(sp runtime.Provider, cfg *config.City, cityPath string, store beads.Store, stderr io.Writer) cityStatusSnapshot {
-	return collectCityStatusSnapshotFromStoreSnapshot(sp, cfg, cityPath, store, loadStatusSessionSnapshot(store, stderr), stderr)
+	return collectCityStatusSnapshotFromStoreSnapshot(sp, cfg, cityPath, store, loadStatusSessionSnapshot(store, statusSessionSnapshotTimeoutForConfig(cfg), stderr), stderr)
 }
 
 func collectCityStatusSnapshotFromStoreSnapshot(

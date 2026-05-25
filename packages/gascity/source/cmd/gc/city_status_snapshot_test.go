@@ -52,7 +52,7 @@ func TestCityStatusNamedSessionsUseProvidedStore(t *testing.T) {
 	if snapshot.NamedSessions[0].Status != "materialized" {
 		t.Fatalf("named session status = %q, want materialized", snapshot.NamedSessions[0].Status)
 	}
-	code := doCityStatusWithStoreAndSnapshot(sp, dops, cfg, cityPath, store, loadStatusSessionSnapshot(store, &stderr), &stdout, &stderr)
+	code := doCityStatusWithStoreAndSnapshot(sp, dops, cfg, cityPath, store, loadStatusSessionSnapshot(store, statusSessionSnapshotTimeout, &stderr), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr: %s", code, stderr.String())
 	}
@@ -161,7 +161,7 @@ func TestLoadStatusSessionSnapshotTimesOut(t *testing.T) {
 
 	var stderr bytes.Buffer
 	start := time.Now()
-	snapshot := loadStatusSessionSnapshot(store, &stderr)
+	snapshot := loadStatusSessionSnapshot(store, statusSessionSnapshotTimeout, &stderr)
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Fatalf("loadStatusSessionSnapshot elapsed %s, want bounded timeout", elapsed)
 	}
@@ -180,6 +180,15 @@ func TestLoadStatusSessionSnapshotTimesOut(t *testing.T) {
 	}
 	if !strings.Contains(loadErr.Error(), "timed out") {
 		t.Fatalf("snapshot.LoadError() = %v, want timeout text", loadErr)
+	}
+}
+
+func TestStatusSessionSnapshotTimeoutForConfigUsesStatusConfig(t *testing.T) {
+	cfg := &config.City{
+		Status: config.StatusConfig{SessionSnapshotTimeout: "45s"},
+	}
+	if got := statusSessionSnapshotTimeoutForConfig(cfg); got != 45*time.Second {
+		t.Fatalf("statusSessionSnapshotTimeoutForConfig() = %v, want 45s", got)
 	}
 }
 
@@ -573,7 +582,7 @@ func TestCityStatusNamedSessionsUseLoadedSnapshotWithoutGet(t *testing.T) {
 		t.Fatalf("snapshot named session status = %q, want materialized", got)
 	}
 
-	code := doCityStatusWithStoreAndSnapshot(sp, dops, cfg, "/home/user/city", store, loadStatusSessionSnapshot(store, &stderr), &stdout, &stderr)
+	code := doCityStatusWithStoreAndSnapshot(sp, dops, cfg, "/home/user/city", store, loadStatusSessionSnapshot(store, statusSessionSnapshotTimeout, &stderr), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr: %s", code, stderr.String())
 	}

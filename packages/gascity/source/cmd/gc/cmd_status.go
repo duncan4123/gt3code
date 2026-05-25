@@ -87,7 +87,7 @@ func cmdRigStatus(args []string, jsonOutput bool, stdout, stderr io.Writer) int 
 			store = opened
 		}
 	}
-	statusSnapshot := loadStatusSessionSnapshot(store, stderr)
+	statusSnapshot := loadStatusSessionSnapshot(store, statusSessionSnapshotTimeoutForConfig(cfg), stderr)
 	sp := newStatusSessionProviderForCityWithSnapshot(cfg, cityPath, statusSnapshot)
 	dops := newDrainOps(sp)
 	return doRigStatusWithStoreAndSnapshot(sp, dops, rig, rigAgents, cityPath, cityName, cfg.Workspace.SessionTemplate, cfg, store, statusSnapshot, jsonOutput, stdout, stderr)
