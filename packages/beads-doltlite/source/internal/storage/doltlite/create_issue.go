@@ -99,10 +99,11 @@ func createIssueSQLite(ctx context.Context, tx *sql.Tx, bc *issueops.BatchContex
 			return fmt.Errorf("failed to record event for %s: %w", issue.ID, err)
 		}
 	}
-	if err := issueops.PersistLabelsWithDialect(ctx, tx, issue, issueops.SQLDialectSQLite); err != nil {
+	if _, err := issueops.PersistLabelsWithDialect(ctx, tx, issue, actor, eventTable, issueops.SQLDialectSQLite); err != nil {
 		return err
 	}
-	return issueops.PersistComments(ctx, tx, issue)
+	_, err := issueops.PersistComments(ctx, tx, issue)
+	return err
 }
 
 func insertIssueSQLite(ctx context.Context, tx *sql.Tx, table string, issue *types.Issue) error {

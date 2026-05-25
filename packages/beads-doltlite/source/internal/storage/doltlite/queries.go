@@ -16,17 +16,20 @@ func (s *DoltliteStore) GetReadyWork(ctx context.Context, filter types.WorkFilte
 	var result []*types.Issue
 	err := s.withConn(ctx, false, func(tx *sql.Tx) error {
 		var err error
-		result, err = issueops.GetReadyWorkInTxWithDialect(ctx, tx, filter, computeBlockedIDsWrapper, issueops.SQLDialectSQLite)
+		result, err = issueops.GetReadyWorkInTx(ctx, tx, filter)
 		return err
 	})
 	return result, err
 }
 
-// computeBlockedIDsWrapper adapts ComputeBlockedIDsInTx to the callback
-// signature expected by GetReadyWorkInTx.
-func computeBlockedIDsWrapper(ctx context.Context, tx *sql.Tx, includeWisps bool) ([]string, error) {
-	ids, _, err := issueops.ComputeBlockedIDsInTx(ctx, tx, includeWisps)
-	return ids, err
+func (s *DoltliteStore) GetReadyWorkWithCounts(ctx context.Context, filter types.WorkFilter) ([]*types.IssueWithCounts, error) {
+	var result []*types.IssueWithCounts
+	err := s.withConn(ctx, false, func(tx *sql.Tx) error {
+		var err error
+		result, err = issueops.GetReadyWorkWithCountsInTx(ctx, tx, filter)
+		return err
+	})
+	return result, err
 }
 
 // GetMoleculeProgress returns progress stats for a molecule.

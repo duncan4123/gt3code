@@ -162,19 +162,14 @@ type DoltStore struct {
 	readOnly      bool         // True if opened in read-only mode
 	credentialKey []byte       // Random encryption key for federation credentials
 
-	// Per-invocation caches (lifetime = DoltStore lifetime)
-	customStatusDetailedCache    []types.CustomStatus // cached result of GetCustomStatusesDetailed
-	customStatusCache            []string             // cached name-only result (derived from detailed)
-	customStatusCached           bool                 // true once cache has been populated
-	customTypeCache              []string             // cached result of GetCustomTypes
-	customTypeCached             bool                 // true once customTypeCache has been populated
-	infraTypeCache               map[string]bool      // cached result of GetInfraTypes
-	infraTypeCached              bool                 // true once infraTypeCache has been populated
-	blockedIDsCache              []string             // cached result of computeBlockedIDs
-	blockedIDsCacheMap           map[string]bool
-	blockedIDsCached             bool // true once blockedIDsCache has been populated
-	blockedIDsCacheIncludesWisps bool // true if cache was computed with wisps
-	cacheMu                      sync.Mutex
+	customStatusDetailedCache []types.CustomStatus
+	customStatusCache         []string
+	customStatusCached        bool
+	customTypeCache           []string
+	customTypeCached          bool
+	infraTypeCache            map[string]bool
+	infraTypeCached           bool
+	cacheMu                   sync.Mutex
 
 	// OTel span attribute cache (avoids per-call allocation)
 	spanAttrsOnce  sync.Once
@@ -1100,26 +1095,8 @@ func newServerMode(ctx context.Context, cfg *Config) (*DoltStore, error) {
 		autoStartedServerDir: autoStartedDir,
 	}
 
-	// Schema initialization for server mode (idempotent).
-	// Short retry for Dolt "no root value found in session" race: after
-	// CREATE DATABASE, information_schema queries may fail transiently
-	// even though Ping succeeded. This resolves within ~1s.
 	if !cfg.ReadOnly {
-		schemaBO := backoff.NewExponentialBackOff()
-		schemaBO.InitialInterval = 100 * time.Millisecond
-		// Must exceed schema.MigrateUpWithLock's 5s GET_LOCK wait so a
-		// contended schema migration can time out once and still retry.
-		schemaBO.MaxElapsedTime = 15 * time.Second
-		if err := backoff.Retry(func() error {
-			schemaErr := store.initSchema(ctx)
-			if schemaErr != nil && isRetryableError(schemaErr) {
-				return schemaErr
-			}
-			if schemaErr != nil {
-				return backoff.Permanent(schemaErr)
-			}
-			return nil
-		}, backoff.WithContext(schemaBO, ctx)); err != nil {
+		if err := store.initSchema(ctx); err != nil {
 			return nil, fmt.Errorf("failed to initialize schema: %w", err)
 		}
 	}
@@ -1498,8 +1475,29 @@ func initSchemaOnDB(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
+func initSchemaOnDBWithRetry(ctx context.Context, db *sql.DB) error {
+	// Schema initialization for server mode is idempotent. Retry transient
+	// Dolt startup/catalog races and contended migration-lock attempts so
+	// concurrent bd processes converge instead of failing one unlucky waiter.
+	schemaBO := backoff.NewExponentialBackOff()
+	schemaBO.InitialInterval = 100 * time.Millisecond
+	// Must exceed schema.MigrateUpWithLock's 5s GET_LOCK wait so a contended
+	// schema migration can time out once and still retry.
+	schemaBO.MaxElapsedTime = serverRetryMaxElapsed
+	return backoff.Retry(func() error {
+		schemaErr := initSchemaOnDB(ctx, db)
+		if schemaErr != nil && isRetryableError(schemaErr) {
+			return schemaErr
+		}
+		if schemaErr != nil {
+			return backoff.Permanent(schemaErr)
+		}
+		return nil
+	}, backoff.WithContext(schemaBO, ctx))
+}
+
 func (s *DoltStore) initSchema(ctx context.Context) error {
-	return initSchemaOnDB(ctx, s.db)
+	return initSchemaOnDBWithRetry(ctx, s.db)
 }
 
 // IsClosed returns true if the store has been closed.

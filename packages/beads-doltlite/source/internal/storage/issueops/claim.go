@@ -124,7 +124,6 @@ func ClaimReadyIssueInTx(
 	tx *sql.Tx,
 	filter types.WorkFilter,
 	actor string,
-	computeBlockedFn func(ctx context.Context, tx *sql.Tx, includeWisps bool) ([]string, error),
 ) (*types.Issue, error) {
 	claimFilter := filter
 	claimFilter.Status = types.StatusOpen
@@ -132,7 +131,7 @@ func ClaimReadyIssueInTx(
 	claimFilter.Assignee = nil
 	claimFilter.Limit = 0
 
-	readyIssues, err := GetReadyWorkInTx(ctx, tx, claimFilter, computeBlockedFn)
+	readyIssues, err := GetReadyWorkInTx(ctx, tx, claimFilter)
 	if err != nil {
 		return nil, err
 	}

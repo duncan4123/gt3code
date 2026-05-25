@@ -82,6 +82,13 @@ func CreateIgnoredTablesSQLite(ctx context.Context, db DBConn) error {
 	if _, err := db.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS dolt_ignore (pattern TEXT NOT NULL PRIMARY KEY, ignored BOOLEAN NOT NULL)"); err != nil {
 		return fmt.Errorf("create dolt_ignore: %w", err)
 	}
+	var issuesExists int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'issues'").Scan(&issuesExists); err != nil {
+		return fmt.Errorf("check issues table: %w", err)
+	}
+	if issuesExists == 0 {
+		return nil
+	}
 	current, err := ignoredTablesCurrentSQLite(ctx, db)
 	if err != nil {
 		return err
@@ -226,6 +233,7 @@ func translateSQLiteBasics(stmt string) string {
 		{"now()", "CURRENT_TIMESTAMP"},
 		{"CREATE OR REPLACE VIEW", "CREATE VIEW IF NOT EXISTS"},
 		{"create or replace view", "CREATE VIEW IF NOT EXISTS"},
+		{"JSON_UNQUOTE(JSON_EXTRACT(d.metadata, '$.gate')) = 'any-children'", "(d.metadata LIKE '%\"gate\":\"any-children\"%' OR d.metadata LIKE '%\"gate\": \"any-children\"%')"},
 		{"ESCAPE '\\\\'", "ESCAPE '\\'"},
 		{" PRIMARY KEY FIRST", ""},
 		{" NOT NULL FIRST", ""},

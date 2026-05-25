@@ -69,7 +69,7 @@ func (t *embeddedTransaction) UpdateIssue(ctx context.Context, id string, update
 func (t *embeddedTransaction) CloseIssue(ctx context.Context, id string, reason string, actor string, session string) error {
 	t.dirty.MarkDirty("issues")
 	t.dirty.MarkDirty("events")
-	_, err := issueops.CloseIssueInTxWithDialect(ctx, t.tx, id, reason, actor, session, issueops.SQLDialectSQLite)
+	_, err := issueops.CloseIssueInTx(ctx, t.tx, id, reason, actor, session)
 	return err
 }
 
@@ -87,7 +87,7 @@ func (t *embeddedTransaction) GetIssue(ctx context.Context, id string) (*types.I
 }
 
 func (t *embeddedTransaction) SearchIssues(ctx context.Context, query string, filter types.IssueFilter) ([]*types.Issue, error) {
-	return issueops.SearchIssuesInTxWithDialect(ctx, t.tx, query, filter, issueops.SQLDialectSQLite)
+	return issueops.SearchIssuesInTx(ctx, t.tx, query, filter)
 }
 
 func (t *embeddedTransaction) AddDependency(ctx context.Context, dep *types.Dependency, actor string) error {

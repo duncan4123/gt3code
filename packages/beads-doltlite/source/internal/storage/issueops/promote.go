@@ -30,7 +30,10 @@ func PromoteFromEphemeralInTx(ctx context.Context, tx *sql.Tx, id string, actor 
 	if err != nil {
 		return fmt.Errorf("new batch context: %w", err)
 	}
-	if err := CreateIssueInTx(ctx, tx, bc, issue, actor); err != nil {
+	if err := PrepareIssueForInsert(issue, bc.CustomStatuses, bc.CustomTypes); err != nil {
+		return fmt.Errorf("promote wisp to issues: %w", err)
+	}
+	if _, err := InsertIssueIfNew(ctx, tx, "issues", issue); err != nil {
 		return fmt.Errorf("promote wisp to issues: %w", err)
 	}
 
@@ -91,6 +94,14 @@ func PromoteFromEphemeralInTx(ctx context.Context, tx *sql.Tx, id string, actor 
 	}
 	if rows == 0 {
 		return fmt.Errorf("wisp %s not found", id)
+	}
+
+	affectedIssues, affectedWisps, aerr := AffectedByStatusChangeInTx(ctx, tx, id)
+	if aerr != nil {
+		return fmt.Errorf("affected by promote for %s: %w", id, aerr)
+	}
+	if err := RecomputeIsBlockedInTx(ctx, tx, affectedIssues, affectedWisps); err != nil {
+		return fmt.Errorf("recompute is_blocked after promote for %s: %w", id, err)
 	}
 	return nil
 }
