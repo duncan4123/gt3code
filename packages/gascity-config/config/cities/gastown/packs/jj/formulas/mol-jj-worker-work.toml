@@ -2,7 +2,8 @@ description = """
 JJ worker lifecycle.
 
 The worker owns one code bead, creates or resumes one JJ workspace for that
-bead, submits a Jorje review, records metadata, and routes the bead to lander.
+bead, submits a Jorje review, records metadata, and routes the bead to sentinel
+for workflow verification before landing.
 
 Use the Doltlite-backed `bd` CLI for bead reads, writes, and metadata.
 """
@@ -12,16 +13,16 @@ contract = "graph.v2"
 
 [vars]
 [vars.target]
-description = "Target bookmark to build on"
+description = "Target bookmark to base work on"
 default = "staging/current"
 
 [vars.target_remote]
 description = "Remote that owns the target bookmark"
 default = "jorje"
 
-[vars.lander]
-description = "Lander agent suffix"
-default = "lander"
+[vars.sentinel]
+description = "Sentinel agent suffix"
+default = "sentinel"
 
 [vars.binding_prefix]
 description = "Rig binding prefix"
@@ -96,13 +97,14 @@ JJ_CHANGE=$(jj log -r @ --no-graph --template 'change_id')
 bd update {{issue}} --set-metadata jj_change="$JJ_CHANGE"
 ```
 
-Run only checks requested by the bead, mayor, or user. Do not invent broad test
-runs.
+Run only focused tests requested by the bead, mayor, or user and only when they
+directly cover your changed files. Do not run builds, complete test suites,
+repo-wide gates, broad generated checks, or opportunistic verification.
 """
 
 [[steps]]
 id = "submit-review"
-title = "Push Jorje review and route to lander"
+title = "Push Jorje review and route to sentinel"
 needs = ["implement-change"]
 description = """
 Push the current JJ change for review:
@@ -115,8 +117,8 @@ bd update {{issue}} \
   --set-metadata jj_change="$JJ_CHANGE" \
   --set-metadata jj_commit="$JJ_COMMIT" \
   --set-metadata review_remote="jorje" \
-  --set-metadata gc.routed_to="${GC_RIG:+$GC_RIG/}{{binding_prefix}}{{lander}}" \
-  --assignee="${GC_RIG:+$GC_RIG/}{{binding_prefix}}{{lander}}" \
+  --set-metadata gc.routed_to="${GC_RIG:+$GC_RIG/}{{binding_prefix}}{{sentinel}}" \
+  --assignee="${GC_RIG:+$GC_RIG/}{{binding_prefix}}{{sentinel}}" \
   --status=open
 ```
 

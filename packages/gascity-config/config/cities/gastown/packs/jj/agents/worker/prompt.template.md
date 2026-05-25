@@ -25,6 +25,9 @@ gc hook
 
 Claim one work bead, read the formula steps, create/resume the JJ workspace,
 implement the change, push it for review with Jorje, then assign the bead to
-the lander.
+the sentinel.
 
 Do not move target bookmarks. Do not land your own work.
+Do not run builds, complete test suites, repo-wide gates, or broad generated
+checks. You may run focused tests only when they directly cover your changed
+files and the bead, mayor, or user asked for verification.

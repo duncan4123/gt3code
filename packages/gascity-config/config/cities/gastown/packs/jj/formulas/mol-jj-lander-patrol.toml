@@ -2,8 +2,9 @@ description = """
 JJ lander patrol.
 
 The lander serializes accepted changes onto the pack target bookmark. Workers
-submit JJ change IDs; the lander validates, rebases, moves the target
-bookmark, pushes, and closes beads.
+submit JJ change IDs through sentinel; the lander validates, optionally runs
+heavier verification, rebases, moves the target bookmark, pushes, and closes
+beads.
 
 Use the Doltlite-backed `bd` CLI for bead reads, writes, and metadata.
 """
@@ -70,6 +71,11 @@ jj show "$JJ_CHANGE"
 Confirm the change is still reviewable and based on the intended target stack.
 If it needs code changes, return it to the worker pool with
 `rejection_reason`.
+
+You are the only JJ-pack role allowed to run builds, complete test suites,
+repo-wide gates, or broad generated checks. Run them only when they are needed
+to decide whether this change can land. Prefer the smallest targeted
+verification that gives landing confidence.
 """
 
 [[steps]]

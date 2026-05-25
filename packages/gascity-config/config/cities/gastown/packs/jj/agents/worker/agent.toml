@@ -2,10 +2,9 @@ scope = "rig"
 provider = "codex"
 option_defaults = { model = "gpt-5.5" }
 wake_mode = "fresh"
-is_pool = true
 work_dir = "{{.RigRoot}}/.t3-dev/worktrees/gascity/{{.CityName}}/{{.Rig}}/jj/agents/workers/{{.AgentBase}}"
-nudge = "Run gc hook; claim one routed work bead, create a JJ workspace, and submit the change."
-default_sling_formula = "mol-jj-worker-work"
+nudge = "Run gc hook; claim one routed work bead, create a JJ workspace, run only focused checks, and submit to sentinel."
 idle_timeout = "2h"
+default_sling_formula = "mol-jj-worker-work"
 min_active_sessions = 1
 max_active_sessions = 4

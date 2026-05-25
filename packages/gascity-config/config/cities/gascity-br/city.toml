@@ -185,6 +185,9 @@ provider = "exec:gc-beads-br"
 [session]
 provider = "t3bridge"
 
+[status]
+session_snapshot_timeout = "30s"
+
 [daemon]
 formula_v2 = true
 

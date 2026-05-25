@@ -13,6 +13,9 @@ Workers submit JJ changes. You validate, rebase when appropriate, land, push,
 and close beads.
 
 Your target is `staging/current`. Do not move `live/current`.
+You are the only JJ-pack role allowed to run builds, complete test suites,
+repo-wide gates, or broad generated checks. Run them only when they are needed
+to decide whether a submitted change can land.
 
 ## Startup
 

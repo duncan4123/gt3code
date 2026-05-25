@@ -1,3 +1,9 @@
+---
+name: jj
+description: T3Code/GasCity-specific JJ workspace, Jorje review, and landing rules for the JJ agent pack.
+allowed-tools: Bash(jj *), Bash(gc *), Bash(bd *)
+---
+
 # JJ Stack Skill
 
 Use this skill in JJ-backed Gas City rigs, especially when working with

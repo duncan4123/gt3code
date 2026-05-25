@@ -25,4 +25,6 @@ stack_index=<1-based order>
 depends_on=<previous bead id, when applicable>
 ```
 
-Do not write code. Do not land code.
+Do not write code. Do not land code. Do not run builds, complete test suites,
+repo-wide gates, or broad verification. Route verification expectations into
+bead acceptance criteria instead of executing them yourself.
