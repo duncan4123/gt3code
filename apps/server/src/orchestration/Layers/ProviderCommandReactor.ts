@@ -291,11 +291,13 @@ const make = Effect.gen(function* () {
     const existingSessionThreadId =
       thread.session && thread.session.status !== "stopped" ? thread.id : null;
     if (existingSessionThreadId) {
+      const activeSession = yield* resolveActiveSession(existingSessionThreadId);
+      const effectiveCurrentProviderInstanceId =
+        currentProviderInstanceId ?? activeSession?.providerInstanceId;
       const runtimeModeChanged = thread.runtimeMode !== thread.session?.runtimeMode;
       const providerChanged =
         requestedModelSelection !== undefined &&
-        requestedModelSelection.instanceId !== currentProviderInstanceId;
-      const activeSession = yield* resolveActiveSession(existingSessionThreadId);
+        requestedModelSelection.instanceId !== effectiveCurrentProviderInstanceId;
       const sessionModelSwitch =
         activeSession?.providerInstanceId === undefined
           ? "in-session"
@@ -317,6 +319,13 @@ const make = Effect.gen(function* () {
         !shouldRestartForModelChange &&
         !shouldRestartForModelSelectionChange
       ) {
+        if (
+          activeSession !== undefined &&
+          (thread.session?.providerInstanceId !== activeSession.providerInstanceId ||
+            thread.session?.status !== mapProviderSessionStatusToOrchestrationStatus(activeSession.status))
+        ) {
+          yield* bindSessionToThread(activeSession);
+        }
         return existingSessionThreadId;
       }
 
@@ -328,6 +337,8 @@ const make = Effect.gen(function* () {
         threadId,
         existingSessionThreadId,
         currentProvider,
+        currentProviderInstanceId,
+        activeProviderInstanceId: activeSession?.providerInstanceId,
         desiredProviderInstanceId: desiredProviderInstanceId,
         currentRuntimeMode: thread.session?.runtimeMode,
         desiredRuntimeMode: thread.runtimeMode,
@@ -368,6 +379,16 @@ const make = Effect.gen(function* () {
     const thread = yield* resolveThread(input.threadId);
     if (!thread) {
       return;
+    }
+    if (
+      input.modelSelection !== undefined &&
+      input.modelSelection.instanceId !== thread.modelSelection.instanceId
+    ) {
+      return yield* Effect.fail(
+        new Error(
+          `Thread '${input.threadId}' is bound to provider instance '${thread.modelSelection.instanceId}' and cannot switch to '${input.modelSelection.instanceId}' for a turn.`,
+        ),
+      );
     }
     yield* ensureSessionForThread(
       input.threadId,
