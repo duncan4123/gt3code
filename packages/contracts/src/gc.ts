@@ -91,6 +91,8 @@ export const GcThreadMeta = Schema.Struct({
   agentQualified: Schema.optional(Schema.String),
   /** Canonical agent label for grouping. */
   agentLabel: Schema.optional(Schema.String),
+  /** Resolved GC config revision used when this metadata was stamped. */
+  configRevision: Schema.optional(Schema.String),
 });
 export type GcThreadMeta = typeof GcThreadMeta.Type;
 
@@ -160,6 +162,7 @@ export function parseGcMeta(
       groupLabel: undefined,
       agentQualified: undefined,
       agentLabel: undefined,
+      configRevision: undefined,
     };
   }
   const sessionEnv = parseGcSessionEnv(customMetadata["gc.sessionEnv"]);
@@ -201,6 +204,7 @@ export function parseGcMeta(
     groupLabel: customMetadata["gc.groupLabel"],
     agentQualified: customMetadata["gc.agentQualified"],
     agentLabel: customMetadata["gc.agentLabel"],
+    configRevision: customMetadata["gc.configRevision"],
   };
 }
 
@@ -325,6 +329,43 @@ export const GcConfigResult = Schema.Struct({
   lifecycle: Schema.optional(GcLifecycleStatus),
 });
 export type GcConfigResult = typeof GcConfigResult.Type;
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entryValue]) => entryValue !== undefined)
+      .toSorted(([left], [right]) => left.localeCompare(right));
+    return `{${entries
+      .map(([key, entryValue]) => `${JSON.stringify(key)}:${stableJson(entryValue)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function fnv1a32(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+/** Stable identity for the resolved GC config shape used by sidebar grouping. */
+export function gcConfigRevision(config: GcConfigResult): string {
+  return `gc-config-v1:${fnv1a32(
+    stableJson({
+      workspace: config.workspace,
+      agents: config.agents,
+      rigs: config.rigs,
+      providers: config.providers ?? {},
+      patches: config.patches ?? null,
+    }),
+  )}`;
+}
 
 export const GcSidebarLayoutAgentGroup = Schema.Struct({
   id: Schema.String,
@@ -590,6 +631,7 @@ function inferGcMetaFromConfiguredSession(
       groupLabel: isRigAgent ? groupId : groupId.toUpperCase(),
       agentQualified: qualifiedName,
       agentLabel: agentFolderLabel(qualifiedName),
+      configRevision: gcConfigRevision(config),
     };
   }
   return null;
@@ -614,7 +656,9 @@ function resolveGcMetaForGrouping(
       (entry) => configuredAgentQualifiedName(entry) === parsedAgent,
     ),
   );
-  if (!inferredMeta || parsedAgentIsExactlyConfigured) {
+  const parsedRevisionIsCurrent =
+    !config || parsedMeta.configRevision === gcConfigRevision(config);
+  if (!inferredMeta || (parsedAgentIsExactlyConfigured && parsedRevisionIsCurrent)) {
     return parsedMeta;
   }
   return {
@@ -628,6 +672,75 @@ function resolveGcMetaForGrouping(
     groupLabel: inferredMeta.groupLabel,
     agentQualified: inferredMeta.agentQualified,
     agentLabel: inferredMeta.agentLabel,
+    configRevision: inferredMeta.configRevision,
+  };
+}
+
+const canonicalGcMetadataKeys = [
+  "gc.agent",
+  "gc.rig",
+  "gc.city",
+  "gc.groupKind",
+  "gc.groupId",
+  "gc.groupLabel",
+  "gc.agentQualified",
+  "gc.agentLabel",
+  "gc.configRevision",
+] as const;
+
+export function repairGcThreadMetadataFromConfig(
+  thread: {
+    customMetadata?: Record<string, string> | undefined;
+    title?: string | undefined;
+  },
+  config: GcConfigResult | null | undefined,
+): {
+  customMetadata: Record<string, string>;
+  updates: Record<string, string>;
+  changedKeys: string[];
+} {
+  const existing = { ...(thread.customMetadata ?? {}) };
+  if (!config) {
+    return { customMetadata: existing, updates: {}, changedKeys: [] };
+  }
+
+  const resolved = resolveGcMetaForGrouping(thread, config);
+  if (!resolved.isGcManaged) {
+    return { customMetadata: existing, updates: {}, changedKeys: [] };
+  }
+
+  const updates: Record<string, string> = {};
+  const setUpdate = (key: (typeof canonicalGcMetadataKeys)[number], value: string | undefined) => {
+    const normalized = normalizeMetadataValue(value);
+    if (normalized) {
+      updates[key] = normalized;
+    }
+  };
+  setUpdate("gc.agent", resolved.agentQualified ?? resolved.agent);
+  setUpdate("gc.rig", resolved.rig);
+  setUpdate("gc.city", resolved.city);
+  setUpdate("gc.groupKind", resolved.groupKind);
+  setUpdate("gc.groupId", resolved.groupId);
+  setUpdate("gc.groupLabel", resolved.groupLabel);
+  setUpdate("gc.agentQualified", resolved.agentQualified ?? resolved.agent);
+  setUpdate("gc.agentLabel", resolved.agentLabel);
+  updates["gc.configRevision"] = gcConfigRevision(config);
+
+  const changedKeys = canonicalGcMetadataKeys.filter((key) => {
+    const next = updates[key];
+    return next !== undefined && existing[key] !== next;
+  });
+
+  return {
+    customMetadata:
+      changedKeys.length > 0
+        ? {
+            ...existing,
+            ...updates,
+          }
+        : existing,
+    updates: Object.fromEntries(changedKeys.map((key) => [key, updates[key]!])),
+    changedKeys,
   };
 }
 

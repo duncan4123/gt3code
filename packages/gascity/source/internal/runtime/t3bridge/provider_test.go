@@ -357,9 +357,12 @@ func TestBuildThreadEnv_DropsStartupEnvelopeAndDoltliteServerEnv(t *testing.T) {
 }
 
 func TestBuildGCMetadata_UsesFirstClassT3BridgeProviderName(t *testing.T) {
-	meta := buildGCMetadata(StartupEnvelope{}, "codex", "active", nil)
+	meta := buildGCMetadata(StartupEnvelope{}, "codex", "active", "v2:test", nil)
 	if got := meta["gc.provider"]; got != "t3bridge" {
 		t.Fatalf("gc.provider = %v, want t3bridge", got)
+	}
+	if got := meta["gc.configRevision"]; got != "v2:test" {
+		t.Fatalf("gc.configRevision = %v, want v2:test", got)
 	}
 }
 

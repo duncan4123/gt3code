@@ -1401,7 +1401,7 @@ func buildThreadEnv(env map[string]string) map[string]string {
 	return threadEnv
 }
 
-func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state string, sessionEnv map[string]string) map[string]interface{} {
+func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state, configRevision string, sessionEnv map[string]string) map[string]interface{} {
 	groupKind := "workspace"
 	groupID := envelope.GC.CityName
 	groupLabel := strings.ToUpper(strings.TrimSpace(envelope.GC.CityName))
@@ -1445,6 +1445,7 @@ func buildGCMetadata(envelope StartupEnvelope, runtimeProvider, state string, se
 		"gc.groupLabel":        groupLabel,
 		"gc.agentQualified":    agentQualified,
 		"gc.agentLabel":        agentLabel,
+		"gc.configRevision":    configRevision,
 	}
 	if len(sessionEnv) > 0 {
 		if encodedEnv, err := json.Marshal(sessionEnv); err == nil {
@@ -1774,7 +1775,7 @@ func (p *Provider) refreshAssignmentProjection(threadID string, envelope Startup
 	if next.Assignment.MoleculeID == "" {
 		next.Assignment.MoleculeID = bead.Metadata["molecule_id"]
 	}
-	_ = p.dispatchThreadMeta(threadID, buildGCMetadata(next, providerName, "active", nil))
+	_ = p.dispatchThreadMeta(threadID, buildGCMetadata(next, providerName, "active", "", nil))
 }
 
 func (p *Provider) runEventWatcher(ctx context.Context, name string, cfg runtime.Config, binding threadBinding, envelope StartupEnvelope, providerName string) {
@@ -2098,7 +2099,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 				Model:       modelName,
 			}
 			p.setRecentStart(name, time.Now())
-			if err := p.dispatchThreadMeta(threadID, buildGCMetadata(envelope, providerName, "active", buildThreadEnv(cfg.Env))); err != nil {
+			if err := p.dispatchThreadMeta(threadID, buildGCMetadata(envelope, providerName, "active", runtime.ConfigFingerprint(cfg), buildThreadEnv(cfg.Env))); err != nil {
 				return fail(fmt.Errorf("t3bridge: update gc metadata: %w", err))
 			}
 			if err := p.waitForThreadGCMetadata(threadID, 5*time.Second); err != nil {
@@ -2148,7 +2149,7 @@ func (p *Provider) Start(ctx context.Context, name string, cfg runtime.Config) e
 	}
 	fmt.Fprintf(os.Stderr, "t3bridge: Start(%s) creating thread id=%s project=%s title=%s branch=%s worktree=%s\n", //nolint:errcheck
 		name, threadID, projectID, threadTitle, createBranch, createWorktreePath)
-	initialGCMetadata := buildGCMetadata(envelope, providerName, "active", buildThreadEnv(cfg.Env))
+	initialGCMetadata := buildGCMetadata(envelope, providerName, "active", runtime.ConfigFingerprint(cfg), buildThreadEnv(cfg.Env))
 	if err := p.dispatchThreadCreate(
 		threadID,
 		projectID,
