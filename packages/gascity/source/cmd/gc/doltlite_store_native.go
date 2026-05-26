@@ -12,11 +12,19 @@ import (
 
 const nativeDoltliteBeadsEnv = "GC_NATIVE_DOLTLITE_BEADS"
 
-func openOptimizedDoltliteStore(storePath string, store *beads.BdStore) (beads.Store, bool) {
+func init() {
+	registerBdBeadsBackendOptimizer(optimizeDoltliteBdBeadsBackend)
+}
+
+func optimizeDoltliteBdBeadsBackend(req beadsBackendRequest, store beads.Store) (beads.Store, bool) {
 	if !nativeDoltliteBeadsEnabled() {
 		return nil, false
 	}
-	direct, err := beads.NewDoltliteNativeStore(storePath, store)
+	bdStore, ok := store.(*beads.BdStore)
+	if !ok {
+		return nil, false
+	}
+	direct, err := beads.NewDoltliteNativeStore(req.ScopeRoot, bdStore)
 	if err == nil {
 		return direct, true
 	}
