@@ -25,42 +25,6 @@ suspended = false
 [patches]
 
 [[patches.agent]]
-dir = ""
-name = "mayor"
-suspended = true
-provider = "codex"
-wake_mode = "resume"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = ""
-name = "deacon"
-suspended = false
-provider = "codex"
-[patches.agent.option_defaults]
-model = "gpt-5.5"
-
-[[patches.agent]]
-dir = ""
-name = "boot"
-suspended = true
-provider = "kimi-for-coding"
-[patches.agent.option_defaults]
-agent = "build"
-model = "kimi-for-coding/k2p6"
-
-[[patches.agent]]
-dir = ""
-name = "dog"
-suspended = true
-provider = "codex"
-[patches.agent.env]
-GC_MODEL = "gpt-5.4-mini"
-[patches.agent.option_defaults]
-model = "gpt-5.4-mini"
-
-[[patches.agent]]
 dir = "t3code"
 name = "worker"
 append_fragments = ["t3code-fork-context"]
@@ -71,23 +35,6 @@ dir = "t3code"
 name = "lander"
 append_fragments = ["t3code-fork-context"]
 wake_mode = "resume"
-
-[[patches.agent]]
-dir = ""
-name = "hq-witness"
-wake_mode = "fresh"
-
-[[patches.named_session]]
-template = "mayor"
-mode = "always"
-
-[[patches.named_session]]
-template = "deacon"
-mode = "always"
-
-[[patches.named_session]]
-template = "boot"
-mode = "always"
 
 [beads]
 provider = "bd"

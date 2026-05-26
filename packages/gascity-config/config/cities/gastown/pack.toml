@@ -2,9 +2,6 @@
 name = "gc"
 schema = 2
 
-[imports.doltlite-gastown]
-source = "../../packs/doltlite-gastown"
-
 [providers.codex]
 base = "builtin:codex"
 command = "codex"
@@ -59,34 +56,3 @@ GC_OPENCODE_AGENT = "build"
 
 [agent_defaults]
 model = "gpt-5.5"
-
-[patches]
-
-[[patches.agent]]
-dir = ""
-name = "deacon"
-suspended = true
-provider = "codex"
-
-[[patches.agent]]
-dir = ""
-name = "boot"
-suspended = true
-provider = "codex"
-
-[[patches.agent]]
-dir = ""
-name = "dog"
-suspended = true
-provider = "codex"
-env = { GC_MODEL = "gpt-5.4-mini" }
-
-[[patches.agent]]
-dir = ""
-name = "mayor"
-suspended = true
-provider = "codex"
-
-[[patches.named_session]]
-template = "mayor"
-mode = "always"
