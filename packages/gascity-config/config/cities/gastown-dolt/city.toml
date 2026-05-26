@@ -11,6 +11,68 @@ prefix = "t3"
 [rigs.imports.gastown]
 source = "../../packs/gastown-upstream"
 
+[[rigs.overrides]]
+agent = "mayor"
+suspended = false
+
+[[rigs.overrides]]
+agent = "deacon"
+suspended = false
+
+[[rigs.overrides]]
+agent = "boot"
+suspended = false
+
+[[rigs.overrides]]
+agent = "witness"
+suspended = false
+
+[[rigs.overrides]]
+agent = "refinery"
+suspended = false
+
+[[rigs.overrides]]
+agent = "polecat"
+suspended = false
+
+[patches]
+
+[[patches.agent]]
+dir = "t3code"
+name = "mayor"
+provider = "kimi-for-coding"
+wake_mode = "resume"
+
+[[patches.agent]]
+dir = "t3code"
+name = "deacon"
+provider = "kimi-for-coding"
+wake_mode = "resume"
+
+[[patches.agent]]
+dir = "t3code"
+name = "boot"
+provider = "kimi-for-coding"
+wake_mode = "resume"
+
+[[patches.agent]]
+dir = "t3code"
+name = "witness"
+provider = "kimi-for-coding"
+wake_mode = "resume"
+
+[[patches.agent]]
+dir = "t3code"
+name = "refinery"
+provider = "kimi-for-coding"
+wake_mode = "resume"
+
+[[patches.agent]]
+dir = "t3code"
+name = "polecat"
+provider = "kimi-for-coding"
+wake_mode = "resume"
+
 [beads]
 provider = "bd"
 backend = "dolt"
@@ -27,3 +89,6 @@ max_restarts = 5
 restart_window = "1h"
 shutdown_timeout = "5s"
 formula_v2 = true
+
+[orders]
+skip = ["beads-health", "cross-rig-deps", "digest-generate", "dolt-health", "dolt-remotes-patrol", "doltlite-compact", "gate-sweep", "mol-dog-backup", "mol-dog-compactor", "mol-dog-doctor", "mol-dog-jsonl", "mol-dog-phantom-db", "mol-dog-reaper", "mol-dog-stale-db", "orphan-sweep", "prune-branches", "spawn-storm-detect", "wisp-compact"]
