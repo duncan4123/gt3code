@@ -948,22 +948,43 @@ export function groupThreadsByRigAndAgent<
     typeof agent.min_active_sessions === "number" ||
     typeof agent.max_active_sessions === "number" ||
     agent.wake_mode !== undefined;
+  const isImplicitProviderAgent = (
+    agent: GcConfigResult["agents"][number],
+  ): boolean =>
+    Boolean(
+      agent.provider &&
+        agent.prompt_template?.endsWith("/core/assets/prompts/pool-worker.md") &&
+        agent.default_sling_formula === "mol-do-work" &&
+        agent.scope === undefined &&
+        agent.named_session_mode === undefined &&
+        typeof agent.min_active_sessions !== "number" &&
+        typeof agent.max_active_sessions !== "number" &&
+        agent.wake_mode === undefined &&
+        agent.description === undefined &&
+        agent.start_command === undefined &&
+        agent.is_pool !== true,
+    );
+  const isImplicitControlAgent = (
+    agent: GcConfigResult["agents"][number],
+  ): boolean =>
+    agent.name === "control-dispatcher" &&
+    agent.description === "Built-in deterministic graph.v2 workflow control worker" &&
+    Boolean(agent.start_command?.includes("convoy control --serve"));
   const isConfiguredSidebarAgent = (
     agent: GcConfigResult["agents"][number],
   ): boolean =>
-    !(
-      agent.provider !== undefined &&
-      agent.prompt_template !== undefined &&
-      agent.default_sling_formula !== undefined &&
-      agent.scope === undefined &&
-      agent.named_session_mode === undefined &&
-      typeof agent.min_active_sessions !== "number" &&
-      typeof agent.max_active_sessions !== "number" &&
-      agent.wake_mode === undefined &&
-      agent.description === undefined &&
-      agent.start_command === undefined &&
-      agent.is_pool !== true
-    );
+    !isImplicitProviderAgent(agent) && !isImplicitControlAgent(agent);
+  const findSidebarConfiguredAgent = (
+    qualifiedAgent: string | null | undefined,
+  ): GcConfigResult["agents"][number] | undefined => {
+    if (!qualifiedAgent) {
+      return undefined;
+    }
+    const configuredAgent = findConfiguredAgent(options?.config, qualifiedAgent);
+    return configuredAgent && isConfiguredSidebarAgent(configuredAgent)
+      ? configuredAgent
+      : undefined;
+  };
 
   const isCityAliasProject = [...projectLabels].some((label) =>
     ["city", "gc"].some(
@@ -995,11 +1016,7 @@ export function groupThreadsByRigAndAgent<
     const agent =
       normalizeMetadataValue(meta.agentQualified) ??
       normalizeMetadataValue(meta.agent);
-    const configuredAgent = agent
-      ? options?.config?.agents.find(
-          (entry) => configuredAgentQualifiedName(entry) === agent,
-        )
-      : undefined;
+    const configuredAgent = findSidebarConfiguredAgent(agent);
     const agentImpliedRig =
       normalizeMetadataValue(configuredAgent?.dir) ??
       (agent ? deriveRigIdFromQualifiedAgent(agent) : null);
@@ -1148,11 +1165,7 @@ export function groupThreadsByRigAndAgent<
     const threadAgent =
       normalizeMetadataValue(meta.agentQualified) ??
       normalizeMetadataValue(meta.agent);
-    const threadConfiguredAgent = threadAgent
-      ? options?.config?.agents.find(
-          (entry) => configuredAgentQualifiedName(entry) === threadAgent,
-        )
-      : undefined;
+    const threadConfiguredAgent = findSidebarConfiguredAgent(threadAgent);
     const threadConfiguredRig = normalizeMetadataValue(
       threadConfiguredAgent?.dir,
     );
@@ -1193,9 +1206,8 @@ export function groupThreadsByRigAndAgent<
     ) {
       resolvedAgent = `${resolvedCity}/${resolvedAgent}`;
     }
-    const configuredAgentForResolved = resolvedAgent
-      ? findConfiguredAgent(options?.config, resolvedAgent)
-      : undefined;
+    const configuredAgentForResolved =
+      findSidebarConfiguredAgent(resolvedAgent);
     const agentImpliedRig =
       normalizeMetadataValue(configuredAgentForResolved?.dir) ??
       (resolvedAgent ? deriveRigIdFromQualifiedAgent(resolvedAgent) : null);
@@ -1221,9 +1233,7 @@ export function groupThreadsByRigAndAgent<
     });
 
     if (!resolvedRig && resolvedAgent && options?.config) {
-      const configuredAgent = options.config.agents.find(
-        (entry) => configuredAgentQualifiedName(entry) === resolvedAgent,
-      );
+      const configuredAgent = findSidebarConfiguredAgent(resolvedAgent);
       if (configuredAgent) {
         resolvedRig =
           normalizeMetadataValue(configuredAgent.dir) ?? cityScopedRigGroupId;
@@ -1327,6 +1337,11 @@ export function groupThreadsByRigAndAgent<
       rigGroupsById.set(resolvedRig, rigGroup);
     }
     const ensuredRigGroup = rigGroup!;
+    const configuredAgent = findSidebarConfiguredAgent(resolvedAgent);
+    if (options?.config && ensuredRigGroup.isConfigured && !configuredAgent) {
+      standaloneThreads.push(thread);
+      continue;
+    }
 
     const existingAgentGroup = findMatchingAgentGroup(
       ensuredRigGroup.agentGroupsById,
@@ -1334,8 +1349,7 @@ export function groupThreadsByRigAndAgent<
     );
     if (existingAgentGroup) {
       existingAgentGroup.threads.push(thread);
-      const configuredAgent = findConfiguredAgent(
-        options?.config,
+      const configuredAgent = findSidebarConfiguredAgent(
         existingAgentGroup.qualifiedName,
       );
       if (configuredAgent) {
@@ -1371,7 +1385,6 @@ export function groupThreadsByRigAndAgent<
       continue;
     }
 
-    const configuredAgent = findConfiguredAgent(options?.config, resolvedAgent);
     ensuredRigGroup.agentGroupsById.set(resolvedAgent, {
       id: `${resolvedRig}/${resolvedAgent}`,
       label: canonicalAgentLabel ?? agentFolderLabel(resolvedAgent),

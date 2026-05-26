@@ -154,4 +154,30 @@ describe("splitGcRigProjectSnapshots", () => {
       ProjectId.make("rig-b"),
     ]);
   });
+
+  it("labels configured rig repository folders from the resolved rig name", () => {
+    const [grouped] = snapshots(
+      [
+        {
+          ...makeProject({
+            id: "rig-live-workspace",
+            name: "live",
+            cwd: "/home/user/work/customer-api",
+          }),
+          repositoryIdentity: repositoryIdentity("repo-key"),
+        },
+      ],
+      "repository",
+    );
+
+    const split = splitGcRigProjectSnapshots({
+      snapshots: grouped ? [grouped] : [],
+      gcConfig: makeGcConfig(),
+      primaryEnvironmentId: environmentId,
+    });
+
+    expect(split).toHaveLength(1);
+    expect(split[0]?.displayName).toBe("customer-api");
+    expect(split[0]?.memberProjects[0]?.name).toBe("live");
+  });
 });

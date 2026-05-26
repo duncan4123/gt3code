@@ -397,7 +397,7 @@ describe("groupThreadsByRigAndAgent", () => {
     });
   });
 
-  it("does not show implicit provider lanes as agent folders", () => {
+  it("does not show implicit provider or control lanes as agent folders", () => {
     const { rigGroups } = groupThreadsByRigAndAgent([], {
       config: {
         workspace: {
@@ -441,14 +441,7 @@ describe("groupThreadsByRigAndAgent", () => {
     });
 
     expect(rigGroups).toHaveLength(1);
-    expect(rigGroups[0]?.agentGroups.map((group) => group.qualifiedName)).toEqual([
-      "t3code/control-dispatcher",
-    ]);
-    expect(rigGroups[0]?.agentGroups[0]).toMatchObject({
-      description: "Built-in deterministic graph.v2 workflow control worker",
-      startCommand: "gc convoy control --serve",
-      maxActiveSessions: 1,
-    });
+    expect(rigGroups[0]?.agentGroups).toEqual([]);
   });
 
   it("backfills configured city agents into metadata-created workspace folders", () => {
@@ -1458,5 +1451,96 @@ describe("groupThreadsByRigAndAgent", () => {
         ?.agentGroups.find((agent) => agent.qualifiedName === "city-a/repo-main/worker")?.threads,
     ).toHaveLength(1);
     expect(rigGroups.find((group) => group.id === "repo-main")).toBeUndefined();
+  });
+
+  it("does not create rig folders for implicit provider or control agents", () => {
+    const { standaloneThreads, rigGroups } = groupThreadsByRigAndAgent(
+      [
+        {
+          id: "thread-worker",
+          customMetadata: {
+            "gc.agent": "t3code/worker",
+            "gc.agentQualified": "t3code/worker",
+            "gc.agentLabel": "worker",
+            "gc.rig": "t3code",
+          },
+        },
+        {
+          id: "thread-codex",
+          customMetadata: {
+            "gc.agent": "t3code/codex",
+            "gc.agentQualified": "t3code/codex",
+            "gc.agentLabel": "codex",
+            "gc.rig": "t3code",
+          },
+        },
+        {
+          id: "thread-control-dispatcher",
+          customMetadata: {
+            "gc.agent": "t3code/control-dispatcher",
+            "gc.agentQualified": "t3code/control-dispatcher",
+            "gc.agentLabel": "control-dispatcher",
+            "gc.rig": "t3code",
+          },
+        },
+      ],
+      {
+        config: {
+          workspace: {
+            name: "gastown",
+            suspended: false,
+          },
+          rigs: [
+            {
+              name: "t3code",
+              path: "/data/projects/t3code",
+              suspended: false,
+            },
+          ],
+          agents: [
+            {
+              name: "worker",
+              dir: "t3code",
+              suspended: false,
+              is_pool: true,
+            },
+            {
+              name: "codex",
+              dir: "t3code",
+              suspended: false,
+              provider: "codex",
+              prompt_template: ".gc/system/packs/core/assets/prompts/pool-worker.md",
+              default_sling_formula: "mol-do-work",
+            },
+            {
+              name: "control-dispatcher",
+              dir: "t3code",
+              suspended: false,
+              description: "Built-in deterministic graph.v2 workflow control worker",
+              start_command:
+                "gc internal convoy control --serve --follow --city gastown",
+            },
+          ],
+        },
+        projectCwd: "/data/projects/t3code",
+        projectName: "t3code",
+      },
+    );
+
+    expect(rigGroups).toHaveLength(1);
+    expect(rigGroups[0]).toMatchObject({
+      id: "t3code",
+      kind: "rig",
+    });
+    expect(rigGroups[0]?.agentGroups.map((group) => group.qualifiedName)).toEqual([
+      "t3code/worker",
+    ]);
+    expect(rigGroups[0]?.agentGroups[0]?.threads.map((thread) => thread.id)).toEqual([
+      "thread-worker",
+    ]);
+    expect(standaloneThreads.map((thread) => thread.id)).toEqual([
+      "thread-codex",
+      "thread-control-dispatcher",
+    ]);
   });
 });

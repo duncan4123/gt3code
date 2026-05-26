@@ -25,6 +25,17 @@ function gcRigMemberGroupKey(member: Pick<SidebarProjectGroupMember, "cwd">): st
   return normalizeGcProjectPath(member.cwd) ?? "";
 }
 
+function projectNameFromRigName(rigName: string): string {
+  const segments = rigName.split("/");
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const segment = segments[index]?.trim();
+    if (segment) {
+      return segment;
+    }
+  }
+  return rigName;
+}
+
 function configuredCityRootNames(rigs: readonly GcConfigResult["rigs"][number][]): Set<string> {
   const rigNames = new Set(rigs.map((rig) => rig.name.trim()).filter(Boolean));
   const cityNames = new Set<string>();
@@ -51,6 +62,22 @@ function gcRigProjectPaths(config: GcConfigResult): Set<string> {
   );
 }
 
+function gcRigProjectNames(config: GcConfigResult): Map<string, string> {
+  const cityRootNames = configuredCityRootNames(config.rigs);
+  const names = new Map<string, string>();
+  for (const rig of config.rigs) {
+    if (cityRootNames.has(rig.name.trim())) {
+      continue;
+    }
+    const path = normalizeGcProjectPath(rig.path);
+    if (!path) {
+      continue;
+    }
+    names.set(path, projectNameFromRigName(rig.name));
+  }
+  return names;
+}
+
 function environmentPresenceForMember(
   member: Pick<SidebarProjectGroupMember, "environmentId">,
   primaryEnvironmentId: EnvironmentId | null,
@@ -64,11 +91,12 @@ function environmentPresenceForMember(
 function singleMemberSnapshot(
   member: SidebarProjectGroupMember,
   primaryEnvironmentId: EnvironmentId | null,
+  displayName?: string,
 ): SidebarProjectSnapshot {
   return {
     ...member,
     projectKey: member.physicalProjectKey,
-    displayName: member.name,
+    displayName: displayName ?? member.name,
     groupedProjectCount: 1,
     environmentPresence: environmentPresenceForMember(member, primaryEnvironmentId),
     memberProjects: [member],
@@ -86,9 +114,10 @@ function groupedRemainderSnapshot(
   snapshot: SidebarProjectSnapshot,
   members: readonly SidebarProjectGroupMember[],
   primaryEnvironmentId: EnvironmentId | null,
+  displayName?: string,
 ): SidebarProjectSnapshot {
   if (members.length === 1) {
-    return singleMemberSnapshot(members[0]!, primaryEnvironmentId);
+    return singleMemberSnapshot(members[0]!, primaryEnvironmentId, displayName);
   }
 
   const hasLocal =
@@ -106,6 +135,7 @@ function groupedRemainderSnapshot(
 
   return {
     ...snapshot,
+    displayName: displayName ?? snapshot.displayName,
     groupedProjectCount: members.length,
     environmentPresence: hasLocal && hasRemote ? "mixed" : hasRemote ? "remote-only" : "local-only",
     memberProjects: members,
@@ -124,12 +154,23 @@ export function splitGcRigProjectSnapshots(input: {
   }
 
   const gcRigPaths = gcRigProjectPaths(input.gcConfig);
+  const gcRigNames = gcRigProjectNames(input.gcConfig);
   if (gcRigPaths.size === 0) {
     return [...input.snapshots];
   }
 
   return input.snapshots.flatMap((snapshot) => {
     if (snapshot.memberProjects.length <= 1) {
+      const member = snapshot.memberProjects[0];
+      if (member && isGcRigProject(member, gcRigPaths)) {
+        const path = gcRigMemberGroupKey(member);
+        return [
+          {
+            ...snapshot,
+            displayName: gcRigNames.get(path) ?? snapshot.displayName,
+          },
+        ];
+      }
       return [snapshot];
     }
 
@@ -155,11 +196,12 @@ export function splitGcRigProjectSnapshots(input: {
     }
 
     return [
-      ...Array.from(rigMemberGroups.values()).map((members) =>
-        members.length === 1
-          ? singleMemberSnapshot(members[0]!, input.primaryEnvironmentId)
-          : groupedRemainderSnapshot(snapshot, members, input.primaryEnvironmentId),
-      ),
+      ...Array.from(rigMemberGroups.entries()).map(([path, members]) => {
+        const displayName = gcRigNames.get(path) ?? snapshot.displayName;
+        return members.length === 1
+          ? singleMemberSnapshot(members[0]!, input.primaryEnvironmentId, displayName)
+          : groupedRemainderSnapshot(snapshot, members, input.primaryEnvironmentId, displayName);
+      }),
       ...(remainderMembers.length > 0
         ? [groupedRemainderSnapshot(snapshot, remainderMembers, input.primaryEnvironmentId)]
         : []),
