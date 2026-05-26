@@ -11,12 +11,13 @@ import (
 )
 
 // GetReadyWork returns issues that are ready to work on (not blocked).
-// Delegates to issueops.GetReadyWorkInTx with the shared blocked-ID computation.
+// Delegates to issueops.GetReadyWorkInTxWithDialect with the shared blocked-ID
+// computation and DoltLite-compatible SQL expressions.
 func (s *DoltliteStore) GetReadyWork(ctx context.Context, filter types.WorkFilter) ([]*types.Issue, error) {
 	var result []*types.Issue
 	err := s.withConn(ctx, false, func(tx *sql.Tx) error {
 		var err error
-		result, err = issueops.GetReadyWorkInTx(ctx, tx, filter)
+		result, err = issueops.GetReadyWorkInTxWithDialect(ctx, tx, filter, issueops.SQLDialectSQLite)
 		return err
 	})
 	return result, err

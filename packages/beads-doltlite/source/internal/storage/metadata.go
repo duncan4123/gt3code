@@ -229,3 +229,18 @@ func JSONMetadataPath(key string) string {
 	}
 	return "$." + key
 }
+
+// JSONMetadataKeyPattern returns a compact-JSON LIKE pattern for metadata key
+// existence on engines without JSON SQL functions.
+func JSONMetadataKeyPattern(key string) string {
+	raw, _ := json.Marshal(key)
+	return "%" + string(raw) + ":%"
+}
+
+// JSONMetadataStringEqualsPattern returns a compact-JSON LIKE pattern for
+// string equality on engines without JSON SQL functions.
+func JSONMetadataStringEqualsPattern(key string, value string) string {
+	rawKey, _ := json.Marshal(key)
+	rawValue, _ := json.Marshal(value)
+	return "%" + string(rawKey) + ":" + string(rawValue) + "%"
+}

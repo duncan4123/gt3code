@@ -441,15 +441,18 @@ func TestBuildIssueFilterClauses_MetadataDialect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dolt clauses: %v", err)
 	}
-	sqliteClauses, _, err := BuildIssueFilterClausesWithDialect("", filter, IssuesFilterTables, SQLDialectSQLite)
+	sqliteClauses, sqliteArgs, err := BuildIssueFilterClausesWithDialect("", filter, IssuesFilterTables, SQLDialectSQLite)
 	if err != nil {
 		t.Fatalf("sqlite clauses: %v", err)
 	}
 	if !strings.Contains(strings.Join(doltClauses, " "), "JSON_UNQUOTE(JSON_EXTRACT") {
 		t.Fatalf("dolt metadata clauses = %v", doltClauses)
 	}
-	if !strings.Contains(strings.Join(sqliteClauses, " "), "json_extract(metadata, ?) = ?") {
+	if !strings.Contains(strings.Join(sqliteClauses, " "), "LIKE ?") {
 		t.Fatalf("sqlite metadata clauses = %v", sqliteClauses)
+	}
+	if len(sqliteArgs) != 1 || sqliteArgs[0] != `%"gc.routed_to":"gastown.boot"%` {
+		t.Fatalf("sqlite metadata args = %v", sqliteArgs)
 	}
 }
 

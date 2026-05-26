@@ -277,7 +277,11 @@ func BuildIssueFilterClausesWithDialect(query string, filter types.IssueFilter, 
 			return nil, nil, err
 		}
 		whereClauses = append(whereClauses, dialect.MetadataExistsExpr())
-		args = append(args, storage.JSONMetadataPath(filter.HasMetadataKey))
+		if dialect == SQLDialectSQLite {
+			args = append(args, storage.JSONMetadataKeyPattern(filter.HasMetadataKey))
+		} else {
+			args = append(args, storage.JSONMetadataPath(filter.HasMetadataKey))
+		}
 	}
 	if len(filter.MetadataFields) > 0 {
 		metaKeys := make([]string, 0, len(filter.MetadataFields))
@@ -290,7 +294,11 @@ func BuildIssueFilterClausesWithDialect(query string, filter types.IssueFilter, 
 				return nil, nil, err
 			}
 			whereClauses = append(whereClauses, dialect.MetadataEqualsExpr())
-			args = append(args, storage.JSONMetadataPath(k), filter.MetadataFields[k])
+			if dialect == SQLDialectSQLite {
+				args = append(args, storage.JSONMetadataStringEqualsPattern(k, filter.MetadataFields[k]))
+			} else {
+				args = append(args, storage.JSONMetadataPath(k), filter.MetadataFields[k])
+			}
 		}
 	}
 

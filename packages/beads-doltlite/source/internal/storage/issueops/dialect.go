@@ -32,14 +32,14 @@ func (d SQLDialect) ChildIDLikeExpr() string {
 
 func (d SQLDialect) MetadataEqualsExpr() string {
 	if d == SQLDialectSQLite {
-		return "json_extract(metadata, ?) = ?"
+		return "REPLACE(REPLACE(REPLACE(metadata, ' ', ''), '\n', ''), '\t', '') LIKE ?"
 	}
 	return "JSON_UNQUOTE(JSON_EXTRACT(metadata, ?)) = ?"
 }
 
 func (d SQLDialect) MetadataExistsExpr() string {
 	if d == SQLDialectSQLite {
-		return "json_extract(metadata, ?) IS NOT NULL"
+		return "REPLACE(REPLACE(REPLACE(metadata, ' ', ''), '\n', ''), '\t', '') LIKE ?"
 	}
 	return "JSON_EXTRACT(metadata, ?) IS NOT NULL"
 }

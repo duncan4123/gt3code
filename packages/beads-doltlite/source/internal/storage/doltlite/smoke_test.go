@@ -3,6 +3,7 @@
 package doltlite_test
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -48,6 +49,57 @@ func TestSmokeCreateGetCommit(t *testing.T) {
 
 	if err := store.Commit(ctx, "test: doltlite smoke"); err != nil {
 		t.Fatalf("Commit: %v", err)
+	}
+}
+
+func TestSmokeReadyWorkMetadataUsesSQLiteDialect(t *testing.T) {
+	ctx := t.Context()
+	store, err := doltlite.New(ctx, filepath.Join(t.TempDir(), ".beads"), "beads", "main")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	if err := store.SetConfig(ctx, "issue_prefix", "bd"); err != nil {
+		t.Fatalf("SetConfig: %v", err)
+	}
+
+	now := time.Now().UTC()
+	for _, issue := range []*types.Issue{
+		{
+			ID:        "bd-routed",
+			Title:     "routed",
+			Status:    types.StatusOpen,
+			Priority:  2,
+			IssueType: types.TypeTask,
+			CreatedAt: now,
+			UpdatedAt: now,
+			Metadata:  json.RawMessage(`{"gc.routed_to":"t3code/worker"}`),
+		},
+		{
+			ID:        "bd-other",
+			Title:     "other",
+			Status:    types.StatusOpen,
+			Priority:  2,
+			IssueType: types.TypeTask,
+			CreatedAt: now,
+			UpdatedAt: now,
+			Metadata:  json.RawMessage(`{"gc.routed_to":"t3code/sentinel"}`),
+		},
+	} {
+		if err := store.CreateIssue(ctx, issue, "test"); err != nil {
+			t.Fatalf("CreateIssue %s: %v", issue.ID, err)
+		}
+	}
+
+	ready, err := store.GetReadyWork(ctx, types.WorkFilter{
+		MetadataFields: map[string]string{"gc.routed_to": "t3code/worker"},
+	})
+	if err != nil {
+		t.Fatalf("GetReadyWork metadata filter: %v", err)
+	}
+	if len(ready) != 1 || ready[0].ID != "bd-routed" {
+		t.Fatalf("ready IDs = %#v, want only bd-routed", ready)
 	}
 }
 
