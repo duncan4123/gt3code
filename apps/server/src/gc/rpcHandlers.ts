@@ -1,4 +1,5 @@
 import {
+  CommandId,
   GcFindThreadBindingError,
   GcGetConfigError,
   GcGetThreadContextError,
@@ -16,6 +17,7 @@ import {
   GcSubmitSessionError,
   GcWakeSessionError,
   parseGcMeta,
+  repairGcThreadMetadataFromConfig,
   ThreadId,
   WS_METHODS,
 } from "@t3tools/contracts";
@@ -24,6 +26,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import type { ProjectionSnapshotQueryShape } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import { observeRpcEffect } from "../observability/RpcInstrumentation.ts";
 import type { GcApiClientShape } from "./Services/GcApiClient.ts";
 import type { GcContextProviderShape } from "./Services/GcContextProvider.ts";
@@ -54,10 +57,12 @@ const gcThreadSessionName = (
 export const makeGcRpcHandlers = ({
   gcApiClient,
   gcContextProvider,
+  orchestrationEngine,
   projectionSnapshotQuery,
 }: {
   readonly gcApiClient: GcApiClientShape;
   readonly gcContextProvider: GcContextProviderShape;
+  readonly orchestrationEngine: OrchestrationEngineShape;
   readonly projectionSnapshotQuery: ProjectionSnapshotQueryShape;
 }) => ({
   [WS_METHODS.gcGetConfig]: (_input: {}) =>
@@ -68,6 +73,31 @@ export const makeGcRpcHandlers = ({
           config
             ? Effect.succeed(config)
             : Effect.fail(new GcGetConfigError({ message: "Gas City config is unavailable." })),
+        ),
+        Effect.tap((config) =>
+          projectionSnapshotQuery.getShellSnapshot().pipe(
+            Effect.flatMap((snapshot) =>
+              Effect.forEach(
+                snapshot.threads.filter((thread) => thread.archivedAt === null),
+                (thread) => {
+                  const repair = repairGcThreadMetadataFromConfig(thread, config);
+                  if (repair.changedKeys.length === 0) {
+                    return Effect.void;
+                  }
+                  return orchestrationEngine.dispatch({
+                    type: "thread.meta.update",
+                    commandId: CommandId.make(
+                      `gc-meta-repair:${thread.id}:${repair.updates["gc.configRevision"] ?? "unknown"}`,
+                    ),
+                    threadId: thread.id,
+                    customMetadata: repair.updates,
+                  });
+                },
+                { concurrency: 1 },
+              ),
+            ),
+            Effect.ignore,
+          ),
         ),
         Effect.mapError((cause) =>
           Schema.is(GcGetConfigError)(cause)

@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import * as Schema from "effect/Schema";
 
-import { GcThreadContextResult, groupThreadsByRigAndAgent, parseGcMeta } from "./gc.ts";
+import {
+  GcThreadContextResult,
+  gcConfigRevision,
+  groupThreadsByRigAndAgent,
+  parseGcMeta,
+  repairGcThreadMetadataFromConfig,
+} from "./gc.ts";
 
 describe("parseGcMeta", () => {
   it("decodes serialized GC session env metadata", () => {
@@ -1542,5 +1548,110 @@ describe("groupThreadsByRigAndAgent", () => {
       "thread-codex",
       "thread-control-dispatcher",
     ]);
+  });
+
+  it("repairs stale GC metadata from configured session names and stamps config revision", () => {
+    const config = {
+      workspace: {
+        name: "cities",
+        suspended: false,
+      },
+      rigs: [
+        {
+          name: "city-a",
+          path: "/fixtures/cities/city-a",
+          suspended: false,
+        },
+        {
+          name: "city-a/repo-main",
+          path: "/fixtures/repos/city-a/repo-main",
+          suspended: false,
+        },
+      ],
+      agents: [
+        {
+          name: "worker",
+          dir: "city-a/repo-main",
+          scope: "rig",
+          suspended: false,
+          named_session_mode: "always" as const,
+        },
+      ],
+    };
+
+    const repair = repairGcThreadMetadataFromConfig(
+      {
+        title: "repo-main--worker · worker",
+        customMetadata: {
+          "gc.agent": "worker",
+          "gc.agentQualified": "worker",
+          "gc.groupKind": "rig",
+          "gc.groupId": "repo-main",
+          "gc.rig": "repo-main",
+          "gc.configRevision": "old",
+          "gc.bead": "ga-123",
+        },
+      },
+      config,
+    );
+
+    expect(repair.updates).toMatchObject({
+      "gc.agent": "city-a/repo-main/worker",
+      "gc.agentQualified": "city-a/repo-main/worker",
+      "gc.agentLabel": "worker",
+      "gc.rig": "city-a/repo-main",
+      "gc.city": "city-a",
+      "gc.groupId": "city-a/repo-main",
+      "gc.groupLabel": "city-a/repo-main",
+      "gc.configRevision": gcConfigRevision(config),
+    });
+    expect(repair.customMetadata["gc.bead"]).toBe("ga-123");
+    expect(repair.customMetadata["gc.groupKind"]).toBe("rig");
+    expect(repair.changedKeys).toContain("gc.configRevision");
+  });
+
+  it("does not produce repair updates when GC metadata is current", () => {
+    const config = {
+      workspace: {
+        name: "city",
+        suspended: false,
+      },
+      rigs: [
+        {
+          name: "t3code",
+          path: "/data/projects/t3code",
+          suspended: false,
+        },
+      ],
+      agents: [
+        {
+          name: "worker",
+          dir: "t3code",
+          suspended: false,
+          is_pool: true,
+        },
+      ],
+    };
+    const currentMetadata = {
+      "gc.agent": "t3code/worker",
+      "gc.agentQualified": "t3code/worker",
+      "gc.agentLabel": "worker",
+      "gc.rig": "t3code",
+      "gc.groupKind": "rig",
+      "gc.groupId": "t3code",
+      "gc.groupLabel": "t3code",
+      "gc.configRevision": gcConfigRevision(config),
+    };
+
+    const repair = repairGcThreadMetadataFromConfig(
+      {
+        title: "t3code--worker · worker",
+        customMetadata: currentMetadata,
+      },
+      config,
+    );
+
+    expect(repair.updates).toEqual({});
+    expect(repair.customMetadata).toEqual(currentMetadata);
   });
 });

@@ -1414,6 +1414,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       ...makeGcRpcHandlers({
         gcApiClient,
         gcContextProvider,
+        orchestrationEngine,
         projectionSnapshotQuery,
       }),
       [WS_METHODS.terminalOpen]: (input) =>
