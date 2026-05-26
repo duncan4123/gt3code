@@ -454,16 +454,6 @@ func (cr *CityRuntime) run(ctx context.Context) {
 		return
 	}
 
-	// Dispatch due orders before startup session reconciliation. A cold-start
-	// reconcile can take minutes when it has stale or config-drifted sessions;
-	// due event/condition formulas should not wait behind that maintenance work.
-	cr.safeTick(func() {
-		cr.dispatchOrders(ctx, cityRoot)
-	}, "startup-orders")
-	if ctx.Err() != nil {
-		return
-	}
-
 	// Session bead sync BEFORE reconciliation: ensures beads exist for
 	// the reconciler to read/write hashes. Uses ListByLabel (indexed,
 	// fast even before CachingStore is primed).
@@ -536,15 +526,14 @@ func (cr *CityRuntime) run(ctx context.Context) {
 	}
 
 	// Convergence startup reconciliation: recover in-progress convergence
-	// beads that were interrupted by a controller crash. Runs after "City
-	// started" so it doesn't block readiness. List() waits for the full
-	// CachingStore prime, then serves from memory.
+	// beads that were interrupted by a controller crash. Cached stores defer
+	// recovery until the read model is primed so startup readiness is not
+	// blocked by a slow backing scan.
 	//
 	// Wrapped in safeTick so a panic during convergence recovery (same
 	// class of transient store failure as #663) doesn't cascade to
-	// cityRuntime.shutdown(). Startup does not advance until the active
-	// convergence index is populated, so later patrols can drain pending
-	// convergence beads.
+	// cityRuntime.shutdown(). If the active index cannot be populated yet,
+	// later patrol ticks retry via needsStartupReconcile.
 	convergenceStartupDone := convergenceStartupComplete(cr)
 	if !retryStartupStep("convergence-startup", func() bool { return convergenceStartupDone }, func() {
 		cr.convergenceStartupReconcile(ctx)

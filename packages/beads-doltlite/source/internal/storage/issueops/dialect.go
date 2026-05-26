@@ -43,3 +43,25 @@ func (d SQLDialect) MetadataExistsExpr() string {
 	}
 	return "JSON_EXTRACT(metadata, ?) IS NOT NULL"
 }
+
+func (d SQLDialect) JSONArrayAggExpr(expr string) string {
+	if d == SQLDialectSQLite {
+		return "json_group_array(" + expr + ")"
+	}
+	return "JSON_ARRAYAGG(" + expr + ")"
+}
+
+func (d SQLDialect) DependencyJSONObjectExpr() string {
+	if d == SQLDialectSQLite {
+		return `json_object(
+	'issue_id', issue_id,
+	'depends_on_id', COALESCE(depends_on_issue_id, depends_on_wisp_id, depends_on_external),
+	'type', type,
+	'created_at', strftime('%Y-%m-%dT%H:%M:%SZ', created_at),
+	'created_by', created_by,
+	'metadata', metadata,
+	'thread_id', thread_id
+)`
+	}
+	return readyWorkDepJSONObject
+}

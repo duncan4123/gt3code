@@ -547,15 +547,28 @@ func (cr *CityRuntime) convergenceStartupReconcileScope(ctx context.Context, sco
 			cr.logPrefix, scope.logSuffix(), err)
 		return
 	}
-	// List() waits for CachingStore prime if not yet live, then serves
-	// from memory. No subprocess stampede.
-	all, err := scope.store.List(beads.ListQuery{Type: "convergence"})
-	if err != nil {
-		fmt.Fprintf(cr.stderr, "%s: convergence reconcile%s: listing beads: %v\n", //nolint:errcheck
-			cr.logPrefix, scope.logSuffix(), err)
-		scope.needsStartupReconcile = true
-		scope.adapter.activeIndex = map[string]string{}
-		return
+	query := beads.ListQuery{Type: "convergence"}
+	var all []beads.Bead
+	if cached, ok := scope.store.(*beads.CachingStore); ok {
+		var ready bool
+		all, ready = cached.CachedList(query)
+		if !ready {
+			fmt.Fprintf(cr.stderr, "%s: convergence reconcile%s: cache not ready; deferring startup recovery\n", //nolint:errcheck
+				cr.logPrefix, scope.logSuffix())
+			scope.needsStartupReconcile = true
+			scope.adapter.activeIndex = map[string]string{}
+			return
+		}
+	} else {
+		var err error
+		all, err = scope.store.List(query)
+		if err != nil {
+			fmt.Fprintf(cr.stderr, "%s: convergence reconcile%s: listing beads: %v\n", //nolint:errcheck
+				cr.logPrefix, scope.logSuffix(), err)
+			scope.needsStartupReconcile = true
+			scope.adapter.activeIndex = map[string]string{}
+			return
+		}
 	}
 
 	var beadIDs []string
