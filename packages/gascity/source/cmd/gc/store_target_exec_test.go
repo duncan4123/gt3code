@@ -152,58 +152,6 @@ func TestGcExecLifecycleInitProcessEnvDoesNotProjectCanonicalFilesOwnedFlagForGc
 	}
 }
 
-func TestGcExecLifecycleInitProcessEnvProjectsDoltBackendForGcBeadsBd(t *testing.T) {
-	cityDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(cityDir, ".beads"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeExecStoreCityConfig(t, cityDir, "dolt-city", "ct", nil)
-	cityTomlPath := filepath.Join(cityDir, "city.toml")
-	cityToml, err := os.ReadFile(cityTomlPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cityToml = append(cityToml, []byte("\n[beads]\nprovider = \"bd\"\nbackend = \"dolt\"\n")...)
-	if err := os.WriteFile(cityTomlPath, cityToml, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	configYaml := strings.Join([]string{
-		"issue_prefix: ct",
-		"gc.endpoint_origin: city_canonical",
-		"gc.endpoint_status: verified",
-		"dolt.auto-start: false",
-		"dolt.host: db.example.internal",
-		"dolt.port: 3317",
-		"",
-	}, "\n")
-	if err := os.WriteFile(filepath.Join(cityDir, ".beads", "config.yaml"), []byte(configYaml), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(cityDir, ".beads", "metadata.json"), []byte(`{"database":"dolt","backend":"dolt","dolt_mode":"server","dolt_database":"ct"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Setenv("GC_BEADS_BACKEND", "doltlite")
-	t.Setenv("BEADS_BACKEND", "doltlite")
-	target := execStoreTarget{ScopeRoot: cityDir, ScopeKind: "city", Prefix: "ct"}
-	env, err := gcExecLifecycleInitProcessEnv(cityDir, target, "exec:/tmp/gc-beads-bd")
-	if err != nil {
-		t.Fatalf("gcExecLifecycleInitProcessEnv(gc-beads-bd): %v", err)
-	}
-	if got := envSliceValue(env, "GC_BEADS_BACKEND"); got != "dolt" {
-		t.Fatalf("GC_BEADS_BACKEND = %q, want dolt", got)
-	}
-	if got := envSliceValue(env, "BEADS_BACKEND"); got != "dolt" {
-		t.Fatalf("BEADS_BACKEND = %q, want dolt", got)
-	}
-	if got := envSliceValue(env, "GC_DOLT_HOST"); got != "db.example.internal" {
-		t.Fatalf("GC_DOLT_HOST = %q, want db.example.internal", got)
-	}
-	if got := envSliceValue(env, "GC_DOLT_PORT"); got != "3317" {
-		t.Fatalf("GC_DOLT_PORT = %q, want 3317", got)
-	}
-}
-
 func TestGcExecLifecycleInitProcessEnvDoesNotLeakAmbientBEADS_DIRForGcBeadsK8s(t *testing.T) {
 	cityDir := t.TempDir()
 	rigDir := filepath.Join(cityDir, "rigs", "frontend")

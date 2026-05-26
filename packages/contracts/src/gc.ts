@@ -1231,7 +1231,15 @@ export function groupThreadsByRigAndAgent<
       }
       const rigGroup = rigGroupsById.get(rigName);
       if (!rigGroup) {
-        continue;
+        rigGroup = {
+          id: rigName,
+          label: rigName,
+          kind: "rig" as const,
+          isConfigured: true,
+          isSuspended: false,
+          agentGroupsById: new Map(),
+        };
+        rigGroupsById.set(rigName, rigGroup);
       }
       addConfiguredAgentGroup(rigGroup, agent);
     }

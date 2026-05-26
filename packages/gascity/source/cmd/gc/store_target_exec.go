@@ -100,12 +100,7 @@ func execProviderBase(provider string) string {
 }
 
 func execProviderNeedsScopedDoltInit(provider string) bool {
-	switch execProviderBase(provider) {
-	case "gc-beads-bd", "gc-beads-k8s":
-		return true
-	default:
-		return false
-	}
+	return execProviderBase(provider) == "gc-beads-k8s"
 }
 
 func execProviderUsesCanonicalBdScopeFiles(provider string) bool {

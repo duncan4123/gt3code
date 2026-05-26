@@ -82,11 +82,37 @@ func WorktreesRoot(cityPath string) string {
 		return filepath.Join(t3Home, "worktrees")
 	}
 	return filepath.Join(cityPath, ".gc", "worktrees")
+
+// rigNameForQualifiedAgent resolves the rig an agent belongs to. It prefers
+// the dir-based association used by ConfiguredRigName, then falls back to the
+// qualified-name prefix for explicitly rig-scoped agents whose Dir is not
+// stamped or points outside any configured rig path. This keeps
+// GC_RIG/GC_RIG_ROOT populated for rig-scoped agents whose work_dir lands
+// outside the rig filesystem (e.g. a city-level worktree), where the
+// dir heuristic alone returns "" and the rig keys would otherwise leak
+// through as empty values — gascity#2070.
+func rigNameForQualifiedAgent(cityPath, qualifiedName string, a config.Agent, rigs []config.Rig) string {
+	if name := ConfiguredRigName(cityPath, a, rigs); name != "" {
+		return name
+	}
+	if a.Scope != "rig" {
+		return ""
+	}
+	dir, _ := config.ParseQualifiedName(qualifiedName)
+	if dir == "" {
+		return ""
+	}
+	for _, rig := range rigs {
+		if dir == rig.Name {
+			return rig.Name
+		}
+	}
+	return ""
 }
 
 // PathContextForQualifiedName builds template context for work_dir expansion.
 func PathContextForQualifiedName(cityPath, cityName, qualifiedName string, a config.Agent, rigs []config.Rig) PathContext {
-	rigName := ConfiguredRigName(cityPath, a, rigs)
+	rigName := rigNameForQualifiedAgent(cityPath, qualifiedName, a, rigs)
 	_, agentBase := config.ParseQualifiedName(qualifiedName)
 	return PathContext{
 		Agent:         qualifiedName,

@@ -39,9 +39,6 @@ func ValidateDurations(cfg *City, source string) []string {
 	check("[session]", "nudge_lock_timeout", cfg.Session.NudgeLockTimeout)
 	check("[session]", "startup_timeout", cfg.Session.StartupTimeout)
 
-	// Status config durations.
-	check("[status]", "session_snapshot_timeout", cfg.Status.SessionSnapshotTimeout)
-
 	// Daemon config durations.
 	check("[daemon]", "patrol_interval", cfg.Daemon.PatrolInterval)
 	check("[daemon]", "restart_window", cfg.Daemon.RestartWindow)

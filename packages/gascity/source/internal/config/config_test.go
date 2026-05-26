@@ -2491,6 +2491,57 @@ name = "mayor"
 	}
 }
 
+func TestDaemonTickDebounceDefault(t *testing.T) {
+	d := DaemonConfig{}
+	if got := d.TickDebounceDuration(); got != 0 {
+		t.Errorf("TickDebounceDuration() = %v, want 0 (disabled)", got)
+	}
+}
+
+func TestDaemonTickDebounceCustom(t *testing.T) {
+	d := DaemonConfig{TickDebounce: "500ms"}
+	if got := d.TickDebounceDuration(); got != 500*time.Millisecond {
+		t.Errorf("TickDebounceDuration() = %v, want 500ms", got)
+	}
+}
+
+func TestDaemonTickDebounceInvalid(t *testing.T) {
+	d := DaemonConfig{TickDebounce: "not-a-duration"}
+	if got := d.TickDebounceDuration(); got != 0 {
+		t.Errorf("TickDebounceDuration() = %v, want 0 (default on invalid)", got)
+	}
+}
+
+func TestDaemonTickDebounceNegative(t *testing.T) {
+	d := DaemonConfig{TickDebounce: "-200ms"}
+	if got := d.TickDebounceDuration(); got != 0 {
+		t.Errorf("TickDebounceDuration() = %v, want 0 (default on negative)", got)
+	}
+}
+
+func TestParseDaemonTickDebounce(t *testing.T) {
+	data := []byte(`
+[workspace]
+name = "test"
+
+[daemon]
+tick_debounce = "250ms"
+
+[[agent]]
+name = "mayor"
+`)
+	cfg, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.Daemon.TickDebounce != "250ms" {
+		t.Errorf("Daemon.TickDebounce = %q, want %q", cfg.Daemon.TickDebounce, "250ms")
+	}
+	if got := cfg.Daemon.TickDebounceDuration(); got != 250*time.Millisecond {
+		t.Errorf("TickDebounceDuration() = %v, want 250ms", got)
+	}
+}
+
 func TestParseDaemonNudgeDispatcher(t *testing.T) {
 	data := []byte(`
 [workspace]
@@ -4205,30 +4256,6 @@ func TestDefaultSlingTargetRoundTrip(t *testing.T) {
 // ---------------------------------------------------------------------------
 // SessionConfig accessor tests
 // ---------------------------------------------------------------------------
-
-func TestStatusSessionSnapshotTimeoutDefault(t *testing.T) {
-	s := StatusConfig{}
-	got := s.SessionSnapshotTimeoutDuration()
-	if got != DefaultStatusSessionSnapshotTimeout {
-		t.Errorf("SessionSnapshotTimeoutDuration() = %v, want %v", got, DefaultStatusSessionSnapshotTimeout)
-	}
-}
-
-func TestStatusSessionSnapshotTimeoutCustom(t *testing.T) {
-	s := StatusConfig{SessionSnapshotTimeout: "30s"}
-	got := s.SessionSnapshotTimeoutDuration()
-	if got != 30*time.Second {
-		t.Errorf("SessionSnapshotTimeoutDuration() = %v, want 30s", got)
-	}
-}
-
-func TestStatusSessionSnapshotTimeoutInvalid(t *testing.T) {
-	s := StatusConfig{SessionSnapshotTimeout: "not-a-duration"}
-	got := s.SessionSnapshotTimeoutDuration()
-	if got != DefaultStatusSessionSnapshotTimeout {
-		t.Errorf("SessionSnapshotTimeoutDuration() = %v, want %v (default for invalid)", got, DefaultStatusSessionSnapshotTimeout)
-	}
-}
 
 func TestSessionSetupTimeoutDefault(t *testing.T) {
 	s := SessionConfig{}

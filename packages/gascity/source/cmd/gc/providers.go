@@ -494,7 +494,7 @@ func normalizeRawBeadsProvider(cityPath, provider string) string {
 		return provider
 	}
 	script := strings.TrimSpace(strings.TrimPrefix(provider, "exec:"))
-	if samePath(script, gcBeadsBdScriptPath(cityPath)) {
+	if samePath(script, gcBeadsBdScriptPath(cityPath)) || samePath(script, legacyGcBeadsBdScriptPath(cityPath)) {
 		return "bd"
 	}
 	return provider
@@ -519,10 +519,10 @@ func rawBeadsProviderFromConfig(cityPath string) string {
 }
 
 func configuredBeadsBackendValue(cityPath string) string {
-	if v := strings.TrimSpace(peekBeadsBackend(filepath.Join(cityPath, "city.toml"))); v != "" {
+	if v := strings.TrimSpace(os.Getenv("GC_BEADS_BACKEND")); v != "" {
 		return v
 	}
-	return strings.TrimSpace(os.Getenv("GC_BEADS_BACKEND"))
+	return strings.TrimSpace(peekBeadsBackend(filepath.Join(cityPath, "city.toml")))
 }
 
 func beadsBackend(cityPath string) string {
@@ -668,6 +668,10 @@ func gcBeadsBdScriptPath(cityPath string) string {
 	return filepath.Join(cityPath, citylayout.SystemPacksRoot, "bd", "assets", "scripts", "gc-beads-bd.sh")
 }
 
+func legacyGcBeadsBdScriptPath(cityPath string) string {
+	return filepath.Join(cityPath, ".gc", "scripts", "gc-beads-bd.sh")
+}
+
 // mailProviderName returns the mail provider name.
 // Priority: GC_MAIL env var → city.toml [mail].provider → "" (default: beadmail).
 func mailProviderName() string {
@@ -675,9 +679,14 @@ func mailProviderName() string {
 		return v
 	}
 	if cp, err := resolveCity(); err == nil {
-		if cfg, err := loadCityConfig(cp, io.Discard); err == nil && cfg.Mail.Provider != "" {
-			return cfg.Mail.Provider
-		}
+		return mailProviderNameForCity(cp)
+	}
+	return ""
+}
+
+func mailProviderNameForCity(cityPath string) string {
+	if cfg, err := loadCityConfig(cityPath, io.Discard); err == nil && cfg.Mail.Provider != "" {
+		return cfg.Mail.Provider
 	}
 	return ""
 }
@@ -692,22 +701,18 @@ func mailProviderName() string {
 //   - "exec:<script>" → user-supplied script (absolute path or PATH lookup)
 //   - default → beadmail (backed by beads.Store, no subprocess)
 func newMailProvider(store beads.Store) mail.Provider {
-	v := mailProviderName()
-	if strings.HasPrefix(v, "exec:") {
-		return mailexec.NewProvider(strings.TrimPrefix(v, "exec:"))
-	}
-	switch v {
-	case "fake":
-		return mail.NewFake()
-	case "fail":
-		return mail.NewFailFake()
-	default:
-		return beadmail.New(store)
-	}
+	return newMailProviderNamed(mailProviderName(), store, false)
 }
 
 func newCommandMailProvider(store beads.Store) mail.Provider {
-	v := mailProviderName()
+	return newMailProviderNamed(mailProviderName(), store, true)
+}
+
+func newCommandMailProviderNamed(v string, store beads.Store) mail.Provider {
+	return newMailProviderNamed(v, store, true)
+}
+
+func newMailProviderNamed(v string, store beads.Store, cached bool) mail.Provider {
 	if strings.HasPrefix(v, "exec:") {
 		return mailexec.NewProvider(strings.TrimPrefix(v, "exec:"))
 	}
@@ -717,7 +722,10 @@ func newCommandMailProvider(store beads.Store) mail.Provider {
 	case "fail":
 		return mail.NewFailFake()
 	default:
-		return beadmail.NewCached(store)
+		if cached {
+			return beadmail.NewCached(store)
+		}
+		return beadmail.New(store)
 	}
 }
 

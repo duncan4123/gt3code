@@ -3,8 +3,8 @@
   "path": "packages/gascity/source",
   "sourceRepo": "/data/projects/gascity",
   "remote": "git@github-duncan:duncan4123/gascity.git",
-  "syncedBranch": "integrate/beads-doltlite-gascity-pr",
-  "syncedCommit": "81a660b32",
+  "syncedBranch": "package-upstream-merge",
+  "syncedCommit": "addf94c49",
   "upstreamRepo": "https://github.com/gastownhall/gascity",
   "upstreamBranch": "main",
   "relatedBranches": [

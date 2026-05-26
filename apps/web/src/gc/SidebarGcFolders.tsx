@@ -403,7 +403,9 @@ export function SidebarGcFolders(props: SidebarGcFoldersProps) {
       agentGroup.qualifiedName,
       agentGroup.isExplicitlySuspended,
     );
-    const hasScaleControls = agentGroup.isPool;
+    const hasScaleControls = agentGroup.isPool ||
+      (typeof agentGroup.minActiveSessions === "number" &&
+       typeof agentGroup.maxActiveSessions === "number");
     const showNamedSessionModeControl = Boolean(agentGroup.namedSessionMode);
     const nextNamedSessionMode = !showNamedSessionModeControl
       ? null

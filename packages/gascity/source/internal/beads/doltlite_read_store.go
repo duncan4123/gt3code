@@ -61,7 +61,7 @@ func NewDoltliteReadStore(dir string, backing *BdStore) (*DoltliteReadStore, err
 	if _, err := os.Stat(dbPath); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite3", "file:"+dbPath+"?mode=ro&nolock=1&_busy_timeout=10000")
+	db, err := sql.Open("sqlite3", "file:"+dbPath+"?mode=ro&_busy_timeout=10000")
 	if err != nil {
 		return nil, err
 	}

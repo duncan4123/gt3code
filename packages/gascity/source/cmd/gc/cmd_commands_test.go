@@ -99,49 +99,6 @@ echo "args=$*"
 	}
 }
 
-func TestRunDiscoveredCommand_StripsGCGlobalFlags(t *testing.T) {
-	dir := t.TempDir()
-	packDir := filepath.Join(dir, "pack")
-	sourceDir := filepath.Join(packDir, "commands", "health")
-	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	scriptPath := filepath.Join(sourceDir, "run.sh")
-	script := `#!/bin/sh
-echo "args=$*"
-`
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	entry := config.DiscoveredCommand{
-		BindingName: "dolt",
-		PackName:    "dolt",
-		Command:     []string{"health"},
-		RunScript:   scriptPath,
-		PackDir:     packDir,
-		SourceDir:   sourceDir,
-	}
-
-	var stdout, stderr bytes.Buffer
-	code := runDiscoveredCommand(
-		entry,
-		dir,
-		"testcity",
-		[]string{"--city", dir, "--rig=t3code", "--json"},
-		strings.NewReader(""),
-		&stdout,
-		&stderr,
-	)
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
-	}
-	if got := strings.TrimSpace(stdout.String()); got != "args=--json" {
-		t.Fatalf("stdout = %q, want args=--json", got)
-	}
-}
-
 func TestRunDiscoveredCommand_PrefersEntryPackDir(t *testing.T) {
 	dir := t.TempDir()
 	packDir := filepath.Join(dir, "actual-pack")

@@ -1,6 +1,7 @@
 {
-  "backend": "doltlite",
-  "database": "doltlite",
-  "dolt_database": "t3",
-  "project_id": "c90463f3-e106-4f91-8505-95f848a46cc0"
+  "backend": "dolt",
+  "database": "dolt",
+  "dolt_database": "hq",
+  "dolt_mode": "server",
+  "project_id": "fb5492ec-1b29-4380-be53-18ce9c03901c"
 }

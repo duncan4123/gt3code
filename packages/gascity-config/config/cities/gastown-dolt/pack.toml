@@ -56,14 +56,14 @@ value = "o3"
 label = "o3"
 flag_args = ["--model", "o3"]
 
-[providers.kimi-for-coding]
+[providers.deepseek]
 base = "builtin:opencode"
 supports_acp = false
 
-[providers.kimi-for-coding.env]
+[providers.deepseek.env]
 GC_PROVIDER = "opencode"
-GC_MODEL = "kimi-for-coding/k2p6"
+GC_MODEL = "deepseek/deepseek-v4-pro"
 GC_OPENCODE_AGENT = "build"
 
 [agent_defaults]
-model = "kimi-for-coding"
+model = "deepseek-v4-pro"

@@ -26,7 +26,7 @@ const waitsForGateBlockedSQL = `
 		  )
 		)
 		AND NOT (
-		  (d.metadata LIKE '%"gate":"any-children"%' OR d.metadata LIKE '%"gate": "any-children"%')
+		  JSON_UNQUOTE(JSON_EXTRACT(d.metadata, '$.gate')) = 'any-children'
 		  AND (
 		    EXISTS (
 		      SELECT 1 FROM dependencies cd JOIN issues child ON child.id = cd.issue_id

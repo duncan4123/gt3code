@@ -36,7 +36,7 @@ import { createResourceCache } from "../resourceCache.ts";
 
 const GC_API_DEFAULT_URL = "http://localhost:9443";
 const GC_API_REQUEST_TIMEOUT_MS = 30_000;
-const GC_CLI_REQUEST_TIMEOUT_MS = 8_000;
+const GC_CLI_REQUEST_TIMEOUT_MS = 60_000;
 
 function logGcWarning(message: string, context: Record<string, unknown>): void {
   console.warn("[gc-api]", message, context);
@@ -365,6 +365,23 @@ function normalizeGcConfig(
     }
     const agent = value as Record<string, unknown>;
     if (typeof agent.name !== "string" || agent.name.trim().length === 0) {
+      return [];
+    }
+
+    const isImplicitPoolWorker =
+      typeof agent.prompt_template === "string" &&
+      agent.prompt_template.endsWith("/core/assets/prompts/pool-worker.md") &&
+      agent.default_sling_formula === "mol-do-work" &&
+      agent.is_pool !== true;
+    if (isImplicitPoolWorker) {
+      return [];
+    }
+
+    const isImplicitControlWorker =
+      agent.name === "control-dispatcher" &&
+      typeof agent.start_command === "string" &&
+      agent.start_command.includes("convoy control --serve");
+    if (isImplicitControlWorker) {
       return [];
     }
     const namedSessionMode: "always" | "on_demand" | undefined =
@@ -2298,6 +2315,9 @@ const makeGcApiClient = Effect.gen(function* () {
   const getConfig: GcApiClientShape["getConfig"] = () =>
     Effect.tryPromise({
       try: async () => {
+        if (lastKnownConfig) {
+          return lastKnownConfig;
+        }
         const loadLocalCityTomlConfig = (
           targetCityPath: string,
         ): GcConfigResult | null => {
