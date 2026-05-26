@@ -98,12 +98,6 @@ func (s *DoltliteNativeStore) SetMetadataBatch(id string, kvs map[string]string)
 }
 
 func (s *DoltliteNativeStore) Close(id string) error {
-	// CloseIssue currently exercises a libdoltlite connection-open path that
-	// can abort the gc process under concurrent controller order dispatch.
-	// Keep closes on the bd CLI fallback until that native path is stable.
-	if s.DoltliteReadStore != nil && s.DoltliteReadStore.BdStore != nil {
-		return s.DoltliteReadStore.BdStore.Close(id)
-	}
 	if err := s.withNativeWriteRetry(func() error {
 		return s.native.CloseIssue(context.Background(), id)
 	}); err != nil {
