@@ -1330,7 +1330,7 @@ func TestCityRuntimeTickReturnsBeforeDemandWhenCanceledDuringOrderDispatch(t *te
 	}
 }
 
-func TestCityRuntimeRunDispatchesOrdersBeforeStartupReconcile(t *testing.T) {
+func TestCityRuntimeRunDefersOrderDispatchUntilAfterStarted(t *testing.T) {
 	cityPath := t.TempDir()
 	tomlPath := filepath.Join(cityPath, "city.toml")
 	writeCityRuntimeConfig(t, tomlPath, "fake")
@@ -1353,8 +1353,8 @@ func TestCityRuntimeRunDispatchesOrdersBeforeStartupReconcile(t *testing.T) {
 		Cfg:      cfg,
 		SP:       sp,
 		BuildFn: func(*config.City, runtime.Provider, beads.Store) DesiredStateResult {
-			if !od.called.Load() {
-				t.Fatal("order dispatch should happen before startup reconcile")
+			if od.called.Load() {
+				t.Fatal("order dispatch should not happen before startup reconcile")
 			}
 			return DesiredStateResult{State: map[string]TemplateParams{}}
 		},
@@ -1378,12 +1378,12 @@ func TestCityRuntimeRunDispatchesOrdersBeforeStartupReconcile(t *testing.T) {
 	if !started.Load() {
 		t.Fatal("OnStarted was not called")
 	}
-	if got := od.calls.Load(); got != 1 {
-		t.Fatalf("order dispatch calls = %d, want 1", got)
+	if got := od.calls.Load(); got != 0 {
+		t.Fatalf("order dispatch calls = %d, want 0 before startup readiness", got)
 	}
 }
 
-func TestCityRuntimeRunStartupOrderDispatchPanicIsRecovered(t *testing.T) {
+func TestCityRuntimeRunDoesNotLetOrderDispatchPanicBlockStartupReadiness(t *testing.T) {
 	cityPath := t.TempDir()
 	tomlPath := filepath.Join(cityPath, "city.toml")
 	writeCityRuntimeConfig(t, tomlPath, "fake")
@@ -1431,16 +1431,10 @@ func TestCityRuntimeRunStartupOrderDispatchPanicIsRecovered(t *testing.T) {
 	cr.run(ctx)
 
 	if !started.Load() {
-		t.Fatal("OnStarted was not called after recovered startup order panic")
+		t.Fatal("OnStarted was not called")
 	}
-	if got := od.calls.Load(); got != 1 {
-		t.Fatalf("order dispatch calls = %d, want 1", got)
-	}
-	if !strings.Contains(stderr.String(), "trigger=startup-orders") {
-		t.Fatalf("stderr = %q, want startup-orders panic trigger", stderr.String())
-	}
-	if !strings.Contains(stderr.String(), "startup order boom") {
-		t.Fatalf("stderr = %q, want recovered panic detail", stderr.String())
+	if got := od.calls.Load(); got != 0 {
+		t.Fatalf("order dispatch calls = %d, want 0 before startup readiness", got)
 	}
 }
 
@@ -4572,8 +4566,8 @@ func TestCityRuntimeRunStopsBeforeStartedWhenCanceledDuringStartup(t *testing.T)
 	if started {
 		t.Fatal("OnStarted called after cancellation")
 	}
-	if got := od.calls.Load(); got != 1 {
-		t.Fatalf("order dispatch calls = %d, want startup dispatch before cancellation", got)
+	if got := od.calls.Load(); got != 0 {
+		t.Fatalf("order dispatch calls = %d, want 0 (dispatch deferred until after startup)", got)
 	}
 	if strings.Contains(stdout.String(), "City started.") {
 		t.Fatalf("stdout = %q, want no started banner after cancellation", stdout.String())
@@ -4870,6 +4864,68 @@ func TestCityRuntimeRun_ConvergenceStartupErrorDoesNotBlockStarted(t *testing.T)
 	}
 	if !strings.Contains(stderr.String(), "convergence list unavailable") {
 		t.Fatalf("stderr = %q, want convergence list error", stderr.String())
+	}
+}
+
+func TestCityRuntimeRun_UnprimedConvergenceCacheDoesNotBlockStarted(t *testing.T) {
+	cityPath := t.TempDir()
+	tomlPath := filepath.Join(cityPath, "city.toml")
+	writeCityRuntimeConfig(t, tomlPath, "fake")
+
+	cfg, err := config.Load(osFS{}, tomlPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Daemon.PatrolInterval = "1ms"
+	sp := runtime.NewFake()
+	store := beads.NewCachingStoreForTest(beads.NewMemStore(), nil)
+	var stderr bytes.Buffer
+	var started atomic.Bool
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	cr := newTestCityRuntime(t, CityRuntimeParams{
+		CityPath: cityPath,
+		CityName: "test-city",
+		TomlPath: tomlPath,
+		Cfg:      cfg,
+		SP:       sp,
+		BuildFn: func(*config.City, runtime.Provider, beads.Store) DesiredStateResult {
+			return DesiredStateResult{State: map[string]TemplateParams{}}
+		},
+		Dops:             newDrainOps(sp),
+		Rec:              events.Discard,
+		ConvergenceReqCh: make(chan convergenceRequest, 1),
+		OnStarted: func() {
+			started.Store(true)
+			cancel()
+		},
+		Stdout: io.Discard,
+		Stderr: &stderr,
+	})
+
+	cs := newControllerState(context.Background(), cfg, sp, events.NewFake(), "test-city", cityPath)
+	cs.cityBeadStore = store
+	cr.setControllerState(cs)
+
+	done := make(chan struct{})
+	go func() {
+		cr.run(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		cancel()
+		t.Fatal("run did not return with unprimed convergence cache")
+	}
+	if !started.Load() {
+		t.Fatal("OnStarted was not called with unprimed convergence cache")
+	}
+	if !strings.Contains(stderr.String(), "cache not ready; deferring startup recovery") {
+		t.Fatalf("stderr = %q, want deferred convergence cache message", stderr.String())
 	}
 }
 

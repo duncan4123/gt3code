@@ -85,6 +85,72 @@ func TestCityRuntimeProcessEnvStripsAmbientGCDolt(t *testing.T) {
 	}
 }
 
+func TestExplicitDoltBackendIgnoresStaleDoltliteMetadata(t *testing.T) {
+	t.Setenv("GC_BEADS_BACKEND", "doltlite")
+	t.Setenv("BEADS_BACKEND", "doltlite")
+
+	cityPath := t.TempDir()
+	rigPath := filepath.Join(cityPath, "repo")
+	for _, dir := range []string{filepath.Join(cityPath, ".beads"), filepath.Join(rigPath, ".beads")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(cityPath, "city.toml"), []byte(`[workspace]
+name = "dolt-city"
+
+[[rigs]]
+name = "repo"
+path = "repo"
+prefix = "rp"
+
+[beads]
+provider = "bd"
+backend = "dolt"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cityPath, ".beads", "config.yaml"), []byte(`issue_prefix: dc
+gc.endpoint_origin: city_canonical
+gc.endpoint_status: verified
+dolt.auto-start: false
+dolt.host: db.example.internal
+dolt.port: 3317
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cityPath, ".beads", "metadata.json"), []byte(`{"backend":"doltlite","database":"doltlite","dolt_database":"dc"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rigPath, ".beads", "config.yaml"), []byte(`issue_prefix: rp
+gc.endpoint_origin: inherited_city
+gc.endpoint_status: verified
+dolt.auto-start: false
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rigPath, ".beads", "metadata.json"), []byte(`{"backend":"doltlite","database":"doltlite","dolt_database":"rp"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cityEnv := mustBdRuntimeEnv(t, cityPath)
+	if got := cityEnv["GC_BEADS_BACKEND"]; got != "dolt" {
+		t.Fatalf("city GC_BEADS_BACKEND = %q, want dolt", got)
+	}
+	if got := cityEnv["GC_DOLT_HOST"]; got != "db.example.internal" {
+		t.Fatalf("city GC_DOLT_HOST = %q, want db.example.internal", got)
+	}
+
+	cfg := &config.City{Rigs: []config.Rig{{Name: "repo", Path: "repo", Prefix: "rp"}}}
+	rigEnv := mustBdRuntimeEnvForRig(t, cityPath, cfg, rigPath)
+	if got := rigEnv["GC_BEADS_BACKEND"]; got != "dolt" {
+		t.Fatalf("rig GC_BEADS_BACKEND = %q, want dolt", got)
+	}
+	if got := rigEnv["GC_DOLT_HOST"]; got != "db.example.internal" {
+		t.Fatalf("rig GC_DOLT_HOST = %q, want db.example.internal", got)
+	}
+}
+
 func TestBdStoreForCityResolvesIDPrefixFromScopeConfig(t *testing.T) {
 	cityDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(cityDir, ".beads"), 0o700); err != nil {

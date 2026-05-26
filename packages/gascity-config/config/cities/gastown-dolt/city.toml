@@ -1,0 +1,29 @@
+[workspace]
+name = "gastown-dolt"
+provider = "codex"
+global_fragments = ["command-glossary", "operational-awareness"]
+
+[[rigs]]
+name = "t3code"
+path = "../../../../.."
+prefix = "t3"
+
+[rigs.imports.gastown]
+source = "../../packs/gastown-upstream"
+
+[beads]
+provider = "bd"
+backend = "dolt"
+
+[session]
+provider = "t3bridge"
+
+[status]
+session_snapshot_timeout = "30s"
+
+[daemon]
+patrol_interval = "30s"
+max_restarts = 5
+restart_window = "1h"
+shutdown_timeout = "5s"
+formula_v2 = true

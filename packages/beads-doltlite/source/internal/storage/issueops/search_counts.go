@@ -10,6 +10,10 @@ import (
 )
 
 func SearchIssuesWithCountsInTx(ctx context.Context, tx *sql.Tx, query string, filter types.IssueFilter) ([]*types.IssueWithCounts, error) {
+	return SearchIssuesWithCountsInTxWithDialect(ctx, tx, query, filter, SQLDialectDolt)
+}
+
+func SearchIssuesWithCountsInTxWithDialect(ctx context.Context, tx *sql.Tx, query string, filter types.IssueFilter, dialect SQLDialect) ([]*types.IssueWithCounts, error) {
 	limit := filter.Limit
 
 	wispDepsExist, err := optionalTableExistsInTx(ctx, tx, "wisp_dependencies")
@@ -25,14 +29,14 @@ func SearchIssuesWithCountsInTx(ctx context.Context, tx *sql.Tx, query string, f
 		if empty || !wispDepsExist {
 			return nil, nil
 		}
-		wisps, err := runFilterSearchQueryInTx(ctx, tx, query, filter, WispsFilterTables, true)
+		wisps, err := runFilterSearchQueryInTx(ctx, tx, query, filter, WispsFilterTables, true, dialect)
 		if err != nil {
 			return nil, err
 		}
 		return finishSearchIssuesWithCounts(wisps, limit), nil
 	}
 
-	out, err := runFilterSearchQueryInTx(ctx, tx, query, filter, IssuesFilterTables, wispDepsExist)
+	out, err := runFilterSearchQueryInTx(ctx, tx, query, filter, IssuesFilterTables, wispDepsExist, dialect)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +52,7 @@ func SearchIssuesWithCountsInTx(ctx context.Context, tx *sql.Tx, query string, f
 		return finishSearchIssuesWithCounts(out, limit), nil
 	}
 
-	wisps, err := runFilterSearchQueryInTx(ctx, tx, query, filter, WispsFilterTables, true)
+	wisps, err := runFilterSearchQueryInTx(ctx, tx, query, filter, WispsFilterTables, true, dialect)
 	if err != nil {
 		if isTableNotExistError(err) {
 			return finishSearchIssuesWithCounts(out, limit), nil
@@ -77,8 +81,8 @@ func SearchIssuesWithCountsInTx(ctx context.Context, tx *sql.Tx, query string, f
 	return finishSearchIssuesWithCounts(out, limit), nil
 }
 
-func runFilterSearchQueryInTx(ctx context.Context, tx *sql.Tx, query string, filter types.IssueFilter, tables FilterTables, includeWispReverseDeps bool) ([]*types.IssueWithCounts, error) {
-	whereClauses, args, err := BuildIssueFilterClauses(query, filter, tables)
+func runFilterSearchQueryInTx(ctx context.Context, tx *sql.Tx, query string, filter types.IssueFilter, tables FilterTables, includeWispReverseDeps bool, dialect SQLDialect) ([]*types.IssueWithCounts, error) {
+	whereClauses, args, err := BuildIssueFilterClausesWithDialect(query, filter, tables, dialect)
 	if err != nil {
 		return nil, err
 	}
@@ -91,11 +95,16 @@ func runFilterSearchQueryInTx(ctx context.Context, tx *sql.Tx, query string, fil
 		limitSQL = fmt.Sprintf("LIMIT %d", filter.Limit)
 	}
 	const orderBy = "ORDER BY i.priority ASC, i.created_at DESC, i.id ASC"
-	return runSearchQueryInTx(ctx, tx, tables, whereSQL, orderBy, limitSQL, args, includeWispReverseDeps)
+	return runSearchQueryInTxWithDialect(ctx, tx, tables, whereSQL, orderBy, limitSQL, args, includeWispReverseDeps, dialect)
 }
 
 //nolint:gosec // G201: SQL fragments are caller-built from hardcoded shapes
 func runSearchQueryInTx(ctx context.Context, tx *sql.Tx, tables FilterTables, whereSQL, orderBySQL, limitSQL string, args []interface{}, includeWispReverseDeps bool) ([]*types.IssueWithCounts, error) {
+	return runSearchQueryInTxWithDialect(ctx, tx, tables, whereSQL, orderBySQL, limitSQL, args, includeWispReverseDeps, SQLDialectDolt)
+}
+
+//nolint:gosec // G201: SQL fragments are caller-built from hardcoded shapes
+func runSearchQueryInTxWithDialect(ctx context.Context, tx *sql.Tx, tables FilterTables, whereSQL, orderBySQL, limitSQL string, args []interface{}, includeWispReverseDeps bool, dialect SQLDialect) ([]*types.IssueWithCounts, error) {
 	reverseBlockerSelect := `
 				SELECT COALESCE(depends_on_issue_id, depends_on_wisp_id, depends_on_external) AS dep_id
 				FROM dependencies WHERE type = 'blocks'
@@ -118,7 +127,7 @@ func runSearchQueryInTx(ctx context.Context, tx *sql.Tx, tables FilterTables, wh
 			d.deps_json      AS deps_json
 		FROM %s i
 		LEFT JOIN (
-			SELECT issue_id, JSON_ARRAYAGG(label) AS labels_json
+			SELECT issue_id, %s AS labels_json
 			FROM %s
 			GROUP BY issue_id
 		) l ON l.issue_id = i.id
@@ -146,7 +155,7 @@ func runSearchQueryInTx(ctx context.Context, tx *sql.Tx, tables FilterTables, wh
 			GROUP BY issue_id
 		) pc ON pc.issue_id = i.id
 		LEFT JOIN (
-			SELECT issue_id, JSON_ARRAYAGG(%s) AS deps_json
+			SELECT issue_id, %s AS deps_json
 			FROM %s
 			GROUP BY issue_id
 		) d ON d.issue_id = i.id
@@ -156,12 +165,13 @@ func runSearchQueryInTx(ctx context.Context, tx *sql.Tx, tables FilterTables, wh
 	`,
 		readyWorkIssueColumns,
 		tables.Main,
+		dialect.JSONArrayAggExpr("label"),
 		tables.Labels,
 		tables.Dependencies,
 		reverseBlockerSelect,
 		tables.Comments,
 		tables.Dependencies,
-		readyWorkDepJSONObject,
+		dialect.JSONArrayAggExpr(dialect.DependencyJSONObjectExpr()),
 		tables.Dependencies,
 		whereSQL,
 		orderBySQL,

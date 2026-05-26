@@ -519,10 +519,10 @@ func rawBeadsProviderFromConfig(cityPath string) string {
 }
 
 func configuredBeadsBackendValue(cityPath string) string {
-	if v := strings.TrimSpace(os.Getenv("GC_BEADS_BACKEND")); v != "" {
+	if v := strings.TrimSpace(peekBeadsBackend(filepath.Join(cityPath, "city.toml"))); v != "" {
 		return v
 	}
-	return strings.TrimSpace(peekBeadsBackend(filepath.Join(cityPath, "city.toml")))
+	return strings.TrimSpace(os.Getenv("GC_BEADS_BACKEND"))
 }
 
 func beadsBackend(cityPath string) string {

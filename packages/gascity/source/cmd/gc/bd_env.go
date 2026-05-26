@@ -255,6 +255,20 @@ func applyCanonicalDoltTargetEnv(env map[string]string, target contract.DoltConn
 	}
 }
 
+func applyProjectedBeadsBackendEnv(env map[string]string, backend string) {
+	if env == nil {
+		return
+	}
+	backend = strings.TrimSpace(backend)
+	if backend == "" {
+		delete(env, "GC_BEADS_BACKEND")
+		delete(env, "BEADS_BACKEND")
+		return
+	}
+	env["GC_BEADS_BACKEND"] = backend
+	env["BEADS_BACKEND"] = backend
+}
+
 func shouldProjectResolvedDoltHost(target contract.DoltConnectionTarget) bool {
 	host := strings.TrimSpace(target.Host)
 	if host == "" {
@@ -316,6 +330,7 @@ func applyCanonicalScopeBackendEnv(env map[string]string, cityPath, scopeRoot st
 	switch meta.Backend {
 	case "", "dolt":
 		clearProjectedPostgresEnv(env)
+		applyProjectedBeadsBackendEnv(env, "dolt")
 		target, err := contract.ResolveDoltConnectionTarget(fsys.OSFS{}, cityPath, scopeRoot)
 		if err != nil {
 			return true, err
@@ -327,8 +342,7 @@ func applyCanonicalScopeBackendEnv(env map[string]string, cityPath, scopeRoot st
 	case "doltlite":
 		clearProjectedDoltEnv(env)
 		clearProjectedPostgresEnv(env)
-		env["GC_BEADS_BACKEND"] = "doltlite"
-		env["BEADS_BACKEND"] = "doltlite"
+		applyProjectedBeadsBackendEnv(env, "doltlite")
 		mirrorBeadsDoltEnv(env)
 		return true, nil
 	case "postgres":
@@ -367,6 +381,9 @@ func applyCityPostgresBackendEnv(env map[string]string, cityPath string) (bool, 
 }
 
 func scopeBackendIsDoltlite(cityPath, scopeRoot string) bool {
+	if configured := strings.ToLower(strings.TrimSpace(peekBeadsBackend(filepath.Join(cityPath, "city.toml")))); configured != "" {
+		return configured == "doltlite"
+	}
 	meta, ok, err := contract.LoadMetadataState(fsys.OSFS{}, scopeMetadataJSONPath(scopeRoot))
 	if err == nil && ok && meta.Backend == "doltlite" {
 		return true
@@ -902,6 +919,7 @@ func applyResolvedCityDoltEnv(env map[string]string, cityPath string, allowRecov
 	if err != nil {
 		return err
 	}
+	applyProjectedBeadsBackendEnv(env, "dolt")
 	fallbackUser := ""
 	if ok {
 		applyCanonicalDoltTargetEnv(env, target)
@@ -971,6 +989,7 @@ func applyResolvedRigDoltEnv(env map[string]string, cityPath, rigPath string, ex
 	}
 	if explicitRig != nil && (explicitRig.DoltHost != "" || explicitRig.DoltPort != "") {
 		clearProjectedPostgresEnv(env)
+		applyProjectedBeadsBackendEnv(env, "dolt")
 		applyLegacyRigExternalTarget(env, *explicitRig)
 		clearProjectedDoltPasswordEnv(env)
 		applyResolvedDoltAuthEnv(env, rigPath, "")

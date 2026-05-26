@@ -147,6 +147,7 @@ func discoveredHelpRequested(args []string) bool {
 }
 
 func runDiscoveredCommand(entry config.DiscoveredCommand, cityPath, cityName string, args []string, stdinR io.Reader, stdout, stderr io.Writer) int {
+	args = stripDiscoveredCommandGlobalFlags(args)
 	packDir := entry.PackDir
 	if packDir == "" {
 		packDir = packRootFromEntryDir(entry.SourceDir, "commands")
@@ -176,6 +177,39 @@ func runDiscoveredCommand(entry config.DiscoveredCommand, cityPath, cityName str
 		return 1
 	}
 	return 0
+}
+
+func stripDiscoveredCommandGlobalFlags(args []string) []string {
+	if len(args) == 0 {
+		return args
+	}
+	stripped := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			stripped = append(stripped, args[i:]...)
+			break
+		}
+		switch {
+		case arg == "--city" || arg == "--rig":
+			if i+1 < len(args) {
+				i++
+			}
+			continue
+		case strings.HasPrefix(arg, "--city=") || strings.HasPrefix(arg, "--rig="):
+			continue
+		case arg == "--json-schema":
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+			}
+			continue
+		case strings.HasPrefix(arg, "--json-schema="):
+			continue
+		default:
+			stripped = append(stripped, arg)
+		}
+	}
+	return stripped
 }
 
 func tryDiscoveredCommandFallback(args []string, cfg *config.City, cityPath string, stdout, stderr io.Writer) bool {

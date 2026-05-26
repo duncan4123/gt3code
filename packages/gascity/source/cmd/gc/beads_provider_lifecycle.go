@@ -1893,6 +1893,9 @@ func providerLifecycleProcessEnvFromBase(cityPath, provider string, env []string
 	} {
 		env = removeEnvKey(env, key)
 	}
+	env = removeEnvKey(env, "GC_BEADS_BACKEND")
+	env = removeEnvKey(env, "BEADS_BACKEND")
+	env = append(env, "GC_BEADS_BACKEND=dolt", "BEADS_BACKEND=dolt")
 	env = append(env, providerLifecycleDoltPathEnv(cityPath)...)
 	if gcBin := resolveProviderLifecycleGCBinary(); gcBin != "" {
 		env = removeEnvKey(env, "GC_BIN")

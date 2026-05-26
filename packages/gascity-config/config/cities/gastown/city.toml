@@ -3,6 +3,7 @@ global_fragments = ["command-glossary", "operational-awareness"]
 
 [[rigs]]
 name = "t3code"
+path = "../../../../.."
 prefix = "t3"
 includes = ["packs/jj"]
 
