@@ -1,0 +1,5 @@
+scope = "rig"
+wake_mode = "fresh"
+work_dir = ".gc/agents/{{.Rig}}/merger"
+idle_timeout = "2h"
+max_active_sessions = 1
