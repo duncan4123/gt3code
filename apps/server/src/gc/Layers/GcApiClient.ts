@@ -2342,23 +2342,24 @@ const makeGcApiClient = Effect.gen(function* () {
           );
           const cityRoots = discoverBundledGcCityRoots(process.cwd());
           return cityRoots.flatMap((targetCityPath) => {
-            const expanded = loadExpandedCliConfig(targetCityPath);
-            const local = expanded ?? loadLocalCityTomlConfig(targetCityPath);
-            if (!local) {
-              return [];
-            }
             const fallbackCityName = path.basename(targetCityPath);
             const supervisorCity =
               supervisorCityByPath.get(path.resolve(targetCityPath)) ??
               supervisorCityByName.get(fallbackCityName);
-            const lifecycle = loadDetailedLifecycleStatus(targetCityPath, {
+            const configCityPath = supervisorCity?.path ?? targetCityPath;
+            const expanded = loadExpandedCliConfig(configCityPath);
+            const local = expanded ?? loadLocalCityTomlConfig(configCityPath);
+            if (!local) {
+              return [];
+            }
+            const lifecycle = loadDetailedLifecycleStatus(configCityPath, {
               supervisorRunning: supervisorCities.length > 0,
               controllerRunning: supervisorCity?.running ?? false,
             });
             return [
               prefixGcConfigForCity(withLifecycleStatus(local, lifecycle), {
                 name: supervisorCity?.name ?? fallbackCityName,
-                path: targetCityPath,
+                path: configCityPath,
                 running: supervisorCity?.running ?? false,
               }),
             ];
