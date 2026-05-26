@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -16,7 +15,6 @@ import (
 	"time"
 
 	"github.com/gastownhall/gascity/internal/beads"
-	beadsexec "github.com/gastownhall/gascity/internal/beads/exec"
 	"github.com/gastownhall/gascity/internal/citylayout"
 	"github.com/gastownhall/gascity/internal/config"
 	"github.com/gastownhall/gascity/internal/events"
@@ -1145,45 +1143,11 @@ func openStoreAtForCity(storePath, cityPath string) (beads.Store, error) {
 		runtimeCityPath = cityForStoreDir(storePath)
 	}
 	scopeRoot := resolveStoreScopeRoot(runtimeCityPath, storePath)
-	provider := rawBeadsProviderForScope(scopeRoot, runtimeCityPath)
-	if strings.HasPrefix(provider, "exec:") {
-		target, err := resolveConfiguredExecStoreTarget(runtimeCityPath, scopeRoot)
-		if err != nil {
-			return nil, err
-		}
-		env := gcExecStoreEnv(runtimeCityPath, target, provider)
-		if execProviderNeedsScopedDoltStoreEnv(provider) {
-			if target.ScopeKind == "rig" {
-				cfg, err := loadCityConfig(runtimeCityPath, io.Discard)
-				if err != nil {
-					return nil, err
-				}
-				projected, err := bdRuntimeEnvForRigWithError(runtimeCityPath, cfg, target.ScopeRoot)
-				if err != nil {
-					return nil, err
-				}
-				copyExecProjectedBackendEnv(env, projected)
-			} else {
-				projected, err := bdRuntimeEnvWithError(runtimeCityPath)
-				if err != nil {
-					return nil, err
-				}
-				copyExecProjectedBackendEnv(env, projected)
-			}
-		}
-		store := beadsexec.NewStore(strings.TrimPrefix(provider, "exec:"))
-		store.SetEnv(env)
-		return store, nil
-	}
-	switch provider {
-	case "file":
-		return openCompatibleFileStore(scopeRoot, runtimeCityPath)
-	default: // "bd" or unrecognized → use bd
-		if _, err := exec.LookPath("bd"); err != nil {
-			return nil, fmt.Errorf("bd not found in PATH (install beads or set GC_BEADS=file)")
-		}
-		return openBdStoreAt(scopeRoot, runtimeCityPath)
-	}
+	return openBeadsBackendStore(beadsBackendRequest{
+		Provider:        rawBeadsProviderForScope(scopeRoot, runtimeCityPath),
+		RuntimeCityPath: runtimeCityPath,
+		ScopeRoot:       scopeRoot,
+	})
 }
 
 // resolveStoreScopeRoot resolves a store's scope root under cityPath.
@@ -1206,19 +1170,11 @@ func resolveStoreScopeRoot(cityPath, storePath string) string {
 
 func openBdStoreAt(storePath, cityPath string) (beads.Store, error) {
 	if filepath.Clean(storePath) == filepath.Clean(cityPath) {
-		store := bdStoreForCity(storePath, cityPath)
-		if optimized, ok := openOptimizedDoltliteStore(storePath, store); ok {
-			return optimized, nil
-		}
-		return store, nil
+		return bdStoreForCity(storePath, cityPath), nil
 	}
 	cfg, err := loadCityConfig(cityPath, io.Discard)
 	if err != nil {
 		cfg = nil
 	}
-	store := bdStoreForRig(storePath, cityPath, cfg)
-	if optimized, ok := openOptimizedDoltliteStore(storePath, store); ok {
-		return optimized, nil
-	}
-	return store, nil
+	return bdStoreForRig(storePath, cityPath, cfg), nil
 }
