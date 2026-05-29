@@ -65,9 +65,16 @@ const stamp = {
   beadsSourceRoot,
   doltliteBuildDir,
 };
+const gcHome =
+  process.env.T3CODE_GASCITY_HOME ||
+  process.env.GC_HOME ||
+  path.join(repoRoot, ".t3-dev", "gascity");
+const runtimeBinaryPath = path.join(gcHome, "bin", "gc.real");
+const runtimeLibraryPath = path.join(gcHome, "bin", doltliteLibrary);
+
 if (
   isFresh({
-    outputs: [outputPath, outputLibraryPath, outputLibrarySonamePath].filter(Boolean),
+    outputs: [outputPath, outputLibraryPath, outputLibrarySonamePath, runtimeBinaryPath, runtimeLibraryPath].filter(Boolean),
     stampPath,
     stamp,
     inputRoots: [sourceRoot, beadsSourceRoot],
@@ -102,6 +109,7 @@ const result = spawnSync("go", ["build", "-buildvcs=false", "-o", outputPath, ".
 
 if ((result.status ?? 1) === 0) {
   copyDoltliteRuntimeLibrary();
+  installToRuntime();
   writeFileSync(stampPath, JSON.stringify({ ...stamp, builtAt: new Date().toISOString() }) + "\n");
   console.log(`copied ${outputLibraryPath}`);
 }
@@ -160,6 +168,17 @@ function copyDoltliteRuntimeLibrary() {
   if (outputLibrarySonamePath) {
     copyFileSync(source, outputLibrarySonamePath);
   }
+}
+
+function installToRuntime() {
+  mkdirSync(path.dirname(runtimeBinaryPath), { recursive: true });
+  copyFileSync(outputPath, runtimeBinaryPath);
+  copyFileSync(outputLibraryPath, runtimeLibraryPath);
+  if (outputLibrarySonamePath) {
+    copyFileSync(outputLibrarySonamePath, path.join(path.dirname(runtimeBinaryPath), "libdoltlite.so.0"));
+  }
+  console.log(`installed ${runtimeBinaryPath}`);
+  console.log(`installed ${runtimeLibraryPath}`);
 }
 
 function appendFlag(existing, value) {
