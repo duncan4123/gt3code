@@ -324,11 +324,9 @@ func TestStart_ReusedThreadDoesNotInjectStartupTurns(t *testing.T) {
 	}
 }
 
-func TestBuildThreadEnv_DropsStartupEnvelopeAndDoltliteServerEnv(t *testing.T) {
+func TestBuildThreadEnv_DropsStartupEnvelope(t *testing.T) {
 	env := buildThreadEnv(map[string]string{
 		"GC_STARTUP_ENVELOPE":      `{"runtime":{"provider":"claudeAgent","model":"claude-sonnet-4-6"}}`,
-		"GC_BEADS_BACKEND":         "doltlite",
-		"GC_NATIVE_DOLTLITE_BEADS": "true",
 		"GC_MODEL":                 "gpt-5.4-mini",
 		"GC_SESSION_NAME":          "gc--mayor",
 		"GC_DOLT_HOST":             "127.0.0.1",
@@ -346,10 +344,17 @@ func TestBuildThreadEnv_DropsStartupEnvelopeAndDoltliteServerEnv(t *testing.T) {
 	if env["GC_SESSION_NAME"] != "gc--mayor" {
 		t.Fatalf("GC_SESSION_NAME = %q, want gc--mayor", env["GC_SESSION_NAME"])
 	}
-	for _, key := range []string{"GC_DOLT_HOST", "GC_DOLT_PORT", "BEADS_DOLT_SHARED_SERVER", "BEADS_DOLT_SERVER_HOST", "BEADS_DOLT_SERVER_PORT", "BEADS_DOLT_SERVER_MODE"} {
-		if _, ok := env[key]; ok {
-			t.Fatalf("%s should not persist into DoltLite thread env", key)
-		}
+	if env["BEADS_DOLT_SERVER_HOST"] != "127.0.0.1" {
+		t.Fatalf("BEADS_DOLT_SERVER_HOST = %q, want 127.0.0.1", env["BEADS_DOLT_SERVER_HOST"])
+	}
+	if env["BEADS_DOLT_SERVER_PORT"] != "35819" {
+		t.Fatalf("BEADS_DOLT_SERVER_PORT = %q, want 35819", env["BEADS_DOLT_SERVER_PORT"])
+	}
+	if env["BEADS_DOLT_SERVER_MODE"] != "1" {
+		t.Fatalf("BEADS_DOLT_SERVER_MODE = %q, want 1", env["BEADS_DOLT_SERVER_MODE"])
+	}
+	if _, ok := env["BEADS_DOLT_SHARED_SERVER"]; ok {
+		t.Fatal("BEADS_DOLT_SHARED_SERVER should not persist into thread env")
 	}
 	if _, ok := env["NOT_GC"]; ok {
 		t.Fatal("non-GC key should not persist into thread env")
@@ -357,7 +362,7 @@ func TestBuildThreadEnv_DropsStartupEnvelopeAndDoltliteServerEnv(t *testing.T) {
 }
 
 func TestBuildGCMetadata_UsesFirstClassT3BridgeProviderName(t *testing.T) {
-	meta := buildGCMetadata(StartupEnvelope{}, "codex", "active", nil)
+	meta := buildGCMetadata(StartupEnvelope{}, "codex", nil)
 	if got := meta["gc.provider"]; got != "t3bridge" {
 		t.Fatalf("gc.provider = %v, want t3bridge", got)
 	}
@@ -507,6 +512,23 @@ func TestSetMetaGetMetaRemoveMeta_UsesNativeStateStore(t *testing.T) {
 	}
 }
 
+func TestMetaFilePath_SanitizesNameAndKey(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv("GC_T3BRIDGE_STATE_DIR", stateDir)
+
+	path := metaFilePath("../crew/name", "../../GC/DRAIN")
+	rel, err := filepath.Rel(stateDir, path)
+	if err != nil {
+		t.Fatalf("rel meta path: %v", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		t.Fatalf("meta path escaped state dir: %q", path)
+	}
+	if got, want := filepath.Base(path), ".._crew_name.meta..._.._GC_DRAIN"; got != want {
+		t.Fatalf("meta filename = %q, want %q", got, want)
+	}
+}
+
 func TestCopyTo_UsesThreadWorkDir(t *testing.T) {
 	workDir := t.TempDir()
 	srcDir := t.TempDir()
@@ -546,6 +568,47 @@ func TestCopyTo_UsesThreadWorkDir(t *testing.T) {
 	}
 	if string(data) != "hello" {
 		t.Fatalf("copied file = %q, want hello", string(data))
+	}
+}
+
+func TestCopyTo_RejectsRelDstEscapingWorkDir(t *testing.T) {
+	parent := t.TempDir()
+	workDir := filepath.Join(parent, "work")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatalf("mkdir workDir: %v", err)
+	}
+	srcFile := filepath.Join(parent, "note.txt")
+	if err := os.WriteFile(srcFile, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write src file: %v", err)
+	}
+
+	server := newT3BridgeTestServer(t, map[string]interface{}{
+		"threads": []interface{}{
+			map[string]interface{}{
+				"id":        "thread-1",
+				"projectId": "project-1",
+				"customMetadata": map[string]interface{}{
+					"gc.agent":          "t3code/crew",
+					"gc.sessionName":    "t3code--crew",
+					"gc.startupWorkDir": workDir,
+				},
+			},
+		},
+	})
+	defer server.Close()
+	t.Setenv("T3_BEARER_TOKEN", "test-bearer")
+	t.Setenv("T3_WS_URL", server.wsURL())
+
+	p := &Provider{
+		watchers:     make(map[string]context.CancelFunc),
+		recentStarts: make(map[string]time.Time),
+	}
+
+	if err := p.CopyTo("t3code--crew", srcFile, "../outside.txt"); err != nil {
+		t.Fatalf("CopyTo: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(parent, "outside.txt")); !os.IsNotExist(err) {
+		t.Fatalf("outside file stat err = %v, want not exist", err)
 	}
 }
 
@@ -601,7 +664,7 @@ func newT3BridgeTestServer(t *testing.T, snapshot map[string]interface{}) *t3Bri
 			t.Errorf("upgrade websocket: %v", err)
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		var req struct {
 			ID      string          `json:"id"`
@@ -673,15 +736,6 @@ func (ts *t3BridgeTestServer) authCalls() int {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	return ts.authRequestCount
-}
-
-func (ts *t3BridgeTestServer) lastWSAuthorization() string {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	if len(ts.wsAuthorization) == 0 {
-		return ""
-	}
-	return ts.wsAuthorization[len(ts.wsAuthorization)-1]
 }
 
 func (ts *t3BridgeTestServer) wsCalls() int {

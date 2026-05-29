@@ -4,27 +4,10 @@ Current installed source:
 
 - Repository: `/data/projects/gascity`
 - Remote: `git@github-duncan:duncan4123/gascity.git`
-- Branch: `integrate/beads-doltlite-gascity-pr`
-- Commit: `7d5dea57a`
-- PR: <https://github.com/gastownhall/gascity/pull/2474>
-- Contents: latest upstream Gas City plus the DoltLite and T3Bridge integration stack.
+- Source: upstream `gastownhall/gascity` main branch
+- Commit: `1d90970a` (2026-05-29)
+- Contents: latest upstream Gas City (t3bridge provider included, merged via PR #2377)
 
-Related branches:
+Use `bun run package-sources:check gascity` before building to verify source matches.
 
-- `integrate/beads-doltlite-gascity-pr`: current DoltLite + T3Bridge PR branch.
-- `snapshot/t3code-packaged-gascity-20260522`: raw snapshot of the previous packaged source.
-
-Backup snapshot details:
-
-- Branch: `snapshot/t3code-packaged-gascity-20260522`
-- Commit: `4a2172c15`
-- Remote: `duncan4123/gascity`
-- Purpose: raw snapshot of the earlier `/data/projects/t3code/packages/gascity/source` tree. Use it only as a reference/quarry; it is not PR-shaped and includes old divergence/deletions.
-
-Use `bun run package-sources:check gascity` before building to verify that
-`packages/gascity/source` still matches the declared source branch.
-
-If package-local testing produces source fixes, use
-`bun run package-sources:export gascity` to copy only manifest-allowed source
-files back into `/data/projects/gascity`. The export command refuses to run if
-the target repo has dirty work and does not commit or push.
+To sync back into the fork repo, use `bun run package-sources:export gascity`.

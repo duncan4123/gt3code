@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strings"
-
-	"github.com/gastownhall/gascity/internal/runtime"
 )
 
-func applyT3BridgeRuntimeConfig(tp TemplateParams, env map[string]string, cfg *runtime.Config) {
+func applyT3BridgeRuntimeConfig(tp TemplateParams, env map[string]string) {
 	if !templateParamsUseT3Bridge(tp) {
 		return
 	}
@@ -28,7 +26,6 @@ func applyT3BridgeRuntimeConfig(tp TemplateParams, env map[string]string, cfg *r
 	if strings.TrimSpace(env["GC_PROVIDER"]) == "" && tp.ResolvedProvider != nil {
 		env["GC_PROVIDER"] = tp.ResolvedProvider.Name
 	}
-	cfg.StartupEnvelope = buildT3BridgeStartupEnvelope(tp, tp.Prompt)
 }
 
 func buildT3BridgeStartupEnvelope(tp TemplateParams, startupPrompt string) json.RawMessage {
@@ -120,6 +117,9 @@ func t3BridgeStartupEnvelopeModel(provider string, tp TemplateParams) string {
 				return parts[i+1]
 			}
 		}
+	}
+	if v := tp.Env["GC_MODEL"]; v != "" {
+		return v
 	}
 	if provider == "codex" {
 		return "gpt-5-codex"

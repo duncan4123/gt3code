@@ -1,11 +1,9 @@
 [workspace]
-name = "gastown-dolt"
 provider = "codex"
 global_fragments = ["command-glossary", "operational-awareness"]
 
 [[rigs]]
 name = "t3code"
-path = "/data/projects/t3code/.t3-dev/workspaces/t3code/live"
 prefix = "t3"
 [rigs.imports]
 [rigs.imports.gastown]
@@ -13,7 +11,6 @@ source = "../../packs/gastown-upstream"
 
 [[rigs]]
 name = "beadstui"
-path = "/data/projects/t3code/.t3-dev/workspaces/t3code/live/packages/gascity-config/config/cities/gastown-dolt/rigs/beadstui"
 prefix = "btui"
 [rigs.imports]
 [rigs.imports.gastown]
@@ -101,13 +98,9 @@ wake_mode = "resume"
 
 [beads]
 provider = "bd"
-backend = "dolt"
 
 [session]
 provider = "t3bridge"
-
-[status]
-session_snapshot_timeout = "30s"
 
 [daemon]
 formula_v2 = true

@@ -65,5 +65,4 @@ GC_PROVIDER = "opencode"
 GC_MODEL = "deepseek/deepseek-v4-pro"
 GC_OPENCODE_AGENT = "build"
 
-[agent_defaults]
-model = "deepseek-v4-pro"
+

@@ -18,11 +18,7 @@ type execStoreTarget struct {
 }
 
 func execProjectedBackendEnvKeys() []string {
-	keys := make([]string, 0, len(projectedDoltEnvKeys)+len(projectedPostgresEnvKeys)+2)
-	keys = append(keys,
-		"GC_BEADS_BACKEND",
-		"BEADS_BACKEND",
-	)
+	keys := make([]string, 0, len(projectedDoltEnvKeys)+len(projectedPostgresEnvKeys))
 	keys = append(keys, projectedDoltEnvKeys...)
 	keys = append(keys, projectedPostgresEnvKeys...)
 	return keys

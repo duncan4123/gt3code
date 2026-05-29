@@ -110,8 +110,6 @@ func crossBackendKeysToScrub(backend string) []string {
 	switch backend {
 	case "dolt":
 		return postgresBackendKeys
-	case "doltlite":
-		return append([]string{"dolt_mode"}, postgresBackendKeys...)
 	case "postgres":
 		return doltBackendKeys
 	default:
@@ -328,12 +326,12 @@ func LoadMetadataState(fs fsys.FS, path string) (MetadataState, bool, error) {
 	}
 
 	switch state.Backend {
-	case "", "dolt", "doltlite", "postgres":
+	case "", "dolt", "postgres":
 		// allowed
 	default:
 		return MetadataState{}, false, &MetadataParseError{
 			Path:   abs,
-			Reason: fmt.Sprintf("unsupported backend %q (supported: dolt, doltlite, postgres)", state.Backend),
+			Reason: fmt.Sprintf("unsupported backend %q (supported: dolt, postgres)", state.Backend),
 		}
 	}
 
@@ -397,7 +395,7 @@ func mixedBackendField(state MetadataState) (string, bool) {
 		if firstDolt != "" {
 			return firstDolt, true
 		}
-	case "dolt", "doltlite":
+	case "dolt":
 		if firstPostgres != "" {
 			return firstPostgres, true
 		}

@@ -158,7 +158,7 @@ func newSessionProviderByName(name string, sc config.SessionConfig, cityName, ci
 }
 
 func isLegacyT3BridgeExecScript(script string) bool {
-	return strings.HasSuffix(strings.TrimSpace(script), "gc-session-t3")
+	return filepath.Base(strings.TrimSpace(script)) == "gc-session-t3"
 }
 
 // newSessionProvider returns a runtime.Provider based on the session provider
@@ -179,12 +179,12 @@ func newSessionProviderForCity(cfg *config.City, cityPath string) runtime.Provid
 
 func newStatusSessionProviderForCity(cfg *config.City, cityPath string) runtime.Provider {
 	ctx := sessionProviderContextForCity(cfg, cityPath, os.Getenv("GC_SESSION"))
-	return newBoundedStatusProvider(newSessionProviderFromContext(ctx, nil))
+	return newSessionProviderFromContext(ctx, nil)
 }
 
 func newStatusSessionProviderForCityWithSnapshot(cfg *config.City, cityPath string, sessionBeads *sessionBeadSnapshot) runtime.Provider {
 	ctx := sessionProviderContextForCity(cfg, cityPath, os.Getenv("GC_SESSION"))
-	return newBoundedStatusProvider(newSessionProviderFromContext(ctx, sessionBeads))
+	return newSessionProviderFromContext(ctx, sessionBeads)
 }
 
 func registerStatusProviderACPRoutes(sp runtime.Provider, snapshot *sessionBeadSnapshot, cityName string, cfg *config.City) {
@@ -518,25 +518,6 @@ func rawBeadsProviderFromConfig(cityPath string) string {
 	return "bd"
 }
 
-func configuredBeadsBackendValue(cityPath string) string {
-	if v := strings.TrimSpace(os.Getenv("GC_BEADS_BACKEND")); v != "" {
-		return v
-	}
-	return strings.TrimSpace(peekBeadsBackend(filepath.Join(cityPath, "city.toml")))
-}
-
-func beadsBackend(cityPath string) string {
-	backend := strings.ToLower(configuredBeadsBackendValue(cityPath))
-	if backend == "" {
-		return "dolt"
-	}
-	return backend
-}
-
-func cityUsesDoltliteBeadsBackend(cityPath string) bool {
-	return beadsBackend(cityPath) == "doltlite"
-}
-
 func providerUsesBdStoreContract(provider string) bool {
 	provider = strings.TrimSpace(provider)
 	if provider == "" || provider == "bd" {
@@ -550,10 +531,6 @@ func providerUsesBdStoreContract(provider string) bool {
 
 func cityUsesBdStoreContract(cityPath string) bool {
 	return providerUsesBdStoreContract(rawBeadsProvider(cityPath))
-}
-
-func cityUsesManagedDoltBeadsLifecycle(cityPath string) bool {
-	return cityUsesBdStoreContract(cityPath) && !cityUsesDoltliteBeadsBackend(cityPath)
 }
 
 func rawBeadsProviderForScope(scopeRoot, cityPath string) string {

@@ -320,6 +320,7 @@ func resolveTemplate(p *agentBuildParams, cfgAgent *config.Agent, qualifiedName 
 		SlingQuery:          expandAgentCommandTemplate(p.cityPath, p.cityName, cfgAgent, p.rigs, "sling_query", cfgAgent.EffectiveSlingQuery(), p.stderr),
 		ProviderKey:         providerKey,
 		ProviderDisplayName: providerDisplayName,
+		InstructionsFile:    instructionsFileForAgent(cfgAgent, p.workspace, p.providers),
 		Env:                 cfgAgent.Env,
 	}, p.sessionTemplate, p.stderr, p.packDirs, fragments, p.beadStore)
 	hasHooks := config.AgentHasHooks(cfgAgent, p.workspace, resolved.Name, p.providers)
@@ -562,27 +563,28 @@ func resolveTemplate(p *agentBuildParams, cfgAgent *config.Agent, qualifiedName 
 		CopyFiles:              copyFiles,
 	}
 
-	return TemplateParams{
-		Command:                  command,
-		Prompt:                   prompt,
-		Env:                      env,
-		Hints:                    hints,
-		WorkDir:                  workDir,
-		SessionName:              sessName,
-		Alias:                    qualifiedName,
-		FPExtra:                  fpExtra,
-		ResolvedProvider:         resolved,
-		TemplateName:             templateNameFor(cfgAgent, qualifiedName),
-		InstanceName:             qualifiedName,
-		RigName:                  rigName,
-		RigRoot:                  rigRoot,
-		WakeMode:                 cfgAgent.WakeMode,
-		IsACP:                    sessionTransport == config.SessionTransportACP,
-		HookEnabled:              hasHooks,
-		SessionOverride:          cfgAgent.Session,
-		EffectiveSessionProvider: effectiveSessionProvider(cfgAgent.Session, p.sessionProvider),
-		MCPServers:               mcpServers,
-	}, nil
+	params := TemplateParams{
+		Command:          command,
+		Prompt:           prompt,
+		Env:              env,
+		Hints:            hints,
+		WorkDir:          workDir,
+		SessionName:      sessName,
+		Alias:            qualifiedName,
+		FPExtra:          fpExtra,
+		ResolvedProvider: resolved,
+		TemplateName:     templateNameFor(cfgAgent, qualifiedName),
+		InstanceName:     qualifiedName,
+		RigName:          rigName,
+		RigRoot:          rigRoot,
+		WakeMode:         cfgAgent.WakeMode,
+		IsACP:            sessionTransport == config.SessionTransportACP,
+		HookEnabled:      hasHooks,
+		MCPServers:       mcpServers,
+	}
+	params.SessionOverride = cfgAgent.Session
+	params.EffectiveSessionProvider = effectiveSessionProvider(cfgAgent.Session, p.sessionProvider)
+	return params, nil
 }
 
 func suppressStartupPromptForAgent(cfgAgent *config.Agent) bool {
@@ -715,7 +717,7 @@ func templateParamsToConfig(tp TemplateParams) runtime.Config {
 		CopyFiles:              tp.Hints.CopyFiles,
 		FingerprintExtra:       tp.FPExtra,
 	}
-	applyT3BridgeRuntimeConfig(tp, env, &cfg)
+	applyT3BridgeRuntimeConfig(tp, env)
 	return cfg
 }
 

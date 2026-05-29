@@ -56,6 +56,14 @@ func ExecCommandRunnerWithEnv(env map[string]string) CommandRunner {
 	return func(dir, name string, args ...string) ([]byte, error) {
 		start := time.Now()
 		trace := func(status string, err error) {
+			// GC_BD_TRACE_JSON wins: when the structured JSONL trace
+			// (via TraceBDCall in bdtrace.go) is enabled, suppress the
+			// legacy line-format trace so the two don't interleave
+			// incompatible records in the same file when an operator
+			// points both env vars at the same path.
+			if strings.TrimSpace(os.Getenv("GC_BD_TRACE_JSON")) != "" {
+				return
+			}
 			path := strings.TrimSpace(os.Getenv("GC_BD_TRACE"))
 			if path == "" {
 				return
@@ -99,6 +107,18 @@ func ExecCommandRunnerWithEnv(env map[string]string) CommandRunner {
 		cmd.Stderr = &stderr
 		out, err := cmd.Output()
 		if name == "bd" {
+			// Structured JSONL trace — independent of the legacy line-format
+			// trace above (gated by GC_BD_TRACE_JSON, not GC_BD_TRACE).
+			traceExit := 0
+			if err != nil {
+				var exitErr *exec.ExitError
+				if errors.As(err, &exitErr) {
+					traceExit = exitErr.ExitCode()
+				} else {
+					traceExit = -1
+				}
+			}
+			TraceBDCall("go:bdstore.runner", dir, args, start, traceExit, err)
 			telemetry.RecordBDCall(context.Background(),
 				args, float64(time.Since(start).Milliseconds()),
 				err, out, stderr.String())
@@ -293,6 +313,7 @@ func (s *BdStore) Purge(beadsDir string, dryRun bool) (PurgeResult, error) {
 
 // execPurge runs bd purge via exec.CommandContext with a 60-second timeout.
 func execPurge(dir string, env, args []string) ([]byte, error) {
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -305,6 +326,16 @@ func execPurge(dir string, env, args []string) ([]byte, error) {
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
+	traceExit := 0
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			traceExit = exitErr.ExitCode()
+		} else {
+			traceExit = -1
+		}
+	}
+	TraceBDCall("go:bdstore.execPurge", dir, args, start, traceExit, err)
 	if ctx.Err() == context.DeadlineExceeded {
 		return nil, fmt.Errorf("timed out after 60s")
 	}
@@ -1165,7 +1196,6 @@ func removedLabels(original, current []string) []string {
 
 func (s *BdStore) runBDTransientWrite(args ...string) error {
 	var err error
-	args = s.bdTransientWriteArgs(args)
 	for attempt := 1; attempt <= bdTransientWriteAttempts; attempt++ {
 		_, err = s.runner(s.dir, "bd", args...)
 		if err == nil || !isBdTransientWriteError(err) || attempt == bdTransientWriteAttempts {
@@ -1176,31 +1206,6 @@ func (s *BdStore) runBDTransientWrite(args ...string) error {
 	return err
 }
 
-func (s *BdStore) bdTransientWriteArgs(args []string) []string {
-	if !s.isDoltliteBackend() {
-		return args
-	}
-	out := make([]string, 0, len(args)+2)
-	out = append(out, "--dolt-auto-commit", "off")
-	out = append(out, args...)
-	return out
-}
-
-func (s *BdStore) isDoltliteBackend() bool {
-	metaPath := filepath.Join(s.dir, ".beads", "metadata.json")
-	data, err := os.ReadFile(metaPath)
-	if err != nil {
-		return false
-	}
-	var meta struct {
-		Backend string `json:"backend"`
-	}
-	if err := json.Unmarshal(data, &meta); err != nil {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(meta.Backend), "doltlite")
-}
-
 func isBdTransientWriteError(err error) bool {
 	if err == nil {
 		return false
@@ -1208,7 +1213,6 @@ func isBdTransientWriteError(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "Error 1213 (40001): serialization failure") ||
 		strings.Contains(msg, "this transaction conflicts with a committed transaction") ||
-		strings.Contains(msg, "failed to prepare catalog") ||
 		strings.Contains(msg, "i/o timeout") ||
 		strings.Contains(msg, "invalid connection") ||
 		strings.Contains(msg, "bad connection") ||
@@ -1515,9 +1519,7 @@ func (s *BdStore) listEphemeral(query ListQuery) ([]Bead, error) {
 }
 
 func canApplyWispsServerLimit(query ListQuery) bool {
-	return (query.Sort == SortDefault || query.Sort == SortCreatedDesc) &&
-		query.CreatedBefore.IsZero() &&
-		len(query.Metadata) == 0
+	return query.Sort == SortDefault && query.CreatedBefore.IsZero() && len(query.Metadata) == 0
 }
 
 func appendBdQueryClause(clauses []string, serverFilteredOnly bool, field, value string) ([]string, bool) {
