@@ -2091,7 +2091,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         toastManager.add({
           type: "error",
           title: "Failed to archive thread",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: `Failed to scale ${agent}: ${error instanceof Error ? error.message : "An error occurred."}`,
         });
       }
     },
@@ -2143,7 +2143,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         toastManager.add({
           type: "error",
           title: "Failed to rename thread",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: `Failed to scale ${agent}: ${error instanceof Error ? error.message : "An error occurred."}`,
         });
       }
       finishRename();
@@ -4065,7 +4065,7 @@ export default function Sidebar() {
         toastManager.update(toastId, {
           type: "error",
           title: `Failed to update ${agent}`,
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: `Failed to scale ${agent}: ${error instanceof Error ? error.message : "An error occurred."}`,
         });
         void refreshGcConfig().catch(() => undefined);
       } finally {
@@ -4187,7 +4187,7 @@ export default function Sidebar() {
         toastManager.update(toastId, {
           type: "error",
           title: `Failed to update ${agent}`,
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: `Failed to scale ${agent}: ${error instanceof Error ? error.message : "An error occurred."}`,
         });
         void refreshGcConfig().catch(() => undefined);
       } finally {
@@ -4221,7 +4221,7 @@ export default function Sidebar() {
         toastManager.add({
           type: "error",
           title: `Failed to wake ${agent}`,
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: `Failed to scale ${agent}: ${error instanceof Error ? error.message : "An error occurred."}`,
         });
         void refreshGcConfig().catch(() => undefined);
       } finally {
@@ -4290,7 +4290,7 @@ export default function Sidebar() {
         toastManager.update(toastId, {
           type: "error",
           title: `Failed to update ${agent}`,
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: `Failed to scale ${agent}: ${error instanceof Error ? error.message : "An error occurred."}`,
         });
         void refreshGcConfig().catch(() => undefined);
       } finally {
@@ -4362,7 +4362,7 @@ export default function Sidebar() {
         toastManager.update(toastId, {
           type: "error",
           title: `Failed to scale ${agent}`,
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: `Failed to scale ${agent}: ${error instanceof Error ? error.message : "An error occurred."}`,
           data: {
             dismissAfterVisibleMs: 0,
           },
@@ -4437,7 +4437,7 @@ export default function Sidebar() {
         toastManager.update(toastId, {
           type: "error",
           title: `Failed to scale ${agent}`,
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: `Failed to scale ${agent}: ${error instanceof Error ? error.message : "An error occurred."}`,
           data: {
             dismissAfterVisibleMs: 0,
           },
@@ -4537,7 +4537,7 @@ export default function Sidebar() {
         toastManager.update(toastId, {
           type: "error",
           title: `Failed to update ${rig}`,
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: `Failed to scale ${agent}: ${error instanceof Error ? error.message : "An error occurred."}`,
         });
         void refreshGcConfig().catch(() => undefined);
       } finally {
@@ -4631,7 +4631,7 @@ export default function Sidebar() {
         toastManager.update(toastId, {
           type: "error",
           title: "Failed to update city",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: `Failed to scale ${agent}: ${error instanceof Error ? error.message : "An error occurred."}`,
         });
         void refreshGcConfig().catch(() => undefined);
       } finally {
@@ -4689,7 +4689,7 @@ export default function Sidebar() {
         toastManager.update(toastId, {
           type: "error",
           title: running ? "Failed to start supervisor" : "Failed to stop supervisor",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: `Failed to scale ${agent}: ${error instanceof Error ? error.message : "An error occurred."}`,
         });
         void refreshGcConfig().catch(() => undefined);
       } finally {
@@ -4747,7 +4747,7 @@ export default function Sidebar() {
         toastManager.update(toastId, {
           type: "error",
           title: running ? `Failed to start ${city}` : `Failed to stop ${city}`,
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description: `Failed to scale ${agent}: ${error instanceof Error ? error.message : "An error occurred."}`,
         });
         void refreshGcConfig().catch(() => undefined);
       } finally {
