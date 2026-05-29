@@ -227,6 +227,13 @@ func buildDoctorChecks(cityPath string, cfg *config.City, cfgErr error, opts bui
 	register(doctor.NewBinaryCheck("jq", "", exec.LookPath))
 	register(doctor.NewBinaryCheck("pgrep", "", exec.LookPath))
 	register(doctor.NewBinaryCheck("lsof", "", exec.LookPath))
+	register(&doctor.T3CodeProviderCheck{})
+	register(&doctor.T3CodeWebCheck{})
+	register(&doctor.T3CodeOpenCodeBinaryCheck{})
+	register(&doctor.T3CodeGCApiPhaseCheck{})
+	register(&doctor.T3CodeProviderModelCheck{})
+	register(&doctor.T3CodeStateDBCheck{})
+	register(&doctor.T3CodeBdQueryHealthCheck{})
 	// beads.role must be set before any bd command runs; check it here so
 	// the missing-role error appears before the downstream data/Dolt checks
 	// that will all fail for the same root cause.
