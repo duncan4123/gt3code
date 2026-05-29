@@ -937,7 +937,11 @@ function isPoolAgent(config: GcConfigResult | null, name: string): boolean {
     return false;
   }
   return config.agents.some(
-    (agent) => resolveAgentConfigKey(agent) === name && agent.is_pool === true,
+    (agent) =>
+      resolveAgentConfigKey(agent) === name &&
+      (agent.is_pool === true ||
+        typeof agent.max_active_sessions === "number" ||
+        typeof agent.min_active_sessions === "number"),
   );
 }
 
