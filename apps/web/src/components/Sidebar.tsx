@@ -4363,6 +4363,9 @@ export default function Sidebar() {
           type: "error",
           title: `Failed to scale ${agent}`,
           description: error instanceof Error ? error.message : "An error occurred.",
+          data: {
+            dismissAfterVisibleMs: 0,
+          },
         });
         void refreshGcConfig().catch(() => undefined);
       } finally {
@@ -4435,6 +4438,9 @@ export default function Sidebar() {
           type: "error",
           title: `Failed to scale ${agent}`,
           description: error instanceof Error ? error.message : "An error occurred.",
+          data: {
+            dismissAfterVisibleMs: 0,
+          },
         });
         void refreshGcConfig().catch(() => undefined);
       } finally {
