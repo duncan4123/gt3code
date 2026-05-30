@@ -18,9 +18,6 @@ schema = 2
 [imports.gastown]
 source = "../../packs/gastown-upstream"
 
-[imports.maintenance]
-source = "../../packs/maintenance"
-
 [imports.bd]
 source = "../../packs/bd"
 export = true

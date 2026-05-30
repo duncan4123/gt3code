@@ -1,8 +1,6 @@
 scope = "city"
-provider = "codex"
-option_defaults = { model = "gpt-5.4-mini" }
 fallback = true
 nudge = "Check your hook for work assignments."
 idle_timeout = "2h"
-min_active_sessions = 1
 max_active_sessions = 3
+

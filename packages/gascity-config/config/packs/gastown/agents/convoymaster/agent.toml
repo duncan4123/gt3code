@@ -1,8 +1,7 @@
 scope = "rig"
-provider = "codex"
-option_defaults = { model = "gpt-5.5" }
 wake_mode = "fresh"
 work_dir = ".gc/agents/{{.Rig}}/convoymaster"
 nudge = "Check convoys, mail, and ready work; then coordinate."
 idle_timeout = "2h"
 max_active_sessions = 1
+

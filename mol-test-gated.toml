@@ -1,0 +1,73 @@
+description = """
+Test formula demonstrating gates in a convoy context.
+
+This formula shows how gate beads block formula steps until the gate is
+satisfied. The gate bead (type=gate) is created automatically during cooking
+and must be closed for the step to proceed.
+
+Gate types: timer, condition, gh:run, gh:pr, human, mail
+"""
+formula = "mol-test-gated"
+version = 1
+
+[vars]
+[vars.issue]
+description = "The work bead ID assigned to this agent"
+required = true
+
+[[steps]]
+id = "setup"
+title = "Initialize and read assignment"
+description = """
+Read the assigned bead and prepare for work.
+
+```bash
+bd show {{issue}}
+```
+
+**Exit criteria:** You understand the task and are ready to proceed."""
+
+[[steps]]
+id = "wait-for-timer"
+title = "Wait for timer gate before implementing"
+needs = ["setup"]
+description = """
+This step is BLOCKED by a timer gate. The gate bead must be closed
+(either manually or by the gate-sweep order) before this step
+can be claimed.
+
+The gate-sweep order evaluates timer gates every 30s and
+auto-closes them when the timeout elapses.
+
+**This step CANNOT proceed until the gate bead is closed.**"""
+
+[steps.gate]
+type = "timer"
+timeout = "2m"
+
+[[steps]]
+id = "do-work"
+title = "Implement the solution"
+needs = ["wait-for-timer"]
+description = """
+The timer gate has been satisfied. Now implement the work.
+
+```bash
+bd show {{issue}}
+```
+
+**Exit criteria:** Work is complete, changes committed."""
+
+[[steps]]
+id = "drain"
+title = "Close drain step and signal completion"
+needs = ["do-work"]
+description = """
+Complete the drain and signal to controller.
+
+```bash
+if [ -n "${GC_BEAD_ID:-}" ]; then
+  bd update "$GC_BEAD_ID" --set-metadata gc.outcome=pass --status=closed --notes "Drain acknowledged."
+fi
+gc runtime drain-ack
+```"""

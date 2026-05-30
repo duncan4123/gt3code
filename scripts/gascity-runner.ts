@@ -52,7 +52,7 @@ const defaultCityRoot = join(
   "gascity-config",
   "config",
   "cities",
-  "gastown",
+  "gastown-dolt",
 );
 const configuredCitiesRoot = dirname(defaultCityRoot);
 const command = process.argv[2] ?? "help";
@@ -844,6 +844,12 @@ function bundledRigPath(cityPath: string, rigName: string): string | null {
       gascity: gastownGascityRepoRoot,
       t3code: repoRoot,
       "test-rig": join(cityPath, "rigs", "test-rig"),
+    },
+    "gastown-dolt": {
+      "beads-doltlite": join(repoRoot, "packages", "beads-doltlite"),
+      gascity: gastownGascityRepoRoot,
+      t3code: repoRoot,
+      beadstui: join(cityPath, "rigs", "beadstui"),
     },
   };
   const mapped = known[cityName]?.[rigName];

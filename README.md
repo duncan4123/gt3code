@@ -100,6 +100,52 @@ or a machine-global supervisor registry. `bun gc ...` and the T3 server set
 `GC_HOME`, `T3CODE_GASCITY_HOME`, `GC_BIN`, `BD_BIN`, and worktree paths to the
 install-local runtime.
 
+#### `.t3-dev/gascity` directory layout
+
+```
+.t3-dev/gascity/
+├── bin/                # gc, bd, br binaries + libdoltlite.so
+├── cities.toml         # supervisor city registry (one city: gastown-dolt)
+├── supervisor.toml     # supervisor config (port, etc.)
+├── supervisor.sock     # Unix socket for API
+├── supervisor.log      # supervisor process logs (gc supervisor logs)
+├── supervisor.lock     # process lock
+├── events.jsonl        # supervisor-level events
+└── runtime.env         # generated env vars (GC_HOME, GC_API_URL, etc.)
+```
+
+Key paths are resolved via `runtime.env`:
+
+| Variable | Value |
+|----------|-------|
+| `GC_HOME` | `./.t3-dev/gascity` |
+| `GC_API_URL` | `http://127.0.0.1:<port>` (port from `supervisor.toml`) |
+| `GC_BIN` | `./.t3-dev/gascity/bin/gc` |
+| `BD_BIN` | `./.t3-dev/gascity/bin/bd` |
+| `GC_WORKTREES_DIR` | `./.t3-dev/worktrees` |
+
+The supervisor API port is configured in `supervisor.toml` (`[supervisor] port`).
+This is set by the T3 Code app, not hardcoded — it uses `GC_API_URL` from
+`runtime.env`.
+
+#### Gas City version and upstream sync
+
+The bundled GC binary is built from source and synced from upstream
+`gastownhall/gascity` main. The sync metadata lives at
+`packages/gascity/source.sync.json`. Current target: **v1.2.0** (2026-05-25).
+
+After an upstream sync, run `gc doctor` and `gc doctor --fix` to migrate
+pack/city config to the current schema. Pack V2 enforcement (`schema = 2`,
+`[imports.*]`, conventional directories) is now required.
+
+#### Supervisor lifecycle
+
+The supervisor is started and stopped by the T3 Code app via `gc supervisor run`
+(not systemd when running from this checkout). The T3 Code server manages the
+supervisor process lifecycle — do NOT start a standalone `gc supervisor run` or
+`bd dolt start` against the same city. Gas City v1.2.0 rejects managed startup
+if a standalone Dolt server holds `.beads/dolt`.
+
 Design question: packaged desktop/user installs should likely use an
 app-relative runtime directory rather than the development `./.t3-dev` path. The
 invariant is the same either way: the runtime root belongs to that T3 Code

@@ -112,3 +112,9 @@ skip = ["beads-health", "cross-rig-deps", "digest-generate", "dolt-health", "dol
 
 [agent_defaults]
 model = "deepseek/deepseek-v4-flash"
+
+
+[[patches.agent]]
+dir = "t3code"
+name = "polecat"
+max_active_sessions = 6

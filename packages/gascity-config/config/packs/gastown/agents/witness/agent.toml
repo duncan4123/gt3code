@@ -1,8 +1,7 @@
 scope = "rig"
-provider = "kimi-for-coding"
-option_defaults = { model = "kimi-for-coding/k2p6", agent = "build" }
 wake_mode = "fresh"
 work_dir = ".gc/agents/{{.Rig}}/witness"
 nudge = "Run 'gc prime' to check worker status and begin patrol cycle."
 idle_timeout = "1h"
 max_active_sessions = 1
+

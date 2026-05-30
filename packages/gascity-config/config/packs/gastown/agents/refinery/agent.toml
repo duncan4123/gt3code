@@ -1,6 +1,4 @@
 scope = "rig"
-provider = "kimi-for-coding"
-option_defaults = { model = "kimi-for-coding/k2p6", agent = "build" }
 wake_mode = "fresh"
 work_dir = ".gc/worktrees/{{.Rig}}/refinery"
 nudge = "Run 'gc prime' to check merge queue and begin processing."
@@ -9,3 +7,4 @@ pre_start = [
 ]
 idle_timeout = "2h"
 max_active_sessions = 1
+
