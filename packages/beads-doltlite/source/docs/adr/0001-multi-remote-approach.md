@@ -59,7 +59,7 @@ Add config-managed additional remotes:
 - Add `federation.additional-remotes` as an ordered list of named remotes:
   ```yaml
   federation:
-    remote: "dolthub://org/beads"     # primary, Dolt remote name: "origin"
+    remote: "dolthub://org/beads" # primary, Dolt remote name: "origin"
     additional-remotes:
       - name: backup
         url: "az://account.blob.core.windows.net/container/path"
@@ -78,7 +78,7 @@ Add config-managed additional remotes:
 
 ## Considered Alternatives
 
-### Approach A: Config-driven multi-remote — *selected as target (Phase 2)*
+### Approach A: Config-driven multi-remote — _selected as target (Phase 2)_
 
 Keep `federation.remote` as primary, add `federation.additional-remotes` map.
 
@@ -90,12 +90,13 @@ push sequence.
 **Cons**: Two config patterns to maintain (`remote` + `additional-remotes`). Requires
 SyncOrchestrator for coordination. More code than Phase 1.
 
-### Approach B: Remote list with roles — *rejected*
+### Approach B: Remote list with roles — _rejected_
 
 Replace `federation.remote` with a list of remotes, each with name/url/role
 (primary/backup/archive).
 
 **Rejected because**:
+
 - **Breaking config change** — every existing `config.yaml` would need migration.
   Migration risk is high for a tool used in CI pipelines and team workflows.
 - **Security harder to reason about** — a flat list makes it less obvious which
@@ -103,7 +104,7 @@ Replace `federation.remote` with a list of remotes, each with name/url/role
 - **No incremental path** — requires full implementation before any value is
   delivered.
 
-### Approach C: Dolt-native `--remote` flag — *selected as first step (Phase 1)*
+### Approach C: Dolt-native `--remote` flag — _selected as first step (Phase 1)_
 
 Expose Dolt's native multi-remote via a CLI flag on `bd dolt push`/`bd dolt pull`.
 
@@ -114,11 +115,12 @@ management.
 **Cons**: Manual remote management (no config-driven setup). Drift/apply cannot
 manage additional remotes. No orchestrated multi-push.
 
-### Approach D: Push hooks / middleware — *rejected*
+### Approach D: Push hooks / middleware — _rejected_
 
 Post-push hook triggers additional pushes to backup remotes.
 
 **Rejected because**:
+
 - **Complex error handling** — hook failures are hard to surface and retry.
 - **Non-blocking semantics unsuitable for sync** — the caller needs to know
   whether the backup push succeeded. Fire-and-forget is wrong for data
@@ -134,6 +136,7 @@ The primary remote (`federation.remote`) is always authoritative for pulls.
 Additional remotes are **push-only mirrors**.
 
 **Rationale**:
+
 - Backup remotes may be stale due to partial push failures.
 - Mirrors must not diverge independently; pulling from mirrors creates
   split-brain ambiguity.
@@ -176,6 +179,7 @@ credentials correctly per transport protocol.
 ### SyncOrchestrator (Phase 2)
 
 A dedicated `SyncOrchestrator` component owns multi-remote coordination:
+
 - Iterates configured remotes in order.
 - Handles per-remote push with appropriate credential routing.
 - Aggregates results (success/warning/failure).

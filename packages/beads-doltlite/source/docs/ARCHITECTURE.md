@@ -67,6 +67,7 @@ When you create or modify an issue:
 3. **Sync:** Use `bd dolt push` to share changes with Dolt remotes
 
 Key implementation:
+
 - Dolt storage: `internal/storage/dolt/`
 - Export (for portability): `cmd/bd/export.go`
 
@@ -85,6 +86,7 @@ All queries run directly against the local Dolt database:
 2. **Sync:** Use `bd dolt pull` to fetch updates from Dolt remotes
 
 Key implementation:
+
 - Backup restore: `cmd/bd/backup_restore.go`
 - Issue bootstrap/migration: `cmd/bd/init.go`
 - Dolt storage: `internal/storage/dolt/`
@@ -165,6 +167,7 @@ Each workspace can run its own Dolt server for multi-writer access:
 ```
 
 **Server mode:**
+
 - Connects to `dolt sql-server` (multi-writer, high-concurrency)
 - PID file at `.beads/dolt-server.pid`
 - Logs at `.beads/dolt-server.log`
@@ -173,9 +176,11 @@ Each workspace can run its own Dolt server for multi-writer access:
   `dolt.shared-server: true` in config.yaml or `BEADS_DOLT_SHARED_SERVER=1`.
 
 **Embedded mode:**
+
 - Direct database access (single-writer, no server process)
 
 **Communication:**
+
 - Protocol defined in `internal/rpc/protocol.go`
 - Used by Dolt server mode for multi-writer access
 
@@ -183,22 +188,22 @@ Each workspace can run its own Dolt server for multi-writer access:
 
 Core types in `internal/types/types.go`:
 
-| Type | Description | Key Fields |
-|------|-------------|------------|
-| **Issue** | Work item | ID, Title, Description, Status, Priority, Type |
+| Type           | Description  | Key Fields                                                       |
+| -------------- | ------------ | ---------------------------------------------------------------- |
+| **Issue**      | Work item    | ID, Title, Description, Status, Priority, Type                   |
 | **Dependency** | Relationship | FromID, ToID, Type (blocks/related/parent-child/discovered-from) |
-| **Label** | Tag | Name, Color, Description |
-| **Comment** | Discussion | IssueID, Author, Content, Timestamp |
-| **Event** | Audit trail | IssueID, Type, Data, Timestamp |
+| **Label**      | Tag          | Name, Color, Description                                         |
+| **Comment**    | Discussion   | IssueID, Author, Content, Timestamp                              |
+| **Event**      | Audit trail  | IssueID, Type, Data, Timestamp                                   |
 
 ### Dependency Types
 
-| Type | Semantic | Affects `bd ready`? |
-|------|----------|---------------------|
-| `blocks` | Issue X must close before Y starts | Yes |
-| `parent-child` | Hierarchical (epic/subtask) | Yes (children blocked if parent blocked) |
-| `related` | Soft link for reference | No |
-| `discovered-from` | Found during work on parent | No |
+| Type              | Semantic                           | Affects `bd ready`?                      |
+| ----------------- | ---------------------------------- | ---------------------------------------- |
+| `blocks`          | Issue X must close before Y starts | Yes                                      |
+| `parent-child`    | Hierarchical (epic/subtask)        | Yes (children blocked if parent blocked) |
+| `related`         | Soft link for reference            | No                                       |
+| `discovered-from` | Found during work on parent        | No                                       |
 
 ### Status Flow
 
@@ -219,67 +224,67 @@ orchestration, or team-specific data before adding new first-class fields; see
 
 **Core Identification:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Unique identifier (e.g., `bd-a1b2`) |
+| Field | Type   | Description                         |
+| ----- | ------ | ----------------------------------- |
+| `id`  | string | Unique identifier (e.g., `bd-a1b2`) |
 
 **Issue Content:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `title` | string | Issue title (required) |
-| `description` | string | Detailed description (optional) |
-| `design` | string | Design notes (optional) |
-| `acceptance_criteria` | string | Acceptance criteria (optional) |
-| `notes` | string | Additional notes (optional) |
+| Field                 | Type   | Description                     |
+| --------------------- | ------ | ------------------------------- |
+| `title`               | string | Issue title (required)          |
+| `description`         | string | Detailed description (optional) |
+| `design`              | string | Design notes (optional)         |
+| `acceptance_criteria` | string | Acceptance criteria (optional)  |
+| `notes`               | string | Additional notes (optional)     |
 
 **Status & Workflow:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `status` | string | Current status: `open`, `in_progress`, `blocked`, `deferred`, `closed`, `tombstone`, `pinned`, `hooked` (optional, defaults to `open`) |
-| `priority` | int | Priority 0-4 where 0=critical, 4=backlog |
+| Field        | Type   | Description                                                                                                                                               |
+| ------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`     | string | Current status: `open`, `in_progress`, `blocked`, `deferred`, `closed`, `tombstone`, `pinned`, `hooked` (optional, defaults to `open`)                    |
+| `priority`   | int    | Priority 0-4 where 0=critical, 4=backlog                                                                                                                  |
 | `issue_type` | string | Type: `bug`, `feature`, `task`, `epic`, `chore`, `message`, `merge-request`, `molecule`, `gate`, `agent`, `role`, `convoy` (optional, defaults to `task`) |
 
 **Assignment:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `assignee` | string | Assigned user/agent (optional) |
-| `estimated_minutes` | int | Time estimate in minutes (optional) |
+| Field               | Type   | Description                         |
+| ------------------- | ------ | ----------------------------------- |
+| `assignee`          | string | Assigned user/agent (optional)      |
+| `estimated_minutes` | int    | Time estimate in minutes (optional) |
 
 **Timestamps:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `created_at` | RFC3339 | When issue was created |
-| `created_by` | string | Who created the issue (optional) |
-| `updated_at` | RFC3339 | Last modification time |
-| `closed_at` | RFC3339 | When issue was closed (optional, set when status=closed) |
-| `close_reason` | string | Reason provided when closing (optional) |
+| Field          | Type    | Description                                              |
+| -------------- | ------- | -------------------------------------------------------- |
+| `created_at`   | RFC3339 | When issue was created                                   |
+| `created_by`   | string  | Who created the issue (optional)                         |
+| `updated_at`   | RFC3339 | Last modification time                                   |
+| `closed_at`    | RFC3339 | When issue was closed (optional, set when status=closed) |
+| `close_reason` | string  | Reason provided when closing (optional)                  |
 
 **External Integration:**
 
-| Field | Type | Description |
-|-------|------|-------------|
+| Field          | Type   | Description                                              |
+| -------------- | ------ | -------------------------------------------------------- |
 | `external_ref` | string | External reference (e.g., `gh-9`, `jira-ABC`) (optional) |
 
 **Relational Data:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `labels` | []string | Tags attached to the issue (optional) |
+| Field          | Type         | Description                              |
+| -------------- | ------------ | ---------------------------------------- |
+| `labels`       | []string     | Tags attached to the issue (optional)    |
 | `dependencies` | []Dependency | Relationships to other issues (optional) |
-| `comments` | []Comment | Discussion comments (optional) |
+| `comments`     | []Comment    | Discussion comments (optional)           |
 
 **Tombstone Fields (soft-delete):**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `deleted_at` | RFC3339 | When deleted (optional, set when status=tombstone) |
-| `deleted_by` | string | Who deleted (optional) |
-| `delete_reason` | string | Why deleted (optional) |
-| `original_type` | string | Issue type before deletion (optional) |
+| Field           | Type    | Description                                        |
+| --------------- | ------- | -------------------------------------------------- |
+| `deleted_at`    | RFC3339 | When deleted (optional, set when status=tombstone) |
+| `deleted_by`    | string  | Who deleted (optional)                             |
+| `delete_reason` | string  | Why deleted (optional)                             |
+| `original_type` | string  | Issue type before deletion (optional)              |
 
 **Note:** Fields with `json:"-"` tags (like `content_hash`, `source_repo`, `id_prefix`) are internal and not included in exports.
 
@@ -294,15 +299,15 @@ orchestration, or team-specific data before adding new first-class fields; see
 
 ## Key Code Paths
 
-| Area | Files |
-|------|-------|
-| CLI entry | `cmd/bd/main.go` |
-| Storage interface | `internal/storage/storage.go` |
-| Dolt implementation | `internal/storage/dolt/` |
-| RPC protocol | `internal/rpc/protocol.go`, `server_*.go` |
-| Export logic (portability) | `cmd/bd/export.go` |
-| Backup restore | `cmd/bd/backup_restore.go` |
-| Issue bootstrap/migration | `cmd/bd/init.go` |
+| Area                       | Files                                     |
+| -------------------------- | ----------------------------------------- |
+| CLI entry                  | `cmd/bd/main.go`                          |
+| Storage interface          | `internal/storage/storage.go`             |
+| Dolt implementation        | `internal/storage/dolt/`                  |
+| RPC protocol               | `internal/rpc/protocol.go`, `server_*.go` |
+| Export logic (portability) | `cmd/bd/export.go`                        |
+| Backup restore             | `cmd/bd/backup_restore.go`                |
+| Issue bootstrap/migration  | `cmd/bd/init.go`                          |
 
 ## Wisps and Molecules
 
@@ -341,12 +346,12 @@ This design enables:
 
 ### Wisp vs Regular Issue Deletion
 
-| Aspect | Regular Issues | Wisps |
-|--------|---------------|-------|
-| Synced to remotes | Yes | No |
-| Tombstone on delete | Yes | No |
-| Can resurrect | Yes (without tombstone) | No (never synced) |
-| Deletion method | `CreateTombstone()` | `DeleteIssue()` (hard delete) |
+| Aspect              | Regular Issues          | Wisps                         |
+| ------------------- | ----------------------- | ----------------------------- |
+| Synced to remotes   | Yes                     | No                            |
+| Tombstone on delete | Yes                     | No                            |
+| Can resurrect       | Yes (without tombstone) | No (never synced)             |
+| Deletion method     | `CreateTombstone()`     | `DeleteIssue()` (hard delete) |
 
 The `bd mol squash` command uses hard delete intentionally - tombstones would be wasted overhead for data that never leaves the local database.
 

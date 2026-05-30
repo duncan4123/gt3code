@@ -11,14 +11,14 @@ Verdict: PASS
 
 ## Criteria
 
-| # | Criterion | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Review PASS present | PASS | `bd show ga-5ju0nf` contains `Review verdict: PASS`. Reviewer synthesis lists findings F1-F5 as informational only. |
-| 2 | Acceptance criteria met | PASS | The helper `examples/dolt/assets/scripts/port_resolve.sh` exists with `resolve_dolt_port_or_die`; `runtime.sh` and maintenance `dolt-target.sh` route through it; current source-closure script `GC_DOLT_PORT.*3307` fallbacks were removed; packlint and helper tests cover the pinned behavior; `gc dolt sync --db` reserved-name validation still runs before runtime port resolution. |
-| 3 | Tests pass | PASS | Focused acceptance tests, shell syntax checks, `go vet ./...`, `go build ./...`, and `make test-fast-parallel` passed on the PR branch. |
-| 4 | No high-severity review findings open | PASS | Review notes contain five informational findings and no HIGH findings. |
-| 5 | Final branch is clean | PASS | `git status --porcelain=v1` was empty before the gate commits and rechecked clean after push. |
-| 6 | Branch diverges cleanly from main | PASS | `git merge-base --is-ancestor origin/main HEAD` returned 0 after the gate commit; `git merge-tree` conflict scan found no conflict markers; PR #2282 reports `mergeable: MERGEABLE`. GitHub `mergeStateStatus: BLOCKED` is from queued/in-progress CI and branch protection, not a merge conflict. |
+| #   | Criterion                             | Verdict | Evidence                                                                                                                                                                                                                                                                                                                                                                                  |
+| --- | ------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS    | `bd show ga-5ju0nf` contains `Review verdict: PASS`. Reviewer synthesis lists findings F1-F5 as informational only.                                                                                                                                                                                                                                                                       |
+| 2   | Acceptance criteria met               | PASS    | The helper `examples/dolt/assets/scripts/port_resolve.sh` exists with `resolve_dolt_port_or_die`; `runtime.sh` and maintenance `dolt-target.sh` route through it; current source-closure script `GC_DOLT_PORT.*3307` fallbacks were removed; packlint and helper tests cover the pinned behavior; `gc dolt sync --db` reserved-name validation still runs before runtime port resolution. |
+| 3   | Tests pass                            | PASS    | Focused acceptance tests, shell syntax checks, `go vet ./...`, `go build ./...`, and `make test-fast-parallel` passed on the PR branch.                                                                                                                                                                                                                                                   |
+| 4   | No high-severity review findings open | PASS    | Review notes contain five informational findings and no HIGH findings.                                                                                                                                                                                                                                                                                                                    |
+| 5   | Final branch is clean                 | PASS    | `git status --porcelain=v1` was empty before the gate commits and rechecked clean after push.                                                                                                                                                                                                                                                                                             |
+| 6   | Branch diverges cleanly from main     | PASS    | `git merge-base --is-ancestor origin/main HEAD` returned 0 after the gate commit; `git merge-tree` conflict scan found no conflict markers; PR #2282 reports `mergeable: MERGEABLE`. GitHub `mergeStateStatus: BLOCKED` is from queued/in-progress CI and branch protection, not a merge conflict.                                                                                        |
 
 ## Acceptance Evidence
 
@@ -35,13 +35,13 @@ Verdict: PASS
 
 ## Review Findings
 
-| Finding | Severity | Gate disposition |
-|---------|----------|------------------|
-| F1 | Informational | Spec path correction accepted: lint targets source pack directories under `examples/`. |
-| F2 | Informational | Extra allowlist entry accepted because both formula literals are sibling-slice scope. |
-| F3 | Informational | Unit isolation accepted; managed runtime fixtures are already exercised in `health_test.go`. |
-| F4 | Informational | Companion validation reorder accepted and covered by `TestDoltSyncRejectsManagedProbeDatabaseFilter`. |
-| F5 | Informational | Test-only `$SCRIPT_DIR` fallback accepted; production path still uses `GC_SYSTEM_PACKS_DIR`. |
+| Finding | Severity      | Gate disposition                                                                                      |
+| ------- | ------------- | ----------------------------------------------------------------------------------------------------- |
+| F1      | Informational | Spec path correction accepted: lint targets source pack directories under `examples/`.                |
+| F2      | Informational | Extra allowlist entry accepted because both formula literals are sibling-slice scope.                 |
+| F3      | Informational | Unit isolation accepted; managed runtime fixtures are already exercised in `health_test.go`.          |
+| F4      | Informational | Companion validation reorder accepted and covered by `TestDoltSyncRejectsManagedProbeDatabaseFilter`. |
+| F5      | Informational | Test-only `$SCRIPT_DIR` fallback accepted; production path still uses `GC_SYSTEM_PACKS_DIR`.          |
 
 ## Push Target
 

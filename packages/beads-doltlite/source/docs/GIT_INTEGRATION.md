@@ -13,6 +13,7 @@ Beads has comprehensive Git worktree compatibility with shared database architec
 ### How It Works
 
 Git worktrees share the same `.git` directory and `.beads` database:
+
 - All worktrees use the same `.beads/dolt/` database in the main repository
 - Database discovery prioritizes main repository location
 - Worktree-aware git operations prevent conflicts
@@ -20,12 +21,14 @@ Git worktrees share the same `.git` directory and `.beads` database:
 ### Worktree-Aware Features
 
 **Database Discovery:**
+
 - Resolves the active workspace using `BEADS_DIR`, worktree fallback, and shared main-repo `.beads`
 - Falls back to worktree-local search if needed
 - Prevents database duplication across worktrees
 - Use `bd where` as the authoritative check; local `./.beads` may be absent in pure worktree or redirected setups
 
 **Git Operations:**
+
 - Worktree-aware repository root detection
 - Proper handling of git directory vs git common directory
 - Safe concurrent access to shared database (use server mode for multi-writer)
@@ -82,14 +85,14 @@ Beads works with branchless VCS tools like [Jujutsu (jj)](https://martinvonz.git
 
 All core beads functionality works without git hooks:
 
-| Feature | Hooks Required? | Notes |
-|---------|----------------|-------|
-| `bd create`, `bd update`, `bd close` | No | Core CRUD uses Dolt directly |
-| `bd ready`, `bd list`, `bd show` | No | Read-only queries |
-| `bd dolt push` / `bd dolt pull` | No | Dolt-native sync, independent of git |
-| `bd onboard`, `bd doctor` | No | Diagnostics and onboarding |
-| Agent identity trailers | Yes | `prepare-commit-msg` hook adds `Executed-By:` to commits |
-| Hook chaining | Yes | Preserves existing pre-commit, post-merge hooks |
+| Feature                              | Hooks Required? | Notes                                                    |
+| ------------------------------------ | --------------- | -------------------------------------------------------- |
+| `bd create`, `bd update`, `bd close` | No              | Core CRUD uses Dolt directly                             |
+| `bd ready`, `bd list`, `bd show`     | No              | Read-only queries                                        |
+| `bd dolt push` / `bd dolt pull`      | No              | Dolt-native sync, independent of git                     |
+| `bd onboard`, `bd doctor`            | No              | Diagnostics and onboarding                               |
+| Agent identity trailers              | Yes             | `prepare-commit-msg` hook adds `Executed-By:` to commits |
+| Hook chaining                        | Yes             | Preserves existing pre-commit, post-merge hooks          |
 
 **To skip hooks entirely during init:**
 
@@ -188,9 +191,11 @@ bd hooks install --beads
 ### What Gets Installed
 
 **pre-commit hook:**
+
 - Runs pre-commit checks for beads data consistency
 
 **post-merge hook:**
+
 - Runs chained user hooks, then uses JSONL import only as a legacy fallback
   when no Dolt remote is configured. With `sync.remote` configured, use
   `bd dolt pull` for canonical issue sync.
@@ -216,6 +221,7 @@ When the timeout is reached, beads prints a warning and allows the git operation
 #### Hook Installation (`cmd/bd/hooks.go`)
 
 The `installHooks()` function:
+
 - Writes embedded hook scripts to the `.git/hooks/` directory
 - Creates the hooks directory with `os.MkdirAll()` if needed
 - Backs up existing hooks with `.backup` extension (unless `--force` flag used)
@@ -262,11 +268,13 @@ The `detectExistingHooks()` function scans for existing hooks and classifies the
 ```
 
 **Best for:**
+
 - Open source contributors
 - Solo developers
 - Private task tracking on public repos
 
 **Setup:**
+
 ```bash
 bd init --contributor  # Interactive wizard
 ```
@@ -286,11 +294,13 @@ bd init --contributor  # Interactive wizard
 ```
 
 **Best for:**
+
 - Teams on protected branches
 - Managed git workflows
 - Review-before-merge policies
 
 **Setup:**
+
 ```bash
 bd init --team  # Interactive wizard
 ```

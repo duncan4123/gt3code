@@ -470,7 +470,13 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
 
   const connectToOpenCodeServer: OpenCodeRuntimeShape["connectToOpenCodeServer"] = (input) => {
     const serverUrl = input.serverUrl?.trim();
-    if (serverUrl) {
+    // Bypass shared server for sessions that need GC env vars (e.g. agent
+    // sessions from t3bridge). Text generation and manual threads use the
+    // shared server; agent sessions get dedicated processes with proper env.
+    const hasSessionEnv =
+      input.environment !== undefined &&
+      ("GC_AGENT" in input.environment || "GC_SESSION_NAME" in input.environment);
+    if (serverUrl && !hasSessionEnv) {
       // We don't own externally-configured servers — no scope interaction.
       return Effect.succeed({
         url: serverUrl,

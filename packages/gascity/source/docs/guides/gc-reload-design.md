@@ -63,14 +63,14 @@ gc reload [path] [--async] [--soft] [--timeout <duration>]
 
 Sync mode waits for the first reload-processing tick only.
 
-| Outcome | Exit | Stdout/Stderr contract |
-| --- | --- | --- |
-| `applied` | `0` | stdout: `Config reloaded: ... (rev <short>)` |
-| `no_change` | `0` | stdout: `No config changes detected.` |
-| `accepted` (`--async`) | `0` | stdout: `Reload requested.` |
-| `failed` | `1` | stderr: specific config/load/fetch error |
-| `busy` | `1` | stderr: controller too busy to accept reload |
-| `timeout` | `1` | stderr: wait budget expired; reload may still finish later |
+| Outcome                | Exit | Stdout/Stderr contract                                     |
+| ---------------------- | ---- | ---------------------------------------------------------- |
+| `applied`              | `0`  | stdout: `Config reloaded: ... (rev <short>)`               |
+| `no_change`            | `0`  | stdout: `No config changes detected.`                      |
+| `accepted` (`--async`) | `0`  | stdout: `Reload requested.`                                |
+| `failed`               | `1`  | stderr: specific config/load/fetch error                   |
+| `busy`                 | `1`  | stderr: controller too busy to accept reload               |
+| `timeout`              | `1`  | stderr: wait budget expired; reload may still finish later |
 
 Warnings are non-fatal post-apply problems. On sync success with
 warnings:
@@ -174,7 +174,7 @@ Soft reload is **not** a substitute for restarting sessions when a
 config change requires a process restart to take effect (e.g.
 changing the binary path or command-line). It updates only the
 recorded hash so the reconciler stops trying to drain the session;
-the live session continues running with the *old* command for the
+the live session continues running with the _old_ command for the
 rest of its life. Use `--soft` for changes that are cosmetic to a
 running session — hook commands, matchers, environment variables that
 the session reads via lookup rather than once-at-launch — or any time

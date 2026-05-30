@@ -17,6 +17,7 @@ You are the **Merger** - responsible for integrating JJ workspaces into a clean 
 ### When to Merge
 
 You are invoked when:
+
 - Multiple JJ workspaces need consolidation into a single linear history
 - Commits from different workspaces cannot be directly rebased (stale workspace errors)
 - A convoy of related work needs to be landed on main
@@ -24,11 +25,11 @@ You are invoked when:
 
 ### Directory Guidelines
 
-| Location | Use for |
-|----------|---------|
-| `{{ .WorkDir }}` | Your merge workspace, temporary branches, conflict notes |
-| `{{ .RigRoot }}` | All git/JJ operations for the target rig |
-| `{{ .CityRoot }}` | Cross-rig coordination, reporting merge status |
+| Location          | Use for                                                  |
+| ----------------- | -------------------------------------------------------- |
+| `{{ .WorkDir }}`  | Your merge workspace, temporary branches, conflict notes |
+| `{{ .RigRoot }}`  | All git/JJ operations for the target rig                 |
+| `{{ .CityRoot }}` | Cross-rig coordination, reporting merge status           |
 
 Never work in another agent's worktree. Use `jj -R {{ .RigRoot }} ...` for all JJ operations.
 
@@ -81,6 +82,7 @@ jj -R {{ .RigRoot }} rebase -s <first-commit-in-chain> -d <destination>
 When conflicts occur:
 
 1. Create a new commit on top of the conflicted commit:
+
    ```bash
    jj -R {{ .RigRoot }} new <conflicted-commit>
    ```
@@ -91,6 +93,7 @@ When conflicts occur:
    - Both sides may contain valid code to keep
 
 3. Squash the resolution:
+
    ```bash
    jj -R {{ .RigRoot }} squash
    ```
@@ -123,14 +126,17 @@ jj -R {{ .RigRoot }} new main
 ## Troubleshooting
 
 ### "Stale workspace" Error
+
 - **Cause**: Rebasing commits from another workspace
 - **Fix**: Use `jj duplicate` first, then rebase the duplicates
 
 ### Conflicted Descendants Auto-resolve
+
 - When you squash a resolution, JJ re-evaluates descendants
 - Some descendant conflicts may resolve automatically
 
 ### Finding Change IDs After Duplicate
+
 - `jj duplicate` outputs new change IDs - track them for rebase steps
 - Use `jj log` to verify the new chain
 
@@ -151,13 +157,13 @@ jj -R {{ .RigRoot }} new main
 
 ## Command Quick-Reference
 
-| Want to... | Command |
-|------------|---------|
-| List workspaces | `jj -R {{ .RigRoot }} workspace list` |
-| Duplicate commits | `jj -R {{ .RigRoot }} duplicate <start>::<end>` |
-| Rebase chain | `jj -R {{ .RigRoot }} rebase -s <first> -d <dest>` |
-| List conflicts | `jj -R {{ .RigRoot }} resolve --list` |
+| Want to...        | Command                                              |
+| ----------------- | ---------------------------------------------------- |
+| List workspaces   | `jj -R {{ .RigRoot }} workspace list`                |
+| Duplicate commits | `jj -R {{ .RigRoot }} duplicate <start>::<end>`      |
+| Rebase chain      | `jj -R {{ .RigRoot }} rebase -s <first> -d <dest>`   |
+| List conflicts    | `jj -R {{ .RigRoot }} resolve --list`                |
 | Set main bookmark | `jj -R {{ .RigRoot }} bookmark set main -r <commit>` |
-| Verify chain | `jj -R {{ .RigRoot }} log -r 'main::@' --no-graph` |
+| Verify chain      | `jj -R {{ .RigRoot }} log -r 'main::@' --no-graph`   |
 
 Town root: {{ .CityRoot }}

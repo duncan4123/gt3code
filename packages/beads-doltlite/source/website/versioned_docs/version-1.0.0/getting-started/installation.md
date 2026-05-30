@@ -67,11 +67,11 @@ If you see `bd: command not found`, ensure your install location is in PATH. For
 
 Building from source requires Go, git, and a C compiler for embedded Dolt. ICU headers are not required; builds use `gms_pure_go`.
 
-| Platform | Command |
-|----------|---------|
-| macOS | `brew install zstd` |
+| Platform      | Command                               |
+| ------------- | ------------------------------------- |
+| macOS         | `brew install zstd`                   |
 | Debian/Ubuntu | `sudo apt-get install -y libzstd-dev` |
-| Fedora/RHEL | `sudo dnf install -y libzstd-devel` |
+| Fedora/RHEL   | `sudo dnf install -y libzstd-devel`   |
 
 ```bash
 git clone https://github.com/gastownhall/beads

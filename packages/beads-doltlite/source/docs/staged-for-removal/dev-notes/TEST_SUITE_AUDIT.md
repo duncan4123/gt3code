@@ -77,11 +77,12 @@ These have a mix - some can share DB, some need isolation:
 
 #### Server/RPC Tests (Already have integration tags):
 
-*Note: Legacy daemon test files (`daemon_test.go`, `daemon_autoimport_test.go`, etc.) have been removed as part of the daemon-to-Dolt migration.*
+_Note: Legacy daemon test files (`daemon_test.go`, `daemon_autoimport_test.go`, etc.) have been removed as part of the daemon-to-Dolt migration._
 
 **Recommendation**: Keep server/RPC tests isolated (they already have `//go:build integration` tags)
 
 #### Git Operation Tests:
+
 - **git_sync_test.go** (1 test)
 - **sync_test.go** (16 tests)
 - **sync_local_only_test.go** (2 tests)
@@ -100,10 +101,12 @@ Tests that already use good patterns:
 ### Category 4: Special Cases (50+ tests)
 
 #### CLI Integration Tests:
+
 - **cli_fast_test.go** (17 tests) - End-to-end CLI testing
   - Keep isolated, already tagged `//go:build integration`
 
 #### Import/Export Tests:
+
 - **import_bug_test.go** (1 test)
 - **import_cancellation_test.go** (2 tests)
 - **import_idempotent_test.go** (3 tests)
@@ -114,6 +117,7 @@ Tests that already use good patterns:
 **Recommendation**: Most can share DB within their suite
 
 #### Filesystem/Init Tests:
+
 - **init_test.go** (8 tests)
 - **init_hooks_test.go** (3 tests)
 - **reinit_test.go** (1 test)
@@ -122,6 +126,7 @@ Tests that already use good patterns:
 **Recommendation**: Need isolation (modify filesystem)
 
 #### Validation/Utility Tests:
+
 - **validate_test.go** (9 tests)
 - **template_test.go** (5 tests)
 - **template_security_test.go** (2 tests)
@@ -133,6 +138,7 @@ Tests that already use good patterns:
 **Recommendation**: Can share DB or may not need DB at all
 
 #### Migration Tests:
+
 - **migrate_test.go** (3 tests)
 - **migrate_hash_ids_test.go** (4 tests)
 - **repair_deps_test.go** (4 tests)
@@ -140,12 +146,14 @@ Tests that already use good patterns:
 **Recommendation**: Need isolation (modify DB schema)
 
 #### Doctor Tests:
+
 - **doctor_test.go** (13 tests)
 - **doctor/legacy_test.go** tests
 
 **Recommendation**: Mix - some can share, some need isolation
 
 #### Misc Tests:
+
 - ✅ **compact_test.go** (10 tests → 1 suite + 4 standalone = Phase 2 DONE)
 - **duplicates_test.go** (5 tests)
 - **epic_test.go** (3 tests)
@@ -176,6 +184,7 @@ Tests that already use good patterns:
 ## Proposed Refactoring Plan
 
 ### Phase 1: High Priority (P1) - Quick Wins ✓ COMPLETE
+
 All P1 files refactored for immediate speedup:
 
 1. ✓ **create_test.go** (bd-y6d) - Template refactor → `TestCreateSuite`
@@ -203,6 +212,7 @@ func TestCreateSuite(t *testing.T) {
 ```
 
 ### Phase 2: Medium Priority (P2) - Moderate Gains
+
 After Phase 1 success:
 
 1. **main_test.go** - Audit for DB-only vs CLI tests
@@ -210,6 +220,7 @@ After Phase 1 success:
 3. **export_import_test.go** - Already has helper pattern
 
 ### Phase 3: Special Cases (P3) - Complex Refactors
+
 Handle tests that need mixed isolation:
 
 1. Review server/RPC tests for DB-only portions
@@ -219,11 +230,13 @@ Handle tests that need mixed isolation:
 ## Success Metrics
 
 ### Before (Current):
+
 - **279-280 tests**
 - Each with `newTestStore()` = **280 DB initializations**
 - Estimated time: **8+ minutes**
 
 ### After (Proposed):
+
 - **10-15 test suites** for DB tests = **~15 DB initializations**
 - **~65 isolated tests** (server/RPC, git, filesystem) = **~65 DB initializations**
 - **Total: ~80 DB initializations** (down from 280)
@@ -231,13 +244,13 @@ Handle tests that need mixed isolation:
 
 ### Per-Suite Expectations:
 
-| Suite | Current | Proposed | Speedup |
-|-------|---------|----------|---------|
-| TestCreateSuite | 11 DBs | 1 DB | 10x |
-| TestDependencySuite | 4 DBs | 1 DB | 4x |
-| TestStaleSuite | 5 DBs | 1 DB | 5x |
-| TestIntegritySuite | 15 DBs | 1 DB | 15x |
-| TestMainSuite | 14 DBs | 1-2 DBs | 7-14x |
+| Suite               | Current | Proposed | Speedup |
+| ------------------- | ------- | -------- | ------- |
+| TestCreateSuite     | 11 DBs  | 1 DB     | 10x     |
+| TestDependencySuite | 4 DBs   | 1 DB     | 4x      |
+| TestStaleSuite      | 5 DBs   | 1 DB     | 5x      |
+| TestIntegritySuite  | 15 DBs  | 1 DB     | 15x     |
+| TestMainSuite       | 14 DBs  | 1-2 DBs  | 7-14x   |
 
 ## Implementation Strategy
 
@@ -277,5 +290,5 @@ Handle tests that need mixed isolation:
 1. **Shared DB pattern works well** for most pure DB tests
 2. **Data pollution can occur** when tests create overlapping data (e.g., stale_test.go)
 3. **Solution for pollution**: Either use unique ID prefixes per subtest OR split into separate suites
-4. **ID prefix validation** requires test IDs to match "test-*" pattern
+4. **ID prefix validation** requires test IDs to match "test-\*" pattern
 5. **SQLite datetime functions** needed for timestamp manipulation in tests

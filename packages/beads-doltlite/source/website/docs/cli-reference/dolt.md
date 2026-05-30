@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc dolt`
 
 ## bd dolt
@@ -17,40 +18,40 @@ auto-started transparently when needed. Use these commands for explicit
 control or diagnostics.
 
 Server lifecycle:
-  bd dolt start        Start the Dolt server for this project
-  bd dolt stop         Stop the Dolt server for this project
-  bd dolt status       Show Dolt server status
+bd dolt start Start the Dolt server for this project
+bd dolt stop Stop the Dolt server for this project
+bd dolt status Show Dolt server status
 
 Configuration:
-  bd dolt show         Show current Dolt configuration with connection test
-  bd dolt set &lt;k&gt; &lt;v&gt;  Set a configuration value
-  bd dolt test         Test server connection
+bd dolt show Show current Dolt configuration with connection test
+bd dolt set &lt;k&gt; &lt;v&gt; Set a configuration value
+bd dolt test Test server connection
 
 Version control:
-  bd dolt commit       Commit pending changes
-  bd dolt push         Push commits to Dolt remote
-  bd dolt pull         Pull commits from Dolt remote
+bd dolt commit Commit pending changes
+bd dolt push Push commits to Dolt remote
+bd dolt pull Pull commits from Dolt remote
 
 Remote management:
-  bd dolt remote add &lt;name&gt; &lt;url&gt;   Add a Dolt remote
-  bd dolt remote list                List configured remotes
-  bd dolt remote remove &lt;name&gt;       Remove a Dolt remote
+bd dolt remote add &lt;name&gt; &lt;url&gt; Add a Dolt remote
+bd dolt remote list List configured remotes
+bd dolt remote remove &lt;name&gt; Remove a Dolt remote
 
 Configuration keys for 'bd dolt set':
-  database  Database name (default: issue prefix or "beads")
-  host      Server host (default: 127.0.0.1)
-  port      Server port (auto-detected; override with bd dolt set port &lt;N&gt;)
-  user      MySQL user (default: root)
-  data-dir  Custom dolt data directory (absolute path; default: .beads/dolt)
+database Database name (default: issue prefix or "beads")
+host Server host (default: 127.0.0.1)
+port Server port (auto-detected; override with bd dolt set port &lt;N&gt;)
+user MySQL user (default: root)
+data-dir Custom dolt data directory (absolute path; default: .beads/dolt)
 
 Flags for 'bd dolt set':
-  --update-config  Also write to config.yaml for team-wide defaults
+--update-config Also write to config.yaml for team-wide defaults
 
 Examples:
-  bd dolt set database myproject
-  bd dolt set host 192.168.1.100 --update-config
-  bd dolt set data-dir /home/user/.beads-dolt/myproject
-  bd dolt test
+bd dolt set database myproject
+bd dolt set host 192.168.1.100 --update-config
+bd dolt set data-dir /home/user/.beads-dolt/myproject
+bd dolt test
 
 ```
 bd dolt
@@ -61,7 +62,7 @@ bd dolt
 Identify and drop leftover test and agent databases that accumulate
 on the shared Dolt server from interrupted test runs and terminated agents.
 
-Stale database prefixes: testdb_*, doctest_*, doctortest_*, beads_pt*, beads_vr*, beads_t*
+Stale database prefixes: testdb*\*, doctest*_, doctortest\__, beads_pt*, beads_vr*, beads_t\*
 
 These waste server memory and can degrade performance under concurrent load.
 Use --dry-run to see what would be dropped without actually dropping.
@@ -167,9 +168,9 @@ bd dolt push [flags]
 Manage Dolt remotes for push/pull replication.
 
 Subcommands:
-  add &lt;name&gt; &lt;url&gt;   Add a new remote
-  list               List all configured remotes
-  remove &lt;name&gt;      Remove a remote
+add &lt;name&gt; &lt;url&gt; Add a new remote
+list List all configured remotes
+remove &lt;name&gt; Remove a remote
 
 ```
 bd dolt remote
@@ -210,19 +211,19 @@ bd dolt remote remove <name> [flags]
 Set a Dolt configuration value in metadata.json.
 
 Keys:
-  database  Database name (default: issue prefix or "beads")
-  host      Server host (default: 127.0.0.1)
-  port      Server port (auto-detected; override with bd dolt set port &lt;N&gt;)
-  user      MySQL user (default: root)
-  data-dir  Custom dolt data directory (absolute path; default: .beads/dolt)
+database Database name (default: issue prefix or "beads")
+host Server host (default: 127.0.0.1)
+port Server port (auto-detected; override with bd dolt set port &lt;N&gt;)
+user MySQL user (default: root)
+data-dir Custom dolt data directory (absolute path; default: .beads/dolt)
 
 Use --update-config to also write to config.yaml for team-wide defaults.
 
 Examples:
-  bd dolt set database myproject
-  bd dolt set host 192.168.1.100
-  bd dolt set port 3307 --update-config
-  bd dolt set data-dir /home/user/.beads-dolt/myproject
+bd dolt set database myproject
+bd dolt set host 192.168.1.100
+bd dolt set port 3307 --update-config
+bd dolt set data-dir /home/user/.beads-dolt/myproject
 
 ```
 bd dolt set <key> <value> [flags]
@@ -294,8 +295,9 @@ bd dolt stop [flags]
 Test the connection to the configured Dolt server.
 
 This verifies that:
-  1. The server is reachable at the configured host:port
-  2. The connection can be established
+
+1. The server is reachable at the configured host:port
+2. The connection can be established
 
 Use this before switching to server mode to ensure the server is running.
 

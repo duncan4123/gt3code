@@ -11,6 +11,7 @@ sidebar_position: 5
 ### Why beads instead of GitHub Issues or Jira?
 
 Beads was designed specifically for AI-supervised coding workflows:
+
 - **Hash-based IDs** prevent collisions with concurrent agents
 - **Dolt-backed storage** enables branch-based workflows
 - **Dependency-aware** ready queue for automated work selection
@@ -35,6 +36,7 @@ Yes, beads is used in production for AI-assisted development. The API is stable 
 ### Why hash-based IDs instead of sequential?
 
 Sequential IDs (`#1`, `#2`) break when:
+
 - Multiple agents create issues simultaneously
 - Different branches have independent numbering
 - Forks diverge and merge
@@ -44,6 +46,7 @@ Hash-based IDs are globally unique without coordination.
 ### How does the Dolt server work?
 
 Beads uses Dolt server mode for concurrent access:
+
 - Transaction isolation for multiple agents
 - SQL-based queries for performance
 - Automatic retry on conflicts
@@ -65,6 +68,7 @@ bd dolt pull
 ### How do I handle merge conflicts?
 
 Dolt handles merge conflicts at the database level. If conflicts arise during pull:
+
 ```bash
 bd doctor --fix
 bd dolt push
@@ -73,6 +77,7 @@ bd dolt push
 ### Can multiple agents work on the same repo?
 
 Yes! That's what beads was designed for:
+
 - Hash IDs prevent collisions
 - Pin work to specific agents
 - Track who's working on what
@@ -93,6 +98,7 @@ Declarative workflow templates in TOML or JSON. Pour them to create molecules (i
 ### What are gates?
 
 Async coordination primitives:
+
 - Human gates wait for approval
 - Timer gates wait for duration
 - GitHub gates wait for CI/PR events
@@ -107,6 +113,7 @@ Async coordination primitives:
 ### Should I use CLI or MCP?
 
 **Use CLI + hooks** when shell is available (Claude Code, Cursor, etc.):
+
 - Lower context overhead (~1-2k vs 10-50k tokens)
 - Faster execution
 - Universal across editors

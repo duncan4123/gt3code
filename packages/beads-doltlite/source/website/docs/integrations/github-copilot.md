@@ -13,11 +13,13 @@ How to use beads with GitHub Copilot in VS Code.
 ### Quick Setup
 
 1. Install beads-mcp:
+
    ```bash
    uv tool install beads-mcp
    ```
 
 2. Create `.vscode/mcp.json` in your project:
+
    ```json
    {
      "servers": {
@@ -30,11 +32,11 @@ How to use beads with GitHub Copilot in VS Code.
 
    **For all projects:** Add to VS Code user-level MCP config:
 
-   | Platform | Path |
-   |----------|------|
-   | macOS | `~/Library/Application Support/Code/User/mcp.json` |
-   | Linux | `~/.config/Code/User/mcp.json` |
-   | Windows | `%APPDATA%\Code\User\mcp.json` |
+   | Platform | Path                                               |
+   | -------- | -------------------------------------------------- |
+   | macOS    | `~/Library/Application Support/Code/User/mcp.json` |
+   | Linux    | `~/.config/Code/User/mcp.json`                     |
+   | Windows  | `%APPDATA%\Code\User\mcp.json`                     |
 
    ```json
    {
@@ -48,6 +50,7 @@ How to use beads with GitHub Copilot in VS Code.
    ```
 
 3. Initialize beads:
+
    ```bash
    bd init --quiet
    ```
@@ -75,16 +78,16 @@ Copilot: Closed bd-42
 
 ## MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `beads_ready` | List unblocked issues |
-| `beads_create` | Create new issue |
-| `beads_show` | Show issue details |
-| `beads_update` | Update issue |
-| `beads_close` | Close issue |
-| `beads_dolt_push` | Push to Dolt remote |
-| `beads_dep_add` | Add dependency |
-| `beads_dep_tree` | Show dependency tree |
+| Tool              | Description           |
+| ----------------- | --------------------- |
+| `beads_ready`     | List unblocked issues |
+| `beads_create`    | Create new issue      |
+| `beads_show`      | Show issue details    |
+| `beads_update`    | Update issue          |
+| `beads_close`     | Close issue           |
+| `beads_dolt_push` | Push to Dolt remote   |
+| `beads_dep_add`   | Add dependency        |
+| `beads_dep_tree`  | Show dependency tree  |
 
 ## Copilot Instructions
 
@@ -97,6 +100,7 @@ This project uses **bd (beads)** for issue tracking.
 Run `bd prime` for workflow context.
 
 Quick reference:
+
 - `bd ready` - Find unblocked work
 - `bd create "Title" --type task --priority 2` - Create issue
 - `bd close <id>` - Complete work

@@ -11,6 +11,7 @@ Beads supports coordination between multiple AI agents and repositories.
 ## Overview
 
 Multi-agent features enable:
+
 - **Routing** - Automatic issue routing to correct repositories
 - **Cross-repo dependencies** - Dependencies across repository boundaries
 - **Agent coordination** - Work assignment and handoff between agents

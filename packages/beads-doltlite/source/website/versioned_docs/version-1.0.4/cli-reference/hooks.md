@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc hooks`
 
 ## bd hooks
@@ -13,6 +14,7 @@ Generated from `bd help --doc hooks`
 Install, uninstall, or list git hooks for beads integration.
 
 The hooks provide:
+
 - pre-commit: Run chained hooks before commit
 - post-merge: Run chained hooks after pull/merge
 - pre-push: Run chained hooks before push
@@ -36,11 +38,12 @@ Hooks use section markers to coexist with existing hooks — any user content
 outside the markers is preserved across installs and upgrades.
 
 Installed hooks:
-  - pre-commit: Run chained hooks before commit
-  - post-merge: Run chained hooks after pull/merge
-  - pre-push: Run chained hooks before push
-  - post-checkout: Run chained hooks after branch checkout
-  - prepare-commit-msg: Add agent identity trailers (for orchestrator agents)
+
+- pre-commit: Run chained hooks before commit
+- post-merge: Run chained hooks after pull/merge
+- pre-push: Run chained hooks before push
+- post-checkout: Run chained hooks after branch checkout
+- prepare-commit-msg: Add agent identity trailers (for orchestrator agents)
 
 ```
 bd hooks install [flags]
@@ -69,11 +72,12 @@ Execute the logic for a git hook. This command is typically called by
 thin shim scripts installed in .git/hooks/.
 
 Supported hooks:
-  - pre-commit: Run chained hooks before commit
-  - post-merge: Run chained hooks after pull/merge
-  - pre-push: Run chained hooks before push
-  - post-checkout: Run chained hooks after branch checkout
-  - prepare-commit-msg: Add agent identity trailers for forensics
+
+- pre-commit: Run chained hooks before commit
+- post-merge: Run chained hooks after pull/merge
+- pre-push: Run chained hooks before push
+- post-checkout: Run chained hooks after branch checkout
+- prepare-commit-msg: Add agent identity trailers for forensics
 
 The thin shim pattern ensures hook logic is always in sync with the
 installed bd version - upgrading bd automatically updates hook behavior.

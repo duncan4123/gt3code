@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc upgrade`
 
 ## bd upgrade
@@ -13,9 +14,10 @@ Generated from `bd help --doc upgrade`
 Commands for checking bd version upgrades and reviewing changes.
 
 The upgrade command helps you stay aware of bd version changes:
-  - bd upgrade status: Check if bd version changed since last use
-  - bd upgrade review: Show what's new since your last version
-  - bd upgrade ack: Acknowledge the current version
+
+- bd upgrade status: Check if bd version changed since last use
+- bd upgrade review: Show what's new since your last version
+- bd upgrade ack: Acknowledge the current version
 
 Version tracking is automatic - bd updates metadata.json on every run.
 
@@ -35,8 +37,8 @@ Note: Version tracking happens automatically, so you don't need to
 run this command unless you want to explicitly mark acknowledgement.
 
 Examples:
-  bd upgrade ack
-  bd upgrade ack --json
+bd upgrade ack
+bd upgrade ack --json
 
 ```
 bd upgrade ack
@@ -53,8 +55,8 @@ If you're upgrading from an old version, you'll see the complete
 changelog of everything that changed since then.
 
 Examples:
-  bd upgrade review
-  bd upgrade review --json
+bd upgrade review
+bd upgrade review --json
 
 ```
 bd upgrade review
@@ -68,8 +70,8 @@ This command uses the version tracking that happens automatically
 at startup to detect if bd was upgraded.
 
 Examples:
-  bd upgrade status
-  bd upgrade status --json
+bd upgrade status
+bd upgrade status --json
 
 ```
 bd upgrade status

@@ -1,4 +1,5 @@
 {{ define "approval-fallacy-crew" }}
+
 ## No Approval Step
 
 When work is done, finish the cycle. Do not summarize and wait for permission.
@@ -8,9 +9,10 @@ When work is done, finish the cycle. Do not summarize and wait for permission.
   `gc mail send -s "HANDOFF: <brief>" -m "<context>" && gc runtime drain-ack && exit`
 - Do not ask "should I commit this?"
 - Do not sit idle after finishing.
-{{ end }}
+  {{ end }}
 
 {{ define "approval-fallacy-polecat" }}
+
 ## No Idle Polecats
 
 When implementation and checks are done, run the done sequence immediately.

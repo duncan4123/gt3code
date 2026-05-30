@@ -11,14 +11,14 @@
 
 ## Criteria
 
-| # | Criterion | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Reviewer PASS verdict in bead notes | PASS | `gascity/reviewer` PASS at HEAD `3493fa5b`; 3 INFO findings, none block. |
-| 2 | Acceptance criteria met | PASS | All 7 acceptance criteria from `ga-me9g` checked off in bead description; verified by reviewer re-run. |
-| 3 | Tests pass on final branch | PASS | Targeted regression suites green (see Validation); cmd/gc baseline failures are pre-existing on `origin/main` (see "Pre-existing test environment"). |
-| 4 | No high-severity review findings open | PASS | Reviewer findings list: 3 INFO, 0 HIGH. |
-| 5 | Working tree clean | PASS | `git status` reports nothing to commit on the deploy branch prior to the gate-file commit. |
-| 6 | Branch diverges cleanly from main | PASS | 2 ahead / 0 behind `origin/main`. No conflicts. |
+| #   | Criterion                             | Verdict | Evidence                                                                                                                                             |
+| --- | ------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Reviewer PASS verdict in bead notes   | PASS    | `gascity/reviewer` PASS at HEAD `3493fa5b`; 3 INFO findings, none block.                                                                             |
+| 2   | Acceptance criteria met               | PASS    | All 7 acceptance criteria from `ga-me9g` checked off in bead description; verified by reviewer re-run.                                               |
+| 3   | Tests pass on final branch            | PASS    | Targeted regression suites green (see Validation); cmd/gc baseline failures are pre-existing on `origin/main` (see "Pre-existing test environment"). |
+| 4   | No high-severity review findings open | PASS    | Reviewer findings list: 3 INFO, 0 HIGH.                                                                                                              |
+| 5   | Working tree clean                    | PASS    | `git status` reports nothing to commit on the deploy branch prior to the gate-file commit.                                                           |
+| 6   | Branch diverges cleanly from main     | PASS    | 2 ahead / 0 behind `origin/main`. No conflicts.                                                                                                      |
 
 ## Validation (deployer re-run on `deploy/ga-co7mdp` at HEAD `3493fa5b`)
 
@@ -35,10 +35,10 @@
 deployer re-ran the same suite directly on `origin/main` (`5f1a686d`)
 in the same environment:
 
-| Branch | `cmd/gc` failures |
-|---|---|
-| `origin/main` (5f1a686d) | 121 |
-| `deploy/ga-co7mdp` (3493fa5b) | 60 |
+| Branch                        | `cmd/gc` failures |
+| ----------------------------- | ----------------- |
+| `origin/main` (5f1a686d)      | 121               |
+| `deploy/ga-co7mdp` (3493fa5b) | 60                |
 
 The set difference (failed-on-deploy-but-not-on-main) is **empty** —
 ga-co7mdp introduces zero new test regressions. The branch in fact

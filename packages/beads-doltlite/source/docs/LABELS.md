@@ -53,6 +53,7 @@ bd list --status open --priority 1 --label security
 ### 1. Technical Component Labels
 
 Identify which part of the system:
+
 ```bash
 backend
 frontend
@@ -65,6 +66,7 @@ mobile
 ```
 
 **Example:**
+
 ```bash
 bd create "Add GraphQL endpoint" -t feature -p 2 -l backend,api
 bd create "Update login form" -t task -p 2 -l frontend,auth,ui
@@ -73,6 +75,7 @@ bd create "Update login form" -t task -p 2 -l frontend,auth,ui
 ### 2. Domain/Feature Area
 
 Group by business domain:
+
 ```bash
 auth
 payments
@@ -85,6 +88,7 @@ admin
 ```
 
 **Example:**
+
 ```bash
 bd list --label payments --status open  # All open payment issues
 bd list --label-any auth,security       # Security-related work
@@ -93,6 +97,7 @@ bd list --label-any auth,security       # Security-related work
 ### 3. Size/Effort Estimates
 
 Quick effort indicators:
+
 ```bash
 small     # < 1 day
 medium    # 1-3 days
@@ -100,6 +105,7 @@ large     # > 3 days
 ```
 
 **Example:**
+
 ```bash
 # Find small quick wins
 bd ready --json | jq '.[] | select(.labels[] == "small")'
@@ -108,6 +114,7 @@ bd ready --json | jq '.[] | select(.labels[] == "small")'
 ### 4. Quality Gates
 
 Track what's needed before closing:
+
 ```bash
 needs-review
 needs-tests
@@ -116,6 +123,7 @@ breaking-change
 ```
 
 **Example:**
+
 ```bash
 bd label add bd-42 needs-review
 bd list --label needs-review --status in_progress
@@ -124,6 +132,7 @@ bd list --label needs-review --status in_progress
 ### 5. Release Management
 
 Track release targeting:
+
 ```bash
 v1.0
 v2.0
@@ -132,6 +141,7 @@ release-blocker
 ```
 
 **Example:**
+
 ```bash
 bd list --label v1.0 --status open    # What's left for v1.0?
 bd label add bd-42 release-blocker
@@ -140,6 +150,7 @@ bd label add bd-42 release-blocker
 ### 6. Team/Ownership
 
 Indicate ownership or interest:
+
 ```bash
 team-infra
 team-product
@@ -149,6 +160,7 @@ help-wanted
 ```
 
 **Example:**
+
 ```bash
 bd list --assignee alice --label team-infra
 bd create "Memory leak in cache" -t bug -p 1 -l team-infra,help-wanted
@@ -157,6 +169,7 @@ bd create "Memory leak in cache" -t bug -p 1 -l team-infra,help-wanted
 ### 7. Special Markers
 
 Process or workflow flags:
+
 ```bash
 auto-generated     # Created by automation
 discovered-from    # Found during other work (also a dep type)
@@ -167,6 +180,7 @@ wontfix
 ```
 
 **Example:**
+
 ```bash
 bd create "TODO: Refactor parser" -t chore -p 3 -l technical-debt,auto-generated
 ```
@@ -174,6 +188,7 @@ bd create "TODO: Refactor parser" -t chore -p 3 -l technical-debt,auto-generated
 ## Filtering by Labels
 
 ### AND Filtering (--label)
+
 All specified labels must be present:
 
 ```bash
@@ -185,6 +200,7 @@ bd list --status open --type bug --label needs-review,needs-tests
 ```
 
 ### OR Filtering (--label-any)
+
 At least one specified label must be present:
 
 ```bash
@@ -196,6 +212,7 @@ bd list --label-any security,auth
 ```
 
 ### Combining AND/OR
+
 Mix both filters for complex queries:
 
 ```bash
@@ -209,6 +226,7 @@ bd list --label needs-review,needs-tests --label-any frontend,ui,mobile
 ## Workflow Examples
 
 ### Triage Workflow
+
 ```bash
 # Create untriaged issue
 bd create "Crash on login" -t bug -p 1 -l needs-triage
@@ -224,6 +242,7 @@ bd list --label needs-triage
 ```
 
 ### Quality Gate Workflow
+
 ```bash
 # Start work
 bd update bd-42 --claim
@@ -243,6 +262,7 @@ bd close bd-42
 ```
 
 ### Release Planning
+
 ```bash
 # Tag issues for v1.0
 bd label add bd-42 v1.0
@@ -260,6 +280,7 @@ bd label add bd-45 release-blocker
 ```
 
 ### Component-Based Work Distribution
+
 ```bash
 # Backend team picks up work
 bd ready --json | jq '.[] | select(.labels[]? == "backend")'
@@ -274,6 +295,7 @@ bd list --label help-wanted,good-first-issue
 ## Label Management
 
 ### Listing Labels
+
 ```bash
 # Labels on a specific issue
 bd label list bd-42
@@ -286,22 +308,25 @@ bd label list-all --json
 ```
 
 Output:
+
 ```json
 [
-  {"label": "auth", "count": 5},
-  {"label": "backend", "count": 12},
-  {"label": "frontend", "count": 8}
+  { "label": "auth", "count": 5 },
+  { "label": "backend", "count": 12 },
+  { "label": "frontend", "count": 8 }
 ]
 ```
 
 ### Bulk Operations
 
 Add labels in batch during creation:
+
 ```bash
 bd create "Issue" -l label1,label2,label3
 ```
 
 Script to add label to multiple issues:
+
 ```bash
 # Add "needs-review" to all in_progress issues
 bd list --status in_progress --json | jq -r '.[].id' | while read id; do
@@ -310,6 +335,7 @@ done
 ```
 
 Remove label from multiple issues:
+
 ```bash
 # Remove "urgent" from closed issues
 bd list --status closed --label urgent --json | jq -r '.[].id' | while read id; do
@@ -343,15 +369,19 @@ Labels are preserved when importing from markdown:
 # Fix Authentication Bug
 
 ### Type
+
 bug
 
 ### Priority
+
 1
 
 ### Labels
+
 auth, backend, urgent, needs-review
 
 ### Description
+
 Users can't log in after recent deployment.
 ```
 
@@ -363,7 +393,9 @@ bd create -f issue.md
 ## Best Practices
 
 ### 1. Establish Conventions Early
+
 Document your team's label taxonomy:
+
 ```bash
 # Add to project README or CONTRIBUTING.md
 - Use lowercase, hyphen-separated (e.g., `good-first-issue`)
@@ -372,26 +404,34 @@ Document your team's label taxonomy:
 ```
 
 ### 2. Don't Overuse Labels
+
 Labels are flexible, but too many can cause confusion. Prefer:
+
 - 5-10 core technical labels (`backend`, `frontend`, `api`, etc.)
 - 3-5 domain labels per project
 - Standard process labels (`needs-review`, `needs-tests`)
 - Release labels as needed
 
 ### 3. Clean Up Unused Labels
+
 Periodically review:
+
 ```bash
 bd label list-all
 # Remove obsolete labels from issues
 ```
 
 ### 4. Use Labels for Filtering, Not Search
+
 Labels are for categorization, not free-text search:
+
 - ✅ Good: `backend`, `auth`, `urgent`
 - ❌ Bad: `fix-the-login-bug`, `john-asked-for-this`
 
 ### 5. Combine with Dependencies
+
 Labels + dependencies = powerful organization:
+
 ```bash
 # Epic with labeled subtasks
 bd create "Auth system rewrite" -t epic -p 1 -l auth,v2.0
@@ -419,6 +459,7 @@ bd label add bd-42 needs-human-review
 ```
 
 Example agent workflow:
+
 ```bash
 # Agent discovers issues during refactor
 bd create "Extract validateToken function" -t chore -p 2 \
@@ -446,12 +487,14 @@ Labels can cache operational state for fast queries, enabling patterns where bea
 **Convention:** `<dimension>:<value>`
 
 Examples:
+
 - `patrol:muted` / `patrol:active` - patrol suppression state
 - `mode:degraded` / `mode:normal` - operational mode
 - `status:idle` / `status:working` - worker status
 - `health:healthy` / `health:failing` - component health
 
 **Implementation:**
+
 1. Create an event bead (full context, immutable history)
 2. Update the role bead's labels (current state cache)
 
@@ -470,6 +513,7 @@ bd label add beads/observer patrol:muted
 ### Why This Pattern?
 
 **Fast queries without event scanning:**
+
 ```bash
 # Without labels-as-state: scan all events to find current patrol state
 bd list --type event | grep "patrol" | tail -1  # Slow, fragile
@@ -479,12 +523,14 @@ bd show beads/observer | grep "patrol:"  # Instant
 ```
 
 **History preserved:**
+
 ```bash
 # When was patrol muted? Why? Who did it?
 bd list --label event-type:patrol-muted --type event
 ```
 
 **State recovery:**
+
 ```bash
 # If labels get corrupted, rebuild from events
 bd list --type event --label event-type:patrol-muted | tail -1
@@ -493,13 +539,13 @@ bd list --type event --label event-type:patrol-muted | tail -1
 
 ### Common State Dimensions
 
-| Dimension | Values | Use Case |
-|-----------|--------|----------|
-| `patrol:` | `active`, `muted` | Patrol cycle suppression |
-| `mode:` | `normal`, `degraded`, `maintenance` | Operational mode |
-| `status:` | `idle`, `working`, `blocked` | Worker activity |
-| `health:` | `healthy`, `warning`, `failing` | Component health |
-| `lock:` | `unlocked`, `locked` | Exclusive access control |
+| Dimension | Values                              | Use Case                 |
+| --------- | ----------------------------------- | ------------------------ |
+| `patrol:` | `active`, `muted`                   | Patrol cycle suppression |
+| `mode:`   | `normal`, `degraded`, `maintenance` | Operational mode         |
+| `status:` | `idle`, `working`, `blocked`        | Worker activity          |
+| `health:` | `healthy`, `warning`, `failing`     | Component health         |
+| `lock:`   | `unlocked`, `locked`                | Exclusive access control |
 
 ### State Transitions
 
@@ -554,6 +600,7 @@ bd list --type event --label event-type:state-change
 ### Future Helpers
 
 The pattern suggests helper commands (see bd-7l67):
+
 ```bash
 # Query current state
 bd state beads/observer patrol     # → "muted"
@@ -567,7 +614,9 @@ Until helpers exist, use the manual pattern above.
 ## Advanced Patterns
 
 ### Component Matrix
+
 Track issues across multiple dimensions:
+
 ```bash
 # Backend + auth + high priority
 bd list --label backend,auth --priority 1
@@ -580,6 +629,7 @@ bd list --priority 0 --label-any backend,frontend,infrastructure
 ```
 
 ### Sprint Planning
+
 ```bash
 # Label issues for sprint
 for id in bd-42 bd-43 bd-44 bd-45; do
@@ -593,6 +643,7 @@ bd stats | grep "In Progress"                # Current WIP
 ```
 
 ### Technical Debt Tracking
+
 ```bash
 # Mark debt
 bd create "Refactor legacy parser" -t chore -p 3 -l technical-debt,large
@@ -603,6 +654,7 @@ bd list --label technical-debt --priority 1  # High-priority debt
 ```
 
 ### Breaking Change Coordination
+
 ```bash
 # Identify breaking changes
 bd label add bd-42 breaking-change
@@ -650,12 +702,12 @@ bd label add agent-abc patrol:muted
 
 **Events are source of truth. Labels are cache.**
 
-| Approach | Events Only | Labels as Cache |
-|----------|-------------|-----------------|
+| Approach            | Events Only                  | Labels as Cache                |
+| ------------------- | ---------------------------- | ------------------------------ |
 | Query current state | Scan all events, find latest | `bd list --label patrol:muted` |
-| Query state history | Natural (all events exist) | Query events |
-| Audit trail | Complete | Complete (events still exist) |
-| Performance | O(n) events | O(1) label lookup |
+| Query state history | Natural (all events exist)   | Query events                   |
+| Audit trail         | Complete                     | Complete (events still exist)  |
+| Performance         | O(n) events                  | O(1) label lookup              |
 
 The pattern gives you both: complete history via events, fast queries via labels.
 
@@ -682,13 +734,13 @@ bd label add witness-alpha mode:normal
 
 ### Common Dimensions
 
-| Dimension | Values | Use Case |
-|-----------|--------|----------|
-| `patrol` | `active`, `muted`, `suspended` | Agent patrol cycles |
-| `mode` | `normal`, `degraded`, `maintenance` | Operational modes |
-| `status` | `idle`, `working`, `blocked` | Work state |
-| `health` | `healthy`, `warning`, `failing` | Health checks |
-| `sync` | `current`, `stale`, `syncing` | Sync state |
+| Dimension | Values                              | Use Case            |
+| --------- | ----------------------------------- | ------------------- |
+| `patrol`  | `active`, `muted`, `suspended`      | Agent patrol cycles |
+| `mode`    | `normal`, `degraded`, `maintenance` | Operational modes   |
+| `status`  | `idle`, `working`, `blocked`        | Work state          |
+| `health`  | `healthy`, `warning`, `failing`     | Health checks       |
+| `sync`    | `current`, `stale`, `syncing`       | Sync state          |
 
 ### Best Practices
 
@@ -735,6 +787,7 @@ bd set-state witness-alpha patrol=muted --reason "Investigating issue"
 ```
 
 The `set-state` command atomically:
+
 1. Creates an event bead with the reason (source of truth)
 2. Removes the old dimension label if present
 3. Adds the new dimension:value label (cache)
@@ -744,6 +797,7 @@ See [CLI_REFERENCE.md](CLI_REFERENCE.md#state-labels-as-cache) for full command 
 ## Troubleshooting
 
 ### Labels Not Showing in List
+
 Labels require explicit fetching. The `bd list` command shows issues but not labels in human output (only in JSON).
 
 ```bash
@@ -756,7 +810,9 @@ bd label list bd-42
 ```
 
 ### Label Filtering Not Working
+
 Check label names for exact matches (case-sensitive):
+
 ```bash
 # These are different labels:
 bd label add bd-42 Backend    # Capital B
@@ -767,7 +823,9 @@ bd label list-all
 ```
 
 ### Syncing Labels
+
 Labels are stored in the Dolt database. If labels seem out of sync:
+
 ```bash
 # Pull from Dolt remote
 bd dolt pull

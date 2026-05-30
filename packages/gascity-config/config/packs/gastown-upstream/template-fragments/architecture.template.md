@@ -1,4 +1,5 @@
 {{ define "architecture" }}
+
 ## Gas Town Architecture
 
 Town root: `{{ .CityRoot }}`.
@@ -10,4 +11,4 @@ Town root: `{{ .CityRoot }}`.
   merge queue.
 - **Dogs** run utility formulas such as shutdown dance and warrants.
 - **Molecules** are multi-step formula instances that guide agent work.
-{{ end }}
+  {{ end }}

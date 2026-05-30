@@ -7,6 +7,7 @@ This project uses a two-tier testing approach to balance speed and thoroughness.
 ## Test Categories
 
 ### Fast Tests (Unit Tests)
+
 - Run on every commit and PR
 - Complete in ~2 seconds
 - No build tags required
@@ -16,7 +17,8 @@ This project uses a two-tier testing approach to balance speed and thoroughness.
 go test -short ./...
 ```
 
-### Integration Tests  
+### Integration Tests
+
 - Marked with `//go:build integration` tag
 - Include slow git operations and multi-clone scenarios
 - Run nightly and before releases
@@ -32,11 +34,13 @@ go test -tags=integration ./...
 ## CI Strategy
 
 **PR Checks** (fast, runs on every PR):
+
 ```bash
 go test -short -race ./...
 ```
 
 **Nightly** (comprehensive, runs overnight):
+
 ```bash
 go test -tags=integration -race ./...
 ```
@@ -44,9 +48,11 @@ go test -tags=integration -race ./...
 ## Adding New Tests
 
 ### For Fast Tests
+
 No special setup required. Just write the test normally.
 
 ### For Integration Tests
+
 Add build tags at the top of the file:
 
 ```go
@@ -70,11 +76,13 @@ func TestSomethingSlow(t *testing.T) {
 ## Local Development
 
 During development, run fast tests frequently:
+
 ```bash
 go test -short ./...
 ```
 
 Before committing, run full suite:
+
 ```bash
 go test -tags=integration ./...
 ```
@@ -95,6 +103,7 @@ func TestWithGitOps(t *testing.T) {
 ```
 
 **Platform behavior:**
+
 - **Linux**: Uses `/dev/shm` (tmpfs ramdisk) if available - provides 20-30% speedup
 - **macOS**: Uses standard `/tmp` (APFS is already fast)
 - **Windows**: Uses standard temp directory

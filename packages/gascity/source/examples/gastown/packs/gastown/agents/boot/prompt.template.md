@@ -44,6 +44,7 @@ gc mail count {{ .BindingPrefix }}deacon 2>/dev/null
 ```
 
 Read the wisp timestamps and pane output. Build a picture:
+
 - Recent burned wisp -> normal patrol loop
 - Active pane output -> working
 - Young in-progress wisp with idle pane -> likely backoff wait
@@ -53,19 +54,20 @@ Read the wisp timestamps and pane output. Build a picture:
 ### Step 3: Decide
 
 Use judgment; there are no hardcoded thresholds. Consider:
+
 - The deacon's exponential backoff caps at 300s between cycles
 - A stale wisp during a period with no active work is legitimate idle
 - Active output (tool calls, command execution) means the deacon is functioning
 - A pane showing an error message or hanging prompt is a red flag
 - Legitimate work can take several minutes
 
-| Observation | Verdict | Action |
-|-------------|---------|--------|
-| Active output in pane | Healthy | Do nothing |
-| Idle, young wisp | Backoff wait | Do nothing |
-| Idle with unread mail | Needs nudge | Nudge |
-| Stale wisp, no output, ambiguous | Possibly stuck | Nudge |
-| Very stale wisp, errors visible | Clearly stuck | File warrant |
+| Observation                      | Verdict        | Action       |
+| -------------------------------- | -------------- | ------------ |
+| Active output in pane            | Healthy        | Do nothing   |
+| Idle, young wisp                 | Backoff wait   | Do nothing   |
+| Idle with unread mail            | Needs nudge    | Nudge        |
+| Stale wisp, no output, ambiguous | Possibly stuck | Nudge        |
+| Very stale wisp, errors visible  | Clearly stuck  | File warrant |
 
 Healthy or idle: drain-ack and exit. Possibly stuck: nudge once, then let the
 next Boot tick re-evaluate.
@@ -73,6 +75,7 @@ next Boot tick re-evaluate.
 ```bash
 {{ cmd }} session nudge {{ .BindingPrefix }}deacon "Boot check: are you making progress?"
 ```
+
 Drain-ack and exit. Next Boot wake will re-evaluate.
 
 Clearly stuck: file a warrant for the dog pool.
@@ -83,6 +86,7 @@ gc bd create --type=task \
   --metadata '{"target":"{{ .BindingPrefix }}deacon","reason":"Stale patrol wisp, no activity","requester":"boot","gc.routed_to":"{{ .BindingPrefix }}dog"}' \
   --label=warrant
 ```
+
 The dog pool picks up the warrant and runs the shutdown dance.
 
 ### Step 4: Signal done and exit
@@ -109,13 +113,13 @@ with a fresh provider context.
 
 ## Command Quick-Reference
 
-| Want to... | Correct command |
-|------------|----------------|
-| View deacon output | `{{ cmd }} session peek {{ .BindingPrefix }}deacon --lines 30` |
-| Check deacon work | `gc bd list --assignee={{ .BindingPrefix }}deacon --status=in_progress --json` |
-| Nudge deacon | `{{ cmd }} session nudge {{ .BindingPrefix }}deacon "message"` |
-| File stuck warrant | `gc bd create --type=task --label=warrant --metadata '{"target":"{{ .BindingPrefix }}deacon","reason":"...","requester":"boot","gc.routed_to":"{{ .BindingPrefix }}dog"}'` |
-| Check active sessions | `{{ cmd }} session list` |
+| Want to...            | Correct command                                                                                                                                                            |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| View deacon output    | `{{ cmd }} session peek {{ .BindingPrefix }}deacon --lines 30`                                                                                                             |
+| Check deacon work     | `gc bd list --assignee={{ .BindingPrefix }}deacon --status=in_progress --json`                                                                                             |
+| Nudge deacon          | `{{ cmd }} session nudge {{ .BindingPrefix }}deacon "message"`                                                                                                             |
+| File stuck warrant    | `gc bd create --type=task --label=warrant --metadata '{"target":"{{ .BindingPrefix }}deacon","reason":"...","requester":"boot","gc.routed_to":"{{ .BindingPrefix }}dog"}'` |
+| Check active sessions | `{{ cmd }} session list`                                                                                                                                                   |
 
 Working directory: {{ .WorkDir }}
 Formula: none (single-pass deacon watchdog, no patrol loop)

@@ -27,13 +27,13 @@ commands to match your project before first use.
 
 ## Included Formulas
 
-| Formula | Description | Use as |
-|---------|-------------|--------|
-| `feature-workflow` | Design, implement, review, merge | Molecule (persistent) |
-| `gh-issue-to-pr` | Triage a GitHub issue through implementation and PR creation | Wisp (ephemeral) |
-| `gh-pr-review` | Triage and review a GitHub PR using maintainer guidelines | Wisp (ephemeral) |
-| `release` | Bump version, test, tag, publish | Molecule (persistent) |
-| `quick-check` | Lint, test, build sanity check | Wisp (ephemeral) |
+| Formula            | Description                                                  | Use as                |
+| ------------------ | ------------------------------------------------------------ | --------------------- |
+| `feature-workflow` | Design, implement, review, merge                             | Molecule (persistent) |
+| `gh-issue-to-pr`   | Triage a GitHub issue through implementation and PR creation | Wisp (ephemeral)      |
+| `gh-pr-review`     | Triage and review a GitHub PR using maintainer guidelines    | Wisp (ephemeral)      |
+| `release`          | Bump version, test, tag, publish                             | Molecule (persistent) |
+| `quick-check`      | Lint, test, build sanity check                               | Wisp (ephemeral)      |
 
 ## Creating Your Own
 

@@ -68,12 +68,14 @@ bd is in active development and being dogfooded on real projects. The core funct
 - **Rapid iteration** - expect frequent updates and improvements
 
 **When to use bd:**
+
 - ✅ AI-assisted development workflows
 - ✅ Internal team projects
 - ✅ Personal productivity with dependency tracking
 - ✅ Experimenting with agent-first tools
 
 **When to wait:**
+
 - Mission-critical production systems without a tested backup/restore plan
 - Large enterprise deployments that need formal compatibility guarantees
 - Long-term archival as the only system of record
@@ -87,6 +89,7 @@ Follow the repo for updates and compatibility notes.
 **Hash IDs eliminate collisions** when multiple agents or branches create issues concurrently.
 
 **The problem with sequential IDs:**
+
 ```bash
 # Branch A creates bd-10
 git checkout -b feature-auth
@@ -101,6 +104,7 @@ git merge feature-auth   # Two different issues, same ID
 ```
 
 **Hash IDs solve this:**
+
 ```bash
 # Branch A
 bd create "Add OAuth"  # Hash ID: bd-a1b2 (from random UUID)
@@ -113,6 +117,7 @@ git merge feature-auth   # No collision, different IDs
 ```
 
 **Progressive length scaling:**
+
 - 4 chars (0-500 issues): `bd-a1b2`
 - 5 chars (500-1,500 issues): `bd-f14c3`
 - 6 chars (1,500+ issues): `bd-3e7a5b`
@@ -124,6 +129,7 @@ bd automatically extends hash length as your database grows to maintain low coll
 **Hierarchical IDs** (e.g., `bd-a3f8e9.1`, `bd-a3f8e9.2`) provide human-readable structure for epics and their subtasks.
 
 **Example:**
+
 ```bash
 # Create epic (generates parent hash)
 bd create "Auth System" -t epic -p 1
@@ -136,17 +142,20 @@ bd create "Tests" -p 1          # bd-a3f8e9.3
 ```
 
 **Benefits:**
+
 - Parent hash ensures unique namespace (no cross-epic collisions)
 - Sequential child IDs are human-friendly
 - Up to 3 levels of nesting supported
 - Clear visual grouping in issue lists
 
 **When to use:**
+
 - Epics with multiple related tasks
 - Large features with sub-features
 - Work breakdown structures
 
 **When NOT to use:**
+
 - Simple one-off tasks (use regular hash IDs)
 - Cross-cutting dependencies (use `bd dep add` instead)
 
@@ -155,16 +164,19 @@ bd create "Tests" -p 1          # bd-a3f8e9.3
 **Either works!** But use the right flag:
 
 **Humans:**
+
 ```bash
 bd init  # Interactive - prompts for git hooks
 ```
 
 **Agents:**
+
 ```bash
 bd init --quiet  # Non-interactive - auto-installs hooks, no prompts
 ```
 
 **Workflow for humans:**
+
 ```bash
 # Clone existing project with bd:
 git clone <repo>
@@ -179,6 +191,7 @@ git commit -m "Initialize beads"
 ```
 
 **Workflow for agents setting up repos:**
+
 ```bash
 git clone <repo>
 cd <repo>
@@ -211,6 +224,7 @@ bd ready        # Shows fresh data
 ```
 
 For federation setups, use:
+
 ```bash
 bd federation sync    # Sync with all configured peers
 ```
@@ -227,6 +241,7 @@ cd ~/project2 && bd init --prefix proj2
 Each project gets its own `.beads/` directory with its own Dolt database. bd auto-discovers the correct database based on your current directory (walks up like git).
 
 **Multi-project scenarios work seamlessly:**
+
 - Multiple agents working on different projects simultaneously - no conflicts
 - Same machine, different repos - each finds its own `.beads/` automatically
 - Agents in subdirectories - bd walks up to find the project root (like git)
@@ -236,6 +251,7 @@ Each project gets its own `.beads/` directory with its own Dolt database. bd aut
 **Limitation:** Issues cannot reference issues in other projects. Each database is isolated by design. If you need cross-project tracking, initialize bd in a parent directory that contains both projects.
 
 **Example:** Multiple agents, multiple projects, same machine:
+
 ```bash
 # Agent 1 working on web app
 cd ~/work/webapp && bd ready --json    # Uses ~/work/webapp/.beads/ database "webapp"
@@ -247,6 +263,7 @@ cd ~/work/api && bd ready --json       # Uses ~/work/api/.beads/ database "api"
 ```
 
 **Shared server mode** (recommended for machines with 2+ projects):
+
 ```bash
 # Enable shared server - single Dolt process serves all projects
 export BEADS_DOLT_SHARED_SERVER=1   # add to shell profile for machine-wide
@@ -345,6 +362,7 @@ cd .beads/dolt && dolt gc
 ```
 
 Or split your project into multiple databases:
+
 ```bash
 cd ~/project/frontend && bd init --prefix fe
 cd ~/project/backend && bd init --prefix be
@@ -389,6 +407,7 @@ Yes! bd is designed for offline-first operation:
 - Full functionality available without internet
 
 This makes bd ideal for:
+
 - Working on planes/trains
 - Unstable network connections
 - Air-gapped environments
@@ -460,6 +479,7 @@ bd handles two distinct types of integrity issues:
 **1. Logical Consistency (Collision Resolution)**
 
 The hash/fingerprint/collision architecture prevents:
+
 - **ID collisions**: Same ID assigned to different issues (e.g., from parallel workers or branch merges)
 - **Wrong prefix bugs**: Issues created with incorrect prefix due to config mismatch
 - **Merge conflicts**: Branch divergence creating conflicting data
@@ -469,10 +489,12 @@ The hash/fingerprint/collision architecture prevents:
 **2. Physical Database Corruption**
 
 Database corruption can occur from:
+
 - **Disk/hardware failures**: Power loss, disk errors, filesystem corruption
 - **Concurrent writes**: Multiple processes writing to the database simultaneously
 
 **Solution**: Rebuild from Dolt remote or a backup export:
+
 ```bash
 rm -rf .beads/dolt
 bd init

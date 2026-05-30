@@ -14,14 +14,14 @@ This change generalizes `internal/beads.CachingStore` so it can wrap any existin
 
 ## Criteria
 
-| # | Criterion | Result | Evidence |
-|---|-----------|--------|----------|
-| 1 | Review PASS present | PASS | `bd show ga-545cjv` notes include `Review verdict: PASS` from `gascity/reviewer` for commit `5e74032a7`, which is patch-equivalent to the rebased commit `8389071b0e`, with no blocking findings. |
-| 2 | Acceptance criteria met | PASS | `NewCachingStore` now accepts `beads.Store`; `*BdStore` type assertion preserves prefix filtering; `TestNewCachingStoreWrapsAnyStoreImplementation` proves non-BdStore delegation; no new interface was introduced; affected package coverage is included in the fast baseline. |
-| 3 | Tests pass | PASS | `make test-fast-parallel` completed with `All fast jobs passed`; `go vet ./...` exited 0; `git diff --check origin/main...HEAD` exited 0. |
-| 4 | No high-severity review findings open | PASS | Review notes state `PASS - no blocking issues`; no HIGH findings are recorded in the deploy bead notes. |
-| 5 | Final branch is clean | PASS | Final branch cleanliness was verified after committing this gate file with `git status --short --branch`. |
-| 6 | Branch diverges cleanly from main | PASS | `git merge-tree --write-tree HEAD origin/main` exited 0 before gate commit; the check was re-run after the gate commit before push. |
+| #   | Criterion                             | Result | Evidence                                                                                                                                                                                                                                                                        |
+| --- | ------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS   | `bd show ga-545cjv` notes include `Review verdict: PASS` from `gascity/reviewer` for commit `5e74032a7`, which is patch-equivalent to the rebased commit `8389071b0e`, with no blocking findings.                                                                               |
+| 2   | Acceptance criteria met               | PASS   | `NewCachingStore` now accepts `beads.Store`; `*BdStore` type assertion preserves prefix filtering; `TestNewCachingStoreWrapsAnyStoreImplementation` proves non-BdStore delegation; no new interface was introduced; affected package coverage is included in the fast baseline. |
+| 3   | Tests pass                            | PASS   | `make test-fast-parallel` completed with `All fast jobs passed`; `go vet ./...` exited 0; `git diff --check origin/main...HEAD` exited 0.                                                                                                                                       |
+| 4   | No high-severity review findings open | PASS   | Review notes state `PASS - no blocking issues`; no HIGH findings are recorded in the deploy bead notes.                                                                                                                                                                         |
+| 5   | Final branch is clean                 | PASS   | Final branch cleanliness was verified after committing this gate file with `git status --short --branch`.                                                                                                                                                                       |
+| 6   | Branch diverges cleanly from main     | PASS   | `git merge-tree --write-tree HEAD origin/main` exited 0 before gate commit; the check was re-run after the gate commit before push.                                                                                                                                             |
 
 ## Acceptance Evidence
 

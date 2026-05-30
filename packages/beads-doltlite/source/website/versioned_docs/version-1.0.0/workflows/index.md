@@ -12,11 +12,11 @@ Beads provides powerful workflow primitives for complex, multi-step processes.
 
 Beads uses a molecular chemistry metaphor for workflow phases:
 
-| Phase | Command | Synced | Use Case |
-|-------|---------|--------|----------|
-| **Proto** (solid) | `bd cook` | N/A | Compiled template, reusable |
-| **Mol** (liquid) | `bd mol pour` | Yes | Persistent work with audit trail |
-| **Wisp** (vapor) | `bd mol wisp` | No | Ephemeral operations |
+| Phase             | Command       | Synced | Use Case                         |
+| ----------------- | ------------- | ------ | -------------------------------- |
+| **Proto** (solid) | `bd cook`     | N/A    | Compiled template, reusable      |
+| **Mol** (liquid)  | `bd mol pour` | Yes    | Persistent work with audit trail |
+| **Wisp** (vapor)  | `bd mol wisp` | No     | Ephemeral operations             |
 
 ## Core Concepts
 
@@ -47,6 +47,7 @@ needs = ["design"]
 ### Molecules
 
 Work graphs with parent-child relationships:
+
 - Created by instantiating formulas with `bd mol pour`
 - Steps have dependencies (`needs`)
 - Progress tracked via issue status
@@ -54,6 +55,7 @@ Work graphs with parent-child relationships:
 ### Gates
 
 Async coordination primitives:
+
 - **Human gates** - Wait for human approval
 - **Timer gates** - Wait for duration
 - **GitHub gates** - Wait for PR merge, CI, etc.
@@ -61,6 +63,7 @@ Async coordination primitives:
 ### Wisps
 
 Ephemeral operations that don't sync:
+
 - Created with `bd mol wisp`
 - Stored locally with `Ephemeral=true`
 - Lifecycle: squash (promote), burn (discard), or GC (auto-clean)
@@ -68,27 +71,28 @@ Ephemeral operations that don't sync:
 ### Swarms
 
 Parallel execution across an epic's dependency graph:
+
 - Analyze epic structure for parallelism: `bd swarm validate`
 - Create coordinated swarm from epic: `bd swarm create`
 - Monitor progress across waves: `bd swarm status`
 
 ## Workflow Commands
 
-| Command | Description |
-|---------|-------------|
-| `bd cook` | Compile formula into proto |
-| `bd mol pour` | Instantiate formula as persistent molecule |
-| `bd mol wisp` | Create ephemeral wisp from formula |
-| `bd mol list` | List molecules |
-| `bd mol squash` | Promote wisp to persistent molecule |
-| `bd mol burn` | Delete wisp without trace |
-| `bd mol wisp gc` | Garbage collect old wisps |
-| `bd mol bond` | Bond formulas together with phase control |
-| `bd swarm validate` | Analyze epic for parallel execution |
-| `bd swarm create` | Create swarm from epic |
-| `bd swarm status` | Show swarm progress |
-| `bd swarm list` | List all swarm molecules |
-| `bd formula list` | List available formulas |
+| Command             | Description                                |
+| ------------------- | ------------------------------------------ |
+| `bd cook`           | Compile formula into proto                 |
+| `bd mol pour`       | Instantiate formula as persistent molecule |
+| `bd mol wisp`       | Create ephemeral wisp from formula         |
+| `bd mol list`       | List molecules                             |
+| `bd mol squash`     | Promote wisp to persistent molecule        |
+| `bd mol burn`       | Delete wisp without trace                  |
+| `bd mol wisp gc`    | Garbage collect old wisps                  |
+| `bd mol bond`       | Bond formulas together with phase control  |
+| `bd swarm validate` | Analyze epic for parallel execution        |
+| `bd swarm create`   | Create swarm from epic                     |
+| `bd swarm status`   | Show swarm progress                        |
+| `bd swarm list`     | List all swarm molecules                   |
+| `bd formula list`   | List available formulas                    |
 
 ## Simple Example
 

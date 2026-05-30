@@ -549,13 +549,13 @@ export function BranchToolbarBranchSelector({
       ? "current"
       : refName.kind === "workspace"
         ? "workspace"
-      : hasSecondaryWorktree
-        ? "worktree"
-        : refName.isRemote
-          ? "remote"
-          : refName.isDefault
-            ? "default"
-            : null;
+        : hasSecondaryWorktree
+          ? "worktree"
+          : refName.isRemote
+            ? "remote"
+            : refName.isDefault
+              ? "default"
+              : null;
     return (
       <ComboboxItem
         hideIndicator

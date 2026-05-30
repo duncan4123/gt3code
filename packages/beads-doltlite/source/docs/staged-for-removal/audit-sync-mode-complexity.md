@@ -65,6 +65,7 @@ Each of `Push()`, `ForcePush()`, and `Pull()` has a 3-way routing decision:
 3. **Default** (DoltHub, S3, GCS, file) -> `CALL DOLT_PUSH(?, ?)` via SQL
 
 This produces significant code duplication. Each method repeats the same pattern:
+
 ```go
 if s.isGitProtocolRemote(ctx) { ... CLI path ... }
 if s.remoteUser != "" { ... SQL with --user ... }
@@ -81,6 +82,7 @@ if s.remoteUser != "" { ... SQL with --user ... }
 **File:** `internal/storage/dolt/credentials.go` (473 lines)
 
 The federation subsystem provides:
+
 - Peer-to-peer sync: `Sync()`, `PushTo()`, `PullFrom()`, `Fetch()`
 - Credential management: AES-GCM encryption, key migration, peer CRUD
 - Sync status tracking: ahead/behind counts, conflict detection
@@ -133,34 +135,34 @@ primary keys. UUID PKs eliminate counter collisions in multi-clone federation.
 
 ## Summary of Recommendations
 
-| Area | Recommendation | Effort | Impact |
-|------|---------------|--------|--------|
-| SyncMode type + validation | **Remove entirely** | Small | Removes ~80 lines of dead code + ~100 lines of tests |
-| `sync.mode` config key | **Remove** (keep only as deprecated no-op) | Small | Simplifies config validation |
-| `sync.export_on`/`sync.import_on` | **Audit callers**, remove if dead | Small | Removes dead config or documents live usage |
-| Push/Pull/ForcePush 3-way routing | **Extract helper** (optional) | Medium | ~50 lines deduplication |
-| Federation peer system | **No change** | - | Already clean |
-| Conflict/field strategies | **No change** | - | Already clean |
-| Sovereignty tiers | **No change** | - | Already clean |
-| Tracker SyncEngine | **No change** | - | Already clean |
-| Auto-increment reset | **Resolved** — removed via UUID PK migration | - | Done |
+| Area                              | Recommendation                               | Effort | Impact                                               |
+| --------------------------------- | -------------------------------------------- | ------ | ---------------------------------------------------- |
+| SyncMode type + validation        | **Remove entirely**                          | Small  | Removes ~80 lines of dead code + ~100 lines of tests |
+| `sync.mode` config key            | **Remove** (keep only as deprecated no-op)   | Small  | Simplifies config validation                         |
+| `sync.export_on`/`sync.import_on` | **Audit callers**, remove if dead            | Small  | Removes dead config or documents live usage          |
+| Push/Pull/ForcePush 3-way routing | **Extract helper** (optional)                | Medium | ~50 lines deduplication                              |
+| Federation peer system            | **No change**                                | -      | Already clean                                        |
+| Conflict/field strategies         | **No change**                                | -      | Already clean                                        |
+| Sovereignty tiers                 | **No change**                                | -      | Already clean                                        |
+| Tracker SyncEngine                | **No change**                                | -      | Already clean                                        |
+| Auto-increment reset              | **Resolved** — removed via UUID PK migration | -      | Done                                                 |
 
 ## Files Analyzed
 
-| File | Lines | Role |
-|------|-------|------|
-| `internal/config/sync.go` | 240 | Sync mode, conflict, sovereignty, field strategy types |
-| `internal/config/sync_test.go` | 436 | Tests for all sync config types |
-| `internal/config/config.go` | 921 | Config initialization, defaults, SyncConfig/ConflictConfig structs |
-| `internal/config/yaml_config.go` | ~300 | YAML config management, yaml-only keys |
-| `internal/storage/dolt/store.go` | 1668 | DoltStore: Push, Pull, ForcePush |
-| `internal/storage/dolt/federation.go` | 340 | Federation sync: Sync, PushTo, PullFrom, Fetch |
-| `internal/storage/dolt/credentials.go` | 473 | Federation peer credentials, encryption |
-| `internal/storage/versioned.go` | 60 | Shared types: Conflict, SyncStatus, FederationPeer |
-| `internal/tracker/engine.go` | ~200 | External tracker SyncEngine |
-| `internal/hooks/hooks.go` | ~100 | Hook runner (create/update/close events) |
-| `cmd/bd/config.go` | ~500 | CLI config commands, sync.mode validation |
-| `cmd/bd/info.go` | ~400 | Version history documenting sync removals |
+| File                                   | Lines | Role                                                               |
+| -------------------------------------- | ----- | ------------------------------------------------------------------ |
+| `internal/config/sync.go`              | 240   | Sync mode, conflict, sovereignty, field strategy types             |
+| `internal/config/sync_test.go`         | 436   | Tests for all sync config types                                    |
+| `internal/config/config.go`            | 921   | Config initialization, defaults, SyncConfig/ConflictConfig structs |
+| `internal/config/yaml_config.go`       | ~300  | YAML config management, yaml-only keys                             |
+| `internal/storage/dolt/store.go`       | 1668  | DoltStore: Push, Pull, ForcePush                                   |
+| `internal/storage/dolt/federation.go`  | 340   | Federation sync: Sync, PushTo, PullFrom, Fetch                     |
+| `internal/storage/dolt/credentials.go` | 473   | Federation peer credentials, encryption                            |
+| `internal/storage/versioned.go`        | 60    | Shared types: Conflict, SyncStatus, FederationPeer                 |
+| `internal/tracker/engine.go`           | ~200  | External tracker SyncEngine                                        |
+| `internal/hooks/hooks.go`              | ~100  | Hook runner (create/update/close events)                           |
+| `cmd/bd/config.go`                     | ~500  | CLI config commands, sync.mode validation                          |
+| `cmd/bd/info.go`                       | ~400  | Version history documenting sync removals                          |
 
 ## Historical Context
 

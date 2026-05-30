@@ -18,23 +18,23 @@ release criteria supplied to the deployer role and the repository testing rules 
 
 ## Gate Criteria
 
-| # | Criterion | Result | Evidence |
-|---|-----------|--------|----------|
-| 1 | Review PASS present | PASS | `bd show ga-x4m5zv` notes contain `Review Verdict: PASS` from `gascity/reviewer`. |
-| 2 | Acceptance criteria met | PASS | Each acceptance criterion is covered by code and tests listed below. |
-| 3 | Tests pass | PASS | `make test` completed with `observable go test: PASS`; `go vet ./...` completed cleanly. |
-| 4 | No high-severity review findings open | PASS | Review notes list only INFO findings; no HIGH, CRITICAL, FAIL, or request-changes findings are present. |
-| 5 | Final branch is clean | PASS | `git status --short --branch` was clean before the gate file was added; final clean status is rechecked after committing this gate. |
-| 6 | Branch diverges cleanly from main | PASS | `git merge-tree $(git merge-base HEAD origin/main) HEAD origin/main` reported no conflicts. `git diff --check origin/main...HEAD` reported no whitespace errors. |
+| #   | Criterion                             | Result | Evidence                                                                                                                                                         |
+| --- | ------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS   | `bd show ga-x4m5zv` notes contain `Review Verdict: PASS` from `gascity/reviewer`.                                                                                |
+| 2   | Acceptance criteria met               | PASS   | Each acceptance criterion is covered by code and tests listed below.                                                                                             |
+| 3   | Tests pass                            | PASS   | `make test` completed with `observable go test: PASS`; `go vet ./...` completed cleanly.                                                                         |
+| 4   | No high-severity review findings open | PASS   | Review notes list only INFO findings; no HIGH, CRITICAL, FAIL, or request-changes findings are present.                                                          |
+| 5   | Final branch is clean                 | PASS   | `git status --short --branch` was clean before the gate file was added; final clean status is rechecked after committing this gate.                              |
+| 6   | Branch diverges cleanly from main     | PASS   | `git merge-tree $(git merge-base HEAD origin/main) HEAD origin/main` reported no conflicts. `git diff --check origin/main...HEAD` reported no whitespace errors. |
 
 ## Acceptance Criteria Evidence
 
-| Acceptance criterion | Result | Evidence |
-|---------------------|--------|----------|
-| Slow `bd list` emits `bd.slow` at the threshold | PASS | `TestExecCommandRunnerEmitsBDSlowForLongBDCommand` installs a fake `bd` that sleeps past a lowered threshold and asserts a `bd.slow` log record. |
-| Fast `bd list` emits no `bd.slow` event | PASS | `TestExecCommandRunnerStopsBDSlowTimerForFastBDCommand` runs a fast fake `bd`, waits past the lowered threshold, and asserts zero `bd.slow` records. |
-| Secret args are redacted | PASS | `TestSanitizeBDArgsRedactsSecretFlags`, `TestRecordBDCallSanitizesArgs`, and `TestRecordBDSlowEmitsSanitizedWarnEvent` cover `--flag value` and `--flag=value` redaction without mutating caller args. |
-| Fast path adds only timer schedule and stop | PASS | Implementation wires `time.AfterFunc` only for `name == "bd"` and defers `slowTimer.Stop()`; no synchronous telemetry work is added to the successful fast path. |
+| Acceptance criterion                            | Result | Evidence                                                                                                                                                                                               |
+| ----------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Slow `bd list` emits `bd.slow` at the threshold | PASS   | `TestExecCommandRunnerEmitsBDSlowForLongBDCommand` installs a fake `bd` that sleeps past a lowered threshold and asserts a `bd.slow` log record.                                                       |
+| Fast `bd list` emits no `bd.slow` event         | PASS   | `TestExecCommandRunnerStopsBDSlowTimerForFastBDCommand` runs a fast fake `bd`, waits past the lowered threshold, and asserts zero `bd.slow` records.                                                   |
+| Secret args are redacted                        | PASS   | `TestSanitizeBDArgsRedactsSecretFlags`, `TestRecordBDCallSanitizesArgs`, and `TestRecordBDSlowEmitsSanitizedWarnEvent` cover `--flag value` and `--flag=value` redaction without mutating caller args. |
+| Fast path adds only timer schedule and stop     | PASS   | Implementation wires `time.AfterFunc` only for `name == "bd"` and defers `slowTimer.Stop()`; no synchronous telemetry work is added to the successful fast path.                                       |
 
 ## Changed Files Reviewed
 

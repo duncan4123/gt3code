@@ -15,10 +15,12 @@ bd template create <template-name>
 ## Description
 
 Templates can be:
+
 - **Built-in**: Provided by bd (epic, bug, feature)
 - **Custom**: Stored in `.beads/templates/` directory
 
 Each template defines default values for:
+
 - Description structure with placeholders
 - Issue type (bug, feature, task, epic, chore)
 - Priority (0-4)
@@ -101,9 +103,9 @@ $ cat .beads/templates/performance.yaml
 name: performance
 description: |-
     [Describe the issue]
-    
+
     ## Additional Context
-    
+
     [Add relevant details]
 type: task
 priority: 2
@@ -165,9 +167,9 @@ Templates are YAML files with the following structure:
 name: template-name
 description: |
   Multi-line description with placeholders
-  
+
   ## Section heading
-  
+
   [Placeholder text]
 
 type: bug|feature|task|epic|chore
@@ -191,6 +193,7 @@ acceptance_criteria: |
 For large features composed of multiple issues.
 
 **Structure:**
+
 - Overview and scope
 - Success criteria checklist
 - Background and motivation
@@ -199,6 +202,7 @@ For large features composed of multiple issues.
 - Component breakdown
 
 **Defaults:**
+
 - Type: epic
 - Priority: P1
 - Labels: epic
@@ -208,6 +212,7 @@ For large features composed of multiple issues.
 For bug reports with consistent structure.
 
 **Structure:**
+
 - Summary
 - Steps to reproduce
 - Expected vs actual behavior
@@ -217,6 +222,7 @@ For bug reports with consistent structure.
 - Impact assessment
 
 **Defaults:**
+
 - Type: bug
 - Priority: P1
 - Labels: bug
@@ -226,6 +232,7 @@ For bug reports with consistent structure.
 For feature requests and enhancements.
 
 **Structure:**
+
 - Feature description
 - Motivation and use cases
 - Proposed solution
@@ -235,6 +242,7 @@ For feature requests and enhancements.
 - Testing strategy
 
 **Defaults:**
+
 - Type: feature
 - Priority: P2
 - Labels: feature
@@ -244,6 +252,7 @@ For feature requests and enhancements.
 Custom templates override built-in templates with the same name. This allows you to customize built-in templates for your project.
 
 **Priority:**
+
 1. Custom templates in `.beads/templates/`
 2. Built-in templates
 
@@ -258,17 +267,17 @@ $ cat > .beads/templates/bug.yaml << 'EOF'
 name: bug
 description: |
   ## Bug Report
-  
+
   **Severity:** [critical|high|medium|low]
   **Component:** [auth|api|frontend|backend]
-  
+
   ## Description
   [Describe the bug]
-  
+
   ## Reproduction
   1. Step 1
   2. Step 2
-  
+
   ## Impact
   [Who is affected? How many users?]
 

@@ -8,11 +8,10 @@ it is a URL that links here. Find your symptom in the lookup below, then
 expand its section for the cause and resolution.
 
 <Note>
-This page covers the seven failure modes encountered in the 2026-04-26
-selfhost UX bug haul (umbrella PRD `ga-r8hs`). For installation issues
-(`gc` not on PATH, missing prerequisites, version mismatches), see
-[Troubleshooting](/getting-started/troubleshooting). For Dolt store
-recovery, see [Dolt bloat recovery](/troubleshooting/dolt-bloat-recovery).
+  This page covers the seven failure modes encountered in the 2026-04-26 selfhost UX bug haul
+  (umbrella PRD `ga-r8hs`). For installation issues (`gc` not on PATH, missing prerequisites,
+  version mismatches), see [Troubleshooting](/getting-started/troubleshooting). For Dolt store
+  recovery, see [Dolt bloat recovery](/troubleshooting/dolt-bloat-recovery).
 </Note>
 
 ## What a failed gc start looks like
@@ -30,20 +29,20 @@ grep -E '^(FATAL|gc-fatal):' gc-start.log
 
 ## Quick lookup
 
-| If you see this symptom | Section |
-|-------------------------|---------|
-| `bd init: signal: killed` (or supervisor stuck at `starting_bead_store`) | [bd op_init timeout](#bd-op-init-timeout) |
-| `pack schema 2 not supported (max 1)` | [Pack schema mismatch](#pack-schema-mismatch) |
-| `agent X: duplicate name (from … and …)` | [Duplicate agent name](#duplicate-name) |
-| `unknown field agent.pool` (or other unknown field) | [Unknown field](#unknown-field-agent-pool) |
-| `rig X: path is required` | [Rig path required](#rig-path-required) |
-| `named_session X: referenced template not found` | [Template not found](#template-not-found) |
-| `named_session X: duplicate identity` | [Duplicate identity](#duplicate-identity) |
+| If you see this symptom                                                  | Section                                       |
+| ------------------------------------------------------------------------ | --------------------------------------------- |
+| `bd init: signal: killed` (or supervisor stuck at `starting_bead_store`) | [bd op_init timeout](#bd-op-init-timeout)     |
+| `pack schema 2 not supported (max 1)`                                    | [Pack schema mismatch](#pack-schema-mismatch) |
+| `agent X: duplicate name (from … and …)`                                 | [Duplicate agent name](#duplicate-name)       |
+| `unknown field agent.pool` (or other unknown field)                      | [Unknown field](#unknown-field-agent-pool)    |
+| `rig X: path is required`                                                | [Rig path required](#rig-path-required)       |
+| `named_session X: referenced template not found`                         | [Template not found](#template-not-found)     |
+| `named_session X: duplicate identity`                                    | [Duplicate identity](#duplicate-identity)     |
 
 <Tip>
-If your symptom does not match any of the above, run `gc doctor --verbose`
-and consult the [installation troubleshooting](/getting-started/troubleshooting)
-page. If still stuck, file an issue (link at the bottom of this page).
+  If your symptom does not match any of the above, run `gc doctor --verbose` and consult the
+  [installation troubleshooting](/getting-started/troubleshooting) page. If still stuck, file an
+  issue (link at the bottom of this page).
 </Tip>
 
 ## 1. bd op_init timeout {#bd-op-init-timeout}
@@ -166,6 +165,7 @@ name = "mayor"
 fallback = true   # use only if no other declaration exists
 # … the rest of your agent config …
 ```
+
 </CodeGroup>
 
 The recommended path is migration. The `fallback = true` escape hatch

@@ -20,12 +20,14 @@ AI agents should use **one MCP server instance** that automatically routes to pe
 ```
 
 The MCP server automatically:
+
 - Detects current workspace from working directory
 - Routes to correct per-project Dolt server
 - Auto-starts Dolt server if not running
 - Maintains complete database isolation
 
 **Architecture (default):**
+
 ```
 MCP Server (one instance)
     ↓
@@ -58,6 +60,7 @@ bd config set repos.additional "~/repo1,~/repo2,~/repo3"
 ```
 
 **Check current config:**
+
 ```bash
 bd config get routing.mode
 bd config get repos.additional
@@ -71,6 +74,7 @@ bd info --json  # Shows all config
 When `routing.mode=auto`, beads detects user role and routes new issues automatically:
 
 **Maintainer (SSH push access):**
+
 ```bash
 # Git remote: git@github.com:user/repo.git
 bd create "Fix bug" -p 1
@@ -78,6 +82,7 @@ bd create "Fix bug" -p 1
 ```
 
 **Contributor (HTTPS or no push access):**
+
 ```bash
 # Git remote: https://github.com/fork/repo.git
 bd create "Fix bug" -p 1
@@ -85,6 +90,7 @@ bd create "Fix bug" -p 1
 ```
 
 **Role detection priority:**
+
 1. Explicit git config: `git config beads.role maintainer|contributor`
 2. Git remote URL inspection (SSH = maintainer, HTTPS = contributor)
 3. Fallback: contributor
@@ -114,6 +120,7 @@ bd create "Found bug" -p 1 --deps discovered-from:bd-abc
 ```
 
 **Override if needed:**
+
 ```bash
 bd create "Issue" -p 1 --deps discovered-from:bd-abc --repo /different/repo
 ```
@@ -133,6 +140,7 @@ bd list --json | jq '.[] | select(.source_repo == "~/.beads-planning")'
 ```
 
 **How it works:**
+
 1. Beads reads from all configured Dolt databases
 2. Aggregates into unified view
 3. Maintains `source_repo` field for provenance
@@ -145,6 +153,7 @@ bd list --json | jq '.[] | select(.source_repo == "~/.beads-planning")'
 **Setup:** Human runs `bd init --contributor` (wizard handles config)
 
 **Agent workflow:**
+
 ```bash
 # All planning issues auto-route to separate repo
 bd create "Investigate implementation" -p 1
@@ -166,6 +175,7 @@ bd close plan-42 --reason "Done"
 **Setup:** Human runs `bd init --team` (wizard handles config)
 
 **Agent workflow:**
+
 ```bash
 # Shared team planning (committed to repo)
 bd create "Implement feature X" -p 1
@@ -184,6 +194,7 @@ bd ready --json
 **Setup:** Multiple repos for different phases
 
 **Agent workflow:**
+
 ```bash
 # Phase 1: Planning repo
 cd ~/projects/myapp-planning
@@ -203,6 +214,7 @@ bd dep add impl-42 plan-10 --type blocks  # Link across repos
 **Symptom:** `bd create` routes to unexpected repo
 
 **Check:**
+
 ```bash
 bd config get routing.mode
 bd config get routing.maintainer
@@ -211,6 +223,7 @@ bd info --json | jq '.role'
 ```
 
 **Fix:**
+
 ```bash
 # Use explicit flag
 bd create "Issue" -p 1 --repo .
@@ -225,11 +238,13 @@ bd config set routing.default "."
 **Symptom:** `bd list` only shows current repo
 
 **Check:**
+
 ```bash
 bd config get repos.additional
 ```
 
 **Fix:**
+
 ```bash
 # Add missing repos
 bd config set repos.additional "~/repo1,~/repo2"
@@ -246,6 +261,7 @@ bd list --json
 **Explanation:** This is intentional - discovered issues inherit parent's `source_repo`
 
 **Override if needed:**
+
 ```bash
 bd create "Issue" -p 1 --deps discovered-from:bd-42 --repo /different/repo
 ```
@@ -255,6 +271,7 @@ bd create "Issue" -p 1 --deps discovered-from:bd-42 --repo /different/repo
 **Symptom:** `~/.beads-planning` changes appear in upstream PRs
 
 **Verify:**
+
 ```bash
 # Planning repo should be separate
 ls -la ~/.beads-planning/.git  # Should exist
@@ -275,6 +292,7 @@ bd config get routing.contributor  # Should be ~/.beads-planning
 **Cause:** Using multiple MCP server instances (not recommended)
 
 **Fix:**
+
 ```json
 // RECOMMENDED: Single MCP server
 {
@@ -292,6 +310,7 @@ The single MCP server automatically routes based on workspace directory.
 **Symptom:** Commands fail right after a `bd` upgrade
 
 **Fix:**
+
 ```bash
 bd version      # Confirm active CLI version
 bd doctor quick # Validate local installation health
@@ -300,24 +319,28 @@ bd doctor quick # Validate local installation health
 ## Best Practices for Agents
 
 ### OSS Contributors
+
 - ✅ Planning issues auto-route to `~/.beads-planning`
 - ✅ Never commit `.beads/` in PRs to upstream
 - ✅ Use `bd ready` to see all work (upstream + planning)
 - ❌ Don't manually override routing without good reason
 
 ### Teams
+
 - ✅ Use `bd dolt push` to sync the shared Dolt database
 - ✅ Use `bd dolt push` to ensure changes are committed/pushed
 - ✅ Link related issues across repos with dependencies
 - ❌ Don't delete `.beads/` - you lose all issue data
 
 ### Multi-Phase Projects
+
 - ✅ Use clear repo names (`planning`, `impl`, `maint`)
 - ✅ Link issues across phases with `blocks` dependencies
 - ✅ Use `bd list --json` to filter by `source_repo`
 - ❌ Don't duplicate issues across repos
 
 ### General
+
 - ✅ Always use single MCP server (per-project Dolt servers)
 - ✅ Check routing config before filing issues
 - ✅ Use `bd info --json` to verify workspace state
@@ -329,12 +352,14 @@ bd doctor quick # Validate local installation health
 Multi-repo mode is fully backward compatible:
 
 **Without multi-repo config:**
+
 ```bash
 bd create "Issue" -p 1
 # → Creates in local Dolt database (single-repo mode)
 ```
 
 **With multi-repo config:**
+
 ```bash
 bd create "Issue" -p 1
 # → Auto-routed based on config
@@ -342,6 +367,7 @@ bd create "Issue" -p 1
 ```
 
 **Disabling multi-repo:**
+
 ```bash
 bd config unset routing.mode
 bd config unset repos.additional

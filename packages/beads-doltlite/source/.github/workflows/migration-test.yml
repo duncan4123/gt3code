@@ -2,17 +2,17 @@ name: Migration Test Harness
 
 on:
   push:
-    tags: ['v*']
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       versions:
-        description: 'Specific versions to test (space-separated), or empty for all eras'
+        description: "Specific versions to test (space-separated), or empty for all eras"
         required: false
-        default: ''
+        default: ""
       mode:
-        description: 'Test mode'
+        description: "Test mode"
         required: false
-        default: 'all'
+        default: "all"
         type: choice
         options:
           - all
@@ -32,7 +32,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
       - name: Install dependencies
         run: |

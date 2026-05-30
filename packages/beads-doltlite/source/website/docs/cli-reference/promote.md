@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc promote`
 
 ## bd promote
@@ -19,8 +20,8 @@ comments. The original ID is preserved so all links keep working.
 A comment is added recording the promotion and optional reason.
 
 Examples:
-  bd promote bd-wisp-abc123
-  bd promote bd-wisp-abc123 --reason "Worth tracking long-term"
+bd promote bd-wisp-abc123
+bd promote bd-wisp-abc123 --reason "Worth tracking long-term"
 
 ```
 bd promote <wisp-id> [flags]

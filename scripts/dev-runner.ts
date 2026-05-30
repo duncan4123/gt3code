@@ -44,19 +44,11 @@ const MODE_ARGS = {
   ],
   "dev:server": ["run", "dev", "--filter=t3"],
   "dev:web": ["run", "dev", "--filter=@t3tools/web"],
-  "dev:desktop": [
-    "run",
-    "dev",
-    "--filter=@t3tools/desktop",
-    "--filter=@t3tools/web",
-    "--parallel",
-  ],
+  "dev:desktop": ["run", "dev", "--filter=@t3tools/desktop", "--filter=@t3tools/web", "--parallel"],
 } as const satisfies Record<string, ReadonlyArray<string>>;
 
 type DevMode = keyof typeof MODE_ARGS;
-type PortAvailabilityCheck<R = never> = (
-  port: number,
-) => Effect.Effect<boolean, never, R>;
+type PortAvailabilityCheck<R = never> = (port: number) => Effect.Effect<boolean, never, R>;
 
 const DEV_RUNNER_MODES = Object.keys(MODE_ARGS) as Array<DevMode>;
 const LIVE_WORKSPACE_TARGET_BOOKMARK = "live/current";
@@ -103,9 +95,7 @@ export function evaluateLiveWorkspaceGuard({
   if (!normalizedBookmarks.has(targetBookmark)) {
     failures.push(
       `The served workspace parent is not ${targetBookmark}. Parent bookmarks: ${
-        normalizedBookmarks.size > 0
-          ? [...normalizedBookmarks].join(", ")
-          : "(none)"
+        normalizedBookmarks.size > 0 ? [...normalizedBookmarks].join(", ") : "(none)"
       }.`,
     );
   }
@@ -178,16 +168,12 @@ function assertServedWorkspaceRunsLive(
   });
 }
 
-const optionalStringConfig = (
-  name: string,
-): Config.Config<string | undefined> =>
+const optionalStringConfig = (name: string): Config.Config<string | undefined> =>
   Config.string(name).pipe(
     Config.option,
     Config.map((value) => Option.getOrUndefined(value)),
   );
-const optionalBooleanConfig = (
-  name: string,
-): Config.Config<boolean | undefined> =>
+const optionalBooleanConfig = (name: string): Config.Config<boolean | undefined> =>
   Config.boolean(name).pipe(
     Config.option,
     Config.map((value) => Option.getOrUndefined(value)),
@@ -197,9 +183,7 @@ const optionalPortConfig = (name: string): Config.Config<number | undefined> =>
     Config.option,
     Config.map((value) => Option.getOrUndefined(value)),
   );
-const optionalIntegerConfig = (
-  name: string,
-): Config.Config<number | undefined> =>
+const optionalIntegerConfig = (name: string): Config.Config<number | undefined> =>
   Config.int(name).pipe(
     Config.option,
     Config.map((value) => Option.getOrUndefined(value)),
@@ -245,9 +229,7 @@ export function resolveOffset(config: {
   return { offset, source: `hashed T3CODE_DEV_INSTANCE=${seed}` };
 }
 
-function resolveBaseDir(
-  baseDir: string | undefined,
-): Effect.Effect<string, never, Path.Path> {
+function resolveBaseDir(baseDir: string | undefined): Effect.Effect<string, never, Path.Path> {
   return Effect.gen(function* () {
     const path = yield* Path.Path;
     const configured = baseDir?.trim();
@@ -260,9 +242,7 @@ function resolveBaseDir(
   });
 }
 
-function normalizeWsUrlForT3Bridge(
-  raw: string | undefined,
-): string | undefined {
+function normalizeWsUrlForT3Bridge(raw: string | undefined): string | undefined {
   const trimmed = raw?.trim();
   if (!trimmed) {
     return undefined;
@@ -270,9 +250,7 @@ function normalizeWsUrlForT3Bridge(
   return trimmed.endsWith("/ws") ? trimmed : `${trimmed.replace(/\/$/, "")}/ws`;
 }
 
-function writeT3BridgeWsUrlHint(
-  env: NodeJS.ProcessEnv,
-): Effect.Effect<void, DevRunnerError> {
+function writeT3BridgeWsUrlHint(env: NodeJS.ProcessEnv): Effect.Effect<void, DevRunnerError> {
   return Effect.try({
     try: () => {
       const baseDir = env.T3CODE_HOME?.trim();
@@ -317,11 +295,7 @@ export function createDevRunnerEnv({
   host,
   port,
   devUrl,
-}: CreateDevRunnerEnvInput): Effect.Effect<
-  NodeJS.ProcessEnv,
-  never,
-  Path.Path
-> {
+}: CreateDevRunnerEnvInput): Effect.Effect<NodeJS.ProcessEnv, never, Path.Path> {
   return Effect.gen(function* () {
     const serverPort = port ?? BASE_SERVER_PORT + serverOffset;
     const webPort = BASE_WEB_PORT + webOffset;
@@ -362,8 +336,7 @@ export function createDevRunnerEnv({
     }
 
     if (autoBootstrapProjectFromCwd !== undefined) {
-      output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD =
-        autoBootstrapProjectFromCwd ? "1" : "0";
+      output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = autoBootstrapProjectFromCwd ? "1" : "0";
     } else {
       delete output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD;
     }
@@ -411,10 +384,7 @@ function portPairForOffset(offset: number): {
 export function checkPortAvailabilityOnHosts<R>(
   port: number,
   hosts: ReadonlyArray<string>,
-  canListenOnHost: (
-    port: number,
-    host: string,
-  ) => Effect.Effect<boolean, never, R>,
+  canListenOnHost: (port: number, host: string) => Effect.Effect<boolean, never, R>,
 ): Effect.Effect<boolean, never, R> {
   return Effect.gen(function* () {
     for (const host of hosts) {
@@ -427,15 +397,11 @@ export function checkPortAvailabilityOnHosts<R>(
   });
 }
 
-const defaultCheckPortAvailability: PortAvailabilityCheck<
-  NetService.NetService
-> = (port) =>
+const defaultCheckPortAvailability: PortAvailabilityCheck<NetService.NetService> = (port) =>
   Effect.gen(function* () {
     const net = yield* NetService.NetService;
-    return yield* checkPortAvailabilityOnHosts(
-      port,
-      DEV_PORT_PROBE_HOSTS,
-      (candidatePort, host) => net.canListenOnHost(candidatePort, host),
+    return yield* checkPortAvailabilityOnHosts(port, DEV_PORT_PROBE_HOSTS, (candidatePort, host) =>
+      net.canListenOnHost(candidatePort, host),
     );
   });
 
@@ -464,9 +430,7 @@ export function findFirstAvailableOffset<R = NetService.NetService>({
       if (
         (requireServerPort && serverPortOutOfRange) ||
         (requireWebPort && webPortOutOfRange) ||
-        (!requireServerPort &&
-          !requireWebPort &&
-          (serverPortOutOfRange || webPortOutOfRange))
+        (!requireServerPort && !requireWebPort && (serverPortOutOfRange || webPortOutOfRange))
       ) {
         break;
       }
@@ -576,8 +540,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       Effect.mapError(
         (cause) =>
           new DevRunnerError({
-            message:
-              "Failed to read T3CODE_PORT_OFFSET/T3CODE_DEV_INSTANCE configuration.",
+            message: "Failed to read T3CODE_PORT_OFFSET/T3CODE_DEV_INSTANCE configuration.",
             cause,
           }),
       ),
@@ -660,8 +623,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       cause instanceof DevRunnerError
         ? cause
         : new DevRunnerError({
-            message:
-              cause instanceof Error ? cause.message : "dev-runner failed",
+            message: cause instanceof Error ? cause.message : "dev-runner failed",
             cause,
           }),
     ),
@@ -673,58 +635,40 @@ const devRunnerCli = Command.make("dev-runner", {
     Argument.withDescription("Development mode to run."),
   ),
   t3Home: Flag.string("home-dir").pipe(
-    Flag.withDescription(
-      "Base directory for all T3 Code data (equivalent to T3CODE_HOME).",
-    ),
+    Flag.withDescription("Base directory for all T3 Code data (equivalent to T3CODE_HOME)."),
     Flag.withFallbackConfig(optionalStringConfig("T3CODE_HOME")),
   ),
   noBrowser: Flag.boolean("no-browser").pipe(
-    Flag.withDescription(
-      "Browser auto-open toggle (equivalent to T3CODE_NO_BROWSER).",
-    ),
+    Flag.withDescription("Browser auto-open toggle (equivalent to T3CODE_NO_BROWSER)."),
     Flag.withFallbackConfig(optionalBooleanConfig("T3CODE_NO_BROWSER")),
   ),
-  autoBootstrapProjectFromCwd: Flag.boolean(
-    "auto-bootstrap-project-from-cwd",
-  ).pipe(
+  autoBootstrapProjectFromCwd: Flag.boolean("auto-bootstrap-project-from-cwd").pipe(
     Flag.withDescription(
       "Auto-bootstrap toggle (equivalent to T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD).",
     ),
-    Flag.withFallbackConfig(
-      optionalBooleanConfig("T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD"),
-    ),
+    Flag.withFallbackConfig(optionalBooleanConfig("T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD")),
   ),
   logWebSocketEvents: Flag.boolean("log-websocket-events").pipe(
-    Flag.withDescription(
-      "WebSocket event logging toggle (equivalent to T3CODE_LOG_WS_EVENTS).",
-    ),
+    Flag.withDescription("WebSocket event logging toggle (equivalent to T3CODE_LOG_WS_EVENTS)."),
     Flag.withAlias("log-ws-events"),
     Flag.withFallbackConfig(optionalBooleanConfig("T3CODE_LOG_WS_EVENTS")),
   ),
   host: Flag.string("host").pipe(
-    Flag.withDescription(
-      "Server host/interface override (forwards to T3CODE_HOST).",
-    ),
+    Flag.withDescription("Server host/interface override (forwards to T3CODE_HOST)."),
     Flag.withFallbackConfig(optionalStringConfig("T3CODE_HOST")),
   ),
   port: Flag.integer("port").pipe(
-    Flag.withSchema(
-      Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
-    ),
+    Flag.withSchema(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }))),
     Flag.withDescription("Server port override (forwards to T3CODE_PORT)."),
     Flag.withFallbackConfig(optionalPortConfig("T3CODE_PORT")),
   ),
   devUrl: Flag.string("dev-url").pipe(
     Flag.withSchema(Schema.URLFromString),
-    Flag.withDescription(
-      "Web dev URL override (forwards to VITE_DEV_SERVER_URL).",
-    ),
+    Flag.withDescription("Web dev URL override (forwards to VITE_DEV_SERVER_URL)."),
     Flag.withFallbackConfig(optionalUrlConfig("VITE_DEV_SERVER_URL")),
   ),
   dryRun: Flag.boolean("dry-run").pipe(
-    Flag.withDescription(
-      "Resolve mode/ports/env and print, but do not spawn turbo.",
-    ),
+    Flag.withDescription("Resolve mode/ports/env and print, but do not spawn turbo."),
     Flag.withDefault(false),
   ),
   turboArgs: Argument.string("turbo-arg").pipe(
@@ -732,9 +676,7 @@ const devRunnerCli = Command.make("dev-runner", {
     Argument.variadic(),
   ),
 }).pipe(
-  Command.withDescription(
-    "Run monorepo development modes with deterministic port/env wiring.",
-  ),
+  Command.withDescription("Run monorepo development modes with deterministic port/env wiring."),
   Command.withHandler((input) => runDevRunnerWithInput(input)),
 );
 

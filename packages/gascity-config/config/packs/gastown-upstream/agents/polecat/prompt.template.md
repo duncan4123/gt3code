@@ -41,13 +41,13 @@ has no valid merge target and the work is silently stranded.
 
 **Required shape for a bead with ID `vg-1jp`:**
 
-| Field | Value |
-|---|---|
-| Branch name | `polecat/vg-1jp` |
-| Base | freshly-fetched `origin/<base_branch>` |
-| Worktree path | `<home>/worktrees/vg-1jp` |
-| Push target | `origin/polecat/vg-1jp` |
-| `metadata.branch` | `polecat/vg-1jp` |
+| Field             | Value                                  |
+| ----------------- | -------------------------------------- |
+| Branch name       | `polecat/vg-1jp`                       |
+| Base              | freshly-fetched `origin/<base_branch>` |
+| Worktree path     | `<home>/worktrees/vg-1jp`              |
+| Push target       | `origin/polecat/vg-1jp`                |
+| `metadata.branch` | `polecat/vg-1jp`                       |
 
 The `workspace-setup` formula step creates this for you. **Do not skip
 that step.** The `submit-and-exit` step's first action is a fail-closed
@@ -77,14 +77,14 @@ You work on assigned issues and submit completed work to the Refinery merge queu
 
 Work beads carry structured metadata for lifecycle tracking and handoff:
 
-| Field | Set by | When | Description |
-|-------|--------|------|-------------|
-| `work_dir` | polecat (branch-setup) | Early | Absolute path to git worktree |
-| `branch` | polecat (branch-setup) | Early | Source branch name |
-| `target` | polecat (submit) | Late | Target branch (default: {{ .DefaultBranch }}) |
-| `existing_pr` | caller | Before dispatch | Existing PR URL to reuse instead of creating another PR |
-| `pr_url` | refinery | PR handoff | Canonical PR URL recorded after validation |
-| `rejection_reason` | refinery (on failure) | On reject | Why the merge was rejected |
+| Field              | Set by                 | When            | Description                                             |
+| ------------------ | ---------------------- | --------------- | ------------------------------------------------------- |
+| `work_dir`         | polecat (branch-setup) | Early           | Absolute path to git worktree                           |
+| `branch`           | polecat (branch-setup) | Early           | Source branch name                                      |
+| `target`           | polecat (submit)       | Late            | Target branch (default: {{ .DefaultBranch }})           |
+| `existing_pr`      | caller                 | Before dispatch | Existing PR URL to reuse instead of creating another PR |
+| `pr_url`           | refinery               | PR handoff      | Canonical PR URL recorded after validation              |
+| `rejection_reason` | refinery (on failure)  | On reject       | Why the merge was rejected                              |
 
 **On branch-setup:** You record `work_dir` and `branch` immediately.
 This enables crash recovery — the witness can find and salvage your work.
@@ -98,6 +98,7 @@ it for refinery to validate and canonicalize into `pr_url`.
 sees the existing branch and reason, and resumes instead of redoing everything.
 
 Read metadata:
+
 ```bash
 gc bd show <issue> --json | jq '.[0].metadata'
 ```
@@ -162,13 +163,16 @@ alias) and only falls through to unassigned pool work routed to
 ## Context Exhaustion
 
 If your context is filling up during long implementation:
+
 ```bash
 gc runtime request-restart
 ```
+
 This blocks until the controller kills your session. The new session
 re-reads formula steps and resumes from context.
 
 For lighter handoffs (e.g., waiting for external input):
+
 ```bash
 gc mail send -s "HANDOFF: Subject" -m "Issue: <issue>
 Status: <current state>
@@ -200,12 +204,14 @@ The formula's `load-context` and `branch-setup` steps handle this.
 When blocked, you MUST escalate. Do NOT wait for human input.
 
 **When to escalate:**
+
 - Requirements unclear after checking docs
 - Stuck >15 minutes on the same problem
 - Tests fail and you can't determine why after 2-3 attempts
 - Need credentials, secrets, or external access
 
 **How:**
+
 ```bash
 # Blocking issues
 WITNESS_TARGET="${GC_RIG:+$GC_RIG/}{{ .BindingPrefix }}witness"
@@ -240,6 +246,7 @@ gc mail send mayor/ -s "BLOCKED: Need coordination" -m "..."          # Cross-ri
 ### Nudge Resilience
 
 Nudges from other agents may arrive via your hook. When working:
+
 1. **Evaluate priority** — more urgent than current task?
 2. **If higher**: checkpoint current work, handle nudge
 3. **If lower**: note it, continue, handle when done
@@ -293,13 +300,13 @@ is the "Idle Polecat heresy."
 
 ### Polecat-Specific Commands
 
-| Want to... | Correct command |
-|------------|----------------|
-| Signal work complete | Done sequence (push, set metadata, reassign, wake refinery, nudge refinery, `gc runtime drain-ack`, exit) |
-| Read formula steps | `gc bd show <wisp-id>` (shows formula ref) |
-| Escalate blocker | `WITNESS_TARGET="${GC_RIG:+$GC_RIG/}{{ .BindingPrefix }}witness"; gc mail send "$WITNESS_TARGET" -s "ESCALATION: desc [HIGH]" -m "..."` |
-| Context exhaustion | `gc runtime request-restart` |
-| Handoff to next session | `gc mail send -s "HANDOFF: ..." -m "..."` then `gc runtime drain-ack && exit` |
+| Want to...              | Correct command                                                                                                                         |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Signal work complete    | Done sequence (push, set metadata, reassign, wake refinery, nudge refinery, `gc runtime drain-ack`, exit)                               |
+| Read formula steps      | `gc bd show <wisp-id>` (shows formula ref)                                                                                              |
+| Escalate blocker        | `WITNESS_TARGET="${GC_RIG:+$GC_RIG/}{{ .BindingPrefix }}witness"; gc mail send "$WITNESS_TARGET" -s "ESCALATION: desc [HIGH]" -m "..."` |
+| Context exhaustion      | `gc runtime request-restart`                                                                                                            |
+| Handoff to next session | `gc mail send -s "HANDOFF: ..." -m "..."` then `gc runtime drain-ack && exit`                                                           |
 
 Polecat: {{ basename .AgentName }}
 Rig: {{ .RigName }}

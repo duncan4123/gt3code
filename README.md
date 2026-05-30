@@ -116,13 +116,13 @@ install-local runtime.
 
 Key paths are resolved via `runtime.env`:
 
-| Variable | Value |
-|----------|-------|
-| `GC_HOME` | `./.t3-dev/gascity` |
-| `GC_API_URL` | `http://127.0.0.1:<port>` (port from `supervisor.toml`) |
-| `GC_BIN` | `./.t3-dev/gascity/bin/gc` |
-| `BD_BIN` | `./.t3-dev/gascity/bin/bd` |
-| `GC_WORKTREES_DIR` | `./.t3-dev/worktrees` |
+| Variable           | Value                                                   |
+| ------------------ | ------------------------------------------------------- |
+| `GC_HOME`          | `./.t3-dev/gascity`                                     |
+| `GC_API_URL`       | `http://127.0.0.1:<port>` (port from `supervisor.toml`) |
+| `GC_BIN`           | `./.t3-dev/gascity/bin/gc`                              |
+| `BD_BIN`           | `./.t3-dev/gascity/bin/bd`                              |
+| `GC_WORKTREES_DIR` | `./.t3-dev/worktrees`                                   |
 
 The supervisor API port is configured in `supervisor.toml` (`[supervisor] port`).
 This is set by the T3 Code app, not hardcoded — it uses `GC_API_URL` from

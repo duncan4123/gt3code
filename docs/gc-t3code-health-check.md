@@ -39,13 +39,13 @@ opencode models
 OpenCode exposes models from multiple provider backends. Each slug has a
 `{provider_id}/{model_id}` format:
 
-| Prefix | Source | Example |
-|---|---|---|
-| `opencode/` | OpenCode's built-in proxy (free) | `opencode/deepseek-v4-flash-free` |
-| `deepseek/` | Direct DeepSeek API | `deepseek/deepseek-v4-pro` |
-| `openrouter/` | OpenRouter API | `openrouter/deepseek/deepseek-v4-pro` |
-| `google/` | Google AI / Vertex | `google/gemini-2.5-pro` |
-| `kimi-for-coding/` | Kimi Coding API | `kimi-for-coding/k2p6` |
+| Prefix             | Source                           | Example                               |
+| ------------------ | -------------------------------- | ------------------------------------- |
+| `opencode/`        | OpenCode's built-in proxy (free) | `opencode/deepseek-v4-flash-free`     |
+| `deepseek/`        | Direct DeepSeek API              | `deepseek/deepseek-v4-pro`            |
+| `openrouter/`      | OpenRouter API                   | `openrouter/deepseek/deepseek-v4-pro` |
+| `google/`          | Google AI / Vertex               | `google/gemini-2.5-pro`               |
+| `kimi-for-coding/` | Kimi Coding API                  | `kimi-for-coding/k2p6`                |
 
 **The prefix matters.** `opencode/deepseek-v4-pro` does NOT exist — only
 `opencode/deepseek-v4-flash-free`. Paid DeepSeek models use the `deepseek/`
@@ -62,6 +62,7 @@ config.
 ### Changing models for existing sessions
 
 After changing `GC_MODEL` in `pack.toml`:
+
 1. Restart the city: `gc restart`
 2. Existing session beads retain old model — only new sessions get the new model
 3. To force old sessions: `gc session reset <id>` or close and let controller recreate
@@ -136,6 +137,7 @@ echo "<port>" > .beads/dolt-server.port
 ```
 
 **City backends:**
+
 - `gastown-dolt`: `dolt` (GC-managed Dolt server)
 - `gastown`: `doltlite` (local SQLite file `.beads/doltlite/t3.db`)
 - `gascity-br`: `beads-rust-backend` (custom `br` binary)
@@ -169,6 +171,7 @@ VITE_WS_URL=ws://localhost:3773/ws bun run dev:web &
 
 **When `--watch` restarts don't pick up jj edit changes:**
 Manually restart the dev server:
+
 ```bash
 kill $(lsof -ti :3773)
 jj new -r live/current -m "workspace"
@@ -195,6 +198,7 @@ gc session list 2>&1 | head -20
 ```
 
 **Red flags in gc status:**
+
 - `Controller: stopped` — city not started
 - `Suspended: yes` — city suspended in config
 - All agents `stopped` AND controller not `checking agent images` — stuck
@@ -264,24 +268,24 @@ gc events 2>&1 | tail -30
 
 ## Common Failures & Fixes
 
-| Symptom | Likely Cause | Fix |
-|---|---|---|
-| `T3 WebSocket candidates failed: connection refused` | T3 server not running | Start T3 dev server |
-| `T3 WebSocket candidates failed: i/o timeout` | T3 server hung | Restart T3 server |
-| `failed-create` session bead stuck | Dolt syntax error in bead close | Restart GC city |
-| `adopting sessions` stuck >5 min | Slow `bd list` query blocking reconcile | Wait or restart |
-| `No projects yet` in sidebar | No project added to T3 | Add project via UI |
-| Agents `stopped` indefinitely | Controller still starting | Wait for `checking agent images` → `adopting sessions` |
-| Wrong provider in sidebar | Config not reloaded | `gc restart` after config changes |
-| OpenCode "Unavailable" in T3 settings | No opencode server on port 4096 | `opencode serve --port 4096 &` |
-| GC agents using wrong model prefix | `opencode/deepseek-v4-pro` doesn't exist | Use `deepseek/deepseek-v4-pro` (check with `opencode models \| grep deepseek`) |
-| `gc doctor` missing T3Code integration check | gc binary not rebuilt | New check in `checks_t3code.go`, needs `go build` on next deploy |
-| Sidebar shows "No projects yet" but GC is running | `VITE_WS_URL` not set (Vite can't reach T3 WebSocket) | Start Vite with `VITE_WS_URL=ws://localhost:3773/ws bun run dev` |
-| Multiple Dolt servers on different ports | Stale city registrations + bd shared server auto-start | Kill stale: `ps aux \| grep dolt \| grep -v grep` and remove wrong-path registrations |
-| `bd` commands fail with "Dolt server unreachable" | bd uses shared server (port 35819) instead of GC-managed | Set `BEADS_DOLT_SERVER_PORT=30846` or kill shared server and point `dolt-server.port` at GC Dolt |
-| `doltlite: file is not a database` | Stale `.beads/doltlite/t3.db` from previous backend switch | Remove stale doltlite dir if city uses Dolt: `rm -rf .beads/doltlite` |
-| T3 server refuses to start (non-live workspace) | Working copy has uncommitted changes | `jj new -r live/current -m "workspace"` then `bun run dev:server` |
-| Dev server picks up stale code after jj edit | `--watch` didn't trigger on jj working-copy switch | Restart dev server: `kill` + restart from clean workspace |
+| Symptom                                              | Likely Cause                                               | Fix                                                                                              |
+| ---------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `T3 WebSocket candidates failed: connection refused` | T3 server not running                                      | Start T3 dev server                                                                              |
+| `T3 WebSocket candidates failed: i/o timeout`        | T3 server hung                                             | Restart T3 server                                                                                |
+| `failed-create` session bead stuck                   | Dolt syntax error in bead close                            | Restart GC city                                                                                  |
+| `adopting sessions` stuck >5 min                     | Slow `bd list` query blocking reconcile                    | Wait or restart                                                                                  |
+| `No projects yet` in sidebar                         | No project added to T3                                     | Add project via UI                                                                               |
+| Agents `stopped` indefinitely                        | Controller still starting                                  | Wait for `checking agent images` → `adopting sessions`                                           |
+| Wrong provider in sidebar                            | Config not reloaded                                        | `gc restart` after config changes                                                                |
+| OpenCode "Unavailable" in T3 settings                | No opencode server on port 4096                            | `opencode serve --port 4096 &`                                                                   |
+| GC agents using wrong model prefix                   | `opencode/deepseek-v4-pro` doesn't exist                   | Use `deepseek/deepseek-v4-pro` (check with `opencode models \| grep deepseek`)                   |
+| `gc doctor` missing T3Code integration check         | gc binary not rebuilt                                      | New check in `checks_t3code.go`, needs `go build` on next deploy                                 |
+| Sidebar shows "No projects yet" but GC is running    | `VITE_WS_URL` not set (Vite can't reach T3 WebSocket)      | Start Vite with `VITE_WS_URL=ws://localhost:3773/ws bun run dev`                                 |
+| Multiple Dolt servers on different ports             | Stale city registrations + bd shared server auto-start     | Kill stale: `ps aux \| grep dolt \| grep -v grep` and remove wrong-path registrations            |
+| `bd` commands fail with "Dolt server unreachable"    | bd uses shared server (port 35819) instead of GC-managed   | Set `BEADS_DOLT_SERVER_PORT=30846` or kill shared server and point `dolt-server.port` at GC Dolt |
+| `doltlite: file is not a database`                   | Stale `.beads/doltlite/t3.db` from previous backend switch | Remove stale doltlite dir if city uses Dolt: `rm -rf .beads/doltlite`                            |
+| T3 server refuses to start (non-live workspace)      | Working copy has uncommitted changes                       | `jj new -r live/current -m "workspace"` then `bun run dev:server`                                |
+| Dev server picks up stale code after jj edit         | `--watch` didn't trigger on jj working-copy switch         | Restart dev server: `kill` + restart from clean workspace                                        |
 
 ## After Provider Switch
 
@@ -315,6 +319,7 @@ ps aux | grep opencode | awk '{print $2}' | \
 **Symptom:** Session lifecycle shows `provider_error` with `SQL error in ProjectionThreadMessageRepository.insertProjectionThreadMessageFtsRow`.
 
 **Cause:** The T3 server's state DB is split into two files:
+
 - `.t3-dev/dev/state.sqlite` — main DB, holds migration tracking
 - `.t3-dev/dev/state-proj.sqlite` — sidecar ("proj" schema), holds hot tables including `messages_fts`
 
@@ -325,10 +330,12 @@ created by migration 038 (which is skipped). The repo layer does bare
 `INSERT INTO messages_fts` (no `proj.` prefix), hitting the missing table.
 
 **Fix:** Delete BOTH state files:
+
 ```bash
 rm -f .t3-dev/dev/state.sqlite .t3-dev/dev/state.sqlite-wal .t3-dev/dev/state.sqlite-shm
 rm -f .t3-dev/dev/state-proj.sqlite .t3-dev/dev/state-proj.sqlite-wal .t3-dev/dev/state-proj.sqlite-shm
 ```
+
 Then restart T3 server. All migrations will re-run and `proj.messages_fts` will be created.
 
 **Better fix (code):** Add `messages_fts` creation to `ensureHotSidecarSchema` in `038_MoveHotTablesToBtreeSidecar.ts` so it handles missing-sidecar recovery.
@@ -336,6 +343,7 @@ Then restart T3 server. All migrations will re-run and `proj.messages_fts` will 
 ### 2. Deacon bead stuck (`recompute is_blocked` Dolt syntax error)
 
 **Symptom:** GC supervisor logs show repeatedly:
+
 ```
 session beads: closing failed-create bead t3-u8m: recompute is_blocked (mark):
 Error 1105: syntax error at position 2141 near '%!"(MISSING)gate":"any-children"%!'
@@ -343,20 +351,24 @@ Error 1105: syntax error at position 2141 near '%!"(MISSING)gate":"any-children"
 
 **Cause:** `blocked_state.go:29` in the bd source defines a SQL constant with
 LIKE patterns containing literal `%` signs:
+
 ```sql
 d.metadata LIKE '%"gate":"any-children"%'
 ```
+
 This constant is injected into a Go `fmt.Sprintf` template via `%s`, then the
 resulting string is used as the format string for a SECOND `fmt.Sprintf` call.
 The `%` signs from the LIKE pattern are interpreted as invalid Go format verbs.
 
 **Fix:** Replace the `LIKE` pattern with JSON functions (upstream fix in
 gastownhall/beads `main`):
+
 ```sql
 d.metadata LIKE '%"gate":"any-children"%'  -- broken (fmt.Sprintf eats %)
 -- Replace with:
 JSON_UNQUOTE(JSON_EXTRACT(d.metadata, '$.gate')) = 'any-children'  -- correct
 ```
+
 Then rebuild bd: `cd packages/beads-doltlite/source && CGO_ENABLED=1 go build -o .../bd ./cmd/bd`
 
 ### 3. bd list query blocks cache reconciler (large DB)

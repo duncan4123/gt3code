@@ -1,11 +1,5 @@
 import { InfoIcon, RefreshCwIcon } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { GcConfigResult, ServerProcessSignal } from "@t3tools/contracts";
 
 import { ensureLocalApi } from "../../localApi";
@@ -132,22 +126,14 @@ function DiagnosticsTable({ children }: { children: ReactNode }) {
   );
 }
 
-function ValueRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number | undefined;
-}) {
+function ValueRow({ label, value }: { label: string; value: string | number | undefined }) {
   return (
     <tr>
       <td className="whitespace-nowrap px-4 py-3 align-top text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70 first:sm:pl-5">
         {label}
       </td>
       <td className="break-all px-4 py-3 align-top font-mono text-xs text-foreground last:sm:pr-5">
-        {value ?? (
-          <span className="font-sans text-muted-foreground">not set</span>
-        )}
+        {value ?? <span className="font-sans text-muted-foreground">not set</span>}
       </td>
     </tr>
   );
@@ -205,10 +191,7 @@ function GasCityLifecycleTable({
         <tbody className="divide-y divide-border/50">
           {rows.length === 0 ? (
             <tr>
-              <td
-                colSpan={6}
-                className="px-4 py-4 text-xs text-muted-foreground sm:px-5"
-              >
+              <td colSpan={6} className="px-4 py-4 text-xs text-muted-foreground sm:px-5">
                 {emptyLabel}
               </td>
             </tr>
@@ -224,9 +207,7 @@ function GasCityLifecycleTable({
               </td>
               <td className="px-3 py-2 align-middle text-muted-foreground">
                 <Tooltip>
-                  <TooltipTrigger
-                    render={<span className="block truncate">{row.path}</span>}
-                  />
+                  <TooltipTrigger render={<span className="block truncate">{row.path}</span>} />
                   <TooltipPopup
                     side="top"
                     className="max-w-[min(520px,calc(100vw-2rem))] break-all font-mono text-[11px]"
@@ -235,9 +216,7 @@ function GasCityLifecycleTable({
                   </TooltipPopup>
                 </Tooltip>
               </td>
-              <td className="truncate px-3 py-2 align-middle text-muted-foreground">
-                {row.type}
-              </td>
+              <td className="truncate px-3 py-2 align-middle text-muted-foreground">{row.type}</td>
               <td className="px-3 py-2 align-middle text-muted-foreground sm:pr-5">
                 <Tooltip>
                   <TooltipTrigger
@@ -245,9 +224,7 @@ function GasCityLifecycleTable({
                       <span
                         className={cn(
                           "block truncate",
-                          row.details?.startsWith("Issue:")
-                            ? "text-destructive"
-                            : undefined,
+                          row.details?.startsWith("Issue:") ? "text-destructive" : undefined,
                         )}
                       >
                         {row.details ?? "none"}
@@ -283,9 +260,7 @@ export function GasCitySettingsPanel() {
   const [isRefreshingGcConfig, setIsRefreshingGcConfig] = useState(false);
   const [signalingPid, setSignalingPid] = useState<number | null>(null);
   const supervisorState =
-    diagnostics?.supervisorTomlExists && diagnostics.supervisorPort
-      ? "configured"
-      : "missing";
+    diagnostics?.supervisorTomlExists && diagnostics.supervisorPort ? "configured" : "missing";
   const t3BridgeState =
     diagnostics?.t3WsReachable === true
       ? "reachable"
@@ -318,8 +293,7 @@ export function GasCitySettingsPanel() {
       {
         name: "supervisor",
         status:
-          gcConfig?.lifecycle?.supervisorStatus ??
-          (supervisorRunning ? "Running" : "Stopped"),
+          gcConfig?.lifecycle?.supervisorStatus ?? (supervisorRunning ? "Running" : "Stopped"),
         endpoint: diagnostics?.resolvedApiUrl ?? "not set",
         path: diagnostics?.runtimeHome ?? "not set",
         type: "shared supervisor",
@@ -331,12 +305,8 @@ export function GasCitySettingsPanel() {
             gcConfig?.lifecycle?.authority
               ? `Authority: ${gcConfig.lifecycle.authority}`
               : undefined,
-            gcConfig?.lifecycle?.issue
-              ? `Issue: ${gcConfig.lifecycle.issue}`
-              : undefined,
-            gcConfig?.lifecycle?.nextAction
-              ? `Next: ${gcConfig.lifecycle.nextAction}`
-              : undefined,
+            gcConfig?.lifecycle?.issue ? `Issue: ${gcConfig.lifecycle.issue}` : undefined,
+            gcConfig?.lifecycle?.nextAction ? `Next: ${gcConfig.lifecycle.nextAction}` : undefined,
           ]
             .filter(Boolean)
             .join("\n") || undefined,
@@ -345,15 +315,11 @@ export function GasCitySettingsPanel() {
         const controllerRunning = Boolean(city.lifecycle?.controllerRunning);
         return {
           name: city.name,
-          status:
-            city.lifecycle?.controllerStatus ??
-            (controllerRunning ? "Running" : "Stopped"),
+          status: city.lifecycle?.controllerStatus ?? (controllerRunning ? "Running" : "Stopped"),
           endpoint:
             typeof city.lifecycle?.supervisorPort === "number"
               ? `:${city.lifecycle.supervisorPort}`
-              : (city.lifecycle?.supervisorUrl ??
-                diagnostics?.resolvedApiUrl ??
-                "not set"),
+              : (city.lifecycle?.supervisorUrl ?? diagnostics?.resolvedApiUrl ?? "not set"),
           path: city.path,
           type: "city controller",
           details:
@@ -362,27 +328,16 @@ export function GasCitySettingsPanel() {
               typeof city.lifecycle?.controllerPid === "number"
                 ? `PID ${city.lifecycle.controllerPid}`
                 : undefined,
-              city.lifecycle?.authority
-                ? `Authority: ${city.lifecycle.authority}`
-                : undefined,
-              city.lifecycle?.issue
-                ? `Issue: ${city.lifecycle.issue}`
-                : undefined,
-              city.lifecycle?.nextAction
-                ? `Next: ${city.lifecycle.nextAction}`
-                : undefined,
+              city.lifecycle?.authority ? `Authority: ${city.lifecycle.authority}` : undefined,
+              city.lifecycle?.issue ? `Issue: ${city.lifecycle.issue}` : undefined,
+              city.lifecycle?.nextAction ? `Next: ${city.lifecycle.nextAction}` : undefined,
             ]
               .filter(Boolean)
               .join("\n") || undefined,
         };
       }),
     ];
-  }, [
-    cityRoots,
-    diagnostics?.resolvedApiUrl,
-    diagnostics?.runtimeHome,
-    gcConfig?.lifecycle,
-  ]);
+  }, [cityRoots, diagnostics?.resolvedApiUrl, diagnostics?.runtimeHome, gcConfig?.lifecycle]);
   const refreshGcConfig = useCallback(() => {
     setIsRefreshingGcConfig(true);
     setGcConfigError(null);
@@ -392,9 +347,7 @@ export function GasCitySettingsPanel() {
       .catch((error: unknown) => {
         setGcConfig(null);
         setGcConfigError(
-          error instanceof Error
-            ? error.message
-            : "Failed to load Gas City config.",
+          error instanceof Error ? error.message : "Failed to load Gas City config.",
         );
       })
       .finally(() => setIsRefreshingGcConfig(false));
@@ -403,9 +356,7 @@ export function GasCitySettingsPanel() {
     (pid: number, signal: ServerProcessSignal) => {
       if (
         signal === "SIGKILL" &&
-        !window.confirm(
-          `Send SIGKILL to process ${pid}? This cannot be handled by the process.`,
-        )
+        !window.confirm(`Send SIGKILL to process ${pid}? This cannot be handled by the process.`)
       ) {
         return;
       }
@@ -428,19 +379,11 @@ export function GasCitySettingsPanel() {
     <SettingsPageContainer className="max-w-7xl">
       <SettingsSection
         title="Gas City API"
-        headerAction={
-          <DiagnosticsRefreshButton onClick={() => window.location.reload()} />
-        }
+        headerAction={<DiagnosticsRefreshButton onClick={() => window.location.reload()} />}
       >
         <StatsGrid>
-          <StatBlock
-            label="API URL"
-            value={diagnostics?.resolvedApiUrl ?? "..."}
-          />
-          <StatBlock
-            label="Source"
-            value={diagnostics?.apiUrlSource ?? "..."}
-          />
+          <StatBlock label="API URL" value={diagnostics?.resolvedApiUrl ?? "..."} />
+          <StatBlock label="Source" value={diagnostics?.apiUrlSource ?? "..."} />
           <StatBlock
             label="Supervisor"
             value={supervisorState}
@@ -448,11 +391,7 @@ export function GasCitySettingsPanel() {
           />
           <StatBlock
             label="Port"
-            value={
-              diagnostics?.supervisorPort
-                ? String(diagnostics.supervisorPort)
-                : "..."
-            }
+            value={diagnostics?.supervisorPort ? String(diagnostics.supervisorPort) : "..."}
             tooltip="Read from the bundled Gas City supervisor.toml in the T3 runtime home."
           />
           <StatBlock
@@ -497,16 +436,12 @@ export function GasCitySettingsPanel() {
 
       <SettingsSection title="Registered Cities">
         {gcConfigError ? (
-          <div className="px-4 py-3 text-xs text-destructive sm:px-5">
-            {gcConfigError}
-          </div>
+          <div className="px-4 py-3 text-xs text-destructive sm:px-5">{gcConfigError}</div>
         ) : null}
         <GasCityLifecycleTable
           rows={lifecycleRows}
           emptyLabel={
-            isRefreshingGcConfig
-              ? "Loading Gas City lifecycle..."
-              : "No registered cities found."
+            isRefreshingGcConfig ? "Loading Gas City lifecycle..." : "No registered cities found."
           }
         />
       </SettingsSection>
@@ -517,9 +452,7 @@ export function GasCitySettingsPanel() {
           signalingPid={signalingPid}
           onSignal={signalProcess}
           emptyLabel={
-            isProcessPending
-              ? "Loading live processes..."
-              : "No live descendant processes found."
+            isProcessPending ? "Loading live processes..." : "No live descendant processes found."
           }
         />
       </SettingsSection>
@@ -550,10 +483,7 @@ export function GasCitySettingsPanel() {
           <ValueRow label="T3 WS URL" value={diagnostics?.t3WsUrl} />
           <ValueRow label="T3 WS source" value={diagnostics?.t3WsUrlSource} />
           <ValueRow label="T3 WS host" value={diagnostics?.t3WsHost} />
-          <ValueRow
-            label="T3 WS loopback"
-            value={boolValue(diagnostics?.t3WsIsLoopback)}
-          />
+          <ValueRow label="T3 WS loopback" value={boolValue(diagnostics?.t3WsIsLoopback)} />
           <ValueRow
             label="T3 WS Tailscale-like"
             value={boolValue(diagnostics?.t3WsLooksLikeTailscale)}
@@ -573,9 +503,7 @@ export function GasCitySettingsPanel() {
             value={
               diagnostics?.t3ServerPort
                 ? `${diagnostics.t3ServerPort}${
-                    diagnostics.t3ServerPortListening === false
-                      ? " (not listening)"
-                      : ""
+                    diagnostics.t3ServerPortListening === false ? " (not listening)" : ""
                   }`
                 : undefined
             }
@@ -593,19 +521,10 @@ export function GasCitySettingsPanel() {
 
       <SettingsSection title="DoltLite Beads">
         <DiagnosticsTable>
-          <ValueRow
-            label="GC native beads"
-            value={diagnostics?.nativeDoltliteBeads}
-          />
+          <ValueRow label="GC native beads" value={diagnostics?.nativeDoltliteBeads} />
           <ValueRow label="Beads backend" value={diagnostics?.beadsBackend} />
-          <ValueRow
-            label="DoltLite library"
-            value={diagnostics?.doltliteLibrary}
-          />
-          <ValueRow
-            label="LD_LIBRARY_PATH"
-            value={diagnostics?.ldLibraryPath}
-          />
+          <ValueRow label="DoltLite library" value={diagnostics?.doltliteLibrary} />
+          <ValueRow label="LD_LIBRARY_PATH" value={diagnostics?.ldLibraryPath} />
           {diagnostics?.beadStores.map((store) => (
             <ValueRow
               key={`${store.label}:${store.path}`}
@@ -616,9 +535,7 @@ export function GasCitySettingsPanel() {
                 store.backend ? `backend=${store.backend}` : undefined,
                 store.mode ? `mode=${store.mode}` : undefined,
                 store.database ? `database=${store.database}` : undefined,
-                store.doltDatabase
-                  ? `dolt_database=${store.doltDatabase}`
-                  : undefined,
+                store.doltDatabase ? `dolt_database=${store.doltDatabase}` : undefined,
                 store.error ? `error=${store.error}` : undefined,
               ]
                 .filter(Boolean)

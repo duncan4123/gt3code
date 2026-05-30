@@ -22,10 +22,10 @@ Graph-based issue tracker that survives conversation compaction. Provides persis
 
 **Decision test**: "Will I need this context in 2 weeks?" YES = bd, NO = TodoWrite.
 
-| bd (persistent) | TodoWrite (ephemeral) |
-|-----------------|----------------------|
+| bd (persistent)                                  | TodoWrite (ephemeral)       |
+| ------------------------------------------------ | --------------------------- |
 | Multi-session, dependencies, compaction survival | Single-session linear tasks |
-| Dolt-backed team sync | Conversation-scoped |
+| Dolt-backed team sync                            | Conversation-scoped         |
 
 See [BOUNDARIES.md](resources/BOUNDARIES.md) for detailed comparison.
 
@@ -61,18 +61,19 @@ Append `--json` to any command for structured output. Use `bd show <id> --long` 
 
 ## Error Handling
 
-| Error | Fix |
-|-------|-----|
-| `database not found` | `bd init <prefix>` in project root |
-| `not in a git repository` | `git init` first |
-| `disk I/O error (522)` | Move `.beads/` off cloud-synced filesystem |
-| Status updates lag | Use server mode: `bd dolt start` |
+| Error                     | Fix                                        |
+| ------------------------- | ------------------------------------------ |
+| `database not found`      | `bd init <prefix>` in project root         |
+| `not in a git repository` | `git init` first                           |
+| `disk I/O error (522)`    | Move `.beads/` off cloud-synced filesystem |
+| Status updates lag        | Use server mode: `bd dolt start`           |
 
 See [TROUBLESHOOTING.md](resources/TROUBLESHOOTING.md) for full details.
 
 ## Examples
 
 **Track a multi-session feature:**
+
 ```bash
 bd create "OAuth integration" -t epic -p 1 --json
 bd create "Token storage" -t task --deps blocks:oauth-id --json
@@ -87,23 +88,23 @@ bd close <id> --reason "Implemented with refresh tokens" --json
 
 ## Advanced Features
 
-| Feature | CLI | Resource |
-|---------|-----|----------|
-| Molecules (templates) | `bd mol --help` | [MOLECULES.md](resources/MOLECULES.md) |
+| Feature               | CLI                  | Resource                                                 |
+| --------------------- | -------------------- | -------------------------------------------------------- |
+| Molecules (templates) | `bd mol --help`      | [MOLECULES.md](resources/MOLECULES.md)                   |
 | Chemistry (pour/wisp) | `bd pour`, `bd wisp` | [CHEMISTRY_PATTERNS.md](resources/CHEMISTRY_PATTERNS.md) |
-| Agent beads | `bd agent --help` | [AGENTS.md](resources/AGENTS.md) |
-| Async gates | `bd gate --help` | [ASYNC_GATES.md](resources/ASYNC_GATES.md) |
-| Worktrees | `bd worktree --help` | [WORKTREES.md](resources/WORKTREES.md) |
+| Agent beads           | `bd agent --help`    | [AGENTS.md](resources/AGENTS.md)                         |
+| Async gates           | `bd gate --help`     | [ASYNC_GATES.md](resources/ASYNC_GATES.md)               |
+| Worktrees             | `bd worktree --help` | [WORKTREES.md](resources/WORKTREES.md)                   |
 
 ## Resources
 
-| Category | Files |
-|----------|-------|
-| **Getting Started** | [BOUNDARIES.md](resources/BOUNDARIES.md), [CLI_REFERENCE.md](resources/CLI_REFERENCE.md) (live reference pointers), [WORKFLOWS.md](resources/WORKFLOWS.md) |
-| **Core Concepts** | [DEPENDENCIES.md](resources/DEPENDENCIES.md), [ISSUE_CREATION.md](resources/ISSUE_CREATION.md), [PATTERNS.md](resources/PATTERNS.md) |
-| **Resilience** | [RESUMABILITY.md](resources/RESUMABILITY.md), [TROUBLESHOOTING.md](resources/TROUBLESHOOTING.md) |
-| **Advanced** | [MOLECULES.md](resources/MOLECULES.md), [CHEMISTRY_PATTERNS.md](resources/CHEMISTRY_PATTERNS.md), [AGENTS.md](resources/AGENTS.md), [ASYNC_GATES.md](resources/ASYNC_GATES.md), [WORKTREES.md](resources/WORKTREES.md) |
-| **Reference** | [STATIC_DATA.md](resources/STATIC_DATA.md), [INTEGRATION_PATTERNS.md](resources/INTEGRATION_PATTERNS.md) |
+| Category            | Files                                                                                                                                                                                                                  |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Getting Started** | [BOUNDARIES.md](resources/BOUNDARIES.md), [CLI_REFERENCE.md](resources/CLI_REFERENCE.md) (live reference pointers), [WORKFLOWS.md](resources/WORKFLOWS.md)                                                             |
+| **Core Concepts**   | [DEPENDENCIES.md](resources/DEPENDENCIES.md), [ISSUE_CREATION.md](resources/ISSUE_CREATION.md), [PATTERNS.md](resources/PATTERNS.md)                                                                                   |
+| **Resilience**      | [RESUMABILITY.md](resources/RESUMABILITY.md), [TROUBLESHOOTING.md](resources/TROUBLESHOOTING.md)                                                                                                                       |
+| **Advanced**        | [MOLECULES.md](resources/MOLECULES.md), [CHEMISTRY_PATTERNS.md](resources/CHEMISTRY_PATTERNS.md), [AGENTS.md](resources/AGENTS.md), [ASYNC_GATES.md](resources/ASYNC_GATES.md), [WORKTREES.md](resources/WORKTREES.md) |
+| **Reference**       | [STATIC_DATA.md](resources/STATIC_DATA.md), [INTEGRATION_PATTERNS.md](resources/INTEGRATION_PATTERNS.md)                                                                                                               |
 
 ## Validation
 

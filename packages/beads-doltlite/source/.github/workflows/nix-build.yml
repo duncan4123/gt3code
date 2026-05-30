@@ -3,19 +3,19 @@ name: nix build
 on:
   pull_request:
     paths:
-      - 'go.mod'
-      - 'go.sum'
-      - 'default.nix'
-      - 'flake.nix'
-      - 'flake.lock'
+      - "go.mod"
+      - "go.sum"
+      - "default.nix"
+      - "flake.nix"
+      - "flake.lock"
   push:
     branches: [main]
     paths:
-      - 'go.mod'
-      - 'go.sum'
-      - 'default.nix'
-      - 'flake.nix'
-      - 'flake.lock'
+      - "go.mod"
+      - "go.sum"
+      - "default.nix"
+      - "flake.nix"
+      - "flake.lock"
   workflow_dispatch:
 
 jobs:

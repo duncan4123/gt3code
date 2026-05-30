@@ -15,12 +15,14 @@ Flat issue trackers (GitHub Issues, Jira, etc.) show you a list of open items. Y
 Beads tracks **dependencies between issues** and computes a **ready queue** — only items with no active blockers appear. Here's the difference:
 
 **Flat tracker (GitHub Issues):**
+
 ```
 Open issues: Set up database, Create API, Add authentication
 → An agent picks "Add authentication" and gets stuck immediately
 ```
 
 **Beads:**
+
 ```bash
 $ bd ready
 1. [P1] [task] bd-1: Set up database
@@ -68,6 +70,7 @@ bd init --team
 ```
 
 The wizard will:
+
 - Create `.beads/` directory and embedded Dolt database
 - **Prompt for your role** (maintainer or contributor) unless a flag is provided
 - Import existing issues from git (if any)
@@ -75,6 +78,7 @@ The wizard will:
 - Prompt to configure git merge driver (recommended)
 
 Notes:
+
 - Dolt is the default (and only) storage backend. Data is stored in `.beads/embeddeddolt/`.
 - By default, Dolt runs in **embedded mode** (in-process, no server needed).
 - For multi-writer setups, use `bd init --server` to connect to a `dolt sql-server` instead.
@@ -89,9 +93,9 @@ During `bd init`, you'll be asked: "Contributing to someone else's repo? [y/N]"
 
 This sets `git config beads.role` which determines how beads routes issues:
 
-| Role | Use case | Issue storage |
-|------|----------|---------------|
-| `maintainer` | Repo owner, team with push access | In-repo `.beads/` |
+| Role          | Use case                          | Issue storage          |
+| ------------- | --------------------------------- | ---------------------- |
+| `maintainer`  | Repo owner, team with push access | In-repo `.beads/`      |
 | `contributor` | Fork contributor, OSS contributor | Separate planning repo |
 
 You can also configure manually:
@@ -142,6 +146,7 @@ bd dep tree bd-a3f8e9
 ```
 
 Output:
+
 ```
 Dependency tree for bd-a3f8e9:
 
@@ -165,6 +170,7 @@ bd dep tree bd-3
 ```
 
 Output:
+
 ```
 Dependency tree for bd-3:
 
@@ -174,6 +180,7 @@ Dependency tree for bd-3:
 ```
 
 **Dependency visibility:** `bd list` shows blocking dependencies inline:
+
 ```
 ○ bd-a1b2 [P1] [task] - Set up database
 ○ bd-f14c [P2] [feature] - Create API (blocked by: bd-a1b2)
@@ -187,6 +194,7 @@ bd ready
 ```
 
 Output:
+
 ```
 Ready work (1 issues with no blockers):
 
@@ -202,6 +210,7 @@ bd ready --explain
 ```
 
 Output:
+
 ```
 Ready Work Explanation
 
@@ -349,6 +358,7 @@ bd admin cleanup --force
 ```
 
 **When to compact:**
+
 - Database file > 10MB with many old closed issues
 - After major project milestones when old issues are no longer relevant
 - Before archiving a project phase

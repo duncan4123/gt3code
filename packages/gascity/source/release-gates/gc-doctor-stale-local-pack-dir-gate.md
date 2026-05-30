@@ -12,14 +12,14 @@ supersedes it: final approval requires a fresh synthesis and quality scorecard.
 
 ## Gate Checklist
 
-| # | Criterion | Result | Evidence |
-|---|-----------|--------|----------|
-| 1 | Review evidence current | PENDING | Attempt 1 requested changes; maintainer fixups are local and require a fresh review pass. |
-| 2 | Acceptance criteria met | PASS | `gc doctor` registers the stale local pack dir check; warning-only behavior, operator action text, configured clean state, unconfigured local-dir state, city-level remote imports, rig-level remote imports, root default-rig remote imports, duplicate binding dedupe, and stat-error continuation are covered by tests. |
-| 3 | Validation evidence current | PASS | Current-tree targeted tests, `git diff --check`, `go vet ./...`, and `make test` passed after the maintainer fixups. |
-| 4 | No high-severity review findings open | PENDING | Attempt 1's major import-surface finding is fixed locally; the workflow must rerun synthesis before this can become PASS. |
-| 5 | Final branch is clean | PENDING | The stale claim that this gate was the final branch change is removed. The apply-fixes workflow verifies `git show --name-status HEAD` and `git status --short` after the maintainer fixup commit. |
-| 6 | Branch diverges cleanly from main | NOT RERUN | Merge-tree was not rerun during this maintainer fixup. |
+| #   | Criterion                             | Result    | Evidence                                                                                                                                                                                                                                                                                                                   |
+| --- | ------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review evidence current               | PENDING   | Attempt 1 requested changes; maintainer fixups are local and require a fresh review pass.                                                                                                                                                                                                                                  |
+| 2   | Acceptance criteria met               | PASS      | `gc doctor` registers the stale local pack dir check; warning-only behavior, operator action text, configured clean state, unconfigured local-dir state, city-level remote imports, rig-level remote imports, root default-rig remote imports, duplicate binding dedupe, and stat-error continuation are covered by tests. |
+| 3   | Validation evidence current           | PASS      | Current-tree targeted tests, `git diff --check`, `go vet ./...`, and `make test` passed after the maintainer fixups.                                                                                                                                                                                                       |
+| 4   | No high-severity review findings open | PENDING   | Attempt 1's major import-surface finding is fixed locally; the workflow must rerun synthesis before this can become PASS.                                                                                                                                                                                                  |
+| 5   | Final branch is clean                 | PENDING   | The stale claim that this gate was the final branch change is removed. The apply-fixes workflow verifies `git show --name-status HEAD` and `git status --short` after the maintainer fixup commit.                                                                                                                         |
+| 6   | Branch diverges cleanly from main     | NOT RERUN | Merge-tree was not rerun during this maintainer fixup.                                                                                                                                                                                                                                                                     |
 
 ## Acceptance Evidence
 

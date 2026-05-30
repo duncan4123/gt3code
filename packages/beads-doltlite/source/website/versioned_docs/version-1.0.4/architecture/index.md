@@ -53,6 +53,7 @@ Recovery is straightforward: pull from a Dolt remote with `bd dolt pull`, or res
 ## Data Flow
 
 ### Write Path
+
 ```text
 User runs bd create
     → Dolt database updated
@@ -60,6 +61,7 @@ User runs bd create
 ```
 
 ### Read Path
+
 ```text
 User runs bd list
     → Dolt SQL query
@@ -67,6 +69,7 @@ User runs bd list
 ```
 
 ### Sync Path
+
 ```text
 User runs bd dolt push
     → Commits pushed to Dolt remote
@@ -80,11 +83,13 @@ User runs bd dolt pull
 When working across multiple machines or clones:
 
 1. **Always sync before switching machines**
+
    ```bash
    bd dolt push  # Push changes before leaving
    ```
 
 2. **Pull before creating new issues**
+
    ```bash
    bd dolt pull  # Pull changes first on new machine
    bd create "New issue"
@@ -117,6 +122,7 @@ bd dolt push
 ```
 
 **When embedded mode is appropriate:**
+
 - CI/CD pipelines (Jenkins, GitHub Actions)
 - Docker containers
 - Ephemeral environments
@@ -126,15 +132,17 @@ bd dolt push
 
 :::warning Race Conditions in Multi-Clone Workflows
 When multiple git clones of the same repository run sync operations simultaneously, race conditions can occur during push/pull operations. This is particularly common in:
+
 - Multi-agent AI workflows (multiple Claude/GPT instances)
 - Developer workstations with multiple checkouts
 - Worktree-based development workflows
 
 **Prevention:**
+
 1. Stop the Dolt server (`bd dolt stop`) before switching between clones
 2. Dolt handles worktrees natively in server mode
 3. Use embedded mode for automated workflows
-:::
+   :::
 
 See [Sync Failures Recovery](/recovery/sync-failures) for sync race condition troubleshooting (Pattern B2).
 
@@ -168,9 +176,10 @@ Always back up and preview before running `bd doctor --fix`:
 **Why caution?** The `--fix` flag may remove dependencies it flags as circular, including valid parent-child relationships. Use `--fix-child-parent` only if you're certain the flagged deps are invalid.
 
 **Other diagnostic tools:**
+
 - `bd blocked` — check which issues are blocked and why
 - `bd show <issue-id>` — inspect a specific issue's state
-:::
+  :::
 
 See [Recovery](/recovery) for specific procedures and [Database Corruption Recovery](/recovery/database-corruption) for Dolt recovery steps.
 
@@ -186,13 +195,13 @@ Beads is designed for offline-first, local-first development. The Dolt server ru
 
 ### Trade-offs
 
-| Benefit | Trade-off |
-|---------|-----------|
-| Works offline | No real-time collaboration |
-| Version-controlled database | Requires Dolt server |
-| Cell-level merge | Requires initial setup |
-| Local-first speed | Manual sync to remotes |
-| SQL queries | Dolt binary dependency |
+| Benefit                     | Trade-off                  |
+| --------------------------- | -------------------------- |
+| Works offline               | No real-time collaboration |
+| Version-controlled database | Requires Dolt server       |
+| Cell-level merge            | Requires initial setup     |
+| Local-first speed           | Manual sync to remotes     |
+| SQL queries                 | Dolt binary dependency     |
 
 ### When NOT to use Beads
 

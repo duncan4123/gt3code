@@ -6,6 +6,7 @@ sidebar_position: 400
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc init`
 
 ## bd init
@@ -21,9 +22,9 @@ default prefix-based naming. This is useful when an external tool (e.g. an orche
 has already created the database.
 
 With --stealth: configures per-repository git settings for invisible beads usage:
-  • .git/info/exclude to prevent beads files from being committed
-  Perfect for personal use without affecting repo collaborators.
-  To set up a specific AI tool, run: bd setup &lt;claude|cursor|aider|...&gt; --stealth
+• .git/info/exclude to prevent beads files from being committed
+Perfect for personal use without affecting repo collaborators.
+To set up a specific AI tool, run: bd setup &lt;claude|cursor|aider|...&gt; --stealth
 
 By default, beads uses an embedded Dolt engine (no external server needed).
 Pass --server to use an external dolt sql-server instead. In server mode,
@@ -37,12 +38,12 @@ Cross-machine sync and backups use Dolt remotes/backups, not JSONL import/export
 To enable: bd config set export.auto true
 
 Non-interactive mode (--non-interactive or BD_NON_INTERACTIVE=1):
-  Skips all interactive prompts, using sensible defaults:
-  • Role defaults to "maintainer" (override with --role)
-  • Fork exclude auto-configured when fork detected
-  • Auto-export left at default (disabled)
-  • --contributor and --team flags are rejected (wizards require interaction)
-  Also auto-detected when stdin is not a terminal or CI=true is set.
+Skips all interactive prompts, using sensible defaults:
+• Role defaults to "maintainer" (override with --role)
+• Fork exclude auto-configured when fork detected
+• Auto-export left at default (disabled)
+• --contributor and --team flags are rejected (wizards require interaction)
+Also auto-detected when stdin is not a terminal or CI=true is set.
 
 ```
 bd init [flags]

@@ -6,6 +6,7 @@ sidebar_position: 410
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc setup`
 
 ## bd setup
@@ -16,17 +17,17 @@ Recipes define where beads workflow instructions are written. Built-in recipes
 include cursor, claude, copilot, gemini, aider, factory, codex, mux, opencode, junie, windsurf, cody, and kilocode.
 
 Examples:
-  bd setup cursor          # Install Cursor IDE integration
-  bd setup codex           # Install Codex skill + AGENTS.md guidance
-  bd setup codex --global  # Install global Codex skill + global AGENTS.md guidance
-  bd setup copilot         # Install Copilot CLI plugin + repository instructions
-  bd setup mux --project   # Install Mux workspace layer (.mux/AGENTS.md)
-  bd setup mux --global    # Install Mux global layer (~/.mux/AGENTS.md)
-  bd setup mux --project --global  # Install both Mux layers
-  bd setup --list          # Show all available recipes
-  bd setup --print         # Print the template to stdout
-  bd setup -o rules.md     # Write template to custom path
-  bd setup --add myeditor .myeditor/rules.md  # Add custom recipe
+bd setup cursor # Install Cursor IDE integration
+bd setup codex # Install Codex skill + AGENTS.md guidance
+bd setup codex --global # Install global Codex skill + global AGENTS.md guidance
+bd setup copilot # Install Copilot CLI plugin + repository instructions
+bd setup mux --project # Install Mux workspace layer (.mux/AGENTS.md)
+bd setup mux --global # Install Mux global layer (~/.mux/AGENTS.md)
+bd setup mux --project --global # Install both Mux layers
+bd setup --list # Show all available recipes
+bd setup --print # Print the template to stdout
+bd setup -o rules.md # Write template to custom path
+bd setup --add myeditor .myeditor/rules.md # Add custom recipe
 
 Use 'bd setup &lt;recipe&gt; --check' to verify installation status.
 Use 'bd setup &lt;recipe&gt; --remove' to uninstall.

@@ -6,6 +6,7 @@ sidebar_position: 30
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc ready`
 
 ## bd ready
@@ -18,13 +19,13 @@ GetReadyWork API which applies blocker-aware semantics to find truly claimable w
 Note: 'bd list --ready' uses the same blocker-aware ready-work semantics.
 
 Use --mol to filter to a specific molecule's steps:
-  bd ready --mol bd-patrol   # Show ready steps within molecule
+bd ready --mol bd-patrol # Show ready steps within molecule
 
 Use --gated to find molecules ready for gate-resume dispatch:
-  bd ready --gated           # Find molecules where a gate closed
+bd ready --gated # Find molecules where a gate closed
 
 Use --claim to atomically claim the first ready issue matching the filters:
-  bd ready --claim --json
+bd ready --claim --json
 
 This is useful for agents executing molecules to see which steps can run next.
 

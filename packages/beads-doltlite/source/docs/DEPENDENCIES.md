@@ -34,23 +34,23 @@ Dependencies have a type that determines whether they block work.
 
 **Blocking types** (affect `bd ready`):
 
-| Type | Meaning | Example |
-|------|---------|---------|
-| `blocks` (default) | B cannot start until A closes | Task ordering |
-| `parent-child` | Children blocked when parent blocked | Epic hierarchies |
-| `conditional-blocks` | B runs only if A fails | Error handling paths |
-| `waits-for` | B waits for all of A's children | Fanout aggregation |
+| Type                 | Meaning                              | Example              |
+| -------------------- | ------------------------------------ | -------------------- |
+| `blocks` (default)   | B cannot start until A closes        | Task ordering        |
+| `parent-child`       | Children blocked when parent blocked | Epic hierarchies     |
+| `conditional-blocks` | B runs only if A fails               | Error handling paths |
+| `waits-for`          | B waits for all of A's children      | Fanout aggregation   |
 
 **Non-blocking types** (graph annotations only):
 
-| Type | Meaning |
-|------|---------|
-| `related` | Informational link |
-| `tracks` | Tracks progress of another issue |
+| Type              | Meaning                            |
+| ----------------- | ---------------------------------- |
+| `related`         | Informational link                 |
+| `tracks`          | Tracks progress of another issue   |
 | `discovered-from` | Found during work on another issue |
-| `caused-by` | Root cause link |
-| `validates` | Test or verification link |
-| `supersedes` | Replaces another issue |
+| `caused-by`       | Root cause link                    |
+| `validates`       | Test or verification link          |
+| `supersedes`      | Replaces another issue             |
 
 Specify with `--type`:
 
@@ -68,6 +68,7 @@ bd ready
 ```
 
 Output:
+
 ```
 📋 Ready work (1 issues with no blockers):
 
@@ -122,6 +123,7 @@ bd graph --html issue-id > graph.html   # Interactive D3.js
 ```
 
 The graph organizes issues into layers:
+
 - **Layer 0**: No dependencies (can start immediately)
 - **Layer 1**: Depends on layer 0
 - **Higher layers**: Depend on lower layers
@@ -180,13 +182,13 @@ beads issue status.
 
 ### Gate Types
 
-| Type | Condition | Auto-Resolution |
-|------|-----------|-----------------|
-| `gh:pr` | PR merged | `gh pr view` returns MERGED |
-| `gh:run` | CI passes | `gh run view` returns completed + success |
-| `timer` | Time elapsed | Current time exceeds timeout |
-| `bead` | Cross-rig issue closed | Remote bead status checked |
-| `human` | Manual approval | `bd gate resolve <id>` |
+| Type     | Condition              | Auto-Resolution                           |
+| -------- | ---------------------- | ----------------------------------------- |
+| `gh:pr`  | PR merged              | `gh pr view` returns MERGED               |
+| `gh:run` | CI passes              | `gh run view` returns completed + success |
+| `timer`  | Time elapsed           | Current time exceeds timeout              |
+| `bead`   | Cross-rig issue closed | Remote bead status checked                |
+| `human`  | Manual approval        | `bd gate resolve <id>`                    |
 
 ### Creating Gates
 

@@ -3,7 +3,7 @@
 **Verdict:** PASS
 
 **Deploy bead:** ga-hkpu (review bead for builder bead ga-pura)
-**Builder bead:** ga-pura — *Fix: widen assertLiveContractStreamOpens deadline past sseKeepalive (15s)*
+**Builder bead:** ga-pura — _Fix: widen assertLiveContractStreamOpens deadline past sseKeepalive (15s)_
 **Source branch:** `builder/ga-pura-1` (fork: quad341/gascity)
 **Base:** `origin/main` at `481ea61b`
 **PR:** [gastownhall/gascity#1691](https://github.com/gastownhall/gascity/pull/1691)
@@ -16,14 +16,14 @@ Diff vs `origin/main`: 1 file changed, 1 insertion(+), 1 deletion(-) — `test/i
 
 ## Criteria
 
-| # | Criterion | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Review PASS present | PASS | gascity/reviewer-1 first-pass PASS in ga-hkpu notes (gemini second-pass disabled per current factory policy). |
-| 2 | Acceptance criteria met | PASS | All `Done-when` items from ga-pura satisfied: deadline literal is `30*time.Second`; single commit with the spec'd message; PR description references unblocking PRs #1531 and #1610 plus bead `ga-pura`; `go vet` clean; `go build` clean; reviewer ran `go test -count=3 -tags=integration ./test/integration/ -run TestGCLiveContract_BeadsAndEvents` 3/3 pass in 244s; builder ran 10× green in 822s. |
-| 3 | Tests pass | PASS | Deployer re-ran `go test -count=3 -tags=integration ./test/integration/ -run TestGCLiveContract_BeadsAndEvents` on the assembled branch — see Validation below. `go vet ./test/integration/` clean. `go build ./...` clean. |
-| 4 | No high-severity review findings open | PASS | Reviewer flagged zero HIGH findings. |
-| 5 | Final branch is clean | PASS | `git status` clean on `builder/ga-pura-1`; one commit on top of `origin/main`. |
-| 6 | Branch diverges cleanly from main | PASS | GitHub reports `mergeable=MERGEABLE`. No conflicts. |
+| #   | Criterion                             | Verdict | Evidence                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --- | ------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS    | gascity/reviewer-1 first-pass PASS in ga-hkpu notes (gemini second-pass disabled per current factory policy).                                                                                                                                                                                                                                                                                            |
+| 2   | Acceptance criteria met               | PASS    | All `Done-when` items from ga-pura satisfied: deadline literal is `30*time.Second`; single commit with the spec'd message; PR description references unblocking PRs #1531 and #1610 plus bead `ga-pura`; `go vet` clean; `go build` clean; reviewer ran `go test -count=3 -tags=integration ./test/integration/ -run TestGCLiveContract_BeadsAndEvents` 3/3 pass in 244s; builder ran 10× green in 822s. |
+| 3   | Tests pass                            | PASS    | Deployer re-ran `go test -count=3 -tags=integration ./test/integration/ -run TestGCLiveContract_BeadsAndEvents` on the assembled branch — see Validation below. `go vet ./test/integration/` clean. `go build ./...` clean.                                                                                                                                                                              |
+| 4   | No high-severity review findings open | PASS    | Reviewer flagged zero HIGH findings.                                                                                                                                                                                                                                                                                                                                                                     |
+| 5   | Final branch is clean                 | PASS    | `git status` clean on `builder/ga-pura-1`; one commit on top of `origin/main`.                                                                                                                                                                                                                                                                                                                           |
+| 6   | Branch diverges cleanly from main     | PASS    | GitHub reports `mergeable=MERGEABLE`. No conflicts.                                                                                                                                                                                                                                                                                                                                                      |
 
 ## CI status (PR #1691, head `5df84922`)
 

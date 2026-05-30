@@ -44,22 +44,24 @@ const ensureBtreeFile = (path: string): void => {
 const escapeSqliteStringLiteral = (value: string): string => value.replaceAll("'", "''");
 
 const makeSetup = (projPath: string | null) =>
-  Layer.effectDiscard(Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`PRAGMA foreign_keys = ON;`;
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`PRAGMA foreign_keys = ON;`;
 
-    if (projPath) {
-      ensureBtreeFile(projPath);
-      yield* sql.unsafe(`ATTACH DATABASE '${escapeSqliteStringLiteral(projPath)}' AS proj`);
-      yield* Effect.logInfo(`attached projection sidecar: ${projPath}`);
-    }
+      if (projPath) {
+        ensureBtreeFile(projPath);
+        yield* sql.unsafe(`ATTACH DATABASE '${escapeSqliteStringLiteral(projPath)}' AS proj`);
+        yield* Effect.logInfo(`attached projection sidecar: ${projPath}`);
+      }
 
-    yield* runMigrations();
-    if (projPath) {
-      yield* ensureHotSidecarSchema;
-    }
-    yield* ensureGcLookupTables;
-  }));
+      yield* runMigrations();
+      if (projPath) {
+        yield* ensureHotSidecarSchema;
+      }
+      yield* ensureGcLookupTables;
+    }),
+  );
 
 export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(function* (
   dbPath: string,

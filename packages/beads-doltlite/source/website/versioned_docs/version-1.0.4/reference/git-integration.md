@@ -11,6 +11,7 @@ How beads integrates with git.
 ## Overview
 
 Beads uses git for:
+
 - **Project hosting** - Your code repository also hosts beads configuration
 - **Hooks** - Auto-sync on git operations
 
@@ -34,6 +35,7 @@ bd hooks install
 ```
 
 Installs:
+
 - **pre-commit** - Triggers Dolt commit
 - **post-merge** - Triggers Dolt sync after pull
 - **pre-push** - Ensures Dolt sync before push

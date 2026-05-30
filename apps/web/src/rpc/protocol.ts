@@ -78,14 +78,12 @@ interface TrackedRpcRequest {
   readonly chunkCount: number;
 }
 
-function asWireMessage(value: unknown):
-  | {
-      readonly _tag: string;
-      readonly id?: unknown;
-      readonly requestId?: unknown;
-      readonly tag?: unknown;
-    }
-  | null {
+function asWireMessage(value: unknown): {
+  readonly _tag: string;
+  readonly id?: unknown;
+  readonly requestId?: unknown;
+  readonly tag?: unknown;
+} | null {
   if (typeof value !== "object" || value === null || !("_tag" in value)) {
     return null;
   }

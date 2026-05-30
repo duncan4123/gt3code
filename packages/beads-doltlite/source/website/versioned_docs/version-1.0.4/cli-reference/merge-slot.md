@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc merge-slot`
 
 ## bd merge-slot
@@ -18,16 +19,17 @@ and create cascading conflicts.
 
 Each rig has one merge slot bead: &lt;prefix&gt;-merge-slot (labeled gt:slot).
 The slot uses:
-  - status=open: slot is available
-  - status=in_progress: slot is held
-  - metadata.holder: who currently holds the slot
-  - metadata.waiters: priority-ordered queue of waiters
+
+- status=open: slot is available
+- status=in_progress: slot is held
+- metadata.holder: who currently holds the slot
+- metadata.waiters: priority-ordered queue of waiters
 
 Examples:
-  bd merge-slot create              # Create merge slot for current rig
-  bd merge-slot check               # Check if slot is available
-  bd merge-slot acquire             # Try to acquire the slot
-  bd merge-slot release             # Release the slot
+bd merge-slot create # Create merge slot for current rig
+bd merge-slot check # Check if slot is available
+bd merge-slot acquire # Try to acquire the slot
+bd merge-slot release # Release the slot
 
 ```
 bd merge-slot
@@ -38,8 +40,9 @@ bd merge-slot
 Attempt to acquire the merge slot for exclusive access.
 
 If the slot is available (status=open), it will be acquired:
-  - status set to in_progress
-  - holder set to the requester
+
+- status set to in_progress
+- holder set to the requester
 
 If the slot is held (status=in_progress), the command fails unless
 --wait is passed, which adds the requester to the waiters queue.
@@ -62,9 +65,10 @@ bd merge-slot acquire [flags]
 Check if the merge slot is available or held.
 
 Returns:
-  - available: slot can be acquired
-  - held by &lt;holder&gt;: slot is currently held
-  - not found: no merge slot exists for this rig
+
+- available: slot can be acquired
+- held by &lt;holder&gt;: slot is currently held
+- not found: no merge slot exists for this rig
 
 ```
 bd merge-slot check

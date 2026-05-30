@@ -25,14 +25,14 @@ wake_mode = "resume"        # resume | fresh
 
 ## Sidebar controls — what enables them
 
-| Control | Config field | Values |
-|---|---|---|
-| **Suspend/Resume** | `suspended` on agent override or patch | `true` / `false` |
-| **Session mode** | `named_session_mode` (from `[[named_session]]`) | `always` / `on_demand` |
-| **Wake mode** | `wake_mode` on agent patch | `resume` / `fresh` |
-| **Pool scaling** (min/max) | `min_active_sessions` + `max_active_sessions` on agent.toml | integers |
-| **Wake session** button | Session exists and is asleep | — |
-| **Create new thread** | Rig has a repository project folder | — |
+| Control                    | Config field                                                | Values                 |
+| -------------------------- | ----------------------------------------------------------- | ---------------------- |
+| **Suspend/Resume**         | `suspended` on agent override or patch                      | `true` / `false`       |
+| **Session mode**           | `named_session_mode` (from `[[named_session]]`)             | `always` / `on_demand` |
+| **Wake mode**              | `wake_mode` on agent patch                                  | `resume` / `fresh`     |
+| **Pool scaling** (min/max) | `min_active_sessions` + `max_active_sessions` on agent.toml | integers               |
+| **Wake session** button    | Session exists and is asleep                                | —                      |
+| **Create new thread**      | Rig has a repository project folder                         | —                      |
 
 ## Pool agent controls (min/max active sessions)
 
@@ -111,6 +111,7 @@ prefix = "btui"
 ```
 
 **Rules:**
+
 - Each rig must point to a unique repository root (has `.jj/` or `.git/`)
 - Two rigs sharing the same path prevent T3Code from creating separate project folders
 - The sidebar creates one project folder per unique repository root

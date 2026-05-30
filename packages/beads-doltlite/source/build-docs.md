@@ -42,6 +42,7 @@ install:
 ```
 
 How it works:
+
 1. Uses bash subshell to extract git information at install time
 2. `git rev-parse HEAD` gets the full commit hash
 3. `git rev-parse --abbrev-ref HEAD` gets the current branch name
@@ -65,6 +66,7 @@ ldflags:
 ```
 
 Platform configurations:
+
 1. **bd-linux-amd64** (lines 12-26): Linux 64-bit Intel
 2. **bd-linux-arm64** (lines 28-44): Linux 64-bit ARM (Apple Silicon support)
 3. **bd-darwin-amd64** (lines 46-60): macOS 64-bit Intel
@@ -72,6 +74,7 @@ Platform configurations:
 5. **bd-windows-amd64** (lines 78-95): Windows 64-bit Intel with additional `-buildmode=exe` flag
 
 The ldflags explained:
+
 - `-s -w`: Strip debug symbols to reduce binary size
 - `-X main.Version`: Semantic version (e.g., "0.29.0") from git tag
 - `-X main.Build`: Short commit hash for quick reference
@@ -79,6 +82,7 @@ The ldflags explained:
 - `-X main.Branch`: Branch name for build context
 
 Goreleaser template variables:
+
 - `{{.Version}}`: The release version from git tag
 - `{{.ShortCommit}}`: First 7 characters of commit (used for Build variable)
 - `{{.Commit}}`: Full commit hash
@@ -87,6 +91,7 @@ Goreleaser template variables:
 **Installation Script** (`@/scripts/install.sh`):
 
 Provides a user-friendly way to build from source with full version info:
+
 - Extracts git commit and branch
 - Calls `go install` with the same ldflags pattern as Makefile
 - Immediately verifies installation by running `bd version`
@@ -114,10 +119,12 @@ The version.go file implements functions that retrieve the injected information:
 **Critical Design Decision - Why Explicit Ldflags**:
 
 The Go toolchain (as of 1.18+) can automatically embed VCS information when compiling with `go build`, but this does NOT happen with `go install`. This creates an asymmetry:
+
 - `go build ./cmd/bd` → automatically embeds vcs.revision and vcs.branch
 - `go install ./cmd/bd` → does NOT embed VCS info automatically
 
 The solution is to explicitly pass git information as ldflags in all build configurations. This ensures:
+
 - Users who run `make install` get full version info
 - Users who run `go install ./cmd/bd` need to explicitly set ldflags (via Makefile or script)
 - Released binaries from goreleaser have full version info (handled by goreleaser templates)
@@ -132,6 +139,7 @@ The fix adds explicit ldflag injection at all build points, creating a reliable 
 **Ldflag Variable Names**:
 
 The variables in `@/cmd/bd/version.go` (lines 15-23) must match the ldflag paths in build configurations:
+
 - `main.Version` → Version variable
 - `main.Build` → Build variable
 - `main.Commit` → Commit variable
@@ -154,6 +162,7 @@ These are fully qualified with the package name (`main`) because the ldflag synt
 **Release Process Integration**:
 
 The build configuration integrates with `@/RELEASING.md`:
+
 1. Version tag is pushed to GitHub (e.g., `v0.29.0`)
 2. GitHub Actions/goreleaser automatically builds binaries for all platforms
 3. Goreleaser uses git metadata to populate `{{.Commit}}` and `{{.Branch}}` template variables
@@ -163,8 +172,9 @@ The build configuration integrates with `@/RELEASING.md`:
 **Testing Version Information**:
 
 The test file `@/cmd/bd/version_test.go` includes:
+
 - `TestResolveCommitHash`: Verifies ldflag values are prioritized
-- `TestResolveBranch`: Verifies ldflag values are prioritized  
+- `TestResolveBranch`: Verifies ldflag values are prioritized
 - `TestVersionOutputWithCommitAndBranch`: Verifies output formatting with real values
 
 These tests simulate build-time injection by directly setting the package variables, ensuring the resolution chain works correctly.
@@ -172,6 +182,7 @@ These tests simulate build-time injection by directly setting the package variab
 **Multi-Platform Consistency**:
 
 All 5 goreleaser build configurations use identical ldflag patterns. This ensures:
+
 - macOS (Intel and ARM) binaries have full version info
 - Linux (Intel and ARM) binaries have full version info
 - Windows binaries have full version info

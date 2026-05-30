@@ -7,98 +7,98 @@ actionable — some are by-design tradeoffs. The audit column tracks triage.
 
 ## Session Log
 
-| Date | What we did | Outcome |
-|------|-------------|---------|
-| 2026-02-22 | Manual testing of dep tree, blocking, close guard, labels, status filtering, reparenting, concurrency, validation | Found 14 bugs, confirmed 23 protocol invariants. Wrote `discovery_test.go` (34 tests). |
-| 2026-02-22 | Audit of all bugs for fix vs wontfix | 5-6 clear fix PRs, 2 need design discussion, 5-6 wontfix/by-design |
-| 2026-02-22 | Code review of labels.go, schema.go, dependencies.go for BUG-5 and BUG-7 root cause | BUG-5 upgraded to INVESTIGATE (not clearly wontfix). BUG-7 downgraded to FILE ISSUE (intentionally coded upsert, needs product decision). BUG-4 upgraded to DOCS FIX (help text promises "blocked" as a status). |
-| 2026-02-22 | **Phase 1-3: Snapshot harness + full parity run** | Replaced bd export with snapshot (list+show). Fixed database isolation (unique prefixes per workspace). Normalization for show-vs-export field differences. **Result: 95+ PASS, 15 FAIL (all known bugs), 10 SKIP.** |
-| 2026-02-22 | **Phase 4: Ship fix PRs with tests** | BUG-2+3 already merged (PR #1992). BUG-10 PR #2014, BUG-11+12+14 PR #1994, BUG-4 PR #2017. All PRs include protocol tests. |
-| 2026-02-22 | **Session 3: Candidate-only discovery (lane 3)** | Found 5 new bugs (BUG-16 through 20) + 3 code-review-only findings. External blockers, conditional-blocks, count/list discrepancy, waits-for gating, parent-child blocked consistency. Filed DECISION PRs #2025, #2026. |
-| 2026-02-22 | **Session 4: Deep discovery (search, lifecycle, batch, deps)** | Found 7 more bugs (BUG-21 through 27). Update bypasses close guard, reopen superseded corruption, defer past date invisible, wisp sort order, conditional-blocks cycle, epic wisp children. 2 new protocol tests. |
-| 2026-02-22 | **Session 5: Filter, flag interaction, migration seams** | Found 4 more bugs (BUG-28 through 31). Dead label-pattern filter, claim+status overwrite, --ready overrides --status, assignee empty string. Code review: pull doesn't check merge conflicts, schema migration non-transactional, import drops deps/comments silently. |
-| 2026-02-22 | **Session 6: Routing, validation, sort, edge cases** | Found 10 more bugs (BUG-32 through 42) + 2 protocol tests (BUG-35, 39). Stale negative days, sort unknown field, reparent cycle, reversed ranges, negative limit, whitespace title, config ambiguity, dep rm false positive. Code review: createInRig skips prefix validation, same-prefix rig ambiguity, batch import no UTC. |
-| 2026-02-22 | **Session 7: State corruption, filter conflicts, hierarchy** | Found 4 more bugs (BUG-43 through 46) + 5 protocol tests (BUG-47 through 51). Deferred without date, comma status, assignee conflict, child of closed parent. Documented: custom dep types, in_progress vs claim, --all filter, empty type rejection, show JSON array. |
-| 2026-02-22 | **Session 8: Lifecycle validation, ready filters, duplicate cycles** | Found 5 more bugs (BUG-56 through 60). Reopen already-open, undefer non-deferred, ready out-of-range priority, children nonexistent parent, duplicate cycle undetected. |
-| 2026-02-22 | **Session 8b: Stale, search, type filter, query validation** | Found 3 more bugs (BUG-61 through 63) + 5 protocol tests. Stale --days 0 returns everything, search comma-status same as BUG-44, list --type nonexistent silent empty. Query priority range validation and unknown fields work correctly. |
-| 2026-02-22 | **Session 8c: Blocked parent, label idempotency, dep tree** | Found 3 more bugs (BUG-69 through 71) + 1 protocol test. Blocked --parent nonexistent, label remove nonexistent, label add duplicate. Dep tree --max-depth -1 properly rejected. |
+| Date       | What we did                                                                                                       | Outcome                                                                                                                                                                                                                                                                                                                        |
+| ---------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-02-22 | Manual testing of dep tree, blocking, close guard, labels, status filtering, reparenting, concurrency, validation | Found 14 bugs, confirmed 23 protocol invariants. Wrote `discovery_test.go` (34 tests).                                                                                                                                                                                                                                         |
+| 2026-02-22 | Audit of all bugs for fix vs wontfix                                                                              | 5-6 clear fix PRs, 2 need design discussion, 5-6 wontfix/by-design                                                                                                                                                                                                                                                             |
+| 2026-02-22 | Code review of labels.go, schema.go, dependencies.go for BUG-5 and BUG-7 root cause                               | BUG-5 upgraded to INVESTIGATE (not clearly wontfix). BUG-7 downgraded to FILE ISSUE (intentionally coded upsert, needs product decision). BUG-4 upgraded to DOCS FIX (help text promises "blocked" as a status).                                                                                                               |
+| 2026-02-22 | **Phase 1-3: Snapshot harness + full parity run**                                                                 | Replaced bd export with snapshot (list+show). Fixed database isolation (unique prefixes per workspace). Normalization for show-vs-export field differences. **Result: 95+ PASS, 15 FAIL (all known bugs), 10 SKIP.**                                                                                                           |
+| 2026-02-22 | **Phase 4: Ship fix PRs with tests**                                                                              | BUG-2+3 already merged (PR #1992). BUG-10 PR #2014, BUG-11+12+14 PR #1994, BUG-4 PR #2017. All PRs include protocol tests.                                                                                                                                                                                                     |
+| 2026-02-22 | **Session 3: Candidate-only discovery (lane 3)**                                                                  | Found 5 new bugs (BUG-16 through 20) + 3 code-review-only findings. External blockers, conditional-blocks, count/list discrepancy, waits-for gating, parent-child blocked consistency. Filed DECISION PRs #2025, #2026.                                                                                                        |
+| 2026-02-22 | **Session 4: Deep discovery (search, lifecycle, batch, deps)**                                                    | Found 7 more bugs (BUG-21 through 27). Update bypasses close guard, reopen superseded corruption, defer past date invisible, wisp sort order, conditional-blocks cycle, epic wisp children. 2 new protocol tests.                                                                                                              |
+| 2026-02-22 | **Session 5: Filter, flag interaction, migration seams**                                                          | Found 4 more bugs (BUG-28 through 31). Dead label-pattern filter, claim+status overwrite, --ready overrides --status, assignee empty string. Code review: pull doesn't check merge conflicts, schema migration non-transactional, import drops deps/comments silently.                                                         |
+| 2026-02-22 | **Session 6: Routing, validation, sort, edge cases**                                                              | Found 10 more bugs (BUG-32 through 42) + 2 protocol tests (BUG-35, 39). Stale negative days, sort unknown field, reparent cycle, reversed ranges, negative limit, whitespace title, config ambiguity, dep rm false positive. Code review: createInRig skips prefix validation, same-prefix rig ambiguity, batch import no UTC. |
+| 2026-02-22 | **Session 7: State corruption, filter conflicts, hierarchy**                                                      | Found 4 more bugs (BUG-43 through 46) + 5 protocol tests (BUG-47 through 51). Deferred without date, comma status, assignee conflict, child of closed parent. Documented: custom dep types, in_progress vs claim, --all filter, empty type rejection, show JSON array.                                                         |
+| 2026-02-22 | **Session 8: Lifecycle validation, ready filters, duplicate cycles**                                              | Found 5 more bugs (BUG-56 through 60). Reopen already-open, undefer non-deferred, ready out-of-range priority, children nonexistent parent, duplicate cycle undetected.                                                                                                                                                        |
+| 2026-02-22 | **Session 8b: Stale, search, type filter, query validation**                                                      | Found 3 more bugs (BUG-61 through 63) + 5 protocol tests. Stale --days 0 returns everything, search comma-status same as BUG-44, list --type nonexistent silent empty. Query priority range validation and unknown fields work correctly.                                                                                      |
+| 2026-02-22 | **Session 8c: Blocked parent, label idempotency, dep tree**                                                       | Found 3 more bugs (BUG-69 through 71) + 1 protocol test. Blocked --parent nonexistent, label remove nonexistent, label add duplicate. Dep tree --max-depth -1 properly rejected.                                                                                                                                               |
 
 ## Audit Summary
 
-| Bug | Verdict | Status | PR/Issue |
-|-----|---------|--------|----------|
-| BUG-1 | WONTFIX | RESOLVED | Snapshot harness (PR #2012) |
-| BUG-2 | **FIX PR** | **MERGED** | PR #1992 |
-| BUG-3 | **FIX PR** | **MERGED** | PR #1992 |
-| BUG-4 | **DOCS FIX** | **PR OPEN** | PR #2017 |
-| BUG-5 | **INVESTIGATE** | OPEN | — |
-| BUG-6 | WONTFIX | RESOLVED | Unique prefix per workspace |
-| BUG-7 | **DECISION PR** | **PR OPEN** | PR #1999 |
-| BUG-8 | **DECISION PR** | **PR OPEN** | PR #2001 |
-| BUG-9 | WONTFIX | RESOLVED | — |
-| BUG-10 | **FIX PR** | **PR OPEN** | PR #2014 |
-| BUG-11 | **FIX PR** | **PR OPEN** | PR #1994 |
-| BUG-12 | **FIX PR** | **PR OPEN** | PR #1994 |
-| BUG-13 | **DECISION PR** | **PR OPEN** | PR #2000 |
-| BUG-14 | **FIX PR** | **PR OPEN** | PR #1994 |
-| BUG-15 | **INVESTIGATE** | OPEN | — |
-| BUG-16 | **DECISION PR** | **PR OPEN** | PR #2025 |
-| BUG-17 | **DECISION PR** | **PR OPEN** | PR #2026 |
-| BUG-18 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-19 | **INVESTIGATE** | OPEN (not PR'd yet) | — |
-| BUG-20 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-21 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-22 | **DECISION** | OPEN (not PR'd yet) | — |
-| BUG-23 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-24 | **BUG** (code review) | OPEN (not PR'd yet) | — |
-| BUG-25 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-26 | **DECISION** | OPEN (not PR'd yet) | — |
-| BUG-27 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-28 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-29 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-30 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-31 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-32 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-33 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-34 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-35 | **PROTOCOL** | PASS (correct behavior) | — |
-| BUG-36 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-37 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-38 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-39 | **PROTOCOL** | PASS (correct behavior) | — |
-| BUG-40 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-41 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-42 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-43 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-44 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-45 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-46 | **DECISION** | OPEN (not PR'd yet) | — |
-| BUG-47 | **PROTOCOL** | PASS (by design) | — |
-| BUG-48 | **PROTOCOL** | PASS (docs behavior) | — |
-| BUG-49 | **PROTOCOL** | PASS (correct) | — |
-| BUG-50 | **PROTOCOL** | PASS (correct) | — |
-| BUG-51 | **PROTOCOL** | PASS (correct) | — |
-| BUG-52 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-53 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-54 | **PROTOCOL** | PASS (docs behavior) | — |
-| BUG-55 | **PROTOCOL** | PASS (correct) | — |
-| BUG-56 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-57 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-58 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-59 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-60 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-61 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-62 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-63 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-64 | **PROTOCOL** | PASS (correct) | — |
-| BUG-65 | **PROTOCOL** | PASS (correct) | — |
-| BUG-66 | **PROTOCOL** | PASS (correct) | — |
-| BUG-67 | **PROTOCOL** | PASS (correct) | — |
-| BUG-68 | **PROTOCOL** | PASS (correct) | — |
-| BUG-69 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-70 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-71 | **BUG** | OPEN (not PR'd yet) | — |
-| BUG-72 | **PROTOCOL** | PASS (correct) | — |
+| Bug    | Verdict               | Status                  | PR/Issue                    |
+| ------ | --------------------- | ----------------------- | --------------------------- |
+| BUG-1  | WONTFIX               | RESOLVED                | Snapshot harness (PR #2012) |
+| BUG-2  | **FIX PR**            | **MERGED**              | PR #1992                    |
+| BUG-3  | **FIX PR**            | **MERGED**              | PR #1992                    |
+| BUG-4  | **DOCS FIX**          | **PR OPEN**             | PR #2017                    |
+| BUG-5  | **INVESTIGATE**       | OPEN                    | —                           |
+| BUG-6  | WONTFIX               | RESOLVED                | Unique prefix per workspace |
+| BUG-7  | **DECISION PR**       | **PR OPEN**             | PR #1999                    |
+| BUG-8  | **DECISION PR**       | **PR OPEN**             | PR #2001                    |
+| BUG-9  | WONTFIX               | RESOLVED                | —                           |
+| BUG-10 | **FIX PR**            | **PR OPEN**             | PR #2014                    |
+| BUG-11 | **FIX PR**            | **PR OPEN**             | PR #1994                    |
+| BUG-12 | **FIX PR**            | **PR OPEN**             | PR #1994                    |
+| BUG-13 | **DECISION PR**       | **PR OPEN**             | PR #2000                    |
+| BUG-14 | **FIX PR**            | **PR OPEN**             | PR #1994                    |
+| BUG-15 | **INVESTIGATE**       | OPEN                    | —                           |
+| BUG-16 | **DECISION PR**       | **PR OPEN**             | PR #2025                    |
+| BUG-17 | **DECISION PR**       | **PR OPEN**             | PR #2026                    |
+| BUG-18 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-19 | **INVESTIGATE**       | OPEN (not PR'd yet)     | —                           |
+| BUG-20 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-21 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-22 | **DECISION**          | OPEN (not PR'd yet)     | —                           |
+| BUG-23 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-24 | **BUG** (code review) | OPEN (not PR'd yet)     | —                           |
+| BUG-25 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-26 | **DECISION**          | OPEN (not PR'd yet)     | —                           |
+| BUG-27 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-28 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-29 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-30 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-31 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-32 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-33 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-34 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-35 | **PROTOCOL**          | PASS (correct behavior) | —                           |
+| BUG-36 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-37 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-38 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-39 | **PROTOCOL**          | PASS (correct behavior) | —                           |
+| BUG-40 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-41 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-42 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-43 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-44 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-45 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-46 | **DECISION**          | OPEN (not PR'd yet)     | —                           |
+| BUG-47 | **PROTOCOL**          | PASS (by design)        | —                           |
+| BUG-48 | **PROTOCOL**          | PASS (docs behavior)    | —                           |
+| BUG-49 | **PROTOCOL**          | PASS (correct)          | —                           |
+| BUG-50 | **PROTOCOL**          | PASS (correct)          | —                           |
+| BUG-51 | **PROTOCOL**          | PASS (correct)          | —                           |
+| BUG-52 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-53 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-54 | **PROTOCOL**          | PASS (docs behavior)    | —                           |
+| BUG-55 | **PROTOCOL**          | PASS (correct)          | —                           |
+| BUG-56 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-57 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-58 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-59 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-60 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-61 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-62 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-63 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-64 | **PROTOCOL**          | PASS (correct)          | —                           |
+| BUG-65 | **PROTOCOL**          | PASS (correct)          | —                           |
+| BUG-66 | **PROTOCOL**          | PASS (correct)          | —                           |
+| BUG-67 | **PROTOCOL**          | PASS (correct)          | —                           |
+| BUG-68 | **PROTOCOL**          | PASS (correct)          | —                           |
+| BUG-69 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-70 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-71 | **BUG**               | OPEN (not PR'd yet)     | —                           |
+| BUG-72 | **PROTOCOL**          | PASS (correct)          | —                           |
 
 ### Shipped fix PRs (all include protocol tests)
 
@@ -261,11 +261,13 @@ The help text for `list` says: `--status string  Filter by status (open, in_prog
 
 But "blocked" is a computed status derived from dependency relationships, never
 stored in the `issues.status` column (which stays "open"). So:
+
 - `bd blocked` → 4 issues ✓
 - `bd list --status blocked` → 0 issues ✗
 - `bd count --status blocked` → 0 ✗
 
 **Fix options:**
+
 1. Materialize blocked status: When a blocking dep is added, update status to "blocked"
 2. Compute on query: In the list/count SQL, join with dependencies to detect blocked
 3. Remove "blocked" from the documented status values and point users to `bd blocked`
@@ -333,6 +335,7 @@ upsert, replacing the existing type. Both operations report success.
 removes the blocking relationship. The issue becomes unblocked without warning.
 
 **Fix:** Either:
+
 1. Make the unique key `(issue_id, depends_on_id, type)` to allow multiple dep types
 2. Reject the second `dep add` with an error: "dependency already exists with type X"
 3. Warn the user: "changing dep type from X to Y"
@@ -357,6 +360,7 @@ parent-child dep to P2, but the ID `P1.1` still matches `P1.%` via LIKE.
 `bd children P2` also correctly shows it. The child appears under BOTH parents.
 
 **Fix options:**
+
 1. After reparent, rename the issue ID to match new parent (e.g., `P1.1` → `P2.1`)
 2. Remove the LIKE clause from parent filtering (rely solely on dependency table)
 3. Add EXCEPT clause: `AND id NOT IN (SELECT issue_id FROM dependencies WHERE type = 'parent-child' AND depends_on_id != ?)`
@@ -440,6 +444,7 @@ bd reopen X                     # status=open, defer_until STILL SET
 ```
 
 After reopening, the issue has status "open" but defer_until is still set.
+
 - Not in `bd ready` (excluded by defer_until check) ✓
 - Not in `bd list --status deferred` (status is "open", not "deferred") ✗
 - Appears in `bd list --status open` but won't show in ready ✗
@@ -447,6 +452,7 @@ After reopening, the issue has status "open" but defer_until is still set.
 The issue is effectively invisible to normal workflows.
 
 **Fix options:**
+
 1. `reopen` should clear defer_until when setting status to "open"
 2. `reopen` should restore "deferred" status if defer_until is still in the future
 3. `close` should clear defer_until when closing a deferred issue
@@ -1677,17 +1683,17 @@ Works correctly.
 These were found and fixed before this discovery session. Documented here so
 future investigators don't re-discover them. All are merged to main.
 
-| PR | What it fixed | Why it matters for regression testing |
-|---|---|---|
-| #1969 (nmelo) | `execContext` didn't commit writes under `--no-auto-commit` | Root cause of many "data disappears" bugs. `execContext` now wraps each statement in `BeginTx/Commit`. Directly relevant to BUG-5 investigation — concurrent `Commit()` to Dolt working set may still race. |
-| #1966 (turian) | Labels, comments, deps lost during batch import | `ImportIssues` didn't persist associated data. |
-| #1967 (turian) | `scanIssueIDs` lost ORDER BY | `ready` and `list` returned results in wrong order. |
-| #1968 (turian) | `UpdateIssue` didn't normalize metadata/waiters | Nullable JSON fields stored as `null` instead of `{}`, breaking downstream code. |
-| #1914 (turian) | Column drift in issue scan projection | Centralized column list prevents SELECT * from silently gaining/losing columns after schema migration. |
-| #1816 (sjsyrek) | Silent empty results on Dolt lock errors | Dolt lock contention returned empty results instead of errors. |
-| #1797 (sjsyrek) | Locking, migration, compaction stability | Major stabilization pass on Dolt backend. |
-| #1948 (Xexr) | Parent-child deps mixed with blocking deps in `bd list` | `list --parent` was showing blocking deps as children. |
-| #1909 (zjrosen) | `AddDependency`/`RemoveDependency` not in explicit transactions | Writes could be lost under `--no-auto-commit`. Directly relevant to BUG-7 — the upsert at `dependencies.go:78` is now inside an explicit tx. |
+| PR              | What it fixed                                                   | Why it matters for regression testing                                                                                                                                                                       |
+| --------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #1969 (nmelo)   | `execContext` didn't commit writes under `--no-auto-commit`     | Root cause of many "data disappears" bugs. `execContext` now wraps each statement in `BeginTx/Commit`. Directly relevant to BUG-5 investigation — concurrent `Commit()` to Dolt working set may still race. |
+| #1966 (turian)  | Labels, comments, deps lost during batch import                 | `ImportIssues` didn't persist associated data.                                                                                                                                                              |
+| #1967 (turian)  | `scanIssueIDs` lost ORDER BY                                    | `ready` and `list` returned results in wrong order.                                                                                                                                                         |
+| #1968 (turian)  | `UpdateIssue` didn't normalize metadata/waiters                 | Nullable JSON fields stored as `null` instead of `{}`, breaking downstream code.                                                                                                                            |
+| #1914 (turian)  | Column drift in issue scan projection                           | Centralized column list prevents SELECT \* from silently gaining/losing columns after schema migration.                                                                                                     |
+| #1816 (sjsyrek) | Silent empty results on Dolt lock errors                        | Dolt lock contention returned empty results instead of errors.                                                                                                                                              |
+| #1797 (sjsyrek) | Locking, migration, compaction stability                        | Major stabilization pass on Dolt backend.                                                                                                                                                                   |
+| #1948 (Xexr)    | Parent-child deps mixed with blocking deps in `bd list`         | `list --parent` was showing blocking deps as children.                                                                                                                                                      |
+| #1909 (zjrosen) | `AddDependency`/`RemoveDependency` not in explicit transactions | Writes could be lost under `--no-auto-commit`. Directly relevant to BUG-7 — the upsert at `dependencies.go:78` is now inside an explicit tx.                                                                |
 
 ### Key Dolt constraints learned from prior fixes
 
@@ -1723,12 +1729,12 @@ The regression harness has been adapted to work without `bd export`:
 
 ### Parity run results (2026-02-22)
 
-| Category | Count | Details |
-|----------|-------|---------|
-| PASS | 95+ | All basic lifecycle, labels, deps, comments, types, priorities, dates, due/defer, ready, blocked, count, search, delete, children, tree, query, stale |
-| FAIL (known bugs) | 10 | BUG-4,7,8,10(×2),11,12,13,14 + TestExportByAssigneeFilter (export removed) |
-| FAIL (new findings) | 3 | TestUpdateDoesNotClobberRelationalData (labels missing in dependent view), TestBlockedEpicChildrenNotReady (GH#1495), TestListResolvedBlockerAnnotation (GH#1858) |
-| SKIP (pre-existing) | 10 | Export/import removed, waits-for baseline gap, sorting GH#1880, metadata GH#1912, etc. |
+| Category            | Count | Details                                                                                                                                                           |
+| ------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PASS                | 95+   | All basic lifecycle, labels, deps, comments, types, priorities, dates, due/defer, ready, blocked, count, search, delete, children, tree, query, stale             |
+| FAIL (known bugs)   | 10    | BUG-4,7,8,10(×2),11,12,13,14 + TestExportByAssigneeFilter (export removed)                                                                                        |
+| FAIL (new findings) | 3     | TestUpdateDoesNotClobberRelationalData (labels missing in dependent view), TestBlockedEpicChildrenNotReady (GH#1495), TestListResolvedBlockerAnnotation (GH#1858) |
+| SKIP (pre-existing) | 10    | Export/import removed, waits-for baseline gap, sorting GH#1880, metadata GH#1912, etc.                                                                            |
 
 ### BEADS_DOLT_SERVER_DATABASE bypass (discovered during harness work)
 

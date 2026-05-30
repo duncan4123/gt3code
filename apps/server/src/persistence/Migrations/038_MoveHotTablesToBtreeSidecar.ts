@@ -263,9 +263,21 @@ export const ensureHotSidecarSchema = Effect.gen(function* () {
     )
   `);
 
-  yield* addColumnIfMissing("provider_session_runtime", "provider_instance_id", "provider_instance_id TEXT");
-  yield* addColumnIfMissing("provider_session_runtime", "resume_cursor_json", "resume_cursor_json TEXT");
-  yield* addColumnIfMissing("provider_session_runtime", "runtime_payload_json", "runtime_payload_json TEXT");
+  yield* addColumnIfMissing(
+    "provider_session_runtime",
+    "provider_instance_id",
+    "provider_instance_id TEXT",
+  );
+  yield* addColumnIfMissing(
+    "provider_session_runtime",
+    "resume_cursor_json",
+    "resume_cursor_json TEXT",
+  );
+  yield* addColumnIfMissing(
+    "provider_session_runtime",
+    "runtime_payload_json",
+    "runtime_payload_json TEXT",
+  );
   yield* addColumnIfMissing("projection_projects", "default_model", "default_model TEXT");
   yield* addColumnIfMissing(
     "projection_projects",

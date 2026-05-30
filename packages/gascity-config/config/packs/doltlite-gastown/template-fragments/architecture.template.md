@@ -65,4 +65,4 @@ between them.
 When reconciling with upstream, keep the fork delta small and portable. Prefer
 fork-owned extension points and adapters so future upstream pulls are simple to
 audit and replay.
-  {{ end }}
+{{ end }}

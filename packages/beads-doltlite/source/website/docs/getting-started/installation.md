@@ -17,6 +17,7 @@ brew install beads
 ```
 
 **Why Homebrew?**
+
 - Simple one-command install
 - Automatic updates via `brew upgrade`
 - No need to install Go
@@ -29,6 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/inst
 ```
 
 The installer will:
+
 - Detect your platform (macOS/Linux/FreeBSD, amd64/arm64)
 - Fall back to the supported `go install` modes if Go is available
 - Fall back to building from source if needed
@@ -50,21 +52,25 @@ ICU headers are not required. The embedded-capable command uses `gms_pure_go` so
 ### macOS
 
 **Via Homebrew** (recommended):
+
 ```bash
 brew install beads
 ```
 
 **Via go install** (server-mode only):
+
 ```bash
 CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest
 ```
 
 **Via go install** (embedded-capable):
+
 ```bash
 CGO_ENABLED=1 GOFLAGS=-tags=gms_pure_go go install github.com/steveyegge/beads/cmd/bd@latest
 ```
 
 **From source**:
+
 ```bash
 git clone https://github.com/gastownhall/beads
 cd beads
@@ -75,11 +81,13 @@ sudo mv bd /usr/local/bin/
 ### Linux
 
 **Via Homebrew** (works on Linux too):
+
 ```bash
 brew install beads
 ```
 
 **Arch Linux** (AUR):
+
 ```bash
 # Install from AUR
 yay -S beads-git
@@ -88,11 +96,13 @@ paru -S beads-git
 ```
 
 **Via go install** (server-mode only):
+
 ```bash
 CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest
 ```
 
 **Via go install** (embedded-capable):
+
 ```bash
 CGO_ENABLED=1 GOFLAGS=-tags=gms_pure_go go install github.com/steveyegge/beads/cmd/bd@latest
 ```
@@ -100,11 +110,13 @@ CGO_ENABLED=1 GOFLAGS=-tags=gms_pure_go go install github.com/steveyegge/beads/c
 ### FreeBSD
 
 **Via quick install script**:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
 ```
 
 **Via go install** (server-mode only):
+
 ```bash
 CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest
 ```
@@ -114,10 +126,12 @@ CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest
 Beads ships with native Windows support—no MSYS or MinGW required.
 
 **Prerequisites:**
+
 - [Go 1.24+](https://go.dev/dl/) installed (add `%USERPROFILE%\go\bin` to your `PATH`)
 - Git for Windows
 
 **Via PowerShell script**:
+
 ```pwsh
 irm https://raw.githubusercontent.com/gastownhall/beads/main/install.ps1 | iex
 ```
@@ -125,11 +139,13 @@ irm https://raw.githubusercontent.com/gastownhall/beads/main/install.ps1 | iex
 The script installs a prebuilt Windows release if available. Go is only required for `go install` or building from source.
 
 **Via go install** (server-mode only):
+
 ```pwsh
 $env:CGO_ENABLED="0"; go install github.com/steveyegge/beads/cmd/bd@latest
 ```
 
 **Via go install** (embedded-capable):
+
 ```pwsh
 $env:CGO_ENABLED="1"; $env:GOFLAGS="-tags=gms_pure_go"; go install github.com/steveyegge/beads/cmd/bd@latest
 ```
@@ -158,6 +174,7 @@ bd setup mux      # Mux - creates/updates AGENTS.md
 ```
 
 **How it works:**
+
 - `bd init` creates or updates `AGENTS.md` by default unless you use `--skip-agents` or `--stealth`
 - Editor hooks/rules inject `bd prime` automatically on session start
 - Codex 0.129.0+ uses native `/hooks` for startup and compaction-aware context refresh
@@ -167,6 +184,7 @@ bd setup mux      # Mux - creates/updates AGENTS.md
 - `bd onboard` prints the small manual snippet for unsupported agents or custom instruction files
 
 **Why this is recommended:**
+
 - **Context efficient** - ~1-2k tokens vs 10-50k for MCP tool schemas
 - **Lower latency** - Direct CLI calls, no MCP protocol overhead
 - **Universal** - Works with any editor that has shell access

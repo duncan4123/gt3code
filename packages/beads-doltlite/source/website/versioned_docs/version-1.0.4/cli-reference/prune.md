@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc prune`
 
 ## bd prune
@@ -30,11 +31,11 @@ For full Dolt storage reclaim after deleting many rows, follow with `bd flatten`
 so history can be collapsed and old chunks can be garbage-collected.
 
 EXAMPLES:
-  bd prune --older-than 30d              # Preview closed beads &gt;30d old
-  bd prune --older-than 30d --force      # Delete them
-  bd prune --older-than 90d --dry-run    # Detailed preview with stats
-  bd prune --pattern "*" --force         # Delete all closed regular beads
-  bd prune --pattern "gm-temp-*" --force # Scope to a pattern
+bd prune --older-than 30d # Preview closed beads &gt;30d old
+bd prune --older-than 30d --force # Delete them
+bd prune --older-than 90d --dry-run # Detailed preview with stats
+bd prune --pattern "_" --force # Delete all closed regular beads
+bd prune --pattern "gm-temp-_" --force # Scope to a pattern
 
 ```
 bd prune [flags]

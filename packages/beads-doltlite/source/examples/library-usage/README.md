@@ -5,6 +5,7 @@ This example demonstrates using Beads as a Go library in external projects (like
 ## Why Use Beads as a Library?
 
 Instead of spawning `bd` CLI processes:
+
 - ✅ **Direct API access** - Call functions directly instead of parsing JSON output
 - ✅ **Type safety** - Compile-time checking of types and interfaces
 - ✅ **Performance** - No process spawn overhead
@@ -28,13 +29,13 @@ package main
 import (
     "context"
     "log"
-    
+
     "github.com/steveyegge/beads"
 )
 
 func main() {
     ctx := context.Background()
-    
+
     // Find and open database
     dbPath := beads.FindDatabasePath()
     store, err := beads.Open(ctx, dbPath)
@@ -42,7 +43,7 @@ func main() {
         log.Fatal(err)
     }
     defer store.Close()
-    
+
     // Get ready work
     ready, err := store.GetReadyWork(ctx, beads.WorkFilter{
         Status: beads.StatusOpen,
@@ -51,7 +52,7 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    
+
     // Process ready issues...
 }
 ```
@@ -74,6 +75,7 @@ go run main.go
 The `beads.Storage` interface provides:
 
 ### Issues
+
 - `CreateIssue(ctx, issue, actor)` - Create a new issue
 - `CreateIssues(ctx, issues, actor)` - Batch create issues
 - `GetIssue(ctx, id)` - Get issue by ID
@@ -82,6 +84,7 @@ The `beads.Storage` interface provides:
 - `SearchIssues(ctx, query, filter)` - Search with filters
 
 ### Dependencies
+
 - `AddDependency(ctx, dep, actor)` - Add dependency between issues
 - `RemoveDependency(ctx, issueID, dependsOnID, actor)` - Remove dependency
 - `GetDependencies(ctx, issueID)` - Get what this issue depends on
@@ -89,22 +92,26 @@ The `beads.Storage` interface provides:
 - `GetDependencyTree(ctx, issueID, maxDepth, showAllPaths)` - Visualize tree
 
 ### Labels
+
 - `AddLabel(ctx, issueID, label, actor)` - Add label to issue
 - `RemoveLabel(ctx, issueID, label, actor)` - Remove label
 - `GetLabels(ctx, issueID)` - Get all labels for an issue
 - `GetIssuesByLabel(ctx, label)` - Find issues with label
 
 ### Ready Work & Blocking
+
 - `GetReadyWork(ctx, filter)` - Find issues with no blockers
 - `GetBlockedIssues(ctx)` - Find blocked issues with blocker info
 - `GetEpicsEligibleForClosure(ctx)` - Find completable epics
 
 ### Comments & Events
+
 - `AddIssueComment(ctx, issueID, author, text)` - Add comment
 - `GetIssueComments(ctx, issueID)` - Get all comments
 - `GetEvents(ctx, issueID, limit)` - Get audit trail
 
 ### Statistics
+
 - `GetStatistics(ctx)` - Get aggregate metrics
 
 ## Types
@@ -150,7 +157,7 @@ func NewVCStorage(ctx context.Context, dbPath string) (*VCStorage, error) {
     if err != nil {
         return nil, err
     }
-    
+
     return &VCStorage{beads: store}, nil
 }
 
@@ -163,23 +170,23 @@ func (s *VCStorage) ClaimWork(ctx context.Context, executorID string) (*beads.Is
     if err != nil {
         return nil, err
     }
-    
+
     if len(ready) == 0 {
         return nil, nil // No work available
     }
-    
+
     issue := ready[0]
-    
+
     // Claim it
     updates := map[string]interface{}{
         "status": beads.StatusInProgress,
         "assignee": executorID,
     }
-    
+
     if err := s.beads.UpdateIssue(ctx, issue.ID, updates, executorID); err != nil {
         return nil, err
     }
-    
+
     return issue, nil
 }
 ```

@@ -8,6 +8,7 @@
 ## Summary
 
 Jordan proposes adding chaos testing and E2E test coverage to beads. The PR:
+
 - Adds 4849 lines, removes 511 lines
 - Introduces chaos testing framework (random corruption, disk space exhaustion, NFS-like failures)
 - Creates side databases for testing recovery scenarios
@@ -23,6 +24,7 @@ Jordan proposes adding chaos testing and E2E test coverage to beads. The PR:
 ## Files Changed (Major Categories)
 
 ### Chaos/Doctor Infrastructure
+
 - `cmd/bd/doctor_repair_chaos_test.go` (378 lines) - Core chaos testing
 - `cmd/bd/doctor/fix/database_integrity.go` (116 lines) - DB integrity fixes
 - `cmd/bd/doctor/fix/jsonl_integrity.go` (87 lines) - JSONL integrity fixes
@@ -32,6 +34,7 @@ Jordan proposes adding chaos testing and E2E test coverage to beads. The PR:
 - `cmd/bd/doctor/git.go` (168 additions) - Git hygiene checks
 
 ### Test Coverage Additions
+
 - `internal/storage/memory/memory_more_coverage_test.go` (921 lines) - Memory storage tests
 - `cmd/bd/cli_coverage_show_test.go` (426 lines) - CLI show command tests
 - `cmd/bd/daemon_autostart_unit_test.go` (331 lines) - Server autostart tests
@@ -39,6 +42,7 @@ Jordan proposes adding chaos testing and E2E test coverage to beads. The PR:
 - Various other test files
 
 ### Bug Fixes Discovered During Testing
+
 - `internal/storage/sqlite/migrations/021_migrate_edge_fields.go` - Major migration fix
 - `internal/storage/sqlite/migrations/022_drop_edge_columns.go` - Column cleanup
 - `internal/storage/sqlite/migrations_template_pinned_regression_test.go` - Regression test
@@ -46,12 +50,14 @@ Jordan proposes adding chaos testing and E2E test coverage to beads. The PR:
 ## Tradeoffs
 
 ### Costs
+
 1. **Maintenance burden**: Must keep coverage above 48% (or whatever threshold is set)
 2. **CI noise**: Failed tests = spam until fixed
 3. **Velocity tax**: Every change needs test updates
 4. **Complexity**: Chaos testing framework itself needs maintenance
 
 ### Benefits
+
 1. **Robustness validation**: Proves beads can recover from corruption
 2. **Bug discovery**: Already found migration bugs (021, 022)
 3. **Confidence**: If chaos tests pass, beads is more robust than feared
@@ -75,6 +81,7 @@ From `doctor_repair_chaos_test.go`:
 5. **JSONL integrity** - Malformed lines, re-export from DB
 
 Each test:
+
 - Uses isolated temp directories
 - Builds a fresh `bd` binary for testing
 - Uses "side databases" (separate from real data)
@@ -83,12 +90,14 @@ Each test:
 ### Bug Fixes Already Discovered
 
 The PR includes fixes for bugs found during testing:
+
 - Migration 021/022: `pinned` and `is_template` columns were being clobbered
 - Regression test added to prevent recurrence
 
 ### Test Coverage Structure
 
 Tests are organized by build tags:
+
 - `//go:build chaos` - Chaos/corruption tests (run separately)
 - `//go:build e2e` - End-to-end CLI tests
 - Regular unit tests - No build tag required
@@ -116,6 +125,7 @@ Is the testing worth the ongoing maintenance cost?
    issues that would cause data loss in production. Finding them now is worth something.
 
 3. **Build tag isolation**. Chaos tests won't slow down regular development:
+
    ```bash
    go test ./...                    # Normal tests only
    go test -tags=chaos ./...        # Include chaos tests
@@ -157,11 +167,13 @@ real data loss when things break. We're closer to "reliable tool" than "prototyp
 ### ROI Calculation
 
 **Cost of NOT testing**: When corruption happens:
+
 - Agent loses context (30-60 min recovery)
 - Human has to debug (variable, often 15-60 min)
 - Trust erosion (hard to quantify)
 
 **Cost of testing**:
+
 - Review this PR (1-2 hours, one time)
 - Update tests when behavior changes (5-15 min per change)
 - Fix flaky tests when they appear (variable)
@@ -196,6 +208,7 @@ If corruption happens weekly (or with each new feature), testing pays for itself
 ### Decision Framework for User
 
 If you answer YES to 2+ of these, merge:
+
 - [ ] Are you dogfooding beads for real work?
 - [ ] Has corruption caused you to lose time in the last month?
 - [ ] Do you expect multiple agents using beads concurrently?

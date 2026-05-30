@@ -15,14 +15,14 @@ contains all 9 PG-auth commits. While #1792 is open, this PR will show
 
 ## Criteria
 
-| # | Criterion | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Reviewer PASS verdict in bead notes | PASS | `gascity/reviewer` PASS at HEAD `c7fb142e` (per gm-2uktfc); all 3 prior findings (fd leak, test-smell, unused param) addressed in `c7fb142e`. |
-| 2 | Acceptance criteria met | PASS | Doctor `postgres-auth` check + `pg.credential_resolved` event payload registered + 10/10 `TestPostgresAuth` cases incl. 5 status branches, multi-scope aggregation, `CanFix==false`, RenderExtras, humanSourceLabel mappings. |
-| 3 | Tests pass on final branch | PASS | `go test ./internal/doctor -run TestPostgresAuth -count=1` — PASS; `go test ./internal/events -count=1` — PASS; `go test ./internal/pgauth -count=1` — PASS. |
-| 4 | No high-severity review findings open | PASS | All findings addressed in fixup commit; reviewer "all 3 prior findings addressed; all gates green". |
-| 5 | Working tree clean | PASS | `git status` clean before gate-file commit. |
-| 6 | Branch diverges cleanly from main | PASS | Test merge into `origin/main` 5f1a686d succeeded with no conflicts. |
+| #   | Criterion                             | Verdict | Evidence                                                                                                                                                                                                                      |
+| --- | ------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Reviewer PASS verdict in bead notes   | PASS    | `gascity/reviewer` PASS at HEAD `c7fb142e` (per gm-2uktfc); all 3 prior findings (fd leak, test-smell, unused param) addressed in `c7fb142e`.                                                                                 |
+| 2   | Acceptance criteria met               | PASS    | Doctor `postgres-auth` check + `pg.credential_resolved` event payload registered + 10/10 `TestPostgresAuth` cases incl. 5 status branches, multi-scope aggregation, `CanFix==false`, RenderExtras, humanSourceLabel mappings. |
+| 3   | Tests pass on final branch            | PASS    | `go test ./internal/doctor -run TestPostgresAuth -count=1` — PASS; `go test ./internal/events -count=1` — PASS; `go test ./internal/pgauth -count=1` — PASS.                                                                  |
+| 4   | No high-severity review findings open | PASS    | All findings addressed in fixup commit; reviewer "all 3 prior findings addressed; all gates green".                                                                                                                           |
+| 5   | Working tree clean                    | PASS    | `git status` clean before gate-file commit.                                                                                                                                                                                   |
+| 6   | Branch diverges cleanly from main     | PASS    | Test merge into `origin/main` 5f1a686d succeeded with no conflicts.                                                                                                                                                           |
 
 ## Validation (deployer re-run on `deploy/ga-j65i3c` at HEAD `c7fb142e`)
 

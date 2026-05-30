@@ -129,6 +129,7 @@ When running tests during development:
    - Only if intentionally exercising the ICU regex path, use `./scripts/test-icu-path.sh` (or deprecated `make test-full-cgo`)
 
 2. **Target specific tests when possible:**
+
    ```bash
    # Instead of running everything:
    ./scripts/test.sh
@@ -165,6 +166,7 @@ If you discover a broken test:
 ### Slowest Tests (>0.05s)
 
 The top slow tests in cmd/bd:
+
 - `TestDoctorWithBeadsDir` (1.68s) - Only significantly slow test
 - `TestFlushManagerDebouncing` (0.21s)
 - `TestDebouncer_*` tests (0.06-0.12s each) - Intentional sleeps for concurrency testing
@@ -195,21 +197,25 @@ The test script is designed to work seamlessly with CI/CD:
 ## Debugging Test Failures
 
 ### Get detailed output
+
 ```bash
 ./scripts/test.sh -v ./path/to/package/...
 ```
 
 ### Run a single test
+
 ```bash
 ./scripts/test.sh -run '^TestExactName$' ./cmd/bd/...
 ```
 
 ### Check which tests are being skipped
+
 ```bash
 ./scripts/test.sh 2>&1 | head -5
 ```
 
 Output shows:
+
 ```
 Running: go test -timeout 3m -skip TestFoo|TestBar ./...
 Skipping: TestFoo|TestBar

@@ -83,7 +83,7 @@ go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 golangci-lint run ./...
 ```
 
-**Note**: The linter currently reports ~100 warnings. These are documented false positives and idiomatic Go patterns (deferred cleanup, Cobra interface requirements, etc.). See [docs/LINTING.md](docs/LINTING.md) for details. When contributing, focus on avoiding *new* issues rather than the baseline warnings.
+**Note**: The linter currently reports ~100 warnings. These are documented false positives and idiomatic Go patterns (deferred cleanup, Cobra interface requirements, etc.). See [docs/LINTING.md](docs/LINTING.md) for details. When contributing, focus on avoiding _new_ issues rather than the baseline warnings.
 
 CI will automatically run linting on all pull requests.
 
@@ -164,11 +164,13 @@ CGO_ENABLED=1 go test -tags gms_pure_go -race -coverprofile=coverage.out ./...
 ```
 
 **When to use `-short`:**
+
 - During active development for fast feedback loops
 - When making small changes that don't affect integration points
 - When you want to quickly verify unit tests pass
 
 **When to use full test suite:**
+
 - Before committing and pushing changes
 - After modifying git operations or multi-clone scenarios
 - When preparing a pull request
@@ -277,6 +279,7 @@ func TestIssueValidation(t *testing.T) {
 ### Reporting Bugs
 
 Include in your bug report:
+
 - Steps to reproduce
 - Expected behavior
 - Actual behavior
@@ -286,6 +289,7 @@ Include in your bug report:
 ### Feature Requests
 
 When proposing new features:
+
 - Explain the use case
 - Describe the proposed solution
 - Consider backwards compatibility

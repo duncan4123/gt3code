@@ -26,20 +26,22 @@ P(collision) ≈ 1 - e^(-n²/2N)
 ```
 
 Where:
+
 - `n` = number of issues in database
 - `N` = total possible IDs (36^length for lowercase alphanumeric)
 
 ### Default Thresholds (25% max collision)
 
 | Database Size | ID Length | Collision Probability |
-|--------------|-----------|----------------------|
-| 0-500        | 4 chars   | ~7% at 500           |
-| 501-1500     | 5 chars   | ~2% at 1500          |
-| 1501+        | 6 chars   | continues scaling    |
+| ------------- | --------- | --------------------- |
+| 0-500         | 4 chars   | ~7% at 500            |
+| 501-1500      | 5 chars   | ~2% at 1500           |
+| 1501+         | 6 chars   | continues scaling     |
 
 ### Collision Resolution
 
 If a collision occurs (rare), the algorithm automatically tries:
+
 1. Base length (e.g., 4 chars)
 2. Base + 1 (e.g., 5 chars)
 3. Base + 2 (e.g., 6 chars)
@@ -130,6 +132,7 @@ go run scripts/collision-calculator.go
 ```
 
 Output shows:
+
 - Collision probabilities for different database sizes and ID lengths
 - Recommended ID lengths for different thresholds
 - Expected number of collisions
@@ -165,6 +168,7 @@ INSERT INTO config (key, value) VALUES ('max_hash_length', '8');
 ### Existing Databases
 
 Existing databases with 6-char IDs will:
+
 1. Continue using 6-char IDs by default
 2. Can opt into adaptive mode by setting config (new IDs will use adaptive length)
 3. Old IDs remain unchanged
@@ -172,6 +176,7 @@ Existing databases with 6-char IDs will:
 ### Sequential to Hash Migration
 
 When migrating from sequential IDs to hash IDs with `bd migrate --to-hash-ids`:
+
 - Uses adaptive length algorithm for new IDs
 - Preserves existing sequential IDs
 - References are automatically updated

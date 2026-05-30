@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc todo`
 
 ## bd todo
@@ -13,12 +14,12 @@ Generated from `bd help --doc todo`
 Manage TODO items as lightweight task issues.
 
 TODOs are regular task-type issues with convenient shortcuts:
-  bd todo add "Title"    -&gt; bd create "Title" -t task -p 2
-  bd todo                -&gt; bd list --type task --status open
-  bd todo done &lt;id&gt;      -&gt; bd close &lt;id&gt;
+bd todo add "Title" -&gt; bd create "Title" -t task -p 2
+bd todo -&gt; bd list --type task --status open
+bd todo done &lt;id&gt; -&gt; bd close &lt;id&gt;
 
 TODOs can be promoted to full issues by changing type or priority:
-  bd update todo-123 --type bug --priority 0
+bd update todo-123 --type bug --priority 0
 
 ```
 bd todo

@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc supersede`
 
 ## bd supersede
@@ -16,7 +17,7 @@ The superseded issue is automatically closed with a reference to the replacement
 Useful for design docs, specs, and evolving artifacts.
 
 Examples:
-  bd supersede bd-old --with bd-new    # Mark bd-old as superseded by bd-new
+bd supersede bd-old --with bd-new # Mark bd-old as superseded by bd-new
 
 ```
 bd supersede <id> --with <new> [flags]

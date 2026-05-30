@@ -54,5 +54,3 @@ GC_PROVIDER = "opencode"
 GC_MODEL = "kimi-for-coding/k2p6"
 GC_OPENCODE_AGENT = "build"
 
-[agent_defaults]
-model = "gpt-5.5"

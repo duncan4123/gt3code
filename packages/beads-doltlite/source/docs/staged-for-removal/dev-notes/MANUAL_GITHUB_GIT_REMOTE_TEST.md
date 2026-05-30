@@ -278,24 +278,24 @@ Push, clone, verify data integrity.
 
 ## Summary Checklist
 
-| # | Test | Result |
-|---|------|--------|
-| 1.1 | Init Dolt backend | |
-| 1.2 | Create test data | |
-| 1.3 | Add GitHub remote | |
-| 1.4 | Push to GitHub | |
-| 1.5 | Verify refs on GitHub | |
-| 2.1 | Dolt clone from GitHub | |
-| 2.2 | Data integrity check | |
-| 2.3 | All tables round-trip | |
-| 3.1 | Incremental push | |
-| 3.2 | Pull new data | |
-| 4.1 | Git clone isolation | |
-| 5.1 | Cleanup Dolt refs | |
-| 6.1 | Non-empty repo (optional) | |
-| 6.2 | HTTPS auth (optional) | |
-| 6.3 | Large dataset (optional) | |
-| 6.4 | Special characters (optional) | |
+| #   | Test                          | Result |
+| --- | ----------------------------- | ------ |
+| 1.1 | Init Dolt backend             |        |
+| 1.2 | Create test data              |        |
+| 1.3 | Add GitHub remote             |        |
+| 1.4 | Push to GitHub                |        |
+| 1.5 | Verify refs on GitHub         |        |
+| 2.1 | Dolt clone from GitHub        |        |
+| 2.2 | Data integrity check          |        |
+| 2.3 | All tables round-trip         |        |
+| 3.1 | Incremental push              |        |
+| 3.2 | Pull new data                 |        |
+| 4.1 | Git clone isolation           |        |
+| 5.1 | Cleanup Dolt refs             |        |
+| 6.1 | Non-empty repo (optional)     |        |
+| 6.2 | HTTPS auth (optional)         |        |
+| 6.3 | Large dataset (optional)      |        |
+| 6.4 | Special characters (optional) |        |
 
 **Minimum passing criteria:** All Phase 1-5 tests pass.
 

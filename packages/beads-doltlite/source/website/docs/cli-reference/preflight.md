@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc preflight`
 
 ## bd preflight
@@ -13,6 +14,7 @@ Generated from `bd help --doc preflight`
 Display a checklist of common pre-PR checks for contributors.
 
 This command helps catch common issues before pushing to CI:
+
 - Tests not run locally
 - Lint errors
 - Unformatted Go files
@@ -21,11 +23,10 @@ This command helps catch common issues before pushing to CI:
 - Version mismatches
 
 Examples:
-  bd preflight              # Show checklist
-  bd preflight --check      # Run checks automatically
-  bd preflight --check --json  # JSON output for programmatic use
-  bd preflight --check --skip-lint  # Explicitly skip lint check
-
+bd preflight # Show checklist
+bd preflight --check # Run checks automatically
+bd preflight --check --json # JSON output for programmatic use
+bd preflight --check --skip-lint # Explicitly skip lint check
 
 ```
 bd preflight [flags]

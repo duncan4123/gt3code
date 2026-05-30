@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc context`
 
 ## bd context
@@ -17,9 +18,8 @@ This command reads directly from config files and does not require the
 database to be open, making it useful for diagnostics in degraded states.
 
 Examples:
-  bd context           # Show context information
-  bd context --json    # Output in JSON format
-
+bd context # Show context information
+bd context --json # Output in JSON format
 
 ```
 bd context

@@ -7,15 +7,15 @@ Beads uses [Dolt](https://www.dolthub.com/) as its default storage backend. Dolt
 
 ## Overview
 
-| Feature | Dolt |
-|---------|------|
-| Storage | Directory-based |
-| Version control | Native (cell-level) |
-| Branching | Yes |
-| Time travel | Yes |
-| Merge conflicts | SQL-based (cell-level merge) |
-| Multi-user concurrent | Server mode |
-| Sync | Native push/pull to Dolt remotes |
+| Feature               | Dolt                             |
+| --------------------- | -------------------------------- |
+| Storage               | Directory-based                  |
+| Version control       | Native (cell-level)              |
+| Branching             | Yes                              |
+| Time travel           | Yes                              |
+| Merge conflicts       | SQL-based (cell-level merge)     |
+| Multi-user concurrent | Server mode                      |
+| Sync                  | Native push/pull to Dolt remotes |
 
 ## Quick Start
 
@@ -46,7 +46,7 @@ bd init
 ```yaml
 # .beads/config.yaml
 sync:
-  mode: dolt-native  # Default: use Dolt remotes
+  mode: dolt-native # Default: use Dolt remotes
 ```
 
 ## Embedded Mode (Default)
@@ -78,14 +78,14 @@ For an existing embedded project, see [Migrating Between Backends](#migrating-be
 
 ### Server Configuration
 
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `BEADS_DOLT_SERVER_MODE` | (empty) | Set to `1` to enable server mode |
-| `BEADS_DOLT_SERVER_HOST` | `127.0.0.1` | Server bind address |
-| `BEADS_DOLT_SERVER_PORT` | `3307` | Server port (MySQL protocol) |
-| `BEADS_DOLT_SERVER_USER` | `root` | MySQL username |
-| `BEADS_DOLT_SERVER_PASS` | (empty) | MySQL password |
-| `BEADS_DOLT_SHARED_SERVER` | (empty) | Shared server mode: `1` or `true` to enable |
+| Environment Variable       | Default     | Description                                 |
+| -------------------------- | ----------- | ------------------------------------------- |
+| `BEADS_DOLT_SERVER_MODE`   | (empty)     | Set to `1` to enable server mode            |
+| `BEADS_DOLT_SERVER_HOST`   | `127.0.0.1` | Server bind address                         |
+| `BEADS_DOLT_SERVER_PORT`   | `3307`      | Server port (MySQL protocol)                |
+| `BEADS_DOLT_SERVER_USER`   | `root`      | MySQL username                              |
+| `BEADS_DOLT_SERVER_PASS`   | (empty)     | MySQL password                              |
+| `BEADS_DOLT_SHARED_SERVER` | (empty)     | Shared server mode: `1` or `true` to enable |
 
 ### Server Lifecycle
 
@@ -131,12 +131,12 @@ embedded instances.
 
 ### Embedded vs Central Server
 
-| | Embedded (default) | Central Server |
-|---|---|---|
-| **Setup** | Zero-config — `bd init` handles everything | One-time server setup required |
-| **Data location** | `.beads/embeddeddolt/` per project | Central directory (e.g. `/opt/homebrew/var/dolt`) |
-| **Concurrency** | Single writer per project | Multi-writer via MySQL protocol |
-| **Use case** | Solo development, single agent | Orchestrator, multiple projects, multiple agents |
+|                   | Embedded (default)                         | Central Server                                    |
+| ----------------- | ------------------------------------------ | ------------------------------------------------- |
+| **Setup**         | Zero-config — `bd init` handles everything | One-time server setup required                    |
+| **Data location** | `.beads/embeddeddolt/` per project         | Central directory (e.g. `/opt/homebrew/var/dolt`) |
+| **Concurrency**   | Single writer per project                  | Multi-writer via MySQL protocol                   |
+| **Use case**      | Solo development, single agent             | Orchestrator, multiple projects, multiple agents  |
 
 Embedded mode is the default and requires no setup. Switch to a central server
 when you need an orchestrator or concurrent access from multiple agents.
@@ -451,11 +451,11 @@ backend: dolt
 
 sync:
   mode: dolt-native
-  auto_dolt_commit: true   # Auto-commit after sync (default: true)
-  auto_dolt_push: false    # Auto-push after sync (default: false)
+  auto_dolt_commit: true # Auto-commit after sync (default: true)
+  auto_dolt_push: false # Auto-push after sync (default: false)
 
 dolt:
-  server_mode: false       # Use sql-server (default: false — embedded mode)
+  server_mode: false # Use sql-server (default: false — embedded mode)
   server_host: "127.0.0.1" # Only used when server_mode: true
   server_port: 3307
   server_user: "root"
@@ -468,18 +468,18 @@ dolt:
 
 federation:
   remote: "dolthub://myorg/beads"
-  sovereignty: "T3"  # T1-T4
+  sovereignty: "T3" # T1-T4
 ```
 
 ### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
+| Variable                 | Description             |
+| ------------------------ | ----------------------- |
 | `BEADS_DOLT_SERVER_MODE` | Server mode: `1` or `0` |
-| `BEADS_DOLT_SERVER_HOST` | Server host |
-| `BEADS_DOLT_SERVER_PORT` | Server port |
-| `BEADS_DOLT_SERVER_USER` | Server user |
-| `BEADS_DOLT_SERVER_PASS` | Server password |
+| `BEADS_DOLT_SERVER_HOST` | Server host             |
+| `BEADS_DOLT_SERVER_PORT` | Server port             |
+| `BEADS_DOLT_SERVER_USER` | Server user             |
+| `BEADS_DOLT_SERVER_PASS` | Server password         |
 
 ## Migrating Between Backends
 
@@ -504,6 +504,7 @@ bd list
 ```
 
 **Key details:**
+
 - Embedded data lives in `.beads/embeddeddolt/`, server data in `.beads/dolt/`
 - `--force` is required when restoring into an initialized project (overwrites the database)
 - The restore auto-registers the backup dir for future syncs and updates the project identity

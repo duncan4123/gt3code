@@ -43,8 +43,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
       Effect.gen(function* () {
         const error = yield* Effect.flip(
           Effect.try({
-            try: () =>
-              resolveOffset({ portOffset: -1, devInstance: undefined }),
+            try: () => resolveOffset({ portOffset: -1, devInstance: undefined }),
             catch: (cause) => String(cause),
           }),
         );
@@ -66,8 +65,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
 
     it("rejects working-copy changes in the served workspace", () => {
       const failures = evaluateLiveWorkspaceGuard({
-        diffSummary:
-          "M packages/gascity-config/config/cities/gastown/city.toml\n",
+        diffSummary: "M packages/gascity-config/config/cities/gastown/city.toml\n",
         parentBookmarks: ["live/current*"],
       });
 
@@ -88,38 +86,30 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
   });
 
   describe("createDevRunnerEnv", () => {
-    it.effect(
-      "defaults T3CODE_HOME to workspace-local .t3-dev when not provided",
-      () =>
-        Effect.gen(function* () {
-          const path = yield* Path.Path;
-          const env = yield* createDevRunnerEnv({
-            mode: "dev",
-            baseEnv: {},
-            serverOffset: 0,
-            webOffset: 0,
-            t3Home: undefined,
-            noBrowser: undefined,
-            autoBootstrapProjectFromCwd: undefined,
-            logWebSocketEvents: undefined,
-            host: undefined,
-            port: undefined,
-            devUrl: undefined,
-          });
+    it.effect("defaults T3CODE_HOME to workspace-local .t3-dev when not provided", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const env = yield* createDevRunnerEnv({
+          mode: "dev",
+          baseEnv: {},
+          serverOffset: 0,
+          webOffset: 0,
+          t3Home: undefined,
+          noBrowser: undefined,
+          autoBootstrapProjectFromCwd: undefined,
+          logWebSocketEvents: undefined,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
 
-          assert.equal(
-            env.T3CODE_HOME,
-            path.resolve(import.meta.dirname, "..", ".t3-dev"),
-          );
-          assert.equal(
-            env.T3CODE_GASCITY_HOME,
-            path.resolve(import.meta.dirname, "..", ".t3-dev", "gascity"),
-          );
-          assert.equal(
-            env.GC_CITY_PATH,
-            getBundledGascityConfigLayout("gascity-br").rootDir,
-          );
-        }),
+        assert.equal(env.T3CODE_HOME, path.resolve(import.meta.dirname, "..", ".t3-dev"));
+        assert.equal(
+          env.T3CODE_GASCITY_HOME,
+          path.resolve(import.meta.dirname, "..", ".t3-dev", "gascity"),
+        );
+        assert.equal(env.GC_CITY_PATH, getBundledGascityConfigLayout("gascity-br").rootDir);
+      }),
     );
 
     it.effect("supports explicit typed overrides", () =>
@@ -151,53 +141,49 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
       }),
     );
 
-    it.effect(
-      "does not force websocket logging on in dev mode when unset",
-      () =>
-        Effect.gen(function* () {
-          const env = yield* createDevRunnerEnv({
-            mode: "dev",
-            baseEnv: {
-              T3CODE_LOG_WS_EVENTS: "keep-me-out",
-            },
-            serverOffset: 0,
-            webOffset: 0,
-            t3Home: undefined,
-            noBrowser: undefined,
-            autoBootstrapProjectFromCwd: undefined,
-            logWebSocketEvents: undefined,
-            host: undefined,
-            port: undefined,
-            devUrl: undefined,
-          });
+    it.effect("does not force websocket logging on in dev mode when unset", () =>
+      Effect.gen(function* () {
+        const env = yield* createDevRunnerEnv({
+          mode: "dev",
+          baseEnv: {
+            T3CODE_LOG_WS_EVENTS: "keep-me-out",
+          },
+          serverOffset: 0,
+          webOffset: 0,
+          t3Home: undefined,
+          noBrowser: undefined,
+          autoBootstrapProjectFromCwd: undefined,
+          logWebSocketEvents: undefined,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
 
-          assert.equal(env.T3CODE_MODE, "web");
-          assert.equal(env.T3CODE_LOG_WS_EVENTS, undefined);
-        }),
+        assert.equal(env.T3CODE_MODE, "web");
+        assert.equal(env.T3CODE_LOG_WS_EVENTS, undefined);
+      }),
     );
 
-    it.effect(
-      "forwards explicit websocket logging false without coercing it away",
-      () =>
-        Effect.gen(function* () {
-          const env = yield* createDevRunnerEnv({
-            mode: "dev",
-            baseEnv: {
-              T3CODE_LOG_WS_EVENTS: "1",
-            },
-            serverOffset: 0,
-            webOffset: 0,
-            t3Home: undefined,
-            noBrowser: undefined,
-            autoBootstrapProjectFromCwd: undefined,
-            logWebSocketEvents: false,
-            host: undefined,
-            port: undefined,
-            devUrl: undefined,
-          });
+    it.effect("forwards explicit websocket logging false without coercing it away", () =>
+      Effect.gen(function* () {
+        const env = yield* createDevRunnerEnv({
+          mode: "dev",
+          baseEnv: {
+            T3CODE_LOG_WS_EVENTS: "1",
+          },
+          serverOffset: 0,
+          webOffset: 0,
+          t3Home: undefined,
+          noBrowser: undefined,
+          autoBootstrapProjectFromCwd: undefined,
+          logWebSocketEvents: false,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
 
-          assert.equal(env.T3CODE_LOG_WS_EVENTS, "0");
-        }),
+        assert.equal(env.T3CODE_LOG_WS_EVENTS, "0");
+      }),
     );
 
     it.effect("uses custom t3Home when provided", () =>
@@ -221,42 +207,40 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
       }),
     );
 
-    it.effect(
-      "pins desktop dev to a stable backend port and websocket url",
-      () =>
-        Effect.gen(function* () {
-          const path = yield* Path.Path;
-          const env = yield* createDevRunnerEnv({
-            mode: "dev:desktop",
-            baseEnv: {
-              T3CODE_PORT: "3773",
-              T3CODE_MODE: "web",
-              T3CODE_NO_BROWSER: "0",
-              T3CODE_HOST: "0.0.0.0",
-              VITE_WS_URL: "ws://localhost:3773",
-            },
-            serverOffset: 0,
-            webOffset: 0,
-            t3Home: "/tmp/my-t3",
-            noBrowser: true,
-            autoBootstrapProjectFromCwd: undefined,
-            logWebSocketEvents: undefined,
-            host: "127.0.0.1",
-            port: 4222,
-            devUrl: undefined,
-          });
+    it.effect("pins desktop dev to a stable backend port and websocket url", () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const env = yield* createDevRunnerEnv({
+          mode: "dev:desktop",
+          baseEnv: {
+            T3CODE_PORT: "3773",
+            T3CODE_MODE: "web",
+            T3CODE_NO_BROWSER: "0",
+            T3CODE_HOST: "0.0.0.0",
+            VITE_WS_URL: "ws://localhost:3773",
+          },
+          serverOffset: 0,
+          webOffset: 0,
+          t3Home: "/tmp/my-t3",
+          noBrowser: true,
+          autoBootstrapProjectFromCwd: undefined,
+          logWebSocketEvents: undefined,
+          host: "127.0.0.1",
+          port: 4222,
+          devUrl: undefined,
+        });
 
-          assert.equal(env.T3CODE_HOME, path.resolve("/tmp/my-t3"));
-          assert.equal(env.PORT, "5733");
-          assert.equal(env.VITE_DEV_SERVER_URL, "http://127.0.0.1:5733");
-          assert.equal(env.HOST, "127.0.0.1");
-          assert.equal(env.T3CODE_PORT, "4222");
-          assert.equal(env.VITE_HTTP_URL, "http://127.0.0.1:4222");
-          assert.equal(env.T3CODE_MODE, undefined);
-          assert.equal(env.T3CODE_NO_BROWSER, undefined);
-          assert.equal(env.T3CODE_HOST, undefined);
-          assert.equal(env.VITE_WS_URL, "ws://127.0.0.1:4222");
-        }),
+        assert.equal(env.T3CODE_HOME, path.resolve("/tmp/my-t3"));
+        assert.equal(env.PORT, "5733");
+        assert.equal(env.VITE_DEV_SERVER_URL, "http://127.0.0.1:5733");
+        assert.equal(env.HOST, "127.0.0.1");
+        assert.equal(env.T3CODE_PORT, "4222");
+        assert.equal(env.VITE_HTTP_URL, "http://127.0.0.1:4222");
+        assert.equal(env.T3CODE_MODE, undefined);
+        assert.equal(env.T3CODE_NO_BROWSER, undefined);
+        assert.equal(env.T3CODE_HOST, undefined);
+        assert.equal(env.VITE_WS_URL, "ws://127.0.0.1:4222");
+      }),
     );
 
     it.effect("defaults dev server mode to the upstream backend port", () =>
@@ -283,19 +267,17 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
   });
 
   describe("findFirstAvailableOffset", () => {
-    it.effect(
-      "returns the starting offset when required ports are available",
-      () =>
-        Effect.gen(function* () {
-          const offset = yield* findFirstAvailableOffset({
-            startOffset: 0,
-            requireServerPort: true,
-            requireWebPort: true,
-            checkPortAvailability: () => Effect.succeed(true),
-          });
+    it.effect("returns the starting offset when required ports are available", () =>
+      Effect.gen(function* () {
+        const offset = yield* findFirstAvailableOffset({
+          startOffset: 0,
+          requireServerPort: true,
+          requireWebPort: true,
+          checkPortAvailability: () => Effect.succeed(true),
+        });
 
-          assert.equal(offset, 0);
-        }),
+        assert.equal(offset, 0);
+      }),
     );
 
     it.effect("advances until all required ports are available", () =>
@@ -312,51 +294,47 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
       }),
     );
 
-    it.effect(
-      "allows offsets where the non-required server port exceeds max",
-      () =>
-        Effect.gen(function* () {
-          const offset = yield* findFirstAvailableOffset({
-            startOffset: 59_802,
-            requireServerPort: false,
-            requireWebPort: true,
-            checkPortAvailability: () => Effect.succeed(true),
-          });
+    it.effect("allows offsets where the non-required server port exceeds max", () =>
+      Effect.gen(function* () {
+        const offset = yield* findFirstAvailableOffset({
+          startOffset: 59_802,
+          requireServerPort: false,
+          requireWebPort: true,
+          checkPortAvailability: () => Effect.succeed(true),
+        });
 
-          assert.equal(offset, 59_802);
-        }),
+        assert.equal(offset, 59_802);
+      }),
     );
   });
 
   describe("checkPortAvailabilityOnHosts", () => {
-    it.effect(
-      "checks overlapping hosts sequentially to avoid self-interference",
-      () =>
-        Effect.gen(function* () {
-          let inFlightCount = 0;
-          const calls: Array<[number, string]> = [];
+    it.effect("checks overlapping hosts sequentially to avoid self-interference", () =>
+      Effect.gen(function* () {
+        let inFlightCount = 0;
+        const calls: Array<[number, string]> = [];
 
-          const available = yield* checkPortAvailabilityOnHosts(
-            3_773,
-            ["127.0.0.1", "0.0.0.0", "::"],
-            (port, host) =>
-              Effect.promise(async () => {
-                calls.push([port, host]);
-                inFlightCount += 1;
-                const overlapped = inFlightCount > 1;
-                await Promise.resolve();
-                inFlightCount -= 1;
-                return !overlapped;
-              }),
-          );
+        const available = yield* checkPortAvailabilityOnHosts(
+          3_773,
+          ["127.0.0.1", "0.0.0.0", "::"],
+          (port, host) =>
+            Effect.promise(async () => {
+              calls.push([port, host]);
+              inFlightCount += 1;
+              const overlapped = inFlightCount > 1;
+              await Promise.resolve();
+              inFlightCount -= 1;
+              return !overlapped;
+            }),
+        );
 
-          assert.equal(available, true);
-          assert.deepStrictEqual(calls, [
-            [3_773, "127.0.0.1"],
-            [3_773, "0.0.0.0"],
-            [3_773, "::"],
-          ]);
-        }),
+        assert.equal(available, true);
+        assert.deepStrictEqual(calls, [
+          [3_773, "127.0.0.1"],
+          [3_773, "0.0.0.0"],
+          [3_773, "::"],
+        ]);
+      }),
     );
   });
 
@@ -376,21 +354,19 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
       }),
     );
 
-    it.effect(
-      "keeps server offset stable for dev:web and only shifts web offset",
-      () =>
-        Effect.gen(function* () {
-          const taken = new Set([5733]);
-          const offsets = yield* resolveModePortOffsets({
-            mode: "dev:web",
-            startOffset: 0,
-            hasExplicitServerPort: false,
-            hasExplicitDevUrl: false,
-            checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
-          });
+    it.effect("keeps server offset stable for dev:web and only shifts web offset", () =>
+      Effect.gen(function* () {
+        const taken = new Set([5733]);
+        const offsets = yield* resolveModePortOffsets({
+          mode: "dev:web",
+          startOffset: 0,
+          hasExplicitServerPort: false,
+          hasExplicitDevUrl: false,
+          checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
+        });
 
-          assert.deepStrictEqual(offsets, { serverOffset: 0, webOffset: 1 });
-        }),
+        assert.deepStrictEqual(offsets, { serverOffset: 0, webOffset: 1 });
+      }),
     );
 
     it.effect("shifts only server offset for dev:server", () =>

@@ -68,10 +68,10 @@ declaration. The four legal values are documented in
 `internal/beads/contract/files.go`; for a default `gc init` city you will only
 ever see two of them:
 
-| Value | Meaning |
-|---|---|
-| `managed_city` | This city runs its own local Dolt; the port lives in `.beads/dolt-server.port`. |
-| `inherited_city` | This rig has no endpoint of its own; resolve through the city. |
+| Value            | Meaning                                                                         |
+| ---------------- | ------------------------------------------------------------------------------- |
+| `managed_city`   | This city runs its own local Dolt; the port lives in `.beads/dolt-server.port`. |
+| `inherited_city` | This rig has no endpoint of its own; resolve through the city.                  |
 
 The two remaining values, `city_canonical` and `explicit`, are for cities and
 rigs that point at an external Dolt server. See the [Beads Dolt Contract

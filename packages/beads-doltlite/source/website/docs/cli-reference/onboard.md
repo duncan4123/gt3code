@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc onboard`
 
 ## bd onboard
@@ -19,9 +20,9 @@ This outputs a small (~10 line) snippet that points to 'bd prime' for full
 workflow context. This is the same minimal profile that 'bd init' generates
 by default. This approach:
 
-  • Keeps your agent file lean (doesn't bloat with instructions)
-  • bd prime provides dynamic, always-current workflow details
-  • Hooks auto-inject bd prime at session start
+• Keeps your agent file lean (doesn't bloat with instructions)
+• bd prime provides dynamic, always-current workflow details
+• Hooks auto-inject bd prime at session start
 
 For agents that don't support hooks (Codex, Factory, etc.), use
 'bd init --agents-profile=full' to embed the complete command reference.

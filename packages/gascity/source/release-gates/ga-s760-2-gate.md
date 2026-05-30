@@ -22,20 +22,20 @@ release criteria supplied by the deployer role prompt.
 
 ## Criteria
 
-| # | Criterion | Result | Evidence |
-|---|-----------|--------|----------|
-| 1 | Review PASS present | PASS | Review bead ga-it5y contains two `Reviewer verdict: PASS` notes. The prerequisite review bead ga-34pf also contains two PASS verdicts for the hash-versioning prerequisite. |
-| 2 | Acceptance criteria met | PASS | Code inspection found `runtime.FingerprintVersion`, versioned Config/Core/Live fingerprint output, legacy/version-mismatch classifiers, silent rebaseline at all three reconciler drift paths, typed `BreakdownV1` / `BreakdownCopyEntry`, raw JSON drift rendering, and per-entry CopyFiles diff rendering. Tests cover all named FR/NFR surfaces from ga-s760.1 and ga-s760.2. |
-| 3 | Tests pass | PASS | `make test-fast-parallel` passed all 8 fast shards. `go vet ./...` passed. |
-| 4 | No high-severity review findings open | PASS | Review notes list no unresolved HIGH findings. Both security reviews found no security-sensitive concerns. |
-| 5 | Final branch is clean | PASS | Worktree was clean before gate file creation; after the gate commit there are no uncommitted changes. |
-| 6 | Branch diverges cleanly from main | PASS | `git merge-tree --write-tree HEAD origin/main` completed without conflicts (`8f65485f363a095942eba2e44e020553903eab9c`). |
+| #   | Criterion                             | Result | Evidence                                                                                                                                                                                                                                                                                                                                                                         |
+| --- | ------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS   | Review bead ga-it5y contains two `Reviewer verdict: PASS` notes. The prerequisite review bead ga-34pf also contains two PASS verdicts for the hash-versioning prerequisite.                                                                                                                                                                                                      |
+| 2   | Acceptance criteria met               | PASS   | Code inspection found `runtime.FingerprintVersion`, versioned Config/Core/Live fingerprint output, legacy/version-mismatch classifiers, silent rebaseline at all three reconciler drift paths, typed `BreakdownV1` / `BreakdownCopyEntry`, raw JSON drift rendering, and per-entry CopyFiles diff rendering. Tests cover all named FR/NFR surfaces from ga-s760.1 and ga-s760.2. |
+| 3   | Tests pass                            | PASS   | `make test-fast-parallel` passed all 8 fast shards. `go vet ./...` passed.                                                                                                                                                                                                                                                                                                       |
+| 4   | No high-severity review findings open | PASS   | Review notes list no unresolved HIGH findings. Both security reviews found no security-sensitive concerns.                                                                                                                                                                                                                                                                       |
+| 5   | Final branch is clean                 | PASS   | Worktree was clean before gate file creation; after the gate commit there are no uncommitted changes.                                                                                                                                                                                                                                                                            |
+| 6   | Branch diverges cleanly from main     | PASS   | `git merge-tree --write-tree HEAD origin/main` completed without conflicts (`8f65485f363a095942eba2e44e020553903eab9c`).                                                                                                                                                                                                                                                         |
 
 ## Commits Evaluated
 
-| Bead | Review | Commits |
-|------|--------|---------|
-| ga-s760.1 | PASS via ga-34pf | 18b75456d, d28426f54 |
+| Bead      | Review           | Commits                       |
+| --------- | ---------------- | ----------------------------- |
+| ga-s760.1 | PASS via ga-34pf | 18b75456d, d28426f54          |
 | ga-s760.2 | PASS via ga-it5y | 3c673da8, ba5cc2ad, c8643cdd3 |
 
 ## Acceptance Evidence

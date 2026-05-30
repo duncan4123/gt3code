@@ -75,6 +75,7 @@ The script simplifies local installation from source while ensuring full version
 **Makefile Integration** (`@/Makefile`, lines 37-41):
 
 The Makefile's `install` target uses identical logic:
+
 - Extracts git info at build time
 - Passes to `go install` via ldflags
 - Ensures that standard `make install` produces binaries with full version info, not just `make build`
@@ -82,6 +83,7 @@ The Makefile's `install` target uses identical logic:
 **Goreleaser Configuration** (`@/.goreleaser.yml`):
 
 All 5 platform builds (linux-amd64, linux-arm64, darwin-amd64, darwin-arm64, windows-amd64) use goreleaser's built-in git variables:
+
 - `-X main.Commit={{.Commit}}` uses goreleaser's detected commit
 - `-X main.Branch={{.Branch}}` uses goreleaser's detected branch
 - Ensures released binaries have full version info without requiring manual extraction
@@ -95,36 +97,43 @@ All 5 platform builds (linux-amd64, linux-arm64, darwin-amd64, darwin-arm64, win
 ### Things to Know
 
 **Why Explicit Ldflags Are Necessary**:
+
 - `go install` does not automatically embed VCS information like `go build` does (even though Go supports it)
 - Without explicit ldflags, binaries lack commit and branch information regardless of installation method
 - The Makefile and goreleaser configurations compensate for this limitation
 
 **Installation Path Resolution**:
+
 - The script uses `$(go env GOPATH)/bin` as the default installation target
 - This respects the user's Go configuration and matches standard Go tooling behavior
 - Allows overriding for system-wide installations (e.g., `/usr/local/bin`)
 
 **Git Information Fallbacks**:
+
 - The script silently handles missing git info (returns empty strings)
 - This allows installation in non-git environments or git-less distributions
 - The version command in `@/cmd/bd/version.go` has its own fallback chain
 
 **Testing the Version Pipeline**:
+
 - After running `./scripts/install.sh`, users should immediately see full version info via `bd version`
 - The text output shows format like: `bd version 0.29.0 (dev: main@7e70940)`
 - JSON output includes both `commit` and `branch` fields
 
 **Release Coordination**:
+
 - The `install.sh` script is independent of release automation
 - Users can run it locally to build from any source branch
 - Release scripts (`release.sh`, `update-homebrew.sh`) handle orchestration across channels and are documented separately in `@/RELEASING.md`
 
 **Platform Compatibility**:
+
 - All scripts use POSIX shell constructs (bash on all platforms)
 - Git operations work identically on macOS, Linux, and Windows (with Git for Windows)
 - The go install command behaves consistently across all platforms
 
 **Security Considerations**:
+
 - Scripts use `set -e` to fail fast on any errors
 - Git commands are defensive (using `2>/dev/null` to suppress errors)
 - No shell injection risks as git values are passed as structured arguments

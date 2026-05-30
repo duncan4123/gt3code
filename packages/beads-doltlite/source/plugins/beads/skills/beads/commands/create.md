@@ -4,11 +4,13 @@ argument-hint: [title] [type] [priority]
 ---
 
 Create a new beads issue. If arguments are provided:
+
 - $1: Issue title
 - $2: Issue type (bug, feature, task, epic, chore, decision)
 - $3: Priority (0-4, where 0=critical, 4=backlog)
 
 If arguments are missing, ask the user for:
+
 1. Issue title (required)
 2. Issue type (default: task)
 3. Priority (default: 2)

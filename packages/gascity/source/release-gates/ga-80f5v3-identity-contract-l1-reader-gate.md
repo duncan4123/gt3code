@@ -11,14 +11,14 @@
 
 ## Criteria
 
-| # | Criterion | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Reviewer PASS verdict in bead notes | PASS | `gascity/reviewer` PASS at pre-gate HEAD `7298aa39`; post-merge review rechecked final landed range `6040b076..b61b12f`. |
-| 2 | Acceptance criteria met | PASS | A1-A12 + C1-C2 (14/14) subtests passed pre-gate; post-merge follow-up adds strict-decode coverage for bare `[project]`, non-string `project.id`, and nested unknown `[project.*]` tables. |
-| 3 | Tests pass on final branch | PASS | `go test ./internal/beads/contract -count=1` — PASS on pre-gate branch and post-merge follow-up branch. |
-| 4 | No high-severity review findings open | PASS | Reviewer findings list: empty. |
-| 5 | Working tree clean | PASS | `git status` clean before push. |
-| 6 | Branch diverges cleanly from main | PASS | 1 ahead / 0 behind `origin/main`. |
+| #   | Criterion                             | Verdict | Evidence                                                                                                                                                                                  |
+| --- | ------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Reviewer PASS verdict in bead notes   | PASS    | `gascity/reviewer` PASS at pre-gate HEAD `7298aa39`; post-merge review rechecked final landed range `6040b076..b61b12f`.                                                                  |
+| 2   | Acceptance criteria met               | PASS    | A1-A12 + C1-C2 (14/14) subtests passed pre-gate; post-merge follow-up adds strict-decode coverage for bare `[project]`, non-string `project.id`, and nested unknown `[project.*]` tables. |
+| 3   | Tests pass on final branch            | PASS    | `go test ./internal/beads/contract -count=1` — PASS on pre-gate branch and post-merge follow-up branch.                                                                                   |
+| 4   | No high-severity review findings open | PASS    | Reviewer findings list: empty.                                                                                                                                                            |
+| 5   | Working tree clean                    | PASS    | `git status` clean before push.                                                                                                                                                           |
+| 6   | Branch diverges cleanly from main     | PASS    | 1 ahead / 0 behind `origin/main`.                                                                                                                                                         |
 
 ## Validation (deployer re-run on `deploy/ga-80f5v3` at HEAD `7298aa39`)
 

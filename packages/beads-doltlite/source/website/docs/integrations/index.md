@@ -19,20 +19,20 @@ bd setup --list
 
 ## Built-in Setup Recipes
 
-| Recipe | Integration | Primary setup surface |
-|--------|-------------|-----------------------|
-| `aider` | [Aider](/integrations/aider) | `.aider.conf.yml` and `.aider/` instructions |
-| `claude` | [Claude Code](/integrations/claude-code) | Claude hooks and `CLAUDE.md` |
-| `codex` | [Codex](/integrations/codex) | Beads skill, `AGENTS.md`, and Codex hooks |
-| `cody` | [Sourcegraph Cody](/integrations/cody) | `.cody/rules/beads.md` |
-| `cursor` | [Cursor](/integrations/cursor) | `.cursor/rules/beads.mdc` |
-| `factory` | [Factory.ai Droid](/integrations/factory) | `AGENTS.md` |
-| `gemini` | [Gemini CLI](/integrations/gemini) | Gemini hooks and `GEMINI.md` |
-| `junie` | [Junie](/integrations/junie) | `.junie/guidelines.md` and MCP config |
-| `kilocode` | [Kilo Code](/integrations/kilocode) | `.kilocode/rules/beads.md` |
-| `mux` | [Mux](/integrations/mux) | `AGENTS.md`, optional `.mux/AGENTS.md`, and Mux hooks |
-| `opencode` | [OpenCode](/integrations/opencode) | `AGENTS.md` |
-| `windsurf` | [Windsurf](/integrations/windsurf) | `.windsurf/rules/beads.md` |
+| Recipe     | Integration                               | Primary setup surface                                 |
+| ---------- | ----------------------------------------- | ----------------------------------------------------- |
+| `aider`    | [Aider](/integrations/aider)              | `.aider.conf.yml` and `.aider/` instructions          |
+| `claude`   | [Claude Code](/integrations/claude-code)  | Claude hooks and `CLAUDE.md`                          |
+| `codex`    | [Codex](/integrations/codex)              | Beads skill, `AGENTS.md`, and Codex hooks             |
+| `cody`     | [Sourcegraph Cody](/integrations/cody)    | `.cody/rules/beads.md`                                |
+| `cursor`   | [Cursor](/integrations/cursor)            | `.cursor/rules/beads.mdc`                             |
+| `factory`  | [Factory.ai Droid](/integrations/factory) | `AGENTS.md`                                           |
+| `gemini`   | [Gemini CLI](/integrations/gemini)        | Gemini hooks and `GEMINI.md`                          |
+| `junie`    | [Junie](/integrations/junie)              | `.junie/guidelines.md` and MCP config                 |
+| `kilocode` | [Kilo Code](/integrations/kilocode)       | `.kilocode/rules/beads.md`                            |
+| `mux`      | [Mux](/integrations/mux)                  | `AGENTS.md`, optional `.mux/AGENTS.md`, and Mux hooks |
+| `opencode` | [OpenCode](/integrations/opencode)        | `AGENTS.md`                                           |
+| `windsurf` | [Windsurf](/integrations/windsurf)        | `.windsurf/rules/beads.md`                            |
 
 ## MCP-Based Integrations
 

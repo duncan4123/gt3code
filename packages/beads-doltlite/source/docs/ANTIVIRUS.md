@@ -37,11 +37,13 @@ Before running a downloaded binary or adding antivirus exclusions, verify the fi
 3. If a release includes code signing, verify that signature too
 
 **Verify checksum (Windows PowerShell):**
+
 ```powershell
 Get-FileHash bd.exe -Algorithm SHA256
 ```
 
 **Verify checksum (macOS/Linux):**
+
 ```bash
 shasum -a 256 bd
 ```
@@ -53,6 +55,7 @@ Compare the output with the checksum in `checksums.txt` from the release page.
 Add beads to your antivirus exclusion list:
 
 **Kaspersky:**
+
 1. Open Kaspersky and go to Settings
 2. Navigate to Threats and Exclusions → Manage Exclusions
 3. Click Add → Add path to exclusion
@@ -60,12 +63,14 @@ Add beads to your antivirus exclusion list:
 5. Select which components the exclusion applies to (scan, monitoring, etc.)
 
 **Windows Defender:**
+
 1. Open Windows Security
 2. Go to Virus & threat protection → Manage settings
 3. Scroll to Exclusions → Add or remove exclusions
 4. Add the beads installation directory or the specific `bd.exe` file
 
 **Other antivirus software:**
+
 - Look for "Exclusions", "Whitelist", or "Trusted Applications" settings
 - Add the beads installation directory or executable
 
@@ -74,17 +79,20 @@ Add beads to your antivirus exclusion list:
 Help improve detection accuracy by reporting the false positive:
 
 **Kaspersky:**
+
 1. Visit [Kaspersky Threat Intelligence Portal](https://opentip.kaspersky.com/)
 2. Upload the `bd.exe` file for analysis
 3. Mark it as a false positive
 4. Reference: beads is open-source CLI tool (https://github.com/gastownhall/beads)
 
 **Windows Defender:**
+
 1. Go to [Microsoft Security Intelligence](https://www.microsoft.com/en-us/wdsi/filesubmission)
 2. Submit the file as a false positive
 3. Provide details about the legitimate software
 
 **Other vendors:**
+
 - Check their website for false positive submission forms
 - Most major vendors have a process for reviewing flagged files
 
@@ -98,7 +106,7 @@ Beads releases are built with multiple optimizations to reduce false positives:
 
 ```yaml
 ldflags:
-  - -s -w  # Strip debug symbols and DWARF info
+  - -s -w # Strip debug symbols and DWARF info
 ```
 
 **Windows PE version info**: Release builds embed legitimate PE resource metadata
@@ -112,11 +120,13 @@ These optimizations are applied automatically in official release builds.
 ### Code Signing
 
 Windows releases are signed with an Authenticode certificate when available. Code signing:
+
 - Reduces false positive rates over time
 - Builds reputation with SmartScreen/antivirus vendors
 - Provides tamper verification
 
 **Verify a signed binary (Windows PowerShell):**
+
 ```powershell
 # Check if the binary is signed
 Get-AuthenticodeSignature .\bd.exe
@@ -127,6 +137,7 @@ Get-AuthenticodeSignature .\bd.exe
 ```
 
 **Verify a signed binary (Linux/macOS with osslsigncode):**
+
 ```bash
 # Install osslsigncode if not available
 # Ubuntu/Debian: apt-get install osslsigncode
@@ -140,6 +151,7 @@ osslsigncode verify -in bd.exe
 ### Alternative Build Methods
 
 Some users report success with:
+
 ```bash
 go build -ldflags "-s -w" -o bd ./cmd/bd
 ```
@@ -151,6 +163,7 @@ However, results vary by antivirus vendor and version.
 ### Is beads safe to use?
 
 Yes. Beads is:
+
 - Open source (all code is auditable on [GitHub](https://github.com/gastownhall/beads))
 - Releases include checksums for verification
 - Used by developers worldwide
@@ -159,6 +172,7 @@ Yes. Beads is:
 ### Why don't you just fix the code to avoid detection?
 
 The issue isn't specific to beads' code - it's a characteristic of Go binaries in general. Changing code won't reliably prevent heuristic/behavioral detection. The proper solutions are:
+
 1. Code signing (builds trust over time)
 2. Whitelist applications with antivirus vendors
 3. User reports of false positives
@@ -166,12 +180,14 @@ The issue isn't specific to beads' code - it's a characteristic of Go binaries i
 ### Will this be fixed in future releases?
 
 We've implemented:
+
 - **Windows PE version info** embedded in binaries (company name, product name, version, manifest)
 - **Code signing infrastructure** for Windows releases (requires EV certificate)
 - **Build optimizations** to reduce heuristic triggers (`-s -w` ldflags)
 - **Documentation** for users to add exclusions and report false positives
 
 Still in progress:
+
 - Acquiring an EV code signing certificate
 - Submitting beads to antivirus vendor whitelists
 
@@ -180,6 +196,7 @@ False positives may still occur with new releases until the certificate builds r
 ### Should I disable my antivirus?
 
 **No.** Instead:
+
 1. Verify release checksums before first run
 2. Keep your antivirus enabled for other threats
 3. Add beads to your antivirus exclusions only after verification if detections persist

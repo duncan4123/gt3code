@@ -9,12 +9,7 @@
  */
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import {
-  NonNegativeInt,
-  ProjectId,
-  ThreadId,
-  TrimmedNonEmptyString,
-} from "./baseSchemas.ts";
+import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { OrchestrationThreadShell } from "./orchestration.ts";
 
 // ---------------------------------------------------------------------------
@@ -80,9 +75,7 @@ export const GcThreadMeta = Schema.Struct({
   /** Formula name. */
   formula: Schema.optional(Schema.String),
   /** Canonical sidebar group kind. */
-  groupKind: Schema.optional(
-    Schema.Union([Schema.Literal("workspace"), Schema.Literal("rig")]),
-  ),
+  groupKind: Schema.optional(Schema.Union([Schema.Literal("workspace"), Schema.Literal("rig")])),
   /** Canonical sidebar group id. */
   groupId: Schema.optional(Schema.String),
   /** Canonical sidebar group label. */
@@ -96,9 +89,7 @@ export const GcThreadMeta = Schema.Struct({
 });
 export type GcThreadMeta = typeof GcThreadMeta.Type;
 
-function parseGcSessionEnv(
-  value: string | undefined,
-): Record<string, string> | undefined {
+function parseGcSessionEnv(value: string | undefined): Record<string, string> | undefined {
   if (!value) {
     return undefined;
   }
@@ -124,9 +115,7 @@ function parseGcSessionName(
 }
 
 /** Extract GcThreadMeta from a raw customMetadata record. */
-export function parseGcMeta(
-  customMetadata?: Record<string, string>,
-): GcThreadMeta {
+export function parseGcMeta(customMetadata?: Record<string, string>): GcThreadMeta {
   if (!customMetadata || !customMetadata["gc.agent"]) {
     return {
       isGcManaged: false,
@@ -196,8 +185,7 @@ export function parseGcMeta(
     molecule: customMetadata["gc.molecule"],
     formula: customMetadata["gc.formula"],
     groupKind:
-      customMetadata["gc.groupKind"] === "workspace" ||
-      customMetadata["gc.groupKind"] === "rig"
+      customMetadata["gc.groupKind"] === "workspace" || customMetadata["gc.groupKind"] === "rig"
         ? customMetadata["gc.groupKind"]
         : undefined,
     groupId: customMetadata["gc.groupId"],
@@ -222,8 +210,7 @@ export const GcActivityKind = {
   PromptSent: "gc.prompt.sent",
   NudgeSent: "gc.nudge.sent",
 } as const;
-export type GcActivityKind =
-  (typeof GcActivityKind)[keyof typeof GcActivityKind];
+export type GcActivityKind = (typeof GcActivityKind)[keyof typeof GcActivityKind];
 
 /** Check if an activity kind is a GC activity. */
 export function isGcActivityKind(kind: string): kind is GcActivityKind {
@@ -249,10 +236,7 @@ export const GcNamedSessionMode = Schema.Union([
 ]);
 export type GcNamedSessionMode = typeof GcNamedSessionMode.Type;
 
-export const GcWakeMode = Schema.Union([
-  Schema.Literal("resume"),
-  Schema.Literal("fresh"),
-]);
+export const GcWakeMode = Schema.Union([Schema.Literal("resume"), Schema.Literal("fresh")]);
 export type GcWakeMode = typeof GcWakeMode.Type;
 
 export const GcLifecycleStatus = Schema.Struct({
@@ -493,16 +477,12 @@ function qualifyMergedMultiCityAgent(input: {
     !input.isMergedMultiCityConfig ||
     !input.city ||
     !input.multiCityWorkspaceIds.has(input.city) ||
-    (input.resolvedRig !== input.city &&
-      !input.resolvedRig.startsWith(`${input.city}/`))
+    (input.resolvedRig !== input.city && !input.resolvedRig.startsWith(`${input.city}/`))
   ) {
     return input.agent;
   }
 
-  if (
-    input.agent === input.resolvedRig ||
-    input.agent.startsWith(`${input.resolvedRig}/`)
-  ) {
+  if (input.agent === input.resolvedRig || input.agent.startsWith(`${input.resolvedRig}/`)) {
     return input.agent;
   }
 
@@ -532,9 +512,7 @@ function pathBasename(value: string): string {
   return segments.at(-1) ?? normalized;
 }
 
-function configuredAgentQualifiedName(
-  agent: Pick<GcConfigAgent, "dir" | "name">,
-): string {
+function configuredAgentQualifiedName(agent: Pick<GcConfigAgent, "dir" | "name">): string {
   const dir = normalizeMetadataValue(agent.dir);
   return dir ? `${dir}/${agent.name}` : agent.name;
 }
@@ -574,19 +552,13 @@ function inferGcMetaFromConfiguredSession(
     return null;
   }
   const { sessionName } = parseGcSessionTitleSegments(thread.title);
-  const normalizedSessionName = normalizeMetadataValue(
-    sessionName ?? undefined,
-  );
+  const normalizedSessionName = normalizeMetadataValue(sessionName ?? undefined);
   if (!normalizedSessionName) {
     return null;
   }
 
   for (const agent of config.agents) {
-    if (
-      !configuredAgentSessionNameCandidates(agent).includes(
-        normalizedSessionName,
-      )
-    ) {
+    if (!configuredAgentSessionNameCandidates(agent).includes(normalizedSessionName)) {
       continue;
     }
     const dir = normalizeMetadataValue(agent.dir);
@@ -649,15 +621,11 @@ function resolveGcMetaForGrouping(
   if (!parsedMeta.isGcManaged) {
     return inferredMeta ?? parsedMeta;
   }
-  const parsedAgent =
-    normalizeMetadataValue(parsedMeta.agentQualified) ?? parsedMeta.agent;
+  const parsedAgent = normalizeMetadataValue(parsedMeta.agentQualified) ?? parsedMeta.agent;
   const parsedAgentIsExactlyConfigured = Boolean(
-    config?.agents.some(
-      (entry) => configuredAgentQualifiedName(entry) === parsedAgent,
-    ),
+    config?.agents.some((entry) => configuredAgentQualifiedName(entry) === parsedAgent),
   );
-  const parsedRevisionIsCurrent =
-    !config || parsedMeta.configRevision === gcConfigRevision(config);
+  const parsedRevisionIsCurrent = !config || parsedMeta.configRevision === gcConfigRevision(config);
   if (!inferredMeta || (parsedAgentIsExactlyConfigured && parsedRevisionIsCurrent)) {
     return parsedMeta;
   }
@@ -752,9 +720,7 @@ export function parseGcSessionTitleSegments(title?: string): {
   if (!trimmed) {
     return { sessionName: null, agentHint: null };
   }
-  const parts = trimmed
-    .split("·")
-    .map((part) => normalizeMetadataValue(part) ?? "");
+  const parts = trimmed.split("·").map((part) => normalizeMetadataValue(part) ?? "");
   if (parts.length >= 2) {
     return {
       sessionName: normalizeMetadataValue(parts[0] ?? undefined),
@@ -809,9 +775,7 @@ function findMatchingAgentGroup<TThread>(
     return undefined;
   }
 
-  return [...agentGroupsById.values()].find((group) =>
-    candidateLabels.has(group.label),
-  );
+  return [...agentGroupsById.values()].find((group) => candidateLabels.has(group.label));
 }
 
 function gcAgentVirtualMetadata(
@@ -826,9 +790,7 @@ function gcAgentVirtualMetadata(
     ...(agent.work_dir ? { workDir: agent.work_dir } : {}),
     ...(agent.prompt_template ? { promptTemplate: agent.prompt_template } : {}),
     ...(agent.start_command ? { startCommand: agent.start_command } : {}),
-    ...(agent.default_sling_formula
-      ? { defaultSlingFormula: agent.default_sling_formula }
-      : {}),
+    ...(agent.default_sling_formula ? { defaultSlingFormula: agent.default_sling_formula } : {}),
   };
 }
 
@@ -854,9 +816,7 @@ function findConfiguredAgent(
 
   return config.agents.find((entry) => {
     const qualifiedName = configuredAgentQualifiedName(entry);
-    return candidateAgentLabels(qualifiedName).some((label) =>
-      candidateLabels.has(label),
-    );
+    return candidateAgentLabels(qualifiedName).some((label) => candidateLabels.has(label));
   });
 }
 
@@ -869,10 +829,7 @@ function normalizeGcPath(value: string | null | undefined): string | null {
   return path.length > 0 ? path : null;
 }
 
-function projectContextMatchesRigPath(
-  projectCwds: ReadonlySet<string>,
-  rigPath: string,
-): boolean {
+function projectContextMatchesRigPath(projectCwds: ReadonlySet<string>, rigPath: string): boolean {
   const normalizedRigPath = normalizeGcPath(rigPath);
   if (!normalizedRigPath) {
     return false;
@@ -907,9 +864,7 @@ function expandRelevantRigsWithMultiCityRoots(
     }
   }
 
-  return rigs.filter(
-    (rig) => relevantRigNames.has(rig.name) || requiredCityRoots.has(rig.name),
-  );
+  return rigs.filter((rig) => relevantRigNames.has(rig.name) || requiredCityRoots.has(rig.name));
 }
 
 function multiCityWorkspaceRigNames(rigs: readonly GcConfigRig[]): Set<string> {
@@ -963,9 +918,7 @@ export function groupThreadsByRigAndAgent<
   const projectName = normalizeMetadataValue(options?.projectName ?? undefined);
   const workspaceName = normalizeMetadataValue(options?.config?.workspace.name);
   const workspaceSuspended = options?.config?.workspace.suspended ?? false;
-  const multiCityWorkspaceIds = multiCityWorkspaceRigNames(
-    options?.config?.rigs ?? [],
-  );
+  const multiCityWorkspaceIds = multiCityWorkspaceRigNames(options?.config?.rigs ?? []);
   const isMergedMultiCityConfig = workspaceName?.toLowerCase() === "cities";
   const projectCwds = new Set<string>();
   const projectLabels = new Set<string>();
@@ -994,18 +947,13 @@ export function groupThreadsByRigAndAgent<
     addProjectContext(member);
   }
   const isGlobalScope =
-    projectCwds.size === 0 &&
-    projectLabels.size === 0 &&
-    options?.config !== undefined;
+    projectCwds.size === 0 && projectLabels.size === 0 && options?.config !== undefined;
   const addConfiguredAgentGroup = (
     rigGroup: MutableVirtualRigGroup<TThread>,
     agent: GcConfigResult["agents"][number],
   ): void => {
     const qualifiedName = configuredAgentQualifiedName(agent);
-    const existingGroup = findMatchingAgentGroup(
-      rigGroup.agentGroupsById,
-      qualifiedName,
-    );
+    const existingGroup = findMatchingAgentGroup(rigGroup.agentGroupsById, qualifiedName);
     if (existingGroup) {
       existingGroup.isConfigured = true;
       existingGroup.isPool = agent.is_pool ?? existingGroup.isPool;
@@ -1044,48 +992,38 @@ export function groupThreadsByRigAndAgent<
         ? { maxActiveSessions: agent.max_active_sessions }
         : {}),
       ...(agent.wake_mode ? { wakeMode: agent.wake_mode } : {}),
-      ...(agent.named_session_mode
-        ? { namedSessionMode: agent.named_session_mode }
-        : {}),
+      ...(agent.named_session_mode ? { namedSessionMode: agent.named_session_mode } : {}),
       ...(agent.scope ? { scope: agent.scope } : {}),
       ...gcAgentVirtualMetadata(agent),
       threads: [],
     });
   };
-  const isConfiguredCityAgent = (
-    agent: GcConfigResult["agents"][number],
-  ): boolean =>
+  const isConfiguredCityAgent = (agent: GcConfigResult["agents"][number]): boolean =>
     agent.scope === "city" ||
     agent.name.includes(".") ||
     agent.named_session_mode !== undefined ||
     typeof agent.min_active_sessions === "number" ||
     typeof agent.max_active_sessions === "number" ||
     agent.wake_mode !== undefined;
-  const isImplicitProviderAgent = (
-    agent: GcConfigResult["agents"][number],
-  ): boolean =>
+  const isImplicitProviderAgent = (agent: GcConfigResult["agents"][number]): boolean =>
     Boolean(
       agent.provider &&
-        agent.prompt_template?.endsWith("/core/assets/prompts/pool-worker.md") &&
-        agent.default_sling_formula === "mol-do-work" &&
-        agent.scope === undefined &&
-        agent.named_session_mode === undefined &&
-        typeof agent.min_active_sessions !== "number" &&
-        typeof agent.max_active_sessions !== "number" &&
-        agent.wake_mode === undefined &&
-        agent.description === undefined &&
-        agent.start_command === undefined &&
-        agent.is_pool !== true,
+      agent.prompt_template?.endsWith("/core/assets/prompts/pool-worker.md") &&
+      agent.default_sling_formula === "mol-do-work" &&
+      agent.scope === undefined &&
+      agent.named_session_mode === undefined &&
+      typeof agent.min_active_sessions !== "number" &&
+      typeof agent.max_active_sessions !== "number" &&
+      agent.wake_mode === undefined &&
+      agent.description === undefined &&
+      agent.start_command === undefined &&
+      agent.is_pool !== true,
     );
-  const isImplicitControlAgent = (
-    agent: GcConfigResult["agents"][number],
-  ): boolean =>
+  const isImplicitControlAgent = (agent: GcConfigResult["agents"][number]): boolean =>
     agent.name === "control-dispatcher" &&
     agent.description === "Built-in deterministic graph.v2 workflow control worker" &&
     Boolean(agent.start_command?.includes("convoy control --serve"));
-  const isConfiguredSidebarAgent = (
-    agent: GcConfigResult["agents"][number],
-  ): boolean =>
+  const isConfiguredSidebarAgent = (agent: GcConfigResult["agents"][number]): boolean =>
     !isImplicitProviderAgent(agent) && !isImplicitControlAgent(agent);
   const findSidebarConfiguredAgent = (
     qualifiedAgent: string | null | undefined,
@@ -1101,8 +1039,7 @@ export function groupThreadsByRigAndAgent<
 
   const isCityAliasProject = [...projectLabels].some((label) =>
     ["city", "gc"].some(
-      (alias) =>
-        label.localeCompare(alias, undefined, { sensitivity: "accent" }) === 0,
+      (alias) => label.localeCompare(alias, undefined, { sensitivity: "accent" }) === 0,
     ),
   );
   const isCityProject = Boolean(
@@ -1117,26 +1054,20 @@ export function groupThreadsByRigAndAgent<
   );
   let cityScopedRigGroupId: string | null = null;
   const configRigs = options?.config?.rigs ?? [];
-  const configRigByName = new Map(
-    configRigs.map((rig) => [rig.name, rig] as const),
-  );
+  const configRigByName = new Map(configRigs.map((rig) => [rig.name, rig] as const));
   const threadReferencedRigIds = new Set<string>();
   for (const thread of threads) {
     const meta = resolveGcMetaForGrouping(thread, options?.config);
     const resolvedCity = normalizeMetadataValue(meta.city);
     const canonicalGroupId = normalizeMetadataValue(meta.groupId);
     const rig = normalizeMetadataValue(meta.rig);
-    const agent =
-      normalizeMetadataValue(meta.agentQualified) ??
-      normalizeMetadataValue(meta.agent);
+    const agent = normalizeMetadataValue(meta.agentQualified) ?? normalizeMetadataValue(meta.agent);
     const configuredAgent = findSidebarConfiguredAgent(agent);
     const agentImpliedRig =
       normalizeMetadataValue(configuredAgent?.dir) ??
       (agent ? deriveRigIdFromQualifiedAgent(agent) : null);
     const cityWorkspaceGroupId =
-      resolvedCity && multiCityWorkspaceIds.has(resolvedCity)
-        ? resolvedCity
-        : null;
+      resolvedCity && multiCityWorkspaceIds.has(resolvedCity) ? resolvedCity : null;
     let resolvedRig =
       meta.groupKind === "workspace" &&
       agentImpliedRig &&
@@ -1144,9 +1075,7 @@ export function groupThreadsByRigAndAgent<
         ? agentImpliedRig
         : meta.groupKind === "workspace" && cityWorkspaceGroupId
           ? cityWorkspaceGroupId
-          : (canonicalGroupId ??
-            rig ??
-            deriveRigIdFromQualifiedAgent(agent ?? ""));
+          : (canonicalGroupId ?? rig ?? deriveRigIdFromQualifiedAgent(agent ?? ""));
     resolvedRig = qualifyMergedMultiCityRigId({
       rig: resolvedRig,
       city: resolvedCity,
@@ -1185,8 +1114,7 @@ export function groupThreadsByRigAndAgent<
   if (displayRigs && displayRigs.length > 0) {
     const relevantRigNames = new Set(displayRigs.map((rig) => rig.name));
     for (const rig of displayRigs) {
-      const isMultiCityWorkspace =
-        isMergedMultiCityConfig && multiCityWorkspaceIds.has(rig.name);
+      const isMultiCityWorkspace = isMergedMultiCityConfig && multiCityWorkspaceIds.has(rig.name);
       rigGroupsById.set(rig.name, {
         id: rig.name,
         label: isMultiCityWorkspace ? rig.name.toUpperCase() : rig.name,
@@ -1256,15 +1184,11 @@ export function groupThreadsByRigAndAgent<
     rigGroupsById.set(cityGroupId, {
       id: cityGroupId,
       label:
-        isCityAliasProject && projectName
-          ? projectName.toUpperCase()
-          : workspaceName.toUpperCase(),
+        isCityAliasProject && projectName ? projectName.toUpperCase() : workspaceName.toUpperCase(),
       kind: "workspace",
       isConfigured: true,
       isSuspended: workspaceSuspended,
-      ...(options?.config?.lifecycle
-        ? { lifecycle: options.config.lifecycle }
-        : {}),
+      ...(options?.config?.lifecycle ? { lifecycle: options.config.lifecycle } : {}),
       agentGroupsById: new Map(),
     });
   }
@@ -1284,12 +1208,9 @@ export function groupThreadsByRigAndAgent<
     const meta = resolveGcMetaForGrouping(thread, options?.config);
     const threadCity = normalizeMetadataValue(meta.city);
     const threadAgent =
-      normalizeMetadataValue(meta.agentQualified) ??
-      normalizeMetadataValue(meta.agent);
+      normalizeMetadataValue(meta.agentQualified) ?? normalizeMetadataValue(meta.agent);
     const threadConfiguredAgent = findSidebarConfiguredAgent(threadAgent);
-    const threadConfiguredRig = normalizeMetadataValue(
-      threadConfiguredAgent?.dir,
-    );
+    const threadConfiguredRig = normalizeMetadataValue(threadConfiguredAgent?.dir);
     if (
       options?.config &&
       workspaceName &&
@@ -1312,9 +1233,7 @@ export function groupThreadsByRigAndAgent<
     const canonicalAgentQualified = normalizeMetadataValue(meta.agentQualified);
     const canonicalAgentLabel = normalizeMetadataValue(meta.agentLabel);
     const cityWorkspaceGroupId =
-      resolvedCity && multiCityWorkspaceIds.has(resolvedCity)
-        ? resolvedCity
-        : cityScopedRigGroupId;
+      resolvedCity && multiCityWorkspaceIds.has(resolvedCity) ? resolvedCity : cityScopedRigGroupId;
     let resolvedAgent = canonicalAgentQualified ?? agent;
     if (
       meta.groupKind === "workspace" &&
@@ -1327,19 +1246,14 @@ export function groupThreadsByRigAndAgent<
     ) {
       resolvedAgent = `${resolvedCity}/${resolvedAgent}`;
     }
-    const configuredAgentForResolved =
-      findSidebarConfiguredAgent(resolvedAgent);
+    const configuredAgentForResolved = findSidebarConfiguredAgent(resolvedAgent);
     const agentImpliedRig =
       normalizeMetadataValue(configuredAgentForResolved?.dir) ??
       (resolvedAgent ? deriveRigIdFromQualifiedAgent(resolvedAgent) : null);
     const workspaceMetadataRig =
-      meta.groupKind === "workspace"
-        ? (cityWorkspaceGroupId ?? canonicalGroupId)
-        : null;
+      meta.groupKind === "workspace" ? (cityWorkspaceGroupId ?? canonicalGroupId) : null;
     let resolvedRig =
-      meta.groupKind === "workspace" &&
-      agentImpliedRig &&
-      agentImpliedRig !== workspaceMetadataRig
+      meta.groupKind === "workspace" && agentImpliedRig && agentImpliedRig !== workspaceMetadataRig
         ? agentImpliedRig
         : meta.groupKind === "workspace" && cityWorkspaceGroupId
           ? cityWorkspaceGroupId
@@ -1356,8 +1270,7 @@ export function groupThreadsByRigAndAgent<
     if (!resolvedRig && resolvedAgent && options?.config) {
       const configuredAgent = findSidebarConfiguredAgent(resolvedAgent);
       if (configuredAgent) {
-        resolvedRig =
-          normalizeMetadataValue(configuredAgent.dir) ?? cityScopedRigGroupId;
+        resolvedRig = normalizeMetadataValue(configuredAgent.dir) ?? cityScopedRigGroupId;
       }
     }
 
@@ -1385,11 +1298,7 @@ export function groupThreadsByRigAndAgent<
       multiCityWorkspaceIds,
     });
 
-    if (
-      isMergedMultiCityConfig &&
-      resolvedCity &&
-      !multiCityWorkspaceIds.has(resolvedCity)
-    ) {
+    if (isMergedMultiCityConfig && resolvedCity && !multiCityWorkspaceIds.has(resolvedCity)) {
       standaloneThreads.push(thread);
       continue;
     }
@@ -1403,11 +1312,7 @@ export function groupThreadsByRigAndAgent<
       continue;
     }
 
-    if (
-      (!meta.isGcManaged && !resolvedAgent) ||
-      !resolvedRig ||
-      !resolvedAgent
-    ) {
+    if ((!meta.isGcManaged && !resolvedAgent) || !resolvedRig || !resolvedAgent) {
       standaloneThreads.push(thread);
       continue;
     }
@@ -1417,19 +1322,13 @@ export function groupThreadsByRigAndAgent<
       rigGroup &&
       meta.groupKind === "workspace" &&
       canonicalGroupLabel &&
-      !(
-        isMergedMultiCityConfig &&
-        multiCityWorkspaceIds.has(rigGroup.id) &&
-        rigGroup.isConfigured
-      )
+      !(isMergedMultiCityConfig && multiCityWorkspaceIds.has(rigGroup.id) && rigGroup.isConfigured)
     ) {
       rigGroup.label = canonicalGroupLabel;
     }
     const resolvedRigLifecycle =
       configRigByName.get(resolvedRig)?.lifecycle ??
-      (resolvedRig === cityScopedRigGroupId
-        ? options?.config?.lifecycle
-        : undefined);
+      (resolvedRig === cityScopedRigGroupId ? options?.config?.lifecycle : undefined);
     if (rigGroup && !rigGroup.lifecycle && resolvedRigLifecycle) {
       rigGroup.lifecycle = resolvedRigLifecycle;
     }
@@ -1470,38 +1369,28 @@ export function groupThreadsByRigAndAgent<
     );
     if (existingAgentGroup) {
       existingAgentGroup.threads.push(thread);
-      const configuredAgent = findSidebarConfiguredAgent(
-        existingAgentGroup.qualifiedName,
-      );
+      const configuredAgent = findSidebarConfiguredAgent(existingAgentGroup.qualifiedName);
       if (configuredAgent) {
         existingAgentGroup.isConfigured = true;
-        existingAgentGroup.isPool =
-          configuredAgent.is_pool ?? existingAgentGroup.isPool;
+        existingAgentGroup.isPool = configuredAgent.is_pool ?? existingAgentGroup.isPool;
         existingAgentGroup.isExplicitlySuspended = configuredAgent.suspended;
-        existingAgentGroup.isSuspended =
-          ensuredRigGroup.isSuspended || configuredAgent.suspended;
+        existingAgentGroup.isSuspended = ensuredRigGroup.isSuspended || configuredAgent.suspended;
         if (typeof configuredAgent.min_active_sessions === "number") {
-          existingAgentGroup.minActiveSessions =
-            configuredAgent.min_active_sessions;
+          existingAgentGroup.minActiveSessions = configuredAgent.min_active_sessions;
         }
         if (typeof configuredAgent.max_active_sessions === "number") {
-          existingAgentGroup.maxActiveSessions =
-            configuredAgent.max_active_sessions;
+          existingAgentGroup.maxActiveSessions = configuredAgent.max_active_sessions;
         }
         if (configuredAgent.wake_mode) {
           existingAgentGroup.wakeMode = configuredAgent.wake_mode;
         }
         if (configuredAgent.named_session_mode) {
-          existingAgentGroup.namedSessionMode =
-            configuredAgent.named_session_mode;
+          existingAgentGroup.namedSessionMode = configuredAgent.named_session_mode;
         }
         if (configuredAgent.scope) {
           existingAgentGroup.scope = configuredAgent.scope;
         }
-        Object.assign(
-          existingAgentGroup,
-          gcAgentVirtualMetadata(configuredAgent),
-        );
+        Object.assign(existingAgentGroup, gcAgentVirtualMetadata(configuredAgent));
       }
       continue;
     }
@@ -1513,17 +1402,14 @@ export function groupThreadsByRigAndAgent<
       isConfigured: Boolean(configuredAgent),
       isPool: configuredAgent?.is_pool ?? false,
       isExplicitlySuspended: configuredAgent?.suspended ?? false,
-      isSuspended:
-        ensuredRigGroup.isSuspended || configuredAgent?.suspended || false,
+      isSuspended: ensuredRigGroup.isSuspended || configuredAgent?.suspended || false,
       ...(typeof configuredAgent?.min_active_sessions === "number"
         ? { minActiveSessions: configuredAgent.min_active_sessions }
         : {}),
       ...(typeof configuredAgent?.max_active_sessions === "number"
         ? { maxActiveSessions: configuredAgent.max_active_sessions }
         : {}),
-      ...(configuredAgent?.wake_mode
-        ? { wakeMode: configuredAgent.wake_mode }
-        : {}),
+      ...(configuredAgent?.wake_mode ? { wakeMode: configuredAgent.wake_mode } : {}),
       ...(configuredAgent?.named_session_mode
         ? { namedSessionMode: configuredAgent.named_session_mode }
         : {}),
@@ -1569,8 +1455,8 @@ export function groupThreadsByRigAndAgent<
           kind: rigGroup.kind,
           isConfigured: rigGroup.isConfigured,
           isSuspended: rigGroup.isSuspended,
-          agentGroups: Array.from(rigGroup.agentGroupsById.values()).toSorted(
-            (a, b) => a.label.localeCompare(b.label),
+          agentGroups: Array.from(rigGroup.agentGroupsById.values()).toSorted((a, b) =>
+            a.label.localeCompare(b.label),
           ),
         };
         if (rigGroup.lifecycle) {
@@ -1596,9 +1482,7 @@ export interface VirtualConvoyGroup<TThread> {
 }
 
 /** Partition threads into convoy groups and standalone threads. */
-export function groupThreadsByConvoy<
-  TThread extends { customMetadata?: Record<string, string> },
->(
+export function groupThreadsByConvoy<TThread extends { customMetadata?: Record<string, string> }>(
   threads: TThread[],
 ): {
   standaloneThreads: TThread[];
@@ -1625,9 +1509,7 @@ export function groupThreadsByConvoy<
       id: convoyId,
       label: meta.convoyTitle?.trim() || convoyId,
       status: meta.convoyStatus,
-      closedCount: meta.convoyClosedCount
-        ? Number(meta.convoyClosedCount)
-        : null,
+      closedCount: meta.convoyClosedCount ? Number(meta.convoyClosedCount) : null,
       totalCount: meta.convoyTotalCount ? Number(meta.convoyTotalCount) : null,
       threads: [thread],
     });
@@ -1660,15 +1542,13 @@ export const GcSetSupervisorRunningInput = Schema.Struct({
   running: Schema.Boolean,
   city: Schema.optional(Schema.String),
 });
-export type GcSetSupervisorRunningInput =
-  typeof GcSetSupervisorRunningInput.Type;
+export type GcSetSupervisorRunningInput = typeof GcSetSupervisorRunningInput.Type;
 
 export const GcSetControllerRunningInput = Schema.Struct({
   running: Schema.Boolean,
   city: Schema.optional(Schema.String),
 });
-export type GcSetControllerRunningInput =
-  typeof GcSetControllerRunningInput.Type;
+export type GcSetControllerRunningInput = typeof GcSetControllerRunningInput.Type;
 
 export const GcSetAgentSuspendedInput = Schema.Struct({
   agent: Schema.String,
@@ -1705,15 +1585,13 @@ export const GcSetAgentMaxActiveSessionsInput = Schema.Struct({
   agent: Schema.String,
   maxActiveSessions: Schema.Number,
 });
-export type GcSetAgentMaxActiveSessionsInput =
-  typeof GcSetAgentMaxActiveSessionsInput.Type;
+export type GcSetAgentMaxActiveSessionsInput = typeof GcSetAgentMaxActiveSessionsInput.Type;
 
 export const GcSetAgentMinActiveSessionsInput = Schema.Struct({
   agent: Schema.String,
   minActiveSessions: Schema.Number,
 });
-export type GcSetAgentMinActiveSessionsInput =
-  typeof GcSetAgentMinActiveSessionsInput.Type;
+export type GcSetAgentMinActiveSessionsInput = typeof GcSetAgentMinActiveSessionsInput.Type;
 
 export const GcSetAgentWakeModeInput = Schema.Struct({
   agent: Schema.String,
@@ -1844,9 +1722,7 @@ export const GcThreadBindingResultItem = Schema.Struct({
 });
 export type GcThreadBindingResultItem = typeof GcThreadBindingResultItem.Type;
 
-export const GcFindThreadBindingResult = Schema.NullOr(
-  GcThreadBindingResultItem,
-);
+export const GcFindThreadBindingResult = Schema.NullOr(GcThreadBindingResultItem);
 export type GcFindThreadBindingResult = typeof GcFindThreadBindingResult.Type;
 
 export const GcSessionActionResult = Schema.Struct({
@@ -1915,12 +1791,9 @@ export class GcGetConfigError extends Schema.TaggedErrorClass<GcGetConfigError>(
   { message: Schema.String },
 ) {}
 
-export class GcStartError extends Schema.TaggedErrorClass<GcStartError>()(
-  "GcStartError",
-  {
-    message: Schema.String,
-  },
-) {}
+export class GcStartError extends Schema.TaggedErrorClass<GcStartError>()("GcStartError", {
+  message: Schema.String,
+}) {}
 
 export class GcSetSupervisorRunningError extends Schema.TaggedErrorClass<GcSetSupervisorRunningError>()(
   "GcSetSupervisorRunningError",
@@ -1942,12 +1815,9 @@ export class GcSetRigSuspendedError extends Schema.TaggedErrorClass<GcSetRigSusp
   { message: Schema.String },
 ) {}
 
-export class GcAddRigError extends Schema.TaggedErrorClass<GcAddRigError>()(
-  "GcAddRigError",
-  {
-    message: Schema.String,
-  },
-) {}
+export class GcAddRigError extends Schema.TaggedErrorClass<GcAddRigError>()("GcAddRigError", {
+  message: Schema.String,
+}) {}
 
 export class GcSetCitySuspendedError extends Schema.TaggedErrorClass<GcSetCitySuspendedError>()(
   "GcSetCitySuspendedError",

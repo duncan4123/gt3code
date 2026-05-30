@@ -203,7 +203,9 @@ function main() {
   const gcBinary =
     process.env.GC_BIN ||
     path.join(
-      process.env.T3CODE_GASCITY_HOME || process.env.GC_HOME || path.join(repoRoot, ".t3-dev", "gascity"),
+      process.env.T3CODE_GASCITY_HOME ||
+        process.env.GC_HOME ||
+        path.join(repoRoot, ".t3-dev", "gascity"),
       "bin",
       process.platform === "win32" ? "gc.exe" : "gc",
     );

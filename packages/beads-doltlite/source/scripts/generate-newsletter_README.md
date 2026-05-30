@@ -118,9 +118,9 @@ The AI prompt specifically requests narrative paragraphs to help users understan
 
 ## Supported Models
 
-| Provider | Example Models |
-|----------|---------------|
+| Provider  | Example Models                                       |
+| --------- | ---------------------------------------------------- |
 | Anthropic | `claude-sonnet-4-20250514`, `claude-opus-4-20250514` |
-| OpenAI | `gpt-4o`, `gpt-4o-mini`, `o1-preview`, `o3-mini` |
+| OpenAI    | `gpt-4o`, `gpt-4o-mini`, `o1-preview`, `o3-mini`     |
 
 The script auto-detects the provider from the model name.

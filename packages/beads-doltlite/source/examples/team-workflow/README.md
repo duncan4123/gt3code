@@ -5,6 +5,7 @@ This example demonstrates how to use beads for team collaboration with shared re
 ## Problem
 
 When working as a team on a shared repository, you want to:
+
 - Track issues collaboratively
 - Keep everyone in sync via git
 - Handle protected main branches
@@ -27,6 +28,7 @@ bd init --team
 ```
 
 The wizard will:
+
 1. ✅ Detect your git configuration
 2. ✅ Ask if main branch is protected
 3. ✅ Configure sync branch (if needed)
@@ -36,6 +38,7 @@ The wizard will:
 ### Step 2: Protected Branch Configuration
 
 If your main branch is protected (GitHub/GitLab), the wizard will:
+
 - Create a separate `beads-metadata` branch for issue updates
 - Configure beads to commit to this branch automatically
 - Set up periodic PR workflow for merging to main
@@ -98,7 +101,7 @@ The wizard configures:
 ```yaml
 team:
   enabled: true
-  sync_branch: beads-metadata  # or main if not protected
+  sync_branch: beads-metadata # or main if not protected
 
 dolt:
   auto-commit: on
@@ -219,6 +222,7 @@ bd dolt start
 ```
 
 Benefits:
+
 - ✅ Always in sync
 - ✅ No manual intervention
 - ✅ Real-time collaboration
@@ -233,6 +237,7 @@ bd dolt pull  # Pull remote changes locally
 ```
 
 Benefits:
+
 - ✅ Full control
 - ✅ Batch updates
 - ✅ Review before push
@@ -259,6 +264,7 @@ bd dolt push
 ### For Protected Main:
 
 1. **Create beads-metadata branch**
+
    ```bash
    git checkout -b beads-metadata
    git push origin beads-metadata
@@ -269,6 +275,7 @@ bd dolt push
    - Require PR for main
 
 3. **Periodic PR workflow**
+
    ```bash
    # Once per day/sprint
    git checkout main

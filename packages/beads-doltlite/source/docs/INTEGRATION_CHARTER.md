@@ -77,12 +77,12 @@ When adding support for a new tracker or extending an existing one:
 
 ## Decision Log
 
-| Date | Decision | Rationale |
-|------|----------|-----------|
-| 2026-03-24 | Integrations are adoption bridge, not product | Prevent scope creep; focus on dependency graph as differentiator |
-| 2026-03-24 | No webhooks, ever | Operational complexity disproportionate to value for polled use case |
-| 2026-03-24 | No cross-tracker orchestration | Workflow automation is a different problem domain |
-| 2026-03-24 | Fail loudly on sync errors | Silent failures cause data inconsistency and erode trust |
+| Date       | Decision                                      | Rationale                                                            |
+| ---------- | --------------------------------------------- | -------------------------------------------------------------------- |
+| 2026-03-24 | Integrations are adoption bridge, not product | Prevent scope creep; focus on dependency graph as differentiator     |
+| 2026-03-24 | No webhooks, ever                             | Operational complexity disproportionate to value for polled use case |
+| 2026-03-24 | No cross-tracker orchestration                | Workflow automation is a different problem domain                    |
+| 2026-03-24 | Fail loudly on sync errors                    | Silent failures cause data inconsistency and erode trust             |
 
 ## Related Documents
 

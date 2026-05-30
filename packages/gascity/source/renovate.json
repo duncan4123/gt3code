@@ -1,10 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    "helpers:pinGitHubActionDigests",
-    "docker:pinDigests"
-  ],
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests", "docker:pinDigests"],
   "labels": ["dependencies"],
   "packageRules": [
     {
@@ -53,9 +49,7 @@
         "/^\\.github/workflows/(ci|nightly|mac-regression|ollama-acceptance-c|rc-gate|review-formulas)\\.yml$/",
         "/^deps\\.env$/"
       ],
-      "matchStrings": [
-        "BD_VERSION:\\s*\"(?<currentValue>v?\\d+\\.\\d+\\.\\d+)\""
-      ],
+      "matchStrings": ["BD_VERSION:\\s*\"(?<currentValue>v?\\d+\\.\\d+\\.\\d+)\""],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "gastownhall/beads"
     },
@@ -76,53 +70,35 @@
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "/^contrib/k8s/Dockerfile\\.controller$/"
-      ],
-      "matchStrings": [
-        "KUBECTL_VERSION=(?<currentValue>v?\\d+\\.\\d+\\.\\d+)"
-      ],
+      "fileMatch": ["/^contrib/k8s/Dockerfile\\.controller$/"],
+      "matchStrings": ["KUBECTL_VERSION=(?<currentValue>v?\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "kubernetes/kubernetes"
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "/^Makefile$/"
-      ],
-      "matchStrings": [
-        "GOLANGCI_LINT_VERSION\\s*:=\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-      ],
+      "fileMatch": ["/^Makefile$/"],
+      "matchStrings": ["GOLANGCI_LINT_VERSION\\s*:=\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "golangci/golangci-lint"
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "/^Makefile$/"
-      ],
-      "matchStrings": [
-        "BUILDX_VERSION\\s*:=\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-      ],
+      "fileMatch": ["/^Makefile$/"],
+      "matchStrings": ["BUILDX_VERSION\\s*:=\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "docker/buildx"
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "/^scripts/test-docker-session$/"
-      ],
-      "matchStrings": [
-        "FROM alpine:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)"
-      ],
+      "fileMatch": ["/^scripts/test-docker-session$/"],
+      "matchStrings": ["FROM alpine:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)"],
       "datasourceTemplate": "docker",
       "depNameTemplate": "alpine"
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "/^scripts/worker_inference_setup\\.py$/"
-      ],
+      "fileMatch": ["/^scripts/worker_inference_setup\\.py$/"],
       "matchStrings": [
         "\"@openai/codex\",\\s*\"CODEX_CLI_VERSION\",\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
       ],
@@ -131,9 +107,7 @@
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "/^scripts/worker_inference_setup\\.py$/"
-      ],
+      "fileMatch": ["/^scripts/worker_inference_setup\\.py$/"],
       "matchStrings": [
         "\"@google/gemini-cli\",\\s*\"GEMINI_CLI_VERSION\",\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
       ],
@@ -142,24 +116,16 @@
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "/^deps\\.env$/"
-      ],
-      "matchStrings": [
-        "BR_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-      ],
+      "fileMatch": ["/^deps\\.env$/"],
+      "matchStrings": ["BR_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "Dicklesworthstone/beads_rust",
       "extractVersionTemplate": "^v(?<version>.*)$"
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "/^\\.github/workflows/container-scan\\.yml$/"
-      ],
-      "matchStrings": [
-        "TRIVY_VERSION:\\s*\"(?<currentValue>v?\\d+\\.\\d+\\.\\d+)\""
-      ],
+      "fileMatch": ["/^\\.github/workflows/container-scan\\.yml$/"],
+      "matchStrings": ["TRIVY_VERSION:\\s*\"(?<currentValue>v?\\d+\\.\\d+\\.\\d+)\""],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "aquasecurity/trivy"
     }

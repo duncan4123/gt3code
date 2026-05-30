@@ -22,6 +22,7 @@ Beads was built with these principles:
 ### Issues
 
 Work items with:
+
 - **ID** - Hash-based (e.g., `bd-a1b2`) or hierarchical (e.g., `bd-a1b2.1`)
 - **Type** - `bug`, `feature`, `task`, `epic`, `chore`
 - **Priority** - 0 (critical) to 4 (backlog)
@@ -33,16 +34,17 @@ Work items with:
 
 Four types of relationships:
 
-| Type | Description | Affects Ready Queue |
-|------|-------------|---------------------|
-| `blocks` | Hard dependency (X blocks Y) | Yes |
-| `parent-child` | Epic/subtask relationship | No |
-| `discovered-from` | Track issues found during work | No |
-| `related` | Soft relationship | No |
+| Type              | Description                    | Affects Ready Queue |
+| ----------------- | ------------------------------ | ------------------- |
+| `blocks`          | Hard dependency (X blocks Y)   | Yes                 |
+| `parent-child`    | Epic/subtask relationship      | No                  |
+| `discovered-from` | Track issues found during work | No                  |
+| `related`         | Soft relationship              | No                  |
 
 ### Dolt Server Mode
 
 Dolt provides the database backend for beads:
+
 - Start with `bd dolt start`
 - Handles auto-commit and sync
 - Logs available at `.beads/dolt/sql-server.log`
@@ -63,6 +65,7 @@ Remote Dolt repository
 ### Formulas
 
 Declarative workflow templates:
+
 - Define steps with dependencies
 - Variable substitution
 - Gates for async coordination

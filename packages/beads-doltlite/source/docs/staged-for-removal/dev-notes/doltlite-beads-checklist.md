@@ -64,7 +64,7 @@ Expected state:
   `CGO_ENABLED=1`, `CGO_CFLAGS=-I/data/projects/doltlite/build`, and
   `CGO_LDFLAGS=/data/projects/doltlite/libdoltlite.a ...`; then
   `bd init --backend doltlite --prefix bd31j --skip-hooks --skip-agents
-  --non-interactive` succeeded in a fresh temp repo, `bd branch --json`
+--non-interactive` succeeded in a fresh temp repo, `bd branch --json`
   returned `main`, and `bd create` plus `bd flatten --dry-run` reported 4
   commits instead of the earlier embedded `store.Log()==0` failure shape.
   This means the older “`sqlite3_doltlite` only registers `UUID()`” diagnosis
@@ -94,7 +94,7 @@ Expected state:
   core `bd` reads are functional under current doltlite state.
 - 2026-05-01: `bd config get mail.delegate` returned `mail.delegate (not set)`
   but also emitted `Warning: auto-backup failed: register backup remote: add
-  backup backup_export: near "CALL": syntax error`, which shows a stale Dolt
+backup backup_export: near "CALL": syntax error`, which shows a stale Dolt
   backup codepath still runs in doltlite mode.
 - 2026-05-01: direct doltlite storage probe succeeded for message creation,
   `replies-to` dependency insertion, message search, and ack-like close/update.

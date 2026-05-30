@@ -8,14 +8,14 @@
 
 ## Criteria
 
-| # | Criterion | Result | Evidence |
-|---|-----------|--------|----------|
-| 1 | Review PASS present | PASS | `gascity/reviewer` recorded `Review verdict: PASS` in bead notes (2026-05-07). Single-pass while gemini second-pass is disabled. |
-| 2 | Acceptance criteria met | PASS | All four criteria from the bead body verified by reviewer: (a) test fails if helper stops reporting new PIDs at cleanup; (b) tests run in <100ms without real spawn; (c) `go test ./cmd/gc/ -count=1` passes including new test; (d) `go vet`/`golangci-lint` clean. |
-| 3 | Tests pass | PASS | See "Test runs" below. |
-| 4 | No high-severity review findings open | PASS | 3 unresolved findings, all `info`-level (test-of-tests asymmetry, hypothetical scriptedDoltEnumerator overflow path, branch-1-behind note). 0 HIGH. |
-| 5 | Final branch is clean | PASS | `git status` reports no tracked changes on `builder/ga-vux42u-1`. (One untracked `.gitkeep` is a deployer-worktree session artifact and is not part of the change.) |
-| 6 | Branch diverges cleanly from main | PASS | `git merge-tree --no-messages origin/main HEAD` exits 0 with no conflict markers. Branch is 1 commit behind `origin/main` (PR #1803 unrelated); 3-way merge will preserve that change. |
+| #   | Criterion                             | Result | Evidence                                                                                                                                                                                                                                                             |
+| --- | ------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS   | `gascity/reviewer` recorded `Review verdict: PASS` in bead notes (2026-05-07). Single-pass while gemini second-pass is disabled.                                                                                                                                     |
+| 2   | Acceptance criteria met               | PASS   | All four criteria from the bead body verified by reviewer: (a) test fails if helper stops reporting new PIDs at cleanup; (b) tests run in <100ms without real spawn; (c) `go test ./cmd/gc/ -count=1` passes including new test; (d) `go vet`/`golangci-lint` clean. |
+| 3   | Tests pass                            | PASS   | See "Test runs" below.                                                                                                                                                                                                                                               |
+| 4   | No high-severity review findings open | PASS   | 3 unresolved findings, all `info`-level (test-of-tests asymmetry, hypothetical scriptedDoltEnumerator overflow path, branch-1-behind note). 0 HIGH.                                                                                                                  |
+| 5   | Final branch is clean                 | PASS   | `git status` reports no tracked changes on `builder/ga-vux42u-1`. (One untracked `.gitkeep` is a deployer-worktree session artifact and is not part of the change.)                                                                                                  |
+| 6   | Branch diverges cleanly from main     | PASS   | `git merge-tree --no-messages origin/main HEAD` exits 0 with no conflict markers. Branch is 1 commit behind `origin/main` (PR #1803 unrelated); 3-way merge will preserve that change.                                                                               |
 
 ## Test runs (deployer, on `builder/ga-vux42u-1` HEAD `4460c26b`)
 
@@ -64,8 +64,8 @@ order is safe.
 
 ## Findings (informational only)
 
-| Severity | File:Line | Summary |
-|----------|-----------|---------|
-| info | `cmd/gc/dolt_leak_helper_test.go:23-25` | `recordingTB.Fatalf` intentionally does not call `runtime.Goexit` (documented). Production wrappers always pass `*testing.T` (which does Goexit). Asymmetry confined to test-of-tests. Not blocking. |
-| info | `cmd/gc/dolt_leak_helper_test.go:67` | `scriptedDoltEnumerator` Fatalf-on-overflow returns `nil` after `Fatalf`; harmless because `Fatalf` on `*testing.T` Goexits. Hypothetical concern only if the enumerator type is ever generalised to a non-aborting reporter. Not blocking. |
-| info | branch | Branch is 1 commit behind `origin/main` (PR #1803 unrelated). 3-way merge clean. Not blocking. |
+| Severity | File:Line                               | Summary                                                                                                                                                                                                                                     |
+| -------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| info     | `cmd/gc/dolt_leak_helper_test.go:23-25` | `recordingTB.Fatalf` intentionally does not call `runtime.Goexit` (documented). Production wrappers always pass `*testing.T` (which does Goexit). Asymmetry confined to test-of-tests. Not blocking.                                        |
+| info     | `cmd/gc/dolt_leak_helper_test.go:67`    | `scriptedDoltEnumerator` Fatalf-on-overflow returns `nil` after `Fatalf`; harmless because `Fatalf` on `*testing.T` Goexits. Hypothetical concern only if the enumerator type is ever generalised to a non-aborting reporter. Not blocking. |
+| info     | branch                                  | Branch is 1 commit behind `origin/main` (PR #1803 unrelated). 3-way merge clean. Not blocking.                                                                                                                                              |

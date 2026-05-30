@@ -49,39 +49,39 @@ This project uses bd (beads) for issue tracking.
 
 ## 🛠 Features
 
-* **[Dolt](https://github.com/dolthub/dolt)-Powered:** Version-controlled SQL database with cell-level merge, native branching, and built-in sync via Dolt remotes.
-* **Agent-Optimized:** JSON output, dependency tracking, and auto-ready task detection.
-* **Zero Conflict:** Hash-based IDs (`bd-a1b2`) prevent merge collisions in multi-agent/multi-branch workflows.
-* **Compaction:** Semantic "memory decay" summarizes old closed tasks to save context window.
-* **Messaging:** Message issue type with threading (`--thread`), ephemeral lifecycle, and mail delegation.
-* **Graph Links:** `relates_to`, `duplicates`, `supersedes`, and `replies_to` for knowledge graphs.
+- **[Dolt](https://github.com/dolthub/dolt)-Powered:** Version-controlled SQL database with cell-level merge, native branching, and built-in sync via Dolt remotes.
+- **Agent-Optimized:** JSON output, dependency tracking, and auto-ready task detection.
+- **Zero Conflict:** Hash-based IDs (`bd-a1b2`) prevent merge collisions in multi-agent/multi-branch workflows.
+- **Compaction:** Semantic "memory decay" summarizes old closed tasks to save context window.
+- **Messaging:** Message issue type with threading (`--thread`), ephemeral lifecycle, and mail delegation.
+- **Graph Links:** `relates_to`, `duplicates`, `supersedes`, and `replies_to` for knowledge graphs.
 
 ## 📖 Essential Commands
 
-| Command | Action |
-| --- | --- |
-| `bd ready` | List tasks with no open blockers. |
-| `bd create "Title" -p 0` | Create a P0 task. |
-| `bd update <id> --claim` | Atomically claim a task (sets assignee + in_progress). |
-| `bd dep add <child> <parent>` | Link tasks (blocks, related, parent-child). |
-| `bd show <id>` | View task details and audit trail. |
-| `bd prime` | Print agent workflow context and persistent memories. |
-| `bd remember "insight"` | Store project memory that `bd prime` injects later. |
+| Command                       | Action                                                 |
+| ----------------------------- | ------------------------------------------------------ |
+| `bd ready`                    | List tasks with no open blockers.                      |
+| `bd create "Title" -p 0`      | Create a P0 task.                                      |
+| `bd update <id> --claim`      | Atomically claim a task (sets assignee + in_progress). |
+| `bd dep add <child> <parent>` | Link tasks (blocks, related, parent-child).            |
+| `bd show <id>`                | View task details and audit trail.                     |
+| `bd prime`                    | Print agent workflow context and persistent memories.  |
+| `bd remember "insight"`       | Store project memory that `bd prime` injects later.    |
 
 ## 🔗 Hierarchy & Workflow
 
 Beads supports hierarchical IDs for epics:
 
-* `bd-a3f8` (Epic)
-* `bd-a3f8.1` (Task)
-* `bd-a3f8.1.1` (Sub-task)
+- `bd-a3f8` (Epic)
+- `bd-a3f8.1` (Task)
+- `bd-a3f8.1.1` (Sub-task)
 
 **Stealth Mode:** Run `bd init --stealth` to use Beads locally without committing files to the main repo. Perfect for personal use on shared projects. See [Git-Free Usage](#-git-free-usage) below.
 
 **Contributor vs Maintainer:** When working on open-source projects:
 
-* **Contributors** (forked repos): Run `bd init --contributor` to route planning issues to a separate repo (e.g., `~/.beads-planning`). Keeps experimental work out of PRs.
-* **Maintainers** (write access): Beads auto-detects maintainer role via SSH URLs or HTTPS with credentials. Only need `git config beads.role maintainer` if using GitHub HTTPS without credentials but you have write access.
+- **Contributors** (forked repos): Run `bd init --contributor` to route planning issues to a separate repo (e.g., `~/.beads-planning`). Keeps experimental work out of PRs.
+- **Maintainers** (write access): Beads auto-detects maintainer role via SSH URLs or HTTPS with credentials. Only need `git config beads.role maintainer` if using GitHub HTTPS without credentials but you have write access.
 
 ## 📦 Installation
 
@@ -135,13 +135,13 @@ Connects to an external `dolt sql-server`. Data lives in `.beads/dolt/`.
 Supports multiple concurrent writers. Configure the connection with flags
 or environment variables:
 
-| Flag | Env Var | Default |
-|------|---------|---------|
-| `--server-host` | `BEADS_DOLT_SERVER_HOST` | `127.0.0.1` |
-| `--server-port` | `BEADS_DOLT_SERVER_PORT` | `3307` |
+| Flag              | Env Var                    | Default          |
+| ----------------- | -------------------------- | ---------------- |
+| `--server-host`   | `BEADS_DOLT_SERVER_HOST`   | `127.0.0.1`      |
+| `--server-port`   | `BEADS_DOLT_SERVER_PORT`   | `3307`           |
 | `--server-socket` | `BEADS_DOLT_SERVER_SOCKET` | (none; uses TCP) |
-| `--server-user` | `BEADS_DOLT_SERVER_USER` | `root` |
-| | `BEADS_DOLT_PASSWORD` | (none) |
+| `--server-user`   | `BEADS_DOLT_SERVER_USER`   | `root`           |
+|                   | `BEADS_DOLT_PASSWORD`      | (none)           |
 
 **Unix domain sockets:** Use `--server-socket` to connect via a Unix socket
 instead of TCP. This avoids port conflicts between concurrent projects and
@@ -199,6 +199,7 @@ bypassing git repo discovery. `--stealth` sets `no-git-ops: true` in
 config, disabling all git hook installation and git operations.
 
 This is useful for:
+
 - **Non-git VCS** (Sapling, Jujutsu, Piper) — no `.git/` directory needed
 - **Monorepos** — point `BEADS_DIR` at a specific subdirectory
 - **CI/CD** — isolated task tracking without repo-level side effects
@@ -209,5 +210,5 @@ For daemon mode without git, use `bd daemon start --local`
 
 ## 📝 Documentation
 
-* [Documentation site](https://gastownhall.github.io/beads/) (versioned) | [Installing](docs/INSTALLING.md) | [Sync Concepts](docs/SYNC_CONCEPTS.md) | [Agent Workflow](AGENT_INSTRUCTIONS.md) | [Copilot CLI Setup](docs/COPILOT_CLI_INTEGRATION.md) | [Copilot VS Code MCP](docs/COPILOT_INTEGRATION.md) | [Articles](ARTICLES.md) | [Sync Branch Mode](docs/PROTECTED_BRANCHES.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) | [FAQ](docs/FAQ.md)
-* [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/gastownhall/beads)
+- [Documentation site](https://gastownhall.github.io/beads/) (versioned) | [Installing](docs/INSTALLING.md) | [Sync Concepts](docs/SYNC_CONCEPTS.md) | [Agent Workflow](AGENT_INSTRUCTIONS.md) | [Copilot CLI Setup](docs/COPILOT_CLI_INTEGRATION.md) | [Copilot VS Code MCP](docs/COPILOT_INTEGRATION.md) | [Articles](ARTICLES.md) | [Sync Branch Mode](docs/PROTECTED_BRANCHES.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) | [FAQ](docs/FAQ.md)
+- [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/gastownhall/beads)

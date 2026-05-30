@@ -12,11 +12,11 @@ Beads provides powerful workflow primitives for complex, multi-step processes.
 
 Beads uses a molecular chemistry metaphor:
 
-| Phase | Storage | Synced | Use Case |
-|-------|---------|--------|----------|
-| **Proto** (solid) | Built-in | N/A | Reusable templates |
-| **Mol** (liquid) | `.beads/` | Yes | Persistent work |
-| **Wisp** (vapor) | `.beads-wisp/` | No | Ephemeral operations |
+| Phase             | Storage        | Synced | Use Case             |
+| ----------------- | -------------- | ------ | -------------------- |
+| **Proto** (solid) | Built-in       | N/A    | Reusable templates   |
+| **Mol** (liquid)  | `.beads/`      | Yes    | Persistent work      |
+| **Wisp** (vapor)  | `.beads-wisp/` | No     | Ephemeral operations |
 
 ## Core Concepts
 
@@ -43,6 +43,7 @@ needs = ["design"]
 ### Molecules
 
 Work graphs with parent-child relationships:
+
 - Created by instantiating formulas with `bd pour`
 - Steps have dependencies (`needs`)
 - Progress tracked via issue status
@@ -50,6 +51,7 @@ Work graphs with parent-child relationships:
 ### Gates
 
 Async coordination primitives:
+
 - **Human gates** - Wait for human approval
 - **Timer gates** - Wait for duration
 - **GitHub gates** - Wait for PR merge, CI, etc.
@@ -57,19 +59,20 @@ Async coordination primitives:
 ### Wisps
 
 Ephemeral operations that don't sync to git:
+
 - Created with `bd wisp`
 - Stored in `.beads-wisp/` (gitignored)
 - Auto-expire after completion
 
 ## Workflow Commands
 
-| Command | Description |
-|---------|-------------|
-| `bd pour` | Instantiate formula as molecule |
-| `bd wisp` | Create ephemeral wisp |
-| `bd mol list` | List molecules |
-| `bd pin` | Pin work to agent |
-| `bd hook` | Show pinned work |
+| Command       | Description                     |
+| ------------- | ------------------------------- |
+| `bd pour`     | Instantiate formula as molecule |
+| `bd wisp`     | Create ephemeral wisp           |
+| `bd mol list` | List molecules                  |
+| `bd pin`      | Pin work to agent               |
+| `bd hook`     | Show pinned work                |
 
 ## Simple Example
 

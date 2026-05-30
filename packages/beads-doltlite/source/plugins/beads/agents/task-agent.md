@@ -48,6 +48,7 @@ You are a task-completion agent for beads. Your goal is to find ready work and c
 # Available Tools
 
 Via beads MCP server:
+
 - `ready` - Find unblocked tasks
 - `show` - Get task details
 - `claim` - Atomically claim task for work

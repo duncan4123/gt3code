@@ -10,14 +10,14 @@
 
 ## Release Criteria
 
-| # | Criterion | Result | Evidence |
-|---|-----------|--------|----------|
-| 1 | Review PASS present | PASS | `bd show ga-tp47gr` contains `Review Verdict: PASS` from `gascity/reviewer` on 2026-05-15. |
-| 2 | Acceptance criteria met | PASS | Phase 1 ACs are satisfied: `ListQuery.SkipLabels` is added; `Prime` and `runReconciliation` request skipped-label semantics; reconciler comparisons are label-blind only when `skipLabels=true`; non-reconciler paths pass `false`; no `BdStore` argv wiring or `--no-labels` usage was added. |
-| 3 | Tests pass | PASS | `go test ./internal/beads/... -count=1`; `go vet ./internal/beads/...`; `make test-fast-parallel`; and `go vet ./...` all passed on the final branch before this gate commit. |
-| 4 | No high-severity review findings open | PASS | The review notes list only non-blocking observations; no HIGH or blocking findings are open. |
-| 5 | Final branch is clean | PASS | Before writing this gate file, `git status --short --branch` showed a clean `builder/ga-7gpo-1...fork/builder/ga-7gpo-1` branch. |
-| 6 | Branch diverges cleanly from main | PASS | `git merge-tree --write-tree HEAD origin/main` completed without conflicts and returned tree `cea5fdec2759e1c1dea76a361594b657f1344d48`. |
+| #   | Criterion                             | Result | Evidence                                                                                                                                                                                                                                                                                       |
+| --- | ------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS   | `bd show ga-tp47gr` contains `Review Verdict: PASS` from `gascity/reviewer` on 2026-05-15.                                                                                                                                                                                                     |
+| 2   | Acceptance criteria met               | PASS   | Phase 1 ACs are satisfied: `ListQuery.SkipLabels` is added; `Prime` and `runReconciliation` request skipped-label semantics; reconciler comparisons are label-blind only when `skipLabels=true`; non-reconciler paths pass `false`; no `BdStore` argv wiring or `--no-labels` usage was added. |
+| 3   | Tests pass                            | PASS   | `go test ./internal/beads/... -count=1`; `go vet ./internal/beads/...`; `make test-fast-parallel`; and `go vet ./...` all passed on the final branch before this gate commit.                                                                                                                  |
+| 4   | No high-severity review findings open | PASS   | The review notes list only non-blocking observations; no HIGH or blocking findings are open.                                                                                                                                                                                                   |
+| 5   | Final branch is clean                 | PASS   | Before writing this gate file, `git status --short --branch` showed a clean `builder/ga-7gpo-1...fork/builder/ga-7gpo-1` branch.                                                                                                                                                               |
+| 6   | Branch diverges cleanly from main     | PASS   | `git merge-tree --write-tree HEAD origin/main` completed without conflicts and returned tree `cea5fdec2759e1c1dea76a361594b657f1344d48`.                                                                                                                                                       |
 
 ## Acceptance Evidence
 

@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc audit`
 
 ## bd audit
@@ -13,6 +14,7 @@ Generated from `bd help --doc audit`
 Audit log entries are appended to .beads/interactions.jsonl.
 
 Each line is one event. This file is intended to be versioned in git and used for:
+
 - auditing ("why did the agent do that?")
 - dataset generation (SFT/RL fine-tuning)
 

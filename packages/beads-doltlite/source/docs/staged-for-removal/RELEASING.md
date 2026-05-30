@@ -23,6 +23,7 @@ If you prefer step-by-step control:
 ### Pre-Release Checklist
 
 1. **Stop all running Dolt servers (CRITICAL)**:
+
    ```bash
    # Stop Dolt servers in all workspaces
    bd dolt stop
@@ -38,6 +39,7 @@ If you prefer step-by-step control:
    - Confusing behavior where changes appear to sync incorrectly
 
 2. **Run tests and build**:
+
    ```bash
    make test
    golangci-lint run ./...
@@ -72,6 +74,7 @@ git push origin main
 ```
 
 This updates:
+
 - `cmd/bd/version.go`
 - `plugins/beads/.claude-plugin/plugin.json`
 - `plugins/beads/.codex-plugin/plugin.json`
@@ -82,6 +85,7 @@ This updates:
 - `PLUGIN.md`
 
 **IMPORTANT**: After version bump, rebuild the local binary:
+
 ```bash
 make build
 ./bd version  # Should show new version
@@ -98,6 +102,7 @@ git push origin v0.9.X
 ```
 
 **That's it!** GitHub Actions automatically handles the rest:
+
 - GoReleaser builds and publishes binaries to GitHub Releases
 - PyPI publish job uploads the MCP server package to PyPI
 
@@ -111,6 +116,7 @@ branch.
 The automation requires this secret to be configured:
 
 **PYPI_API_TOKEN**: Your PyPI API token
+
 1. Generate token at https://pypi.org/manage/account/token/
 2. Add to GitHub at https://github.com/gastownhall/beads/settings/secrets/actions
 3. Name: `PYPI_API_TOKEN`
@@ -146,6 +152,7 @@ bd version  # Should show v0.9.X
 ```
 
 **Note:** If you have an old bd binary from `go install` in your PATH, remove it to avoid conflicts:
+
 ```bash
 # Find where bd is installed
 which bd
@@ -165,6 +172,7 @@ bd version      # Should show the latest version
 **GoReleaser automatically creates releases when you push tags!**
 
 The `.github/workflows/release.yml` workflow:
+
 - Triggers on `v*` tags
 - Builds cross-platform binaries (Linux, macOS, Windows for amd64/arm64)
 - Generates checksums
@@ -172,6 +180,7 @@ The `.github/workflows/release.yml` workflow:
 - Publishes release automatically
 
 Just push your tag and wait ~5 minutes:
+
 ```bash
 git push origin v0.9.X
 ```
@@ -197,14 +206,17 @@ Commit `website/versioned_docs/`, `website/versioned_sidebars/`, and `website/ve
 ## Post-Release
 
 1. **Stop old Dolt servers**:
+
    ```bash
    bd dolt stop
    pkill -f "dolt sql-server" 2>/dev/null
    pgrep -lf "dolt sql-server" || echo "No Dolt servers running ✓"
    ```
+
    This ensures your local machine picks up the new version immediately.
 
 2. **Verify installations**:
+
    ```bash
    # Homebrew
    brew update && brew upgrade beads && bd version
@@ -222,26 +234,32 @@ Commit `website/versioned_docs/`, `website/versioned_sidebars/`, and `website/ve
 ## Troubleshooting
 
 ### Stale dist/ directory
+
 Always `rm -rf dist/` before `uv build` to avoid uploading old versions.
 
 ### PyPI version conflict
+
 PyPI doesn't allow re-uploading same version. Increment version number even for fixes.
 
 ### Homebrew SHA256 mismatch
+
 Wait a few seconds after pushing tag for GitHub to make tarball available, then recompute SHA256.
 
 ### Missing PyPI credentials
+
 Set up API token at https://pypi.org/manage/account/token/ and use `__token__` as username.
 
 ## Automation Status
 
 ✅ **Automated:**
+
 - GitHub releases with binaries (GoReleaser + GitHub Actions)
 - PyPI publish (automated via GitHub Actions)
 - Cross-platform builds (Linux, macOS, Windows)
 - Checksums and changelog generation
 
 🔄 **TODO:**
+
 - Auto-update Homebrew formula
 
 ## Related Documentation

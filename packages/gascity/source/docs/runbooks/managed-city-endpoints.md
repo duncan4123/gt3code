@@ -42,10 +42,10 @@ Per-rig state:
 
 Two TOML fields, one per scope, describe endpoint ownership:
 
-| Scope | Field | Values |
-|-------|-------|--------|
-| City | `gc.endpoint_origin` | `managed_city`, `city_canonical` |
-| Rig  | `gc.endpoint_origin` | `inherited_city`, `explicit` |
+| Scope | Field                | Values                           |
+| ----- | -------------------- | -------------------------------- |
+| City  | `gc.endpoint_origin` | `managed_city`, `city_canonical` |
+| Rig   | `gc.endpoint_origin` | `inherited_city`, `explicit`     |
 
 - **`managed_city`** — The city owns the Dolt lifecycle. `gc start`
   launches it; `gc stop` shuts it down. This is the default for
@@ -176,11 +176,11 @@ The `dolt-drift` check (`cmd/gc/cmd_doctor_drift.go`) is registered
 automatically when the workspace is in `bd`-backed `managed_city`
 topology and catches three shapes of drift:
 
-| Shape | Severity | Trigger |
-|-------|----------|---------|
-| Live rig-local Dolt under `inherited_city` | Error | Rig's `.dolt/sql-server.info` lists a PID that is alive, but its canonical origin is still `inherited_city`. |
-| Port mismatch under `inherited_city` | Error | Rig's `.beads/dolt-server.port` disagrees with the managed city port from `.gc/runtime/packs/dolt/dolt-state.json`. |
-| Stale `.dolt/sql-server.info` | Warning | Info file exists under an inherited rig but its PID is no longer alive. |
+| Shape                                      | Severity | Trigger                                                                                                             |
+| ------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| Live rig-local Dolt under `inherited_city` | Error    | Rig's `.dolt/sql-server.info` lists a PID that is alive, but its canonical origin is still `inherited_city`.        |
+| Port mismatch under `inherited_city`       | Error    | Rig's `.beads/dolt-server.port` disagrees with the managed city port from `.gc/runtime/packs/dolt/dolt-state.json`. |
+| Stale `.dolt/sql-server.info`              | Warning  | Info file exists under an inherited rig but its PID is no longer alive.                                             |
 
 All three carry `FixHint` text pointing at the specific
 `gc rig set-endpoint` invocation that resolves them.

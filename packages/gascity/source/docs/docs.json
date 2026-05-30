@@ -135,10 +135,7 @@
       },
       {
         "group": "Troubleshooting",
-        "pages": [
-          "troubleshooting/gc-start-walkthrough",
-          "troubleshooting/dolt-bloat-recovery"
-        ]
+        "pages": ["troubleshooting/gc-start-walkthrough", "troubleshooting/dolt-bloat-recovery"]
       },
       {
         "group": "Reference",
@@ -157,16 +154,11 @@
       },
       {
         "group": "Internals",
-        "pages": [
-          "internals/index",
-          "internals/beads-topology"
-        ]
+        "pages": ["internals/index", "internals/beads-topology"]
       },
       {
         "group": "Specifications",
-        "pages": [
-          "specs/pack-spec"
-        ]
+        "pages": ["specs/pack-spec"]
       }
     ]
   }

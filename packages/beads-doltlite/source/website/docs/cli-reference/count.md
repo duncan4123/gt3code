@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc count`
 
 ## bd count
@@ -13,18 +14,17 @@ Generated from `bd help --doc count`
 Count issues matching the specified filters.
 
 By default, returns the total count of issues matching the filters.
-Use --by-* flags to group counts by different attributes.
+Use --by-\* flags to group counts by different attributes.
 
 Examples:
-  bd count                          # Count all issues
-  bd count --status open            # Count open issues
-  bd count --by-status              # Group count by status
-  bd count --by-priority            # Group count by priority
-  bd count --by-type                # Group count by issue type
-  bd count --by-assignee            # Group count by assignee
-  bd count --by-label               # Group count by label
-  bd count --assignee alice --by-status  # Count alice's issues by status
-
+bd count # Count all issues
+bd count --status open # Count open issues
+bd count --by-status # Group count by status
+bd count --by-priority # Group count by priority
+bd count --by-type # Group count by issue type
+bd count --by-assignee # Group count by assignee
+bd count --by-label # Group count by label
+bd count --assignee alice --by-status # Count alice's issues by status
 
 ```
 bd count [flags]

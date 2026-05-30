@@ -11,12 +11,12 @@ because it documents workarounds for problems that should be fixed in the tool
 itself. Of the ~1,600 lines across the core getting-started docs (README quick
 start, QUICKSTART.md, INSTALLING.md, SETUP.md), roughly:
 
-| Category | Est. Lines | % of Total | Verdict |
-|----------|-----------|------------|---------|
-| **Genuinely necessary** (core concepts, happy path) | ~400 | 25% | Keep |
-| **Useful reference** (platform variants, IDE matrix) | ~350 | 22% | Keep but consolidate |
-| **Workarounds for fixable UX issues** | ~450 | 28% | Fix the tool, delete the docs |
-| **Redundant/duplicated across files** | ~400 | 25% | Consolidate into one place |
+| Category                                             | Est. Lines | % of Total | Verdict                       |
+| ---------------------------------------------------- | ---------- | ---------- | ----------------------------- |
+| **Genuinely necessary** (core concepts, happy path)  | ~400       | 25%        | Keep                          |
+| **Useful reference** (platform variants, IDE matrix) | ~350       | 22%        | Keep but consolidate          |
+| **Workarounds for fixable UX issues**                | ~450       | 28%        | Fix the tool, delete the docs |
+| **Redundant/duplicated across files**                | ~400       | 25%        | Consolidate into one place    |
 
 **Bottom line:** About half the getting-started surface area compensates for
 tool-level UX gaps. If those gaps were fixed, the docs could shrink by ~50% and
@@ -27,15 +27,17 @@ past noise to find the signal.
 
 ## Part 1: What's Genuinely Necessary
 
-These sections earn their keep. A new user *needs* this information and the tool
+These sections earn their keep. A new user _needs_ this information and the tool
 can't reasonably convey it automatically.
 
 ### 1.1 Core concept: "What is this and why would I use it?"
+
 - **README.md** quick pitch (lines 1-30): Necessary. Explains the value prop.
 - **QUICKSTART.md** "Why Beads?" section (lines 1-30): Good concrete example
   showing flat tracker vs. dependency-aware ready queue.
 
 ### 1.2 The actual happy path (5 commands)
+
 ```bash
 brew install beads      # or npm install -g @beads/bd
 cd your-project
@@ -43,18 +45,22 @@ bd init
 bd create "Task" -p 1
 bd ready
 ```
+
 This is the irreducible core. Everything else is either reference or
 workaround.
 
 ### 1.3 Dependency concepts
+
 - `bd dep add`, `bd dep tree`, `bd ready --explain` — these are the
   differentiating feature. The QUICKSTART walkthrough (lines 98-230) is
   well-written and necessary.
 
 ### 1.4 Team sync basics
+
 - "Add a Dolt remote, push, pull" — ~20 lines. Necessary for multi-machine use.
 
 ### 1.5 IDE setup matrix
+
 - The table in INSTALLING.md (lines 22-31) mapping environments to components
   is genuinely useful. Users need to know "I use Cursor, what do I install?"
 
@@ -63,8 +69,8 @@ workaround.
 ## Part 2: Workarounds That Point to Fixable Errors
 
 These documentation sections exist because the tool has a UX gap. Each one
-represents a place where the *tool should be smarter* so the *docs can be
-shorter*.
+represents a place where the _tool should be smarter_ so the _docs can be
+shorter_.
 
 ### 2.1 `bd: command not found` / PATH issues (~40 lines across 3 files)
 
@@ -187,12 +193,12 @@ The extensive troubleshooting section is a band-aid.
 
 ### 3.1 Installation instructions appear in 4 places
 
-| Location | Content |
-|----------|---------|
-| README.md lines 65-99 | Homebrew, Go, npm, build from source |
-| INSTALLING.md (full file) | Same + platform-specific + troubleshooting |
-| QUICKSTART.md lines 33-38 | `go build` from source |
-| CONTRIBUTING.md lines 16-31 | Clone + build from source |
+| Location                    | Content                                    |
+| --------------------------- | ------------------------------------------ |
+| README.md lines 65-99       | Homebrew, Go, npm, build from source       |
+| INSTALLING.md (full file)   | Same + platform-specific + troubleshooting |
+| QUICKSTART.md lines 33-38   | `go build` from source                     |
+| CONTRIBUTING.md lines 16-31 | Clone + build from source                  |
 
 **Recommendation:** README.md should have a 3-line install section linking to
 INSTALLING.md. QUICKSTART.md should say "Install bd (see INSTALLING.md)" and
@@ -284,17 +290,17 @@ Everything else is reference documentation, not getting-started documentation.
 
 ## Appendix: Files Reviewed
 
-| File | Lines | Role in Getting Started |
-|------|-------|------------------------|
-| README.md | 190 | Entry point, quick start, feature overview |
-| docs/QUICKSTART.md | 355 | Tutorial walkthrough |
-| docs/INSTALLING.md | 535 | Installation for all platforms |
-| docs/SETUP.md | 555 | IDE/editor integration setup |
-| docs/TROUBLESHOOTING.md | 1030 | Error recovery |
-| docs/FAQ.md | 513 | Common questions |
-| CONTRIBUTING.md | 367 | Developer setup |
-| docs/SYNC_SETUP.md | ~100 | Multi-machine sync |
-| AGENT_INSTRUCTIONS.md | ~100 | Agent dev workflow |
+| File                    | Lines | Role in Getting Started                    |
+| ----------------------- | ----- | ------------------------------------------ |
+| README.md               | 190   | Entry point, quick start, feature overview |
+| docs/QUICKSTART.md      | 355   | Tutorial walkthrough                       |
+| docs/INSTALLING.md      | 535   | Installation for all platforms             |
+| docs/SETUP.md           | 555   | IDE/editor integration setup               |
+| docs/TROUBLESHOOTING.md | 1030  | Error recovery                             |
+| docs/FAQ.md             | 513   | Common questions                           |
+| CONTRIBUTING.md         | 367   | Developer setup                            |
+| docs/SYNC_SETUP.md      | ~100  | Multi-machine sync                         |
+| AGENT_INSTRUCTIONS.md   | ~100  | Agent dev workflow                         |
 
 Also reviewed: `cmd/bd/init.go` (actual init flow), `cmd/bd/prime.go` (context
 injection), `cmd/bd/doctor.go` (health checks), `scripts/install.sh` (installer).

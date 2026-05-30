@@ -15,19 +15,13 @@
       "type": "category",
       "label": "Core Concepts",
       "collapsed": true,
-      "items": [
-        "core-concepts/index",
-        "core-concepts/issues",
-        "core-concepts/hash-ids"
-      ]
+      "items": ["core-concepts/index", "core-concepts/issues", "core-concepts/hash-ids"]
     },
     {
       "type": "category",
       "label": "Architecture",
       "collapsed": true,
-      "items": [
-        "architecture/index"
-      ]
+      "items": ["architecture/index"]
     },
     {
       "type": "category",
@@ -72,11 +66,7 @@
       "type": "category",
       "label": "Multi-Agent",
       "collapsed": true,
-      "items": [
-        "multi-agent/index",
-        "multi-agent/routing",
-        "multi-agent/coordination"
-      ]
+      "items": ["multi-agent/index", "multi-agent/routing", "multi-agent/coordination"]
     },
     {
       "type": "category",

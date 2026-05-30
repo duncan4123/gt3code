@@ -45,6 +45,7 @@ Remote (Dolt remotes: DoltHub, S3, GCS, etc.)
 - **Hash-based IDs**: Automatic collision prevention (v0.20+)
 
 Core implementation:
+
 - Dolt storage: `internal/storage/dolt/`
 - Embedded runtime: `internal/storage/embeddeddolt/`
 - Server runtime: `internal/doltserver/`, `internal/storage/db/`, and `internal/storage/doltserver/`
@@ -53,6 +54,7 @@ Core implementation:
 ### Key Data Types
 
 See `internal/types/types.go`:
+
 - `Issue`: Core work item (title, description, status, priority, etc.)
 - `Dependency`: Four types (blocks, related, parent-child, discovered-from)
 - `Label`: Flexible tagging system

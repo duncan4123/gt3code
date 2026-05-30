@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc gitlab`
 
 ## bd gitlab
@@ -13,11 +14,11 @@ Generated from `bd help --doc gitlab`
 Commands for syncing issues between beads and GitLab.
 
 Configuration can be set via 'bd config' or environment variables:
-  gitlab.url / GITLAB_URL                         - GitLab instance URL
-  gitlab.token / GITLAB_TOKEN                     - Personal access token
-  gitlab.project_id / GITLAB_PROJECT_ID           - Project ID or path
-  gitlab.group_id / GITLAB_GROUP_ID               - Group ID for group-level sync
-  gitlab.default_project_id / GITLAB_DEFAULT_PROJECT_ID - Project for creating issues in group mode
+gitlab.url / GITLAB_URL - GitLab instance URL
+gitlab.token / GITLAB_TOKEN - Personal access token
+gitlab.project_id / GITLAB_PROJECT_ID - Project ID or path
+gitlab.group_id / GITLAB_GROUP_ID - Group ID for group-level sync
+gitlab.default_project_id / GITLAB_DEFAULT_PROJECT_ID - Project for creating issues in group mode
 
 ```
 bd gitlab
@@ -78,6 +79,7 @@ bd gitlab status
 Synchronize issues between beads and GitLab.
 
 By default, performs bidirectional sync:
+
 - Pulls new/updated issues from GitLab to beads
 - Pushes local beads issues to GitLab
 

@@ -5,6 +5,7 @@ This example demonstrates how to use beads with protected branches on platforms 
 ## Scenario
 
 You have a repository with:
+
 - Protected `main` branch (requires pull requests)
 - Multiple developers/AI agents working on issues
 - Desire to track issues in git without bypassing branch protection
@@ -186,6 +187,7 @@ my-project/
 ```
 
 **Key points:**
+
 - `.git/beads-worktrees/` is hidden from your main workspace
 - Only `.beads/` is checked out in the worktree (sparse checkout)
 - Your `src/` code is never affected by beads commits
@@ -210,6 +212,7 @@ my-project/
 **"Merge conflicts during sync"**
 
 Dolt handles merges natively using three-way merge. If conflicts occur:
+
 1. Run `bd sql "SELECT * FROM dolt_conflicts"` to view them
 2. Resolve with `bd sql "CALL dolt_conflicts_resolve('--ours')"` or `'--theirs'`
 3. Complete with `bd dolt push`
@@ -217,6 +220,7 @@ Dolt handles merges natively using three-way merge. If conflicts occur:
 **"Worktree doesn't exist"**
 
 The Dolt server creates it automatically on first commit. To create manually:
+
 ```bash
 bd config get sync.branch  # Verify it's set
 bd dolt stop && bd dolt start              # Server will create worktree
@@ -225,6 +229,7 @@ bd dolt stop && bd dolt start              # Server will create worktree
 **"Changes not syncing"**
 
 Make sure:
+
 - `bd config get sync.branch` returns the same value on all clones
 - Dolt server is running: `bd doctor`
 - Both clones have fetched: `git fetch origin beads-metadata`
@@ -237,7 +242,7 @@ Automate the merge process with GitHub Actions:
 name: Auto-Merge Beads Metadata
 on:
   schedule:
-    - cron: '0 0 * * *'  # Daily at midnight
+    - cron: "0 0 * * *" # Daily at midnight
   workflow_dispatch:
 
 jobs:

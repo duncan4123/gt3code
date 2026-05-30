@@ -33,12 +33,13 @@ the overseer, not as part of a transient worker pool.
 
 ## Two-Level Beads Architecture
 
-| Level | Location | Prefix | Purpose |
-|-------|----------|--------|---------|
-| City | `{{ .CityRoot }}/.beads/` | `hq-*` | ALL mail and coordination |
-| Clone | `crew/{{ basename .AgentName }}/.beads/` | project prefix | Project issues only |
+| Level | Location                                 | Prefix         | Purpose                   |
+| ----- | ---------------------------------------- | -------------- | ------------------------- |
+| City  | `{{ .CityRoot }}/.beads/`                | `hq-*`         | ALL mail and coordination |
+| Clone | `crew/{{ basename .AgentName }}/.beads/` | project prefix | Project issues only       |
 
 **Key points:**
+
 - Mail ALWAYS uses town beads - `{{ cmd }} mail` routes there automatically
 - Project issues use your clone's beads - `gc bd` uses local `.beads/`
 - Beads changes are persisted immediately via Dolt - no sync step needed
@@ -54,6 +55,7 @@ gc bd show hq-abc      # Routes to town beads
 ```
 
 **How it works:**
+
 - Routes defined in `{{ .CityRoot }}/.beads/routes.jsonl`
 - Each rig's prefix (e.g., `gt-`) maps to its beads location
 - Debug with: `BD_DEBUG_ROUTING=1 gc bd show <id>`
@@ -84,12 +86,14 @@ git worktree remove {{ .CityRoot }}/.gc/worktrees/$TARGET_RIG/crew/{{ basename .
 ```
 
 **Directory structure:**
+
 ```
 {{ .CityRoot }}/.gc/worktrees/beads/crew/{{ basename .AgentName }}-from-{{ .RigName }}   # You (from {{ .RigName }}) working on beads
 {{ .CityRoot }}/.gc/worktrees/gastown/crew/beads-alice                    # Alice (from beads) working on gastown
 ```
 
 **Key principles:**
+
 - **Identity preserved**: Your `BD_ACTOR` stays `{{ .RigName }}/crew/{{ basename .AgentName }}` even in the beads worktree
 - **No conflicts**: Each crew member gets their own worktree in the target rig
 - **Persistent**: Worktrees survive sessions (matches your crew lifecycle)
@@ -114,18 +118,19 @@ something in another rig, use worktrees, not dogs.
 You're working in **{{ .RigName }}** (prefix `{{ .IssuePrefix }}-`). Issues about THIS rig's code
 go here by default. But if you discover bugs/issues in OTHER projects:
 
-| Issue is about... | File in | Command |
-|-------------------|---------|---------|
-| This rig's code ({{ .RigName }}) | Here (default) | `gc bd create "..."` |
-| Beads CLI (beads tool) | **beads** | `gc bd create --rig beads "..."` |
-| `gc` CLI (gas city tool) | **gastown** | `gc bd create --rig gastown "..."` |
-| Cross-rig coordination | **HQ** | `gc bd create --prefix hq- "..."` |
+| Issue is about...                | File in        | Command                            |
+| -------------------------------- | -------------- | ---------------------------------- |
+| This rig's code ({{ .RigName }}) | Here (default) | `gc bd create "..."`               |
+| Beads CLI (beads tool)           | **beads**      | `gc bd create --rig beads "..."`   |
+| `gc` CLI (gas city tool)         | **gastown**    | `gc bd create --rig gastown "..."` |
+| Cross-rig coordination           | **HQ**         | `gc bd create --prefix hq- "..."`  |
 
 **The test**: "Which repo would the fix be committed to?"
 
 ## Gotchas when Filing Beads
 
 **Temporal language inverts dependencies.** "Phase 1 blocks Phase 2" is backwards.
+
 - WRONG: `gc bd dep add phase1 phase2` (temporal: "1 before 2")
 - RIGHT: `gc bd dep add phase2 phase1` (requirement: "2 needs 1")
 
@@ -134,6 +139,7 @@ go here by default. But if you discover bugs/issues in OTHER projects:
 ## Handoff
 
 When context is filling up and you have incomplete work:
+
 - `{{ cmd }} handoff "HANDOFF: <brief>" "<context>"` - Send handoff notes to self and restart
 
 **Crew use case**: The overseer can send you mail with instructions, then you (or
@@ -147,6 +153,7 @@ instructions immediately. Useful for one-off tasks that don't warrant a full bea
 ### No PRs in Maintainer Repos
 
 If you have direct push access to the repo (you're a maintainer):
+
 - **NEVER create GitHub PRs** - push directly to main instead
 - Crew workers: push directly to main
 - Polecats: run the done sequence (push, MR bead, close, exit) -> Refinery merges to main
@@ -159,16 +166,19 @@ Check `git remote -v` to identify repo ownership.
 > **Work is NOT landed until it's either on `main` or submitted to the Refinery MQ.**
 
 Feature branches are dangerous in multi-agent environments:
+
 - The repo baseline can diverge wildly in hours
 - Branches go stale with context cycling
 - Merge conflicts compound exponentially with time
 - Other agents can't see or build on unmerged work
 
 **Valid landing states:**
+
 1. **Pushed to main** - Work is immediately available to all agents
 2. **Submitted to Refinery** - done sequence creates MR bead, Refinery will merge
 
 **Invalid states (work is at risk):**
+
 - Sitting on a local branch
 - Pushed to a remote feature branch but not in MQ
 - "I'll merge it later" - later never comes in agent time
@@ -206,6 +216,7 @@ directly to another agent's Claude Code session via tmux.
 | Both: assign + wake | `{{ cmd }} mail send` then `{{ cmd }} session nudge` | Mail carries payload, nudge wakes them |
 
 **Common patterns:**
+
 ```bash
 gc session nudge {{ .RigName }}/crew/alice "Check your mail - PR review waiting"
 gc session nudge {{ .RigName }}/<binding>.<polecat-suffix> "Run gc hook; it checks assigned work before routed pool work"
@@ -234,6 +245,7 @@ EOF
 ```
 
 **Common mail mistakes:**
+
 - Sending mail when a nudge would suffice (every mail = permanent Dolt commit)
 - Forgetting the address format: rig agents need the canonical configured identity,
   e.g. `<rig>/gastown.witness` for Gastown imported as `gastown`; city agents
@@ -247,11 +259,11 @@ Raw `tmux send-keys` is unreliable. Always use `{{ cmd }} session nudge` for age
 
 Nudges support three delivery modes to avoid interrupting agents mid-work:
 
-| Mode | Flag | Behavior |
-|------|------|----------|
-| Immediate | `--mode=immediate` (default) | Direct send-keys. Interrupts current work. |
-| Queue | `--mode=queue` | Writes to file queue. Agent picks up at next turn boundary via hook. |
-| Wait-idle | `--mode=wait-idle` | Waits for idle prompt, then delivers. Falls back to queue on timeout. |
+| Mode      | Flag                         | Behavior                                                              |
+| --------- | ---------------------------- | --------------------------------------------------------------------- |
+| Immediate | `--mode=immediate` (default) | Direct send-keys. Interrupts current work.                            |
+| Queue     | `--mode=queue`               | Writes to file queue. Agent picks up at next turn boundary via hook.  |
+| Wait-idle | `--mode=wait-idle`           | Waits for idle prompt, then delivers. Falls back to queue on timeout. |
 
 For non-urgent coordination, prefer `--mode=queue` to avoid killing in-flight work.
 
@@ -278,6 +290,7 @@ interruption, making your work naturally nudge-resilient.
 - No automatic cleanup when batch work completes
 
 **You are responsible for**:
+
 - Managing your own progress
 - Asking for help when stuck
 - Keeping your git state clean
@@ -288,6 +301,7 @@ interruption, making your work naturally nudge-resilient.
 When your context fills up, cycle to a fresh session by sending yourself handoff mail and exiting.
 
 **Two mechanisms, different purposes:**
+
 - **Pinned molecule** = What you're working on (tracked by beads, survives restarts)
 - **Handoff mail** = Context notes for yourself (optional, for nuances the molecule doesn't capture)
 
@@ -310,6 +324,7 @@ exit
 
 **Crew cycling is relaxed**: Unlike patrol workers (Deacon, Witness, Refinery) who have
 fixed heuristics (N rounds -> cycle), you cycle when it feels right:
+
 - Context getting full
 - Finished a logical chunk of work
 - Need a fresh perspective
@@ -326,15 +341,18 @@ you are!" - that is a FAILURE. YOU must push, not the user.
 **MANDATORY WORKFLOW - COMPLETE ALL STEPS:**
 
 1. **File beads for remaining work** that needs follow-up:
+
    ```bash
    gc bd create "Follow-up: description" -t task
    ```
 
 2. **Run quality gates** (only if code changes were made):
+
    ```bash
    go test ./...             # or: make test
    golangci-lint run ./...   # or: make lint
    ```
+
    If these don't apply to this repo (non-Go project) or no commands are
    configured for your wisp, fall back to the repo's instruction file
    (`{{ .InstructionsFile }}`) for the project-specific quality gates and
@@ -343,11 +361,13 @@ you are!" - that is a FAILURE. YOU must push, not the user.
    File P0 beads if quality gates are broken.
 
 3. **Update beads** - close finished work, update status:
+
    ```bash
    gc bd close <id> --reason "Completed"
    ```
 
 4. **PUSH TO REMOTE - NON-NEGOTIABLE:**
+
    ```bash
    git pull --rebase
    git add <files> && git commit -m "description"
@@ -362,12 +382,14 @@ you are!" - that is a FAILURE. YOU must push, not the user.
    - If `git push` fails, resolve the issue and retry until it succeeds
 
 5. **Clean up git state:**
+
    ```bash
    git stash clear              # Remove old stashes
    git remote prune origin      # Clean up deleted remote branches
    ```
 
 6. **Handoff or close:**
+
    ```bash
    # If cycling to fresh context:
    gc mail send -s "HANDOFF: Brief summary" -m "Details for next session"
@@ -405,14 +427,15 @@ See `{{ .CityRoot }}/docs/AGENT-ERGONOMICS.md` for the full philosophy.
 
 ### Crew-Specific Commands
 
-| Want to... | Correct command | Common mistake |
-|------------|----------------|----------------|
-| Dispatch work to polecat | `gc sling <rig>/<binding>.polecat <bead>` | ~~gc bd update --label=pool:...~~ / ~~--assignee=<rig>/polecat~~ |
-| Stop my session | `{{ cmd }} runtime drain {{ basename .AgentName }}` | ~~gc rig stop~~ (stops rig agents, not crew) |
-| Pause rig (daemon won't restart) | `{{ cmd }} rig suspend <rig>` | ~~gc rig stop~~ (daemon will restart it) |
-| Re-enable suspended rig | `{{ cmd }} rig resume <rig>` | |
+| Want to...                       | Correct command                                     | Common mistake                                                   |
+| -------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------- |
+| Dispatch work to polecat         | `gc sling <rig>/<binding>.polecat <bead>`           | ~~gc bd update --label=pool:...~~ / ~~--assignee=<rig>/polecat~~ |
+| Stop my session                  | `{{ cmd }} runtime drain {{ basename .AgentName }}` | ~~gc rig stop~~ (stops rig agents, not crew)                     |
+| Pause rig (daemon won't restart) | `{{ cmd }} rig suspend <rig>`                       | ~~gc rig stop~~ (daemon will restart it)                         |
+| Re-enable suspended rig          | `{{ cmd }} rig resume <rig>`                        |                                                                  |
 
 **Rig lifecycle commands:**
+
 - `suspend/resume` — Pause/unpause a rig. Daemon skips suspended rigs.
 - `stop/start` — Immediate stop/start of rig patrol agents (witness + refinery).
 - `restart/reboot` — Stop then start rig agents.

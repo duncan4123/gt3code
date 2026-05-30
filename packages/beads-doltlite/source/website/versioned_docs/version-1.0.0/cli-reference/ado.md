@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc ado`
 
 ## bd ado
@@ -13,11 +14,11 @@ Generated from `bd help --doc ado`
 Commands for syncing issues between beads and Azure DevOps.
 
 Configuration can be set via 'bd config' or environment variables:
-  ado.org / AZURE_DEVOPS_ORG              - Organization name
-  ado.project / AZURE_DEVOPS_PROJECT      - Project name (single)
-  ado.projects / AZURE_DEVOPS_PROJECTS    - Project names (comma-separated)
-  ado.pat / AZURE_DEVOPS_PAT              - Personal access token
-  ado.url / AZURE_DEVOPS_URL              - Custom base URL (on-prem)
+ado.org / AZURE_DEVOPS_ORG - Organization name
+ado.project / AZURE_DEVOPS_PROJECT - Project name (single)
+ado.projects / AZURE_DEVOPS_PROJECTS - Project names (comma-separated)
+ado.pat / AZURE_DEVOPS_PAT - Personal access token
+ado.url / AZURE_DEVOPS_URL - Custom base URL (on-prem)
 
 ```
 bd ado
@@ -78,6 +79,7 @@ bd ado status
 Synchronize issues between beads and Azure DevOps.
 
 By default, performs bidirectional sync:
+
 - Pulls new/updated work items from Azure DevOps to beads
 - Pushes local beads issues to Azure DevOps
 
@@ -88,8 +90,8 @@ which work items are synced. On pull, they limit the WIQL query. On push,
 --types and --states filter local beads before pushing to ADO. Use
 --no-create with push to skip creating new ADO work items (only update
 existing linked items). Filters can also be persisted via config:
-  ado.filter.area_path, ado.filter.iteration_path,
-  ado.filter.types, ado.filter.states
+ado.filter.area_path, ado.filter.iteration_path,
+ado.filter.types, ado.filter.states
 CLI flags override config values when both are set.
 
 ```

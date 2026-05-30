@@ -126,6 +126,7 @@ Our canonical product history is `main@origin`; upstream `pingdotgg/t3code` is a
 When a feature is broken or missing after an upstream merge:
 
 1. **Search jj history for the feature:**
+
    ```bash
    jj log --grep "feature-name"
    jj log --grep "sidebar" --limit 50
@@ -133,18 +134,22 @@ When a feature is broken or missing after an upstream merge:
    ```
 
 2. **Check rescue branches:** We maintain rescue bookmarks for feature sets:
+
    ```bash
    jj bookmark list | grep rescue
    ```
+
    Common rescue bookmarks: `rescue/feature-set-repair-20260518`, `rescue/pre-worker-sidebar`, `rescue/current-accidental-sidebar`
 
 3. **Search for the feature in older upstream-sync branches:**
+
    ```bash
    jj bookmark list | grep t3code/
    jj bookmark list | grep gc-
    ```
 
 4. **Look at the snapshot branches:**
+
    ```bash
    jj bookmark list | grep snapshot
    ```
@@ -154,6 +159,7 @@ When a feature is broken or missing after an upstream merge:
 ### Package Structure
 
 **Upstream packages (synced from pingdotgg/t3code):**
+
 - `apps/server` — WebSocket server, provider session management
 - `apps/web` — React/Vite UI
 - `apps/desktop` — Electron desktop app
@@ -161,6 +167,7 @@ When a feature is broken or missing after an upstream merge:
 - `packages/shared` — Shared runtime utilities
 
 **Fork-owned packages (our integrations):**
+
 - `packages/gascity/` — GasCity orchestration SDK (Go binaries and source)
   - `packages/gascity/source/` — GasCity Go source code
   - `packages/gascity/bin/` — Built GC binaries
@@ -182,15 +189,18 @@ When a feature is broken or missing after an upstream merge:
 ### Integration Points
 
 **GasCity ↔ T3 Code:**
+
 - `apps/server/src/gc/` — GasCity API client and integration layers
 - `apps/server/src/ws.ts` — WebSocket server with GasCity diagnostics
 - `apps/web/src/routes/settings.gascity.tsx` — GasCity settings page
 - `packages/gascity-config/` — Bundled city configuration shipped with T3 Code
 
 **BEADS ↔ T3 Code:**
+
 - Issue tracking via `bd` CLI
 - Dolt database for persistent structured memory
 - Integration markers in this file (`<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
+
 ## Beads Issue Tracker
 
 This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
@@ -232,6 +242,7 @@ bd close <id>         # Complete work
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
+
 - Work is NOT complete until `git push` succeeds
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push

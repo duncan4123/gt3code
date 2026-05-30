@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc repo`
 
 ## bd repo
@@ -17,18 +18,16 @@ into a single database for unified cross-repo issue tracking.
 
 Configuration is stored in .beads/config.yaml under the 'repos' section:
 
-  repos:
-    primary: "."
-    additional:
-      - ~/beads-planning
-      - ~/work-repo
+repos:
+primary: "."
+additional: - ~/beads-planning - ~/work-repo
 
 Examples:
-  bd repo add ~/beads-planning       # Add planning repo
-  bd repo add ../other-repo          # Add relative path repo
-  bd repo list                       # Show all configured repos
-  bd repo remove ~/beads-planning    # Remove by path
-  bd repo sync                       # Sync from all configured repos
+bd repo add ~/beads-planning # Add planning repo
+bd repo add ../other-repo # Add relative path repo
+bd repo list # Show all configured repos
+bd repo remove ~/beads-planning # Remove by path
+bd repo sync # Sync from all configured repos
 
 ```
 bd repo

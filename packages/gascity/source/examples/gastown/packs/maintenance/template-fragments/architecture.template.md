@@ -1,4 +1,5 @@
 {{ define "architecture" }}
+
 ## Gas City Maintenance Context
 
 City root: `{{ .CityRoot }}`.
@@ -10,4 +11,4 @@ City root: `{{ .CityRoot }}`.
 - `.gc/` holds runtime state and embedded system packs.
 - **Dogs** run cleanup and shutdown-dance work. **Beads** route and track tasks;
   **molecules** are the multi-step formula instances.
-{{ end }}
+  {{ end }}

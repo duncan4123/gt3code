@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc batch`
 
 ## bd batch
@@ -22,12 +23,12 @@ by btrfs+compression. Batching collapses N invocations into one transaction
 and one dolt commit.
 
 Grammar (one command per line):
-  close &lt;id&gt; [reason...]
-  update &lt;id&gt; &lt;key&gt;=&lt;value&gt; [&lt;key&gt;=&lt;value&gt; ...]
-  create &lt;type&gt; &lt;priority&gt; &lt;title...&gt;
-  dep add &lt;from-id&gt; &lt;to-id&gt; [type]
-  dep remove &lt;from-id&gt; &lt;to-id&gt;
-  #comment  (blank lines and '# ...' comments are ignored)
+close &lt;id&gt; [reason...]
+update &lt;id&gt; &lt;key&gt;=&lt;value&gt; [&lt;key&gt;=&lt;value&gt; ...]
+create &lt;type&gt; &lt;priority&gt; &lt;title...&gt;
+dep add &lt;from-id&gt; &lt;to-id&gt; [type]
+dep remove &lt;from-id&gt; &lt;to-id&gt;
+#comment (blank lines and '# ...' comments are ignored)
 
 Supported 'update' keys: status, priority, title, assignee
 Supported dependency types: see 'bd dep add --help' (default: blocks)
@@ -36,14 +37,18 @@ Tokens are whitespace-separated. Double-quoted strings ("like this") may
 contain spaces; use \" to embed a quote and \\ for a backslash.
 
 Examples:
-  # From a pipe
-  bd list --status stale -q | awk '&#123;print "close",$1," stale"&#125;' | bd batch
 
-  # From a file
-  bd batch -f operations.txt
+# From a pipe
 
-  # Inline
-  printf 'close bd-1 done\nupdate bd-2 status=in_progress\n' | bd batch
+bd list --status stale -q | awk '&#123;print "close",$1," stale"&#125;' | bd batch
+
+# From a file
+
+bd batch -f operations.txt
+
+# Inline
+
+printf 'close bd-1 done\nupdate bd-2 status=in_progress\n' | bd batch
 
 On success, exits 0 and prints a summary (or JSON with --json). On any error,
 rolls back the entire transaction and exits non-zero with the failing line.

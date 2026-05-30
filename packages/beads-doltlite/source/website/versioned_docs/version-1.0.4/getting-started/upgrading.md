@@ -23,16 +23,16 @@ bd info --whats-new --json  # Machine-readable
 
 Use the command that matches your install method.
 
-| Install method | Platforms | Command |
-|---|---|---|
-| Quick install script | macOS, Linux, FreeBSD | `curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh \| bash` |
-| PowerShell installer | Windows | `irm https://raw.githubusercontent.com/gastownhall/beads/main/install.ps1 \| iex` |
-| Homebrew | macOS, Linux | `brew upgrade beads` |
-| go install (server-mode only) | macOS, Linux, FreeBSD, Windows | `CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest` |
-| go install (embedded-capable) | macOS, Linux, Windows | `CGO_ENABLED=1 GOFLAGS=-tags=gms_pure_go go install github.com/steveyegge/beads/cmd/bd@latest` |
-| npm | macOS, Linux, Windows | `npm update -g @beads/bd` |
-| bun | macOS, Linux, Windows | `bun install -g --trust @beads/bd` |
-| From source (Unix shell) | macOS, Linux, FreeBSD | `git pull && make build` |
+| Install method                | Platforms                      | Command                                                                                          |
+| ----------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------ |
+| Quick install script          | macOS, Linux, FreeBSD          | `curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh \| bash` |
+| PowerShell installer          | Windows                        | `irm https://raw.githubusercontent.com/gastownhall/beads/main/install.ps1 \| iex`                |
+| Homebrew                      | macOS, Linux                   | `brew upgrade beads`                                                                             |
+| go install (server-mode only) | macOS, Linux, FreeBSD, Windows | `CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest`                             |
+| go install (embedded-capable) | macOS, Linux, Windows          | `CGO_ENABLED=1 GOFLAGS=-tags=gms_pure_go go install github.com/steveyegge/beads/cmd/bd@latest`   |
+| npm                           | macOS, Linux, Windows          | `npm update -g @beads/bd`                                                                        |
+| bun                           | macOS, Linux, Windows          | `bun install -g --trust @beads/bd`                                                               |
+| From source (Unix shell)      | macOS, Linux, FreeBSD          | `git pull && make build`                                                                         |
 
 ### Quick install script (macOS/Linux/FreeBSD)
 
@@ -113,12 +113,12 @@ bd migrate --cleanup --yes
 
 If you're upgrading from a much older version of bd, your project may use a different storage backend. bd has gone through several storage eras:
 
-| Era | Versions | Storage |
-|---|---|---|
-| SQLite | v0.30–v0.50 | `.beads/beads.db` |
-| Dolt server | v0.50–v0.58 | `.beads/dolt/` (external server) |
-| Embedded Dolt (old) | v0.59–v0.63.2 | `.beads/dolt/` (in-process) |
-| Embedded Dolt (current) | v0.63.3+ | `.beads/embeddeddolt/` |
+| Era                     | Versions      | Storage                          |
+| ----------------------- | ------------- | -------------------------------- |
+| SQLite                  | v0.30–v0.50   | `.beads/beads.db`                |
+| Dolt server             | v0.50–v0.58   | `.beads/dolt/` (external server) |
+| Embedded Dolt (old)     | v0.59–v0.63.2 | `.beads/dolt/` (in-process)      |
+| Embedded Dolt (current) | v0.63.3+      | `.beads/embeddeddolt/`           |
 
 ### From v0.63.3+ (current era)
 

@@ -69,9 +69,11 @@ gc runtime drain-ack
      --status closed
    ```
 10. After closing, check for more assigned work:
-   ```bash
-   bd ready --assignee="$GC_SESSION_NAME" --json --limit=1
-   ```
+
+```bash
+bd ready --assignee="$GC_SESSION_NAME" --json --limit=1
+```
+
 11. If more work exists, go to step 2. If not, poll briefly (see below).
 
 **Never use wide filesystem searches when a CLI command exists.** Wide

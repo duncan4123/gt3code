@@ -215,39 +215,39 @@ function parseBookmarkEntries(stdout: string): ParsedBookmark[] {
     .map((row) => ({
       name: row.name?.trim() ?? "",
       remoteName: normalizeOptionalString(row.remote),
-      targetExists: (row.target ?? []).some((target) => typeof target === "string" && target.length > 0),
+      targetExists: (row.target ?? []).some(
+        (target) => typeof target === "string" && target.length > 0,
+      ),
     }))
     .filter((row) => row.name.length > 0);
 }
 
 function parseWorkspaceListEntries(stdout: string): ParsedWorkspaceRef[] {
-  return stdout
-    .split(/\r?\n/g)
-    .flatMap((line) => {
-      if (line.trim().length === 0) {
-        return [];
-      }
-      const [rawName, rawRoot, rawChangeId, rawCommitId, rawBookmarks = ""] = line.split("\t");
-      const name = rawName?.trim() ?? "";
-      const root = rawRoot?.trim() ?? "";
-      const changeId = rawChangeId?.trim() ?? "";
-      const commitId = rawCommitId?.trim() ?? "";
-      if (!name || !root || !changeId || !commitId) {
-        return [];
-      }
-      return [
-        {
-          name,
-          root,
-          changeId,
-          commitId,
-          bookmarks: rawBookmarks
-            .split(/\s+/g)
-            .map((bookmark) => bookmark.trim())
-            .filter((bookmark) => bookmark.length > 0),
-        } satisfies ParsedWorkspaceRef,
-      ];
-    });
+  return stdout.split(/\r?\n/g).flatMap((line) => {
+    if (line.trim().length === 0) {
+      return [];
+    }
+    const [rawName, rawRoot, rawChangeId, rawCommitId, rawBookmarks = ""] = line.split("\t");
+    const name = rawName?.trim() ?? "";
+    const root = rawRoot?.trim() ?? "";
+    const changeId = rawChangeId?.trim() ?? "";
+    const commitId = rawCommitId?.trim() ?? "";
+    if (!name || !root || !changeId || !commitId) {
+      return [];
+    }
+    return [
+      {
+        name,
+        root,
+        changeId,
+        commitId,
+        bookmarks: rawBookmarks
+          .split(/\s+/g)
+          .map((bookmark) => bookmark.trim())
+          .filter((bookmark) => bookmark.length > 0),
+      } satisfies ParsedWorkspaceRef,
+    ];
+  });
 }
 
 function parseCommitId(stdout: string): string | null {
@@ -336,7 +336,9 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
       Effect.map(normalizeWorkspaceRegistry),
     );
 
-  const readWorkspaceRefs = (cwd: string): Effect.Effect<ReadonlyArray<ParsedWorkspaceRef>, never> =>
+  const readWorkspaceRefs = (
+    cwd: string,
+  ): Effect.Effect<ReadonlyArray<ParsedWorkspaceRef>, never> =>
     runJjStdout("JjCore.readWorkspaceRefs", cwd, [
       "workspace",
       "list",
@@ -538,8 +540,7 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
       Effect.map((entries) => {
         const localBookmarks = entries.filter((entry) => entry.remoteName === null);
         const remoteBookmarks = entries.filter(
-          (entry) =>
-            entry.remoteName !== null && entry.remoteName !== "git" && entry.targetExists,
+          (entry) => entry.remoteName !== null && entry.remoteName !== "git" && entry.targetExists,
         );
         return {
           localBookmarks,
@@ -1321,19 +1322,20 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
       };
     }
 
-    const [bookmarkState, currentStatus, workspaceRoot, registry, workspaceRefs] = yield* Effect.all(
-      [
-        resolveBookmarkState(input.cwd),
-        statusDetails(input.cwd),
-        resolveJjRoot(input.cwd).pipe(Effect.map(canonicalizePath)),
-        resolveJjRepoDir(input.cwd).pipe(
-          Effect.flatMap((root) => readWorkspaceRegistry(root)),
-          Effect.catch(() => Effect.succeed(EMPTY_WORKSPACE_REGISTRY)),
-        ),
-        readWorkspaceRefs(input.cwd),
-      ],
-      { concurrency: "unbounded" },
-    );
+    const [bookmarkState, currentStatus, workspaceRoot, registry, workspaceRefs] =
+      yield* Effect.all(
+        [
+          resolveBookmarkState(input.cwd),
+          statusDetails(input.cwd),
+          resolveJjRoot(input.cwd).pipe(Effect.map(canonicalizePath)),
+          resolveJjRepoDir(input.cwd).pipe(
+            Effect.flatMap((root) => readWorkspaceRegistry(root)),
+            Effect.catch(() => Effect.succeed(EMPTY_WORKSPACE_REGISTRY)),
+          ),
+          readWorkspaceRefs(input.cwd),
+        ],
+        { concurrency: "unbounded" },
+      );
 
     const defaultBranch = resolveDefaultBranch(
       bookmarkState.localBookmarks.map((bookmark) => bookmark.name),
@@ -1358,7 +1360,9 @@ export const makeJjCore = Effect.fn("makeJjCore")(function* () {
             isRemote: false,
             isDefault: bookmark.name === defaultBranch,
             worktreePath:
-              workspacesByBookmark.get(bookmark.name)?.root ?? registry.branches[bookmark.name] ?? null,
+              workspacesByBookmark.get(bookmark.name)?.root ??
+              registry.branches[bookmark.name] ??
+              null,
             ...(workspacesByBookmark.get(bookmark.name)
               ? {
                   workspaceName: workspacesByBookmark.get(bookmark.name)?.name,

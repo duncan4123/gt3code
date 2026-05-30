@@ -373,6 +373,7 @@ function useLocalDispatchState(input: {
   threadError: string | null | undefined;
 }) {
   const [localDispatch, setLocalDispatch] = useState<LocalDispatchSnapshot | null>(null);
+  const localDispatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const beginLocalDispatch = useCallback(
     (options?: { preparingWorktree?: boolean }) => {
@@ -392,6 +393,24 @@ function useLocalDispatchState(input: {
   const resetLocalDispatch = useCallback(() => {
     setLocalDispatch(null);
   }, []);
+
+  useEffect(() => {
+    if (localDispatchTimeoutRef.current !== null) {
+      clearTimeout(localDispatchTimeoutRef.current);
+      localDispatchTimeoutRef.current = null;
+    }
+    if (localDispatch !== null) {
+      localDispatchTimeoutRef.current = setTimeout(() => {
+        setLocalDispatch(null);
+      }, 300_000);
+    }
+    return () => {
+      if (localDispatchTimeoutRef.current !== null) {
+        clearTimeout(localDispatchTimeoutRef.current);
+        localDispatchTimeoutRef.current = null;
+      }
+    };
+  }, [localDispatch]);
 
   const serverAcknowledgedLocalDispatch = useMemo(
     () =>

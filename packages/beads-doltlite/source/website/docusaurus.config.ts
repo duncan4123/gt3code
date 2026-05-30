@@ -1,21 +1,25 @@
-import {themes as prismThemes} from 'prism-react-renderer';
-import type {Config} from '@docusaurus/types';
-import type * as Preset from '@docusaurus/preset-classic';
+import { themes as prismThemes } from "prism-react-renderer";
+import type { Config } from "@docusaurus/types";
+import type * as Preset from "@docusaurus/preset-classic";
 
 // Environment-based URL configuration for fork flexibility
 // SITE_URL: Full URL (e.g., "https://myuser.github.io/beads" or "https://myuser.github.io")
 // ORG_NAME: GitHub organization/user name (defaults to "gastownhall")
 // PROJECT_NAME: Repository/project name (defaults to "beads")
-const orgName = process.env.ORG_NAME || 'gastownhall';
-const projectName = process.env.PROJECT_NAME || 'beads';
+const orgName = process.env.ORG_NAME || "gastownhall";
+const projectName = process.env.PROJECT_NAME || "beads";
 const siteUrlEnv = process.env.SITE_URL || `https://${orgName}.github.io/${projectName}`;
 
 // Parse SITE_URL into origin (url) and pathname (baseUrl)
 function parseUrl(fullUrl: string): { origin: string; baseUrl: string } {
   try {
     const parsed = new URL(fullUrl);
-    const baseUrl = parsed.pathname === '/' ? `/${projectName}/` :
-                    parsed.pathname.endsWith('/') ? parsed.pathname : `${parsed.pathname}/`;
+    const baseUrl =
+      parsed.pathname === "/"
+        ? `/${projectName}/`
+        : parsed.pathname.endsWith("/")
+          ? parsed.pathname
+          : `${parsed.pathname}/`;
     return { origin: parsed.origin, baseUrl };
   } catch {
     return { origin: `https://${orgName}.github.io`, baseUrl: `/${projectName}/` };
@@ -25,11 +29,11 @@ function parseUrl(fullUrl: string): { origin: string; baseUrl: string } {
 const { origin: siteUrl, baseUrl } = parseUrl(siteUrlEnv);
 
 const config: Config = {
-  title: 'Beads Documentation',
-  tagline: 'Dolt-powered issue tracker for AI-supervised coding workflows',
-  favicon: 'img/favicon.svg',
+  title: "Beads Documentation",
+  tagline: "Dolt-powered issue tracker for AI-supervised coding workflows",
+  favicon: "img/favicon.svg",
 
-  themes: ['@docusaurus/theme-mermaid'],
+  themes: ["@docusaurus/theme-mermaid"],
 
   // future: {
   //   v4: true,
@@ -42,41 +46,41 @@ const config: Config = {
   projectName: projectName,
   trailingSlash: false,
 
-  onBrokenLinks: 'warn',
+  onBrokenLinks: "warn",
 
   markdown: {
     mermaid: true,
     hooks: {
-      onBrokenMarkdownLinks: 'warn',
+      onBrokenMarkdownLinks: "warn",
     },
   },
 
   i18n: {
-    defaultLocale: 'en',
-    locales: ['en'],
+    defaultLocale: "en",
+    locales: ["en"],
   },
 
   // Meta tags for AI agents (uses baseUrl for fork flexibility)
   // Order: ai-terms (discovery), llms-full (complete docs), llms (index)
   headTags: [
     {
-      tagName: 'meta',
+      tagName: "meta",
       attributes: {
-        name: 'ai-terms',
+        name: "ai-terms",
         content: `Load ${baseUrl}llms-full.txt (<50K tokens) for complete documentation, ${baseUrl}llms.txt for index`,
       },
     },
     {
-      tagName: 'meta',
+      tagName: "meta",
       attributes: {
-        name: 'llms-full',
+        name: "llms-full",
         content: `${baseUrl}llms-full.txt`,
       },
     },
     {
-      tagName: 'meta',
+      tagName: "meta",
       attributes: {
-        name: 'llms',
+        name: "llms",
         content: `${baseUrl}llms.txt`,
       },
     },
@@ -84,25 +88,25 @@ const config: Config = {
 
   presets: [
     [
-      'classic',
+      "classic",
       {
         docs: {
-          routeBasePath: '/', // Docs as homepage
-          sidebarPath: './sidebars.ts',
+          routeBasePath: "/", // Docs as homepage
+          sidebarPath: "./sidebars.ts",
           editUrl: `https://github.com/${orgName}/${projectName}/tree/main/website/`,
           showLastUpdateTime: true,
           // Default site view is the latest released snapshot, not unreleased "Next"
-          lastVersion: '1.0.4',
+          lastVersion: "1.0.4",
           versions: {
             current: {
-              label: 'Next',
-              banner: 'unreleased',
+              label: "Next",
+              banner: "unreleased",
             },
           },
         },
         blog: false, // Disable blog
         theme: {
-          customCss: './src/css/custom.css',
+          customCss: "./src/css/custom.css",
         },
       } satisfies Preset.Options,
     ],
@@ -111,141 +115,141 @@ const config: Config = {
   themeConfig: {
     // No social card image - using default
     colorMode: {
-      defaultMode: 'dark',
+      defaultMode: "dark",
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'Beads',
+      title: "Beads",
       logo: {
-        alt: 'Beads Logo',
-        src: 'img/logo.svg',
+        alt: "Beads Logo",
+        src: "img/logo.svg",
       },
       items: [
         {
-          type: 'docSidebar',
-          sidebarId: 'docsSidebar',
-          position: 'left',
-          label: 'Documentation',
+          type: "docSidebar",
+          sidebarId: "docsSidebar",
+          position: "left",
+          label: "Documentation",
         },
         {
-          type: 'docsVersionDropdown',
-          position: 'right',
+          type: "docsVersionDropdown",
+          position: "right",
         },
         {
           href: `pathname://${baseUrl}llms.txt`,
-          label: 'llms.txt',
-          position: 'right',
+          label: "llms.txt",
+          position: "right",
         },
         {
           href: `https://github.com/${orgName}/${projectName}`,
-          label: 'GitHub',
-          position: 'right',
+          label: "GitHub",
+          position: "right",
         },
       ],
     },
     footer: {
-      style: 'dark',
+      style: "dark",
       links: [
         {
-          title: 'Documentation',
+          title: "Documentation",
           items: [
             {
-              label: 'Getting Started',
-              to: '/getting-started/installation',
+              label: "Getting Started",
+              to: "/getting-started/installation",
             },
             {
-              label: 'CLI Reference',
-              to: '/cli-reference',
+              label: "CLI Reference",
+              to: "/cli-reference",
             },
             {
-              label: 'Workflows',
-              to: '/workflows/molecules',
+              label: "Workflows",
+              to: "/workflows/molecules",
             },
           ],
         },
         {
-          title: 'Integrations',
+          title: "Integrations",
           items: [
             {
-              label: 'Overview',
-              to: '/integrations',
+              label: "Overview",
+              to: "/integrations",
             },
             {
-              label: 'Aider',
-              to: '/integrations/aider',
+              label: "Aider",
+              to: "/integrations/aider",
             },
             {
-              label: 'Claude Code',
-              to: '/integrations/claude-code',
+              label: "Claude Code",
+              to: "/integrations/claude-code",
             },
             {
-              label: 'Codex',
-              to: '/integrations/codex',
+              label: "Codex",
+              to: "/integrations/codex",
             },
             {
-              label: 'Cody',
-              to: '/integrations/cody',
+              label: "Cody",
+              to: "/integrations/cody",
             },
             {
-              label: 'Cursor',
-              to: '/integrations/cursor',
+              label: "Cursor",
+              to: "/integrations/cursor",
             },
             {
-              label: 'Factory.ai Droid',
-              to: '/integrations/factory',
+              label: "Factory.ai Droid",
+              to: "/integrations/factory",
             },
             {
-              label: 'Gemini CLI',
-              to: '/integrations/gemini',
+              label: "Gemini CLI",
+              to: "/integrations/gemini",
             },
             {
-              label: 'Junie',
-              to: '/integrations/junie',
+              label: "Junie",
+              to: "/integrations/junie",
             },
             {
-              label: 'Kilo Code',
-              to: '/integrations/kilocode',
+              label: "Kilo Code",
+              to: "/integrations/kilocode",
             },
             {
-              label: 'Mux',
-              to: '/integrations/mux',
+              label: "Mux",
+              to: "/integrations/mux",
             },
             {
-              label: 'OpenCode',
-              to: '/integrations/opencode',
+              label: "OpenCode",
+              to: "/integrations/opencode",
             },
             {
-              label: 'Windsurf',
-              to: '/integrations/windsurf',
+              label: "Windsurf",
+              to: "/integrations/windsurf",
             },
             {
-              label: 'MCP Server',
-              to: '/integrations/mcp-server',
+              label: "MCP Server",
+              to: "/integrations/mcp-server",
             },
             {
-              label: 'GitHub Copilot',
-              to: '/integrations/github-copilot',
+              label: "GitHub Copilot",
+              to: "/integrations/github-copilot",
             },
           ],
         },
         {
-          title: 'Resources',
+          title: "Resources",
           items: [
             {
-              label: 'GitHub',
+              label: "GitHub",
               href: `https://github.com/${orgName}/${projectName}`,
             },
             {
-              label: 'llms.txt',
+              label: "llms.txt",
               href: `pathname://${baseUrl}llms.txt`,
             },
             {
-              label: 'npm Package',
-              href: 'https://www.npmjs.com/package/@beads/bd',
+              label: "npm Package",
+              href: "https://www.npmjs.com/package/@beads/bd",
             },
             {
-              label: 'PyPI (MCP)',
-              href: 'https://pypi.org/project/beads-mcp/',
+              label: "PyPI (MCP)",
+              href: "https://pypi.org/project/beads-mcp/",
             },
           ],
         },
@@ -255,7 +259,7 @@ const config: Config = {
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
-      additionalLanguages: ['bash', 'json', 'toml', 'go'],
+      additionalLanguages: ["bash", "json", "toml", "go"],
     },
   } satisfies Preset.ThemeConfig,
 };

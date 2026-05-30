@@ -1523,8 +1523,7 @@ describe("groupThreadsByRigAndAgent", () => {
               dir: "t3code",
               suspended: false,
               description: "Built-in deterministic graph.v2 workflow control worker",
-              start_command:
-                "gc internal convoy control --serve --follow --city gastown",
+              start_command: "gc internal convoy control --serve --follow --city gastown",
             },
           ],
         },

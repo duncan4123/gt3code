@@ -12,18 +12,18 @@ before merge.
 
 ## Current stack
 
-| # | Subject |
-|---|---------|
-| 1 | `feat(pgauth): add Postgres credential resolver mirroring internal/doltauth` |
-| 2 | `feat(contract): add Postgres MetadataState fields with parse validation` |
-| 3 | `fix(contract): correct misspell 'behaviour' -> 'behavior'` |
-| 4 | `feat(bd_env): wire pgauth into gc bd subprocess env` |
-| 5 | `docs(bd_env): drop historical rename comment from godoc` |
-| 6 | `fix(lint): resolve four golangci findings on PG-auth slice 2/3 stack` |
-| 7 | `chore: release gate PASS for ga-6zqpw + ga-pnqg.1 (PG-auth slices 1+2+3)` |
-| 8 | `fix(pg-auth): complete backend env projection` |
-| 9 | `fix(pg-auth): surface remaining projection errors` |
-| 10 | `fix(pg-auth): keep order env postgres-only` |
+| #   | Subject                                                                      |
+| --- | ---------------------------------------------------------------------------- |
+| 1   | `feat(pgauth): add Postgres credential resolver mirroring internal/doltauth` |
+| 2   | `feat(contract): add Postgres MetadataState fields with parse validation`    |
+| 3   | `fix(contract): correct misspell 'behaviour' -> 'behavior'`                  |
+| 4   | `feat(bd_env): wire pgauth into gc bd subprocess env`                        |
+| 5   | `docs(bd_env): drop historical rename comment from godoc`                    |
+| 6   | `fix(lint): resolve four golangci findings on PG-auth slice 2/3 stack`       |
+| 7   | `chore: release gate PASS for ga-6zqpw + ga-pnqg.1 (PG-auth slices 1+2+3)`   |
+| 8   | `fix(pg-auth): complete backend env projection`                              |
+| 9   | `fix(pg-auth): surface remaining projection errors`                          |
+| 10  | `fix(pg-auth): keep order env postgres-only`                                 |
 
 ## Attempt-5 maintainer fixups
 
@@ -76,7 +76,7 @@ backend-exclusivity gaps remained. This local fixup:
 - `GC_FAST_UNIT=1 GO_TEST_COUNT=1 GO_TEST_TIMEOUT=10m ./scripts/test-go-test-shard ./cmd/gc <shard> 6` for shards 1-6 - PASS
 - `timeout 300s go test ./cmd/gc ./internal/pgauth ./internal/beads/contract`
   - TIMED OUT with no diagnostics; replaced by the passing package-specific
-  and sharded cmd/gc validation above.
+    and sharded cmd/gc validation above.
 
 ## Review status
 

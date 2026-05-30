@@ -5,6 +5,7 @@ This example demonstrates how to use beads' contributor workflow to keep your pl
 ## Problem
 
 When contributing to OSS projects, you want to:
+
 - Track your planning, todos, and design notes
 - Keep experimental work organized
 - **NOT** pollute upstream PRs with your personal planning issues
@@ -34,6 +35,7 @@ bd init --contributor
 ```
 
 The wizard will:
+
 1. ✅ Detect that you're in a fork (checks for 'upstream' remote)
 2. ✅ Prompt you to create a planning repo (`~/.beads-planning` by default)
 3. ✅ Configure auto-routing so your planning stays separate

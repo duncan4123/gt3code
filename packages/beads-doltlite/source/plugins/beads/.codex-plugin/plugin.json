@@ -9,12 +9,7 @@
   "homepage": "https://github.com/gastownhall/beads",
   "repository": "https://github.com/gastownhall/beads",
   "license": "MIT",
-  "keywords": [
-    "issue-tracker",
-    "task-management",
-    "ai-workflow",
-    "agent-memory"
-  ],
+  "keywords": ["issue-tracker", "task-management", "ai-workflow", "agent-memory"],
   "skills": "./skills/",
   "hooks": "./hooks/hooks.json",
   "interface": {
@@ -23,10 +18,7 @@
     "longDescription": "Use Beads from Codex with CLI-first workflow guidance for durable project task tracking.",
     "developerName": "Beads",
     "category": "Developer Tools",
-    "capabilities": [
-      "Skills",
-      "Task tracking"
-    ],
+    "capabilities": ["Skills", "Task tracking"],
     "websiteURL": "https://github.com/gastownhall/beads",
     "defaultPrompt": [
       "Use $beads to show ready work in this repo.",

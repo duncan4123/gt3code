@@ -22,6 +22,7 @@ winget install SteveYegge.beads
 4. Submit a PR to microsoft/winget-pkgs
 
 Or use the wingetcreate tool:
+
 ```powershell
 wingetcreate update SteveYegge.beads --version <new-version> --urls <new-url> --submit
 ```

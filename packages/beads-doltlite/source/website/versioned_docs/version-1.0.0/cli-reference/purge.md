@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc purge`
 
 ## bd purge
@@ -25,11 +26,11 @@ For full Dolt storage reclaim after deleting many rows, follow with `bd flatten`
 so history can be collapsed and old chunks can be garbage-collected.
 
 EXAMPLES:
-  bd purge                           # Preview what would be purged
-  bd purge --force                   # Delete all closed ephemeral beads
-  bd purge --older-than 7d --force   # Only purge items closed 7+ days ago
-  bd purge --pattern "*-wisp-*"      # Only purge matching ID pattern
-  bd purge --dry-run                 # Detailed preview with stats
+bd purge # Preview what would be purged
+bd purge --force # Delete all closed ephemeral beads
+bd purge --older-than 7d --force # Only purge items closed 7+ days ago
+bd purge --pattern "_-wisp-_" # Only purge matching ID pattern
+bd purge --dry-run # Detailed preview with stats
 
 ```
 bd purge [flags]

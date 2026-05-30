@@ -11,6 +11,7 @@ Wisps are ephemeral workflows that don't sync to git.
 ## What are Wisps?
 
 Wisps are "vapor phase" molecules:
+
 - Stored in `.beads-wisp/` (gitignored)
 - Don't sync with git
 - Auto-expire after completion
@@ -18,12 +19,12 @@ Wisps are "vapor phase" molecules:
 
 ## Use Cases
 
-| Scenario | Why Wisp? |
-|----------|-----------|
-| Local experiments | No need to pollute git history |
-| CI/CD pipelines | Ephemeral by nature |
-| Scratch workflows | Quick throwaway work |
-| Agent coordination | Local-only coordination |
+| Scenario           | Why Wisp?                      |
+| ------------------ | ------------------------------ |
+| Local experiments  | No need to pollute git history |
+| CI/CD pipelines    | Ephemeral by nature            |
+| Scratch workflows  | Quick throwaway work           |
+| Agent coordination | Local-only coordination        |
 
 ## Creating Wisps
 
@@ -54,12 +55,12 @@ bd wisp cleanup
 
 ## Wisp vs Molecule
 
-| Aspect | Molecule | Wisp |
-|--------|----------|------|
-| Storage | `.beads/` | `.beads-wisp/` |
-| Git sync | Yes | No |
-| Persistence | Permanent | Ephemeral |
-| Use case | Tracked work | Temporary ops |
+| Aspect      | Molecule     | Wisp           |
+| ----------- | ------------ | -------------- |
+| Storage     | `.beads/`    | `.beads-wisp/` |
+| Git sync    | Yes          | No             |
+| Persistence | Permanent    | Ephemeral      |
+| Use case    | Tracked work | Temporary ops  |
 
 ## Phase Control
 

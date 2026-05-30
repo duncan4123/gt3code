@@ -68,6 +68,7 @@ bd config set linear.api_key "lin_api_..."
 ### Team ID
 
 Find your Team ID in Linear:
+
 - **Settings → General** → Look for Team ID
 - Or extract from URLs: `https://linear.app/YOUR_TEAM/...` → Go to team settings
 
@@ -140,15 +141,16 @@ bd linear sync --dry-run
 
 Linear and Beads use different priority semantics:
 
-| Linear | Meaning | Beads | Meaning |
-|--------|---------|-------|---------|
-| 0 | No priority | 4 | Backlog |
-| 1 | Urgent | 0 | Critical |
-| 2 | High | 1 | High |
-| 3 | Medium | 2 | Medium |
-| 4 | Low | 3 | Low |
+| Linear | Meaning     | Beads | Meaning  |
+| ------ | ----------- | ----- | -------- |
+| 0      | No priority | 4     | Backlog  |
+| 1      | Urgent      | 0     | Critical |
+| 2      | High        | 1     | High     |
+| 3      | Medium      | 2     | Medium   |
+| 4      | Low         | 3     | Low      |
 
 **Default mapping** (Linear → Beads):
+
 - 0 (no priority) → 4 (backlog)
 - 1 (urgent) → 0 (critical)
 - 2 (high) → 1 (high)
@@ -168,12 +170,12 @@ bd config set linear.priority_map.1 1    # Urgent -> High (instead of Critical)
 Map Linear workflow states to bd statuses:
 
 | Linear State Type | Beads Status |
-|-------------------|--------------|
-| backlog | open |
-| unstarted | open |
-| started | in_progress |
-| completed | closed |
-| canceled | closed |
+| ----------------- | ------------ |
+| backlog           | open         |
+| unstarted         | open         |
+| started           | in_progress  |
+| completed         | closed       |
+| canceled          | closed       |
 
 **Custom state mappings** (for custom workflow states):
 
@@ -193,13 +195,13 @@ bd config set linear.state_map.deployed closed
 
 Infer bd issue type from Linear labels:
 
-| Linear Label | Beads Type |
-|--------------|------------|
-| bug, defect | bug |
-| feature, enhancement | feature |
-| epic | epic |
-| chore, maintenance | chore |
-| task | task |
+| Linear Label         | Beads Type |
+| -------------------- | ---------- |
+| bug, defect          | bug        |
+| feature, enhancement | feature    |
+| epic                 | epic       |
+| chore, maintenance   | chore      |
+| task                 | task       |
 
 **Custom label mappings:**
 
@@ -220,13 +222,13 @@ Relation import is opt-in during pull:
 bd linear sync --pull --relations
 ```
 
-| Linear Relation | Beads Dependency |
-|-----------------|------------------|
-| blocks | blocks |
-| blockedBy | blocks (inverted) |
-| duplicate | duplicates |
-| related | related |
-| (parent) | parent-child |
+| Linear Relation | Beads Dependency  |
+| --------------- | ----------------- |
+| blocks          | blocks            |
+| blockedBy       | blocks (inverted) |
+| duplicate       | duplicates        |
+| related         | related           |
+| (parent)        | parent-child      |
 
 **Custom relation mappings:**
 
@@ -256,6 +258,7 @@ bd linear sync --prefer-local
 ```
 
 Use when:
+
 - Local is your source of truth
 - You've made deliberate changes locally
 
@@ -268,6 +271,7 @@ bd linear sync --prefer-linear
 ```
 
 Use when:
+
 - Linear is your source of truth
 - You want to accept team changes
 
@@ -364,6 +368,7 @@ bd linear status
 ```
 
 Shows:
+
 - Configuration status (API key, team ID)
 - Last sync timestamp
 - Issues with Linear links
@@ -379,6 +384,7 @@ bd linear sync --json
 ### Verbose Output
 
 The sync command shows progress:
+
 - Number of issues pulled/pushed
 - Conflicts detected and resolved
 - Errors and warnings
@@ -460,6 +466,7 @@ bd config set linear.team_id "YOUR_TEAM_UUID"
 ### "Rate limited"
 
 Linear has API rate limits. The client automatically retries with exponential backoff:
+
 - 3 retries with increasing delays
 - If still failing, wait and retry later
 

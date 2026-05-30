@@ -195,9 +195,7 @@ describe("@t3tools/gascity-config", () => {
     for (const rig of [...gastownRigs, ...gascityBrRigs]) {
       expect(rig.name).toEqual(expect.any(String));
       expect(rig.prefix).toEqual(expect.any(String));
-      expect(
-        rig.suspended === undefined || typeof rig.suspended === "boolean",
-      ).toBe(true);
+      expect(rig.suspended === undefined || typeof rig.suspended === "boolean").toBe(true);
       expect(rig.includes).toEqual(expect.arrayContaining([expect.any(String)]));
     }
 
@@ -271,9 +269,7 @@ describe("@t3tools/gascity-config", () => {
       const cityToml = readFileSync(layout.cityTomlPath, "utf8");
       expect(cityToml).toContain('name = "gascity"');
       expect(cityToml).toContain('name = "beads-doltlite"');
-      expect(readFileSync(layout.packTomlPath, "utf8")).toContain(
-        "[imports.doltlite-gastown]",
-      );
+      expect(readFileSync(layout.packTomlPath, "utf8")).toContain("[imports.doltlite-gastown]");
       expect(readFileSync(path.join(layout.doltliteGastownPackDir, "pack.toml"), "utf8")).toContain(
         "../maintenance",
       );

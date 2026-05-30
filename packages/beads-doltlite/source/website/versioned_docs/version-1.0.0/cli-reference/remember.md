@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc remember`
 
 ## bd remember
@@ -16,9 +17,9 @@ Memories are injected at prime time (bd prime) so you have them
 in every session without manual loading.
 
 Examples:
-  bd remember "always run tests with -race flag"
-  bd remember "Dolt phantom DBs hide in three places" --key dolt-phantoms
-  bd remember "auth module uses JWT not sessions" --key auth-jwt
+bd remember "always run tests with -race flag"
+bd remember "Dolt phantom DBs hide in three places" --key dolt-phantoms
+bd remember "auth module uses JWT not sessions" --key auth-jwt
 
 ```
 bd remember "<insight>" [flags]

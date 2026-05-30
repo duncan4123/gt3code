@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc comments`
 
 ## bd comments
@@ -13,17 +14,22 @@ Generated from `bd help --doc comments`
 View or manage comments on an issue.
 
 Examples:
-  # List all comments on an issue (issue id is required — there is no "comments list")
-  bd comments bd-123
 
-  # List comments in JSON format
-  bd comments bd-123 --json
+# List all comments on an issue (issue id is required — there is no "comments list")
 
-  # Add a comment
-  bd comments add bd-123 "This is a comment"
+bd comments bd-123
 
-  # Add a comment from a file
-  bd comments add bd-123 -f notes.txt
+# List comments in JSON format
+
+bd comments bd-123 --json
+
+# Add a comment
+
+bd comments add bd-123 "This is a comment"
+
+# Add a comment from a file
+
+bd comments add bd-123 -f notes.txt
 
 ```
 bd comments [issue-id] [flags]
@@ -40,11 +46,14 @@ bd comments [issue-id] [flags]
 Add a comment to an issue.
 
 Examples:
-  # Add a comment
-  bd comments add bd-123 "Working on this now"
 
-  # Add a comment from a file
-  bd comments add bd-123 -f notes.txt
+# Add a comment
+
+bd comments add bd-123 "Working on this now"
+
+# Add a comment from a file
+
+bd comments add bd-123 -f notes.txt
 
 ```
 bd comments add [issue-id] [text] [flags]

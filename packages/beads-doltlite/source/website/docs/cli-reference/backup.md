@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc backup`
 
 ## bd backup
@@ -18,15 +19,15 @@ different from 'bd export', which writes issue records to JSONL for migration
 and interoperability.
 
 Commands:
-  bd backup init &lt;path&gt;    Set up a backup destination (filesystem or DoltHub)
-  bd backup sync           Push to configured backup destination
-  bd backup restore [path] Restore from a backup directory
-  bd backup remove         Remove backup destination
-  bd backup status         Show backup status
+bd backup init &lt;path&gt; Set up a backup destination (filesystem or DoltHub)
+bd backup sync Push to configured backup destination
+bd backup restore [path] Restore from a backup directory
+bd backup remove Remove backup destination
+bd backup status Show backup status
 
 DoltHub is recommended for cloud backup:
-  bd backup init https://doltremoteapi.dolthub.com/&lt;user&gt;/&lt;repo&gt;
-  Set DOLT_REMOTE_USER and DOLT_REMOTE_PASSWORD for authentication.
+bd backup init https://doltremoteapi.dolthub.com/&lt;user&gt;/&lt;repo&gt;
+Set DOLT_REMOTE_USER and DOLT_REMOTE_PASSWORD for authentication.
 
 ```
 bd backup
@@ -41,11 +42,11 @@ DoltHub remote URL. If the destination was previously configured, it is
 updated to the new path.
 
 Filesystem examples:
-  bd backup add /mnt/usb/beads-backup
-  bd backup add ~/Dropbox/beads-backup
+bd backup add /mnt/usb/beads-backup
+bd backup add ~/Dropbox/beads-backup
 
 DoltHub (recommended for cloud backup):
-  bd backup add https://doltremoteapi.dolthub.com/myuser/beads-backup
+bd backup add https://doltremoteapi.dolthub.com/myuser/beads-backup
 
 After adding, run 'bd backup sync' to push your data.
 

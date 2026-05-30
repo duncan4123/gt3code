@@ -4,7 +4,8 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
-  yield* sql.unsafe(`
+  yield* sql
+    .unsafe(`
     UPDATE projection_thread_messages
     SET row_id = (
       SELECT COUNT(*)
@@ -16,7 +17,8 @@ export default Effect.gen(function* () {
         )
     )
     WHERE row_id IS NULL
-  `).pipe(Effect.catch(() => Effect.void));
+  `)
+    .pipe(Effect.catch(() => Effect.void));
 
   yield* sql.unsafe(`DROP TRIGGER IF EXISTS messages_fts_insert`);
   yield* sql.unsafe(`DROP TRIGGER IF EXISTS messages_fts_update`);

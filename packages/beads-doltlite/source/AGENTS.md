@@ -36,6 +36,7 @@ request-changes only as a last resort.
 
 Before implementing work, opening a PR, or merging/closing a PR, run the PR
 preflight:
+
 ```bash
 scripts/pr-preflight.sh --search "<topic keywords>" --repo gastownhall/beads
 scripts/pr-preflight.sh <pr-number> --repo gastownhall/beads
@@ -51,6 +52,7 @@ and credit their design/tests.
 **NEVER use emoji-style icons** (🔴🟠🟡🔵⚪) in CLI output. They cause cognitive overload.
 
 **ALWAYS use small Unicode symbols** with semantic colors:
+
 - Status: `○ ◐ ● ✓ ❄`
 - Priority: `● P0` (filled circle with color)
 
@@ -71,6 +73,7 @@ driver instead of patching around it in beads.
 **DO NOT use `bd edit`** - it opens an interactive editor ($EDITOR) which AI agents cannot use.
 
 Use `bd update` with flags instead:
+
 ```bash
 bd update <id> --description "new description"
 bd update <id> --title "new title"
@@ -89,6 +92,7 @@ echo 'Updated text' | bd update <id> --description=-
 - Opt-in ICU regex path: `make test-icu-path` (or `./scripts/test-icu-path.sh ./...`).
 - This ICU path is maintainer-only and not part of normal validation; `make test-full-cgo` and `./scripts/test-cgo.sh` are deprecated aliases.
 - For package- or test-scoped shipped-config CGO runs, prefer:
+
 ```bash
 CGO_ENABLED=1 go test -tags gms_pure_go ./cmd/bd/...
 CGO_ENABLED=1 go test -tags gms_pure_go -run '^TestName$' ./cmd/bd/...
@@ -101,6 +105,7 @@ CGO_ENABLED=1 go test -tags gms_pure_go -run '^TestName$' ./cmd/bd/...
 Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
 
 **Use these forms instead:**
+
 ```bash
 # Force overwrite without prompting
 cp -f source dest           # NOT: cp source dest
@@ -113,6 +118,7 @@ cp -rf source dest          # NOT: cp -r source dest
 ```
 
 **Other commands that may prompt:**
+
 - `scp` - use `-o BatchMode=yes` for non-interactive
 - `ssh` - use `-o BatchMode=yes` to fail instead of prompting
 - `apt-get` - use `-y` flag
@@ -138,12 +144,14 @@ cp -rf source dest          # NOT: cp -r source dest
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
+
 - Work is NOT complete until `git push` succeeds
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 
 <!-- BEGIN BEADS INTEGRATION -->
+
 ## Issue Tracking with bd (beads)
 
 **IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.

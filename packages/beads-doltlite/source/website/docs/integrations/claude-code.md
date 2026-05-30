@@ -17,6 +17,7 @@ bd setup claude
 ```
 
 This installs:
+
 - **SessionStart hook** - Runs `bd prime` on session start
 - **SessionStart compact refresh** - Runs `bd prime` after context compaction
 
@@ -144,6 +145,7 @@ For enhanced UX with slash commands:
 ```
 
 Adds slash commands:
+
 - `/beads:ready` - Show ready work
 - `/beads:create` - Create issue
 - `/beads:show` - Show issue

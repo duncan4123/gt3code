@@ -24,11 +24,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "SupportsChildConversations",
-          "SupportsAttachments",
-          "MaxMessageLength"
-        ],
+        "required": ["SupportsChildConversations", "SupportsAttachments", "MaxMessageLength"],
         "type": "object"
       },
       "AdapterEventPayload": {
@@ -41,10 +37,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider",
-          "account_id"
-        ],
+        "required": ["provider", "account_id"],
         "type": "object"
       },
       "AgentCreateInputBody": {
@@ -56,17 +49,13 @@
           },
           "name": {
             "description": "Agent name.",
-            "examples": [
-              "deacon-1"
-            ],
+            "examples": ["deacon-1"],
             "minLength": 1,
             "type": "string"
           },
           "provider": {
             "description": "Provider name.",
-            "examples": [
-              "claude"
-            ],
+            "examples": ["claude"],
             "minLength": 1,
             "type": "string"
           },
@@ -75,10 +64,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "provider"
-        ],
+        "required": ["name", "provider"],
         "type": "object"
       },
       "AgentCreatedOutputBody": {
@@ -90,16 +76,11 @@
           },
           "status": {
             "description": "Operation result.",
-            "examples": [
-              "created"
-            ],
+            "examples": ["created"],
             "type": "string"
           }
         },
-        "required": [
-          "status",
-          "agent"
-        ],
+        "required": ["status", "agent"],
         "type": "object"
       },
       "AgentMapping": {
@@ -112,10 +93,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "agent_id",
-          "parent_tool_use_id"
-        ],
+        "required": ["agent_id", "parent_tool_use_id"],
         "type": "object"
       },
       "AgentOutputResponse": {
@@ -134,17 +112,10 @@
             "items": {
               "$ref": "#/components/schemas/OutputTurn"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "agent",
-          "format",
-          "turns"
-        ],
+        "required": ["agent", "format", "turns"],
         "type": "object"
       },
       "AgentPatch": {
@@ -154,31 +125,19 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "Attach": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": ["boolean", "null"]
           },
           "DefaultSlingFormula": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "DependsOn": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "Dir": {
             "type": "string"
@@ -193,123 +152,75 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "HooksInstalled": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": ["boolean", "null"]
           },
           "IdleTimeout": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "InjectAssignedSkills": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": ["boolean", "null"]
           },
           "InjectFragments": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "InjectFragmentsAppend": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "InstallAgentHooks": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "InstallAgentHooksAppend": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "Lifecycle": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "MCP": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "MCPAppend": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "MaxActiveSessions": {
             "format": "int64",
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "MaxSessionAge": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "MaxSessionAgeJitter": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "MinActiveSessions": {
             "format": "int64",
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "Name": {
             "type": "string"
           },
           "Nudge": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "OptionDefaults": {
             "additionalProperties": {
@@ -318,10 +229,7 @@
             "type": "object"
           },
           "OverlayDir": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "Pool": {
             "$ref": "#/components/schemas/PoolOverride"
@@ -330,151 +238,88 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "PreStartAppend": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "PromptTemplate": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "Provider": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "ResumeCommand": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "ScaleCheck": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "Scope": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "Session": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "SessionLive": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "SessionLiveAppend": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "SessionSetup": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "SessionSetupAppend": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "SessionSetupScript": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "Skills": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "SkillsAppend": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "SleepAfterIdle": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "StartCommand": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "Suspended": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": ["boolean", "null"]
           },
           "TmuxAlias": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "WakeMode": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "WorkDir": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           }
         },
         "required": [
@@ -625,13 +470,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "running",
-          "suspended",
-          "state",
-          "available"
-        ],
+        "required": ["name", "running", "suspended", "state", "available"],
         "type": "object"
       },
       "AgentUpdateInputBody": {
@@ -696,11 +535,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "name",
-          "suspended",
-          "origin"
-        ],
+        "required": ["name", "suspended", "origin"],
         "type": "object"
       },
       "AnnotatedProviderResponse": {
@@ -719,10 +554,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "command": {
             "type": "string"
@@ -751,9 +583,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "origin"
-        ],
+        "required": ["origin"],
         "type": "object"
       },
       "AsyncAcceptedBody": {
@@ -769,17 +599,11 @@
           },
           "status": {
             "description": "Async request status.",
-            "examples": [
-              "accepted"
-            ],
+            "examples": ["accepted"],
             "type": "string"
           }
         },
-        "required": [
-          "status",
-          "request_id",
-          "event_cursor"
-        ],
+        "required": ["status", "request_id", "event_cursor"],
         "type": "object"
       },
       "AsyncAcceptedResponse": {
@@ -794,10 +618,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "request_id",
-          "event_cursor"
-        ],
+        "required": ["request_id", "event_cursor"],
         "type": "object"
       },
       "Bead": {
@@ -814,10 +635,7 @@
             "items": {
               "$ref": "#/components/schemas/Dep"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "description": {
             "type": "string"
@@ -838,10 +656,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "metadata": {
             "additionalProperties": {
@@ -853,10 +668,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "parent": {
             "type": "string"
@@ -879,13 +691,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title",
-          "status",
-          "issue_type",
-          "created_at"
-        ],
+        "required": ["id", "title", "status", "issue_type", "created_at"],
         "type": "object"
       },
       "BeadAssignInputBody": {
@@ -914,10 +720,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "metadata": {
             "additionalProperties": {
@@ -949,9 +752,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "title"
-        ],
+        "required": ["title"],
         "type": "object"
       },
       "BeadDepsResponse": {
@@ -961,15 +762,10 @@
             "items": {
               "$ref": "#/components/schemas/Bead"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "children"
-        ],
+        "required": ["children"],
         "type": "object"
       },
       "BeadEventPayload": {
@@ -979,9 +775,7 @@
             "$ref": "#/components/schemas/Bead"
           }
         },
-        "required": [
-          "bead"
-        ],
+        "required": ["bead"],
         "type": "object"
       },
       "BeadGraphResponse": {
@@ -991,29 +785,19 @@
             "items": {
               "$ref": "#/components/schemas/Bead"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "deps": {
             "items": {
               "$ref": "#/components/schemas/WorkflowDepResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "root": {
             "$ref": "#/components/schemas/Bead"
           }
         },
-        "required": [
-          "root",
-          "beads",
-          "deps"
-        ],
+        "required": ["root", "beads", "deps"],
         "type": "object"
       },
       "BeadUpdateBody": {
@@ -1032,10 +816,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "metadata": {
             "additionalProperties": {
@@ -1046,10 +827,7 @@
           },
           "parent": {
             "description": "Parent bead ID. Use null or an empty string to clear.",
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "priority": {
             "description": "Bead priority.",
@@ -1061,10 +839,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "status": {
             "description": "Bead status.",
@@ -1083,10 +858,7 @@
       },
       "BindingStatus": {
         "description": "Lifecycle state of a session binding.",
-        "enum": [
-          "active",
-          "ended"
-        ],
+        "enum": ["active", "ended"],
         "type": "string"
       },
       "BoundEventPayload": {
@@ -1102,11 +874,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider",
-          "conversation_id",
-          "session_id"
-        ],
+        "required": ["provider", "conversation_id", "session_id"],
         "type": "object"
       },
       "CityCreateRequest": {
@@ -1114,12 +882,7 @@
         "properties": {
           "bootstrap_profile": {
             "description": "Optional bootstrap profile.",
-            "enum": [
-              "k8s-cell",
-              "kubernetes",
-              "kubernetes-cell",
-              "single-host-compat"
-            ],
+            "enum": ["k8s-cell", "kubernetes", "kubernetes-cell", "single-host-compat"],
             "type": "string"
           },
           "dir": {
@@ -1137,9 +900,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "dir"
-        ],
+        "required": ["dir"],
         "type": "object"
       },
       "CityCreateSucceededPayload": {
@@ -1158,11 +919,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "request_id",
-          "name",
-          "path"
-        ],
+        "required": ["request_id", "name", "path"],
         "type": "object"
       },
       "CityGetResponse": {
@@ -1199,14 +956,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "path",
-          "suspended",
-          "uptime_sec",
-          "agent_count",
-          "rig_count"
-        ],
+        "required": ["name", "path", "suspended", "uptime_sec", "agent_count", "rig_count"],
         "type": "object"
       },
       "CityInfo": {
@@ -1225,10 +975,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "running": {
             "type": "boolean"
@@ -1237,11 +984,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "path",
-          "running"
-        ],
+        "required": ["name", "path", "running"],
         "type": "object"
       },
       "CityLifecyclePayload": {
@@ -1254,10 +997,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "path"
-        ],
+        "required": ["name", "path"],
         "type": "object"
       },
       "CityPatchInputBody": {
@@ -1286,11 +1026,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "request_id",
-          "name",
-          "path"
-        ],
+        "required": ["request_id", "name", "path"],
         "type": "object"
       },
       "ConfigAgentResponse": {
@@ -1315,10 +1051,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "name",
-          "suspended"
-        ],
+        "required": ["name", "suspended"],
         "type": "object"
       },
       "ConfigExplainPatches": {
@@ -1337,11 +1070,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "agents",
-          "rigs",
-          "providers"
-        ],
+        "required": ["agents", "rigs", "providers"],
         "type": "object"
       },
       "ConfigExplainResponse": {
@@ -1351,10 +1080,7 @@
             "items": {
               "$ref": "#/components/schemas/AnnotatedAgentResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "patches": {
             "$ref": "#/components/schemas/ConfigExplainPatches"
@@ -1366,11 +1092,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "agents",
-          "providers",
-          "patches"
-        ],
+        "required": ["agents", "providers", "patches"],
         "type": "object"
       },
       "ConfigPatchesResponse": {
@@ -1389,11 +1111,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "agent_count",
-          "rig_count",
-          "provider_count"
-        ],
+        "required": ["agent_count", "rig_count", "provider_count"],
         "type": "object"
       },
       "ConfigResponse": {
@@ -1403,10 +1121,7 @@
             "items": {
               "$ref": "#/components/schemas/ConfigAgentResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "patches": {
             "$ref": "#/components/schemas/ConfigPatchesResponse"
@@ -1421,20 +1136,13 @@
             "items": {
               "$ref": "#/components/schemas/ConfigRigResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "workspace": {
             "$ref": "#/components/schemas/WorkspaceResponse"
           }
         },
-        "required": [
-          "workspace",
-          "agents",
-          "rigs"
-        ],
+        "required": ["workspace", "agents", "rigs"],
         "type": "object"
       },
       "ConfigRigResponse": {
@@ -1453,11 +1161,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "name",
-          "path",
-          "suspended"
-        ],
+        "required": ["name", "path", "suspended"],
         "type": "object"
       },
       "ConfigValidateOutputBody": {
@@ -1468,10 +1172,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "valid": {
             "description": "Whether the configuration is valid.",
@@ -1482,17 +1183,10 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "valid",
-          "errors",
-          "warnings"
-        ],
+        "required": ["valid", "errors", "warnings"],
         "type": "object"
       },
       "ConversationGroupParticipant": {
@@ -1520,14 +1214,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "ID",
-          "GroupID",
-          "Handle",
-          "SessionID",
-          "Public",
-          "Metadata"
-        ],
+        "required": ["ID", "GroupID", "Handle", "SessionID", "Public", "Metadata"],
         "type": "object"
       },
       "ConversationGroupRecord": {
@@ -1576,11 +1263,7 @@
       },
       "ConversationKind": {
         "description": "Shape of a conversation.",
-        "enum": [
-          "dm",
-          "room",
-          "thread"
-        ],
+        "enum": ["dm", "room", "thread"],
         "type": "string"
       },
       "ConversationRef": {
@@ -1605,13 +1288,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "scope_id",
-          "provider",
-          "account_id",
-          "conversation_id",
-          "kind"
-        ],
+        "required": ["scope_id", "provider", "account_id", "conversation_id", "kind"],
         "type": "object"
       },
       "ConversationTranscriptRecord": {
@@ -1624,10 +1301,7 @@
             "items": {
               "$ref": "#/components/schemas/ExternalAttachment"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "Conversation": {
             "$ref": "#/components/schemas/ConversationRef"
@@ -1702,10 +1376,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
         "type": "object"
@@ -1732,12 +1403,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "convoy_id",
-          "total",
-          "closed",
-          "complete"
-        ],
+        "required": ["convoy_id", "total", "closed", "complete"],
         "type": "object"
       },
       "ConvoyCreateInputBody": {
@@ -1748,10 +1414,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "rig": {
             "description": "Rig name.",
@@ -1763,9 +1426,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "title"
-        ],
+        "required": ["title"],
         "type": "object"
       },
       "ConvoyGetResponse": {
@@ -1776,10 +1437,7 @@
             "items": {
               "$ref": "#/components/schemas/Bead"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "convoy": {
             "$ref": "#/components/schemas/Bead",
@@ -1806,10 +1464,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "total",
-          "closed"
-        ],
+        "required": ["total", "closed"],
         "type": "object"
       },
       "ConvoyRemoveInputBody": {
@@ -1820,10 +1475,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
         "type": "object"
@@ -1891,11 +1543,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "issue_id",
-          "depends_on_id",
-          "type"
-        ],
+        "required": ["issue_id", "depends_on_id", "type"],
         "type": "object"
       },
       "ErrorDetail": {
@@ -1920,9 +1568,7 @@
         "properties": {
           "detail": {
             "description": "A human-readable explanation specific to this occurrence of the problem.",
-            "examples": [
-              "Property foo is required but is missing."
-            ],
+            "examples": ["Property foo is required but is missing."],
             "type": "string"
           },
           "errors": {
@@ -1930,32 +1576,23 @@
             "items": {
               "$ref": "#/components/schemas/ErrorDetail"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "instance": {
             "description": "A URI reference that identifies the specific occurrence of the problem.",
-            "examples": [
-              "https://example.com/error-log/abc123"
-            ],
+            "examples": ["https://example.com/error-log/abc123"],
             "format": "uri",
             "type": "string"
           },
           "status": {
             "description": "HTTP status code",
-            "examples": [
-              400
-            ],
+            "examples": [400],
             "format": "int64",
             "type": "integer"
           },
           "title": {
             "description": "A short, human-readable summary of the problem type. This value should not change between occurrences of the error.",
-            "examples": [
-              "Bad Request"
-            ],
+            "examples": ["Bad Request"],
             "type": "string"
           },
           "type": {
@@ -1981,15 +1618,11 @@
         "properties": {
           "status": {
             "description": "Operation result.",
-            "examples": [
-              "recorded"
-            ],
+            "examples": ["recorded"],
             "type": "string"
           }
         },
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "type": "object"
       },
       "EventEmitRequest": {
@@ -2014,10 +1647,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "type",
-          "actor"
-        ],
+        "required": ["type", "actor"],
         "type": "object"
       },
       "EventPayload": {
@@ -2118,17 +1748,11 @@
           },
           "type": {
             "description": "Anchor event type.",
-            "examples": [
-              "events.rotated"
-            ],
+            "examples": ["events.rotated"],
             "type": "string"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts"
-        ],
+        "required": ["seq", "type", "ts"],
         "type": "object"
       },
       "EventRotateArchive": {
@@ -2136,10 +1760,7 @@
         "properties": {
           "compression_status": {
             "description": "Archive compression status.",
-            "enum": [
-              "pending",
-              "complete"
-            ],
+            "enum": ["pending", "complete"],
             "type": "string"
           },
           "first_seq": {
@@ -2159,12 +1780,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "path",
-          "first_seq",
-          "last_seq",
-          "compression_status"
-        ],
+        "required": ["path", "first_seq", "last_seq", "compression_status"],
         "type": "object"
       },
       "EventRotateResponse": {
@@ -2187,9 +1803,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "rotated"
-        ],
+        "required": ["rotated"],
         "type": "object"
       },
       "EventStreamEnvelope": {
@@ -2223,12 +1837,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor"
-        ],
+        "required": ["seq", "type", "ts", "actor"],
         "type": "object"
       },
       "ExtMsgAdapterRegisterInputBody": {
@@ -2257,10 +1866,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider",
-          "account_id"
-        ],
+        "required": ["provider", "account_id"],
         "type": "object"
       },
       "ExtMsgAdapterRegisterOutputBody": {
@@ -2280,18 +1886,11 @@
           },
           "status": {
             "description": "Operation result.",
-            "examples": [
-              "registered"
-            ],
+            "examples": ["registered"],
             "type": "string"
           }
         },
-        "required": [
-          "status",
-          "provider",
-          "account_id",
-          "name"
-        ],
+        "required": ["status", "provider", "account_id", "name"],
         "type": "object"
       },
       "ExtMsgAdapterUnregisterInputBody": {
@@ -2308,10 +1907,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider",
-          "account_id"
-        ],
+        "required": ["provider", "account_id"],
         "type": "object"
       },
       "ExtMsgBindInputBody": {
@@ -2334,9 +1930,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "session_id"
-        ],
+        "required": ["session_id"],
         "type": "object"
       },
       "ExtMsgGroupEnsureInputBody": {
@@ -2412,9 +2006,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "session_id"
-        ],
+        "required": ["session_id"],
         "type": "object"
       },
       "ExtMsgParticipantRemoveInputBody": {
@@ -2431,10 +2023,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "group_id",
-          "handle"
-        ],
+        "required": ["group_id", "handle"],
         "type": "object"
       },
       "ExtMsgParticipantUpsertInputBody": {
@@ -2467,11 +2056,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "group_id",
-          "handle",
-          "session_id"
-        ],
+        "required": ["group_id", "handle", "session_id"],
         "type": "object"
       },
       "ExtMsgTranscriptAckInputBody": {
@@ -2492,9 +2077,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "session_id"
-        ],
+        "required": ["session_id"],
         "type": "object"
       },
       "ExtMsgUnbindBody": {
@@ -2505,15 +2088,10 @@
             "items": {
               "$ref": "#/components/schemas/SessionBindingRecord"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "unbound"
-        ],
+        "required": ["unbound"],
         "type": "object"
       },
       "ExtMsgUnbindInputBody": {
@@ -2529,9 +2107,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "session_id"
-        ],
+        "required": ["session_id"],
         "type": "object"
       },
       "ExternalActor": {
@@ -2547,11 +2123,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "id",
-          "display_name",
-          "is_bot"
-        ],
+        "required": ["id", "display_name", "is_bot"],
         "type": "object"
       },
       "ExternalAttachment": {
@@ -2567,11 +2139,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider_id",
-          "url",
-          "mime_type"
-        ],
+        "required": ["provider_id", "url", "mime_type"],
         "type": "object"
       },
       "ExternalInboundMessage": {
@@ -2584,10 +2152,7 @@
             "items": {
               "$ref": "#/components/schemas/ExternalAttachment"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "conversation": {
             "$ref": "#/components/schemas/ConversationRef"
@@ -2612,13 +2177,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider_message_id",
-          "conversation",
-          "actor",
-          "text",
-          "received_at"
-        ],
+        "required": ["provider_message_id", "conversation", "actor", "text", "received_at"],
         "type": "object"
       },
       "ExtmsgAdapterInfo": {
@@ -2637,11 +2196,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider",
-          "account_id",
-          "name"
-        ],
+        "required": ["provider", "account_id", "name"],
         "type": "object"
       },
       "FanoutPolicy": {
@@ -2677,10 +2232,7 @@
             "items": {
               "$ref": "#/components/schemas/FormulaPreviewEdgeResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "description": {
             "type": "string"
@@ -2695,33 +2247,19 @@
             "items": {
               "$ref": "#/components/schemas/FormulaStepResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "var_defs": {
             "items": {
               "$ref": "#/components/schemas/FormulaVarDefResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "version": {
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "description",
-          "version",
-          "var_defs",
-          "steps",
-          "deps",
-          "preview"
-        ],
+        "required": ["name", "description", "version", "var_defs", "steps", "deps", "preview"],
         "type": "object"
       },
       "FormulaFeedBody": {
@@ -2731,10 +2269,7 @@
             "items": {
               "$ref": "#/components/schemas/MonitorFeedItemResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "partial": {
             "type": "boolean"
@@ -2743,16 +2278,10 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "items",
-          "partial"
-        ],
+        "required": ["items", "partial"],
         "type": "object"
       },
       "FormulaListBody": {
@@ -2763,10 +2292,7 @@
             "items": {
               "$ref": "#/components/schemas/FormulaSummaryResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "partial": {
             "description": "Whether the list is partial.",
@@ -2778,11 +2304,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total",
-          "partial"
-        ],
+        "required": ["items", "total", "partial"],
         "type": "object"
       },
       "FormulaPreviewBody": {
@@ -2809,9 +2331,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "target"
-        ],
+        "required": ["target"],
         "type": "object"
       },
       "FormulaPreviewEdgeResponse": {
@@ -2827,10 +2347,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "from",
-          "to"
-        ],
+        "required": ["from", "to"],
         "type": "object"
       },
       "FormulaPreviewNodeResponse": {
@@ -2849,11 +2366,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title",
-          "kind"
-        ],
+        "required": ["id", "title", "kind"],
         "type": "object"
       },
       "FormulaPreviewResponse": {
@@ -2863,25 +2376,16 @@
             "items": {
               "$ref": "#/components/schemas/FormulaPreviewEdgeResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "nodes": {
             "items": {
               "$ref": "#/components/schemas/FormulaPreviewNodeResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "nodes",
-          "edges"
-        ],
+        "required": ["nodes", "edges"],
         "type": "object"
       },
       "FormulaRecentRunResponse": {
@@ -2903,13 +2407,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "workflow_id",
-          "status",
-          "target",
-          "started_at",
-          "updated_at"
-        ],
+        "required": ["workflow_id", "status", "target", "started_at", "updated_at"],
         "type": "object"
       },
       "FormulaRunsResponse": {
@@ -2925,31 +2423,20 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "recent_runs": {
             "items": {
               "$ref": "#/components/schemas/FormulaRecentRunResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "run_count": {
             "format": "int64",
             "type": "integer"
           }
         },
-        "required": [
-          "formula",
-          "run_count",
-          "recent_runs",
-          "partial"
-        ],
+        "required": ["formula", "run_count", "recent_runs", "partial"],
         "type": "object"
       },
       "FormulaStepResponse": {
@@ -2968,10 +2455,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "metadata": {
             "additionalProperties": {
@@ -2986,11 +2470,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title",
-          "kind"
-        ],
+        "required": ["id", "title", "kind"],
         "type": "object"
       },
       "FormulaSummaryResponse": {
@@ -3006,10 +2486,7 @@
             "items": {
               "$ref": "#/components/schemas/FormulaRecentRunResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "run_count": {
             "format": "int64",
@@ -3019,23 +2496,13 @@
             "items": {
               "$ref": "#/components/schemas/FormulaVarDefResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "version": {
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "description",
-          "version",
-          "var_defs",
-          "run_count",
-          "recent_runs"
-        ],
+        "required": ["name", "description", "version", "var_defs", "run_count", "recent_runs"],
         "type": "object"
       },
       "FormulaVarDefResponse": {
@@ -3049,10 +2516,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "name": {
             "type": "string"
@@ -3067,10 +2531,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "type"
-        ],
+        "required": ["name", "type"],
         "type": "object"
       },
       "GitStatus": {
@@ -3095,13 +2556,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "branch",
-          "clean",
-          "changed_files",
-          "ahead",
-          "behind"
-        ],
+        "required": ["branch", "clean", "changed_files", "ahead", "behind"],
         "type": "object"
       },
       "GroupCreatedEventPayload": {
@@ -3117,11 +2572,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider",
-          "conversation_id",
-          "mode"
-        ],
+        "required": ["provider", "conversation_id", "mode"],
         "type": "object"
       },
       "GroupRouteDecision": {
@@ -3137,11 +2588,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "Match",
-          "TargetSessionID",
-          "UpdateCursor"
-        ],
+        "required": ["Match", "TargetSessionID", "UpdateCursor"],
         "type": "object"
       },
       "HealthOutputBody": {
@@ -3153,9 +2600,7 @@
           },
           "status": {
             "description": "Health status.",
-            "examples": [
-              "ok"
-            ],
+            "examples": ["ok"],
             "type": "string"
           },
           "uptime_sec": {
@@ -3168,10 +2613,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "status",
-          "uptime_sec"
-        ],
+        "required": ["status", "uptime_sec"],
         "type": "object"
       },
       "HeartbeatEvent": {
@@ -3182,9 +2624,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "timestamp"
-        ],
+        "required": ["timestamp"],
         "type": "object"
       },
       "InboundEventPayload": {
@@ -3203,12 +2643,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider",
-          "conversation_id",
-          "actor",
-          "target_session"
-        ],
+        "required": ["provider", "conversation_id", "actor", "target_session"],
         "type": "object"
       },
       "InboundResult": {
@@ -3230,13 +2665,7 @@
             "$ref": "#/components/schemas/ConversationTranscriptRecord"
           }
         },
-        "required": [
-          "Message",
-          "Binding",
-          "GroupRoute",
-          "TranscriptEntry",
-          "TargetSessionID"
-        ],
+        "required": ["Message", "Binding", "GroupRoute", "TranscriptEntry", "TargetSessionID"],
         "type": "object"
       },
       "ListBodyAgentPatch": {
@@ -3247,10 +2676,7 @@
             "items": {
               "$ref": "#/components/schemas/AgentPatch"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3265,10 +2691,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3276,10 +2699,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ListBodyAgentResponse": {
@@ -3290,10 +2710,7 @@
             "items": {
               "$ref": "#/components/schemas/AgentResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3308,10 +2725,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3319,10 +2733,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ListBodyBead": {
@@ -3333,10 +2744,7 @@
             "items": {
               "$ref": "#/components/schemas/Bead"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3351,10 +2759,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3362,10 +2767,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ListBodyConversationTranscriptRecord": {
@@ -3376,10 +2778,7 @@
             "items": {
               "$ref": "#/components/schemas/ConversationTranscriptRecord"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3394,10 +2793,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3405,10 +2801,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ListBodyExtmsgAdapterInfo": {
@@ -3419,10 +2812,7 @@
             "items": {
               "$ref": "#/components/schemas/ExtmsgAdapterInfo"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3437,10 +2827,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3448,10 +2835,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ListBodyProviderPatch": {
@@ -3462,10 +2846,7 @@
             "items": {
               "$ref": "#/components/schemas/ProviderPatch"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3480,10 +2861,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3491,10 +2869,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ListBodyProviderResponse": {
@@ -3505,10 +2880,7 @@
             "items": {
               "$ref": "#/components/schemas/ProviderResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3523,10 +2895,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3534,10 +2903,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ListBodyRigPatch": {
@@ -3548,10 +2914,7 @@
             "items": {
               "$ref": "#/components/schemas/RigPatch"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3566,10 +2929,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3577,10 +2937,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ListBodyRigResponse": {
@@ -3591,10 +2948,7 @@
             "items": {
               "$ref": "#/components/schemas/RigResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3609,10 +2963,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3620,10 +2971,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ListBodySessionBindingRecord": {
@@ -3634,10 +2982,7 @@
             "items": {
               "$ref": "#/components/schemas/SessionBindingRecord"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3652,10 +2997,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3663,10 +3005,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ListBodySessionResponse": {
@@ -3677,10 +3016,7 @@
             "items": {
               "$ref": "#/components/schemas/SessionResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3695,10 +3031,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3706,10 +3039,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ListBodyStatus": {
@@ -3720,10 +3050,7 @@
             "items": {
               "$ref": "#/components/schemas/Status"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3738,10 +3065,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3749,10 +3073,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ListBodyWireEvent": {
@@ -3763,10 +3084,7 @@
             "items": {
               "$ref": "#/components/schemas/TypedEventStreamEnvelope"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3781,10 +3099,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of items matching the query.",
@@ -3792,10 +3107,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "LogicalNode": {
@@ -3814,10 +3126,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total message count.",
@@ -3830,10 +3139,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "total",
-          "unread"
-        ],
+        "required": ["total", "unread"],
         "type": "object"
       },
       "MailEventPayload": {
@@ -3846,9 +3152,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "rig"
-        ],
+        "required": ["rig"],
         "type": "object"
       },
       "MailListBody": {
@@ -3859,10 +3163,7 @@
             "items": {
               "$ref": "#/components/schemas/Message"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -3877,10 +3178,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total number of messages matching the query.",
@@ -3888,10 +3186,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "MailReplyInputBody": {
@@ -3938,10 +3233,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "to",
-          "subject"
-        ],
+        "required": ["to", "subject"],
         "type": "object"
       },
       "Message": {
@@ -3954,10 +3246,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "created_at": {
             "format": "date-time",
@@ -3992,15 +3281,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "from",
-          "to",
-          "subject",
-          "body",
-          "created_at",
-          "read"
-        ],
+        "required": ["id", "from", "to", "subject", "body", "created_at", "read"],
         "type": "object"
       },
       "MonitorFeedItemResponse": {
@@ -4083,15 +3364,11 @@
         "properties": {
           "status": {
             "description": "Operation result.",
-            "examples": [
-              "ok"
-            ],
+            "examples": ["ok"],
             "type": "string"
           }
         },
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "type": "object"
       },
       "OKWithIDResponseBody": {
@@ -4103,15 +3380,11 @@
           },
           "status": {
             "description": "Operation result.",
-            "examples": [
-              "ok"
-            ],
+            "examples": ["ok"],
             "type": "string"
           }
         },
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "type": "object"
       },
       "OptionChoiceDTO": {
@@ -4124,10 +3397,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "value",
-          "label"
-        ],
+        "required": ["value", "label"],
         "type": "object"
       },
       "OrderCheckListBody": {
@@ -4138,15 +3408,10 @@
             "items": {
               "$ref": "#/components/schemas/OrderCheckResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "checks"
-        ],
+        "required": ["checks"],
         "type": "object"
       },
       "OrderCheckResponse": {
@@ -4174,12 +3439,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "scoped_name",
-          "due",
-          "reason"
-        ],
+        "required": ["name", "scoped_name", "due", "reason"],
         "type": "object"
       },
       "OrderHistoryDetailResponse": {
@@ -4195,10 +3455,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "output": {
             "type": "string"
@@ -4207,13 +3464,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "bead_id",
-          "store_ref",
-          "created_at",
-          "labels",
-          "output"
-        ],
+        "required": ["bead_id", "store_ref", "created_at", "labels", "output"],
         "type": "object"
       },
       "OrderHistoryEntry": {
@@ -4244,10 +3495,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "name": {
             "type": "string"
@@ -4288,15 +3536,10 @@
             "items": {
               "$ref": "#/components/schemas/OrderHistoryEntry"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "entries"
-        ],
+        "required": ["entries"],
         "type": "object"
       },
       "OrderListBody": {
@@ -4307,15 +3550,10 @@
             "items": {
               "$ref": "#/components/schemas/OrderResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "orders"
-        ],
+        "required": ["orders"],
         "type": "object"
       },
       "OrderResponse": {
@@ -4378,14 +3616,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "scoped_name",
-          "type",
-          "timeout_ms",
-          "enabled",
-          "capture_output"
-        ],
+        "required": ["name", "scoped_name", "type", "timeout_ms", "enabled", "capture_output"],
         "type": "object"
       },
       "OrdersFeedBody": {
@@ -4395,10 +3626,7 @@
             "items": {
               "$ref": "#/components/schemas/MonitorFeedItemResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "partial": {
             "type": "boolean"
@@ -4407,16 +3635,10 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "items",
-          "partial"
-        ],
+        "required": ["items", "partial"],
         "type": "object"
       },
       "OutboundEventPayload": {
@@ -4435,12 +3657,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "provider",
-          "conversation_id",
-          "session",
-          "message_id"
-        ],
+        "required": ["provider", "conversation_id", "session", "message_id"],
         "type": "object"
       },
       "OutboundResult": {
@@ -4456,11 +3673,7 @@
             "$ref": "#/components/schemas/ConversationTranscriptRecord"
           }
         },
-        "required": [
-          "Receipt",
-          "DeliveryContext",
-          "TranscriptEntry"
-        ],
+        "required": ["Receipt", "DeliveryContext", "TranscriptEntry"],
         "type": "object"
       },
       "OutputTurn": {
@@ -4476,10 +3689,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "role",
-          "text"
-        ],
+        "required": ["role", "text"],
         "type": "object"
       },
       "PackListBody": {
@@ -4490,15 +3700,10 @@
             "items": {
               "$ref": "#/components/schemas/PackResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "packs"
-        ],
+        "required": ["packs"],
         "type": "object"
       },
       "PackResponse": {
@@ -4517,9 +3722,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "type": "object"
       },
       "PaginationInfo": {
@@ -4569,15 +3772,11 @@
           },
           "status": {
             "description": "Operation result.",
-            "examples": [
-              "deleted"
-            ],
+            "examples": ["deleted"],
             "type": "string"
           }
         },
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "type": "object"
       },
       "PatchOKResponseBody": {
@@ -4597,15 +3796,11 @@
           },
           "status": {
             "description": "Operation result.",
-            "examples": [
-              "ok"
-            ],
+            "examples": ["ok"],
             "type": "string"
           }
         },
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "type": "object"
       },
       "PendingInteraction": {
@@ -4624,10 +3819,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "prompt": {
             "type": "string"
@@ -4636,62 +3828,34 @@
             "type": "string"
           }
         },
-        "required": [
-          "request_id",
-          "kind"
-        ],
+        "required": ["request_id", "kind"],
         "type": "object"
       },
       "PoolOverride": {
         "additionalProperties": false,
         "properties": {
           "Check": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "DrainTimeout": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "Max": {
             "format": "int64",
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "Min": {
             "format": "int64",
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "OnBoot": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "OnDeath": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           }
         },
-        "required": [
-          "Min",
-          "Max",
-          "Check",
-          "DrainTimeout",
-          "OnDeath",
-          "OnBoot"
-        ],
+        "required": ["Min", "Max", "Check", "DrainTimeout", "OnDeath", "OnBoot"],
         "type": "object"
       },
       "PostgresCredentialResolvedPayload": {
@@ -4716,14 +3880,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "scope_kind",
-          "scope_name",
-          "source",
-          "host",
-          "port",
-          "user"
-        ],
+        "required": ["scope_kind", "scope_name", "source", "host", "port", "user"],
         "type": "object"
       },
       "ProjectIdentityStampedPayload": {
@@ -4745,12 +3902,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "scope_root",
-          "source",
-          "layer",
-          "new_id"
-        ],
+        "required": ["scope_root", "source", "layer", "new_id"],
         "type": "object"
       },
       "ProviderCreateInputBody": {
@@ -4761,10 +3913,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "acp_command": {
             "description": "ACP transport command binary override.",
@@ -4775,20 +3924,14 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "args_append": {
             "description": "Arguments appended after inherited/base args.",
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "base": {
             "description": "Optional provider base for inheritance.",
@@ -4832,9 +3975,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "type": "object"
       },
       "ProviderCreatedOutputBody": {
@@ -4846,16 +3987,11 @@
           },
           "status": {
             "description": "Operation result.",
-            "examples": [
-              "created"
-            ],
+            "examples": ["created"],
             "type": "string"
           }
         },
-        "required": [
-          "status",
-          "provider"
-        ],
+        "required": ["status", "provider"],
         "type": "object"
       },
       "ProviderOptionDTO": {
@@ -4865,10 +4001,7 @@
             "items": {
               "$ref": "#/components/schemas/OptionChoiceDTO"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "default": {
             "type": "string"
@@ -4883,13 +4016,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "key",
-          "label",
-          "type",
-          "default",
-          "choices"
-        ],
+        "required": ["key", "label", "type", "default", "choices"],
         "type": "object"
       },
       "ProviderPatch": {
@@ -4899,52 +4026,31 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "ACPCommand": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "AcceptStartupDialogs": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": ["boolean", "null"]
           },
           "Args": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "ArgsAppend": {
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "Base": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "Command": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "Env": {
             "additionalProperties": {
@@ -4956,38 +4062,23 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "Name": {
             "type": "string"
           },
           "OptionsSchemaMerge": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "PromptFlag": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "PromptMode": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "ReadyDelayMs": {
             "format": "int64",
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "Replace": {
             "type": "boolean"
@@ -5024,10 +4115,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "acp_command": {
             "description": "Override ACP transport command binary.",
@@ -5038,10 +4126,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "command": {
             "description": "Override command binary.",
@@ -5082,10 +4167,7 @@
             "items": {
               "$ref": "#/components/schemas/ProviderPublicResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "next_cursor": {
             "description": "Cursor for the next page of results.",
@@ -5097,10 +4179,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "ProviderPublicResponse": {
@@ -5128,17 +4207,10 @@
             "items": {
               "$ref": "#/components/schemas/ProviderOptionDTO"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "name",
-          "builtin",
-          "city_level"
-        ],
+        "required": ["name", "builtin", "city_level"],
         "type": "object"
       },
       "ProviderReadiness": {
@@ -5154,10 +4226,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "display_name",
-          "status"
-        ],
+        "required": ["display_name", "status"],
         "type": "object"
       },
       "ProviderReadinessResponse": {
@@ -5170,9 +4239,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "providers"
-        ],
+        "required": ["providers"],
         "type": "object"
       },
       "ProviderResponse": {
@@ -5191,10 +4258,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "builtin": {
             "type": "boolean"
@@ -5228,11 +4292,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "name",
-          "builtin",
-          "city_level"
-        ],
+        "required": ["name", "builtin", "city_level"],
         "type": "object"
       },
       "ProviderSpecJSON": {
@@ -5251,10 +4311,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "command": {
             "type": "string"
@@ -5289,10 +4346,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "acp_command": {
             "description": "ACP transport command binary override.",
@@ -5303,20 +4357,14 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "args_append": {
             "description": "Arguments appended after inherited/base args.",
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "base": {
             "description": "Provider base for inheritance.",
@@ -5412,12 +4460,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "kind",
-          "display_name",
-          "status"
-        ],
+        "required": ["name", "kind", "display_name", "status"],
         "type": "object"
       },
       "ReadinessResponse": {
@@ -5430,9 +4473,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "items"
-        ],
+        "required": ["items"],
         "type": "object"
       },
       "RequestFailedPayload": {
@@ -5462,12 +4503,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "request_id",
-          "operation",
-          "error_code",
-          "error_message"
-        ],
+        "required": ["request_id", "operation", "error_code", "error_message"],
         "type": "object"
       },
       "RigActionBody": {
@@ -5482,20 +4518,14 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "killed": {
             "description": "Agents that were killed (restart only).",
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "rig": {
             "description": "Rig name.",
@@ -5503,17 +4533,11 @@
           },
           "status": {
             "description": "Operation result (ok, partial, failed).",
-            "examples": [
-              "ok"
-            ],
+            "examples": ["ok"],
             "type": "string"
           }
         },
-        "required": [
-          "status",
-          "action",
-          "rig"
-        ],
+        "required": ["status", "action", "rig"],
         "type": "object"
       },
       "RigCreateInputBody": {
@@ -5538,10 +4562,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "path"
-        ],
+        "required": ["name", "path"],
         "type": "object"
       },
       "RigCreatedOutputBody": {
@@ -5553,26 +4574,18 @@
           },
           "status": {
             "description": "Operation result.",
-            "examples": [
-              "created"
-            ],
+            "examples": ["created"],
             "type": "string"
           }
         },
-        "required": [
-          "status",
-          "rig"
-        ],
+        "required": ["status", "rig"],
         "type": "object"
       },
       "RigPatch": {
         "additionalProperties": false,
         "properties": {
           "DefaultBranch": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "FormulaVars": {
             "additionalProperties": {
@@ -5584,32 +4597,16 @@
             "type": "string"
           },
           "Path": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "Prefix": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "Suspended": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": ["boolean", "null"]
           }
         },
-        "required": [
-          "Name",
-          "Path",
-          "Prefix",
-          "DefaultBranch",
-          "Suspended",
-          "FormulaVars"
-        ],
+        "required": ["Name", "Path", "Prefix", "DefaultBranch", "Suspended", "FormulaVars"],
         "type": "object"
       },
       "RigPatchSetInputBody": {
@@ -5672,13 +4669,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "name",
-          "path",
-          "suspended",
-          "agent_count",
-          "running_count"
-        ],
+        "required": ["name", "path", "suspended", "agent_count", "running_count"],
         "type": "object"
       },
       "RigUpdateInputBody": {
@@ -5720,11 +4711,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "prior_archive",
-          "prior_first_seq",
-          "prior_last_seq"
-        ],
+        "required": ["prior_archive", "prior_first_seq", "prior_last_seq"],
         "type": "object"
       },
       "ScopeGroup": {
@@ -5736,9 +4723,7 @@
         "properties": {
           "action": {
             "description": "Action performed.",
-            "examples": [
-              "restart"
-            ],
+            "examples": ["restart"],
             "type": "string"
           },
           "service": {
@@ -5747,17 +4732,11 @@
           },
           "status": {
             "description": "Operation result.",
-            "examples": [
-              "ok"
-            ],
+            "examples": ["ok"],
             "type": "string"
           }
         },
-        "required": [
-          "status",
-          "action",
-          "service"
-        ],
+        "required": ["status", "action", "service"],
         "type": "object"
       },
       "SessionActivityEvent": {
@@ -5765,15 +4744,11 @@
         "properties": {
           "activity": {
             "description": "Session activity state: 'idle' or 'in-turn'.",
-            "examples": [
-              "idle"
-            ],
+            "examples": ["idle"],
             "type": "string"
           }
         },
-        "required": [
-          "activity"
-        ],
+        "required": ["activity"],
         "type": "object"
       },
       "SessionAgentGetResponse": {
@@ -5781,18 +4756,13 @@
         "properties": {
           "messages": {
             "items": {},
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "status": {
             "type": "string"
           }
         },
-        "required": [
-          "messages"
-        ],
+        "required": ["messages"],
         "type": "object"
       },
       "SessionAgentListResponse": {
@@ -5802,15 +4772,10 @@
             "items": {
               "$ref": "#/components/schemas/AgentMapping"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "agents"
-        ],
+        "required": ["agents"],
         "type": "object"
       },
       "SessionBindingRecord": {
@@ -5829,10 +4794,7 @@
           },
           "ExpiresAt": {
             "format": "date-time",
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "ID": {
             "type": "string"
@@ -5924,10 +4886,7 @@
             "description": "Full session state as returned by GET /session/{id}. For session.create, this result is emitted only after the session has left creating and can accept normal metadata and lifecycle commands."
           }
         },
-        "required": [
-          "request_id",
-          "session"
-        ],
+        "required": ["request_id", "session"],
         "type": "object"
       },
       "SessionDrainAckedWithAssignedWorkPayload": {
@@ -5954,10 +4913,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "session_id",
-          "bead_id"
-        ],
+        "required": ["session_id", "bead_id"],
         "type": "object"
       },
       "SessionInfo": {
@@ -5974,10 +4930,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "attached"
-        ],
+        "required": ["name", "attached"],
         "type": "object"
       },
       "SessionLifecyclePayload": {
@@ -5996,9 +4949,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "session_id"
-        ],
+        "required": ["session_id"],
         "type": "object"
       },
       "SessionMessageInputBody": {
@@ -6011,9 +4962,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "message"
-        ],
+        "required": ["message"],
         "type": "object"
       },
       "SessionMessageSucceededPayload": {
@@ -6028,10 +4977,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "request_id",
-          "session_id"
-        ],
+        "required": ["request_id", "session_id"],
         "type": "object"
       },
       "SessionPatchBody": {
@@ -6059,9 +5005,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "supported"
-        ],
+        "required": ["supported"],
         "type": "object"
       },
       "SessionPermissionModeBody": {
@@ -6074,9 +5018,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "permission_mode"
-        ],
+        "required": ["permission_mode"],
         "type": "object"
       },
       "SessionRawMessageFrame": {
@@ -6092,9 +5034,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "title"
-        ],
+        "required": ["title"],
         "type": "object"
       },
       "SessionRespondInputBody": {
@@ -6121,9 +5061,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "action"
-        ],
+        "required": ["action"],
         "type": "object"
       },
       "SessionRespondOutputBody": {
@@ -6135,16 +5073,11 @@
           },
           "status": {
             "description": "Operation result.",
-            "examples": [
-              "accepted"
-            ],
+            "examples": ["accepted"],
             "type": "string"
           }
         },
-        "required": [
-          "status",
-          "id"
-        ],
+        "required": ["status", "id"],
         "type": "object"
       },
       "SessionResponse": {
@@ -6294,19 +5227,10 @@
             "items": {
               "$ref": "#/components/schemas/OutputTurn"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "id",
-          "template",
-          "provider",
-          "format",
-          "turns"
-        ],
+        "required": ["id", "template", "provider", "format", "turns"],
         "type": "object"
       },
       "SessionStreamRawMessageEvent": {
@@ -6323,10 +5247,7 @@
             "items": {
               "$ref": "#/components/schemas/SessionRawMessageFrame"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "pagination": {
             "$ref": "#/components/schemas/PaginationInfo"
@@ -6339,13 +5260,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "template",
-          "provider",
-          "format",
-          "messages"
-        ],
+        "required": ["id", "template", "provider", "format", "messages"],
         "type": "object"
       },
       "SessionSubmitInputBody": {
@@ -6354,11 +5269,7 @@
           "intent": {
             "$ref": "#/components/schemas/SubmitIntent",
             "description": "Submit intent; empty defaults to \"default\".",
-            "enum": [
-              "default",
-              "follow_up",
-              "interrupt_now"
-            ]
+            "enum": ["default", "follow_up", "interrupt_now"]
           },
           "message": {
             "description": "Message text to submit.",
@@ -6367,9 +5278,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "message"
-        ],
+        "required": ["message"],
         "type": "object"
       },
       "SessionSubmitSucceededPayload": {
@@ -6392,12 +5301,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "request_id",
-          "session_id",
-          "queued",
-          "intent"
-        ],
+        "required": ["request_id", "session_id", "queued", "intent"],
         "type": "object"
       },
       "SessionTranscriptGetResponse": {
@@ -6415,10 +5319,7 @@
             "items": {
               "$ref": "#/components/schemas/SessionRawMessageFrame"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "pagination": {
             "$ref": "#/components/schemas/PaginationInfo"
@@ -6435,18 +5336,10 @@
             "items": {
               "$ref": "#/components/schemas/OutputTurn"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           }
         },
-        "required": [
-          "id",
-          "template",
-          "provider",
-          "format"
-        ],
+        "required": ["id", "template", "provider", "format"],
         "type": "object"
       },
       "SlingInputBody": {
@@ -6497,9 +5390,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "target"
-        ],
+        "required": ["target"],
         "type": "object"
       },
       "SlingResponse": {
@@ -6530,19 +5421,13 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "workflow_id": {
             "type": "string"
           }
         },
-        "required": [
-          "status",
-          "target"
-        ],
+        "required": ["status", "target"],
         "type": "object"
       },
       "Status": {
@@ -6630,12 +5515,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "total",
-          "running",
-          "suspended",
-          "quarantined"
-        ],
+        "required": ["total", "running", "suspended", "quarantined"],
         "type": "object"
       },
       "StatusAgentDetail": {
@@ -6682,13 +5562,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "name",
-          "qualified_name",
-          "scope",
-          "running",
-          "suspended"
-        ],
+        "required": ["name", "qualified_name", "scope", "running", "suspended"],
         "type": "object"
       },
       "StatusBody": {
@@ -6704,10 +5578,7 @@
             "items": {
               "$ref": "#/components/schemas/StatusAgentDetail"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "agents": {
             "$ref": "#/components/schemas/StatusAgentCounts",
@@ -6726,10 +5597,7 @@
             "items": {
               "$ref": "#/components/schemas/StatusNamedSessionDetail"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "partial": {
             "description": "True when one or more status backing reads returned incomplete data.",
@@ -6740,10 +5608,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "path": {
             "description": "City directory path.",
@@ -6759,10 +5624,7 @@
             "items": {
               "$ref": "#/components/schemas/StatusRigDetail"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "rigs": {
             "$ref": "#/components/schemas/StatusRigCounts",
@@ -6828,10 +5690,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "unread",
-          "total"
-        ],
+        "required": ["unread", "total"],
         "type": "object"
       },
       "StatusNamedSessionDetail": {
@@ -6850,11 +5709,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "identity",
-          "status",
-          "mode"
-        ],
+        "required": ["identity", "status", "mode"],
         "type": "object"
       },
       "StatusRigCounts": {
@@ -6871,10 +5726,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "total",
-          "suspended"
-        ],
+        "required": ["total", "suspended"],
         "type": "object"
       },
       "StatusRigDetail": {
@@ -6893,11 +5745,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "name",
-          "path",
-          "suspended"
-        ],
+        "required": ["name", "path", "suspended"],
         "type": "object"
       },
       "StatusSessionCountsDetail": {
@@ -6914,10 +5762,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "active",
-          "suspended"
-        ],
+        "required": ["active", "suspended"],
         "type": "object"
       },
       "StatusStoreHealth": {
@@ -6989,11 +5834,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "in_progress",
-          "ready",
-          "open"
-        ],
+        "required": ["in_progress", "ready", "open"],
         "type": "object"
       },
       "StoreMaintenanceDonePayload": {
@@ -7015,12 +5856,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "duration_s",
-          "before_bytes",
-          "after_bytes",
-          "snapshot_path"
-        ],
+        "required": ["duration_s", "before_bytes", "after_bytes", "snapshot_path"],
         "type": "object"
       },
       "StoreMaintenanceFailedPayload": {
@@ -7040,11 +5876,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "stage",
-          "error_msg",
-          "duration_s"
-        ],
+        "required": ["stage", "error_msg", "duration_s"],
         "type": "object"
       },
       "SubmissionCapabilities": {
@@ -7057,19 +5889,12 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "supports_follow_up",
-          "supports_interrupt_now"
-        ],
+        "required": ["supports_follow_up", "supports_interrupt_now"],
         "type": "object"
       },
       "SubmitIntent": {
         "description": "Semantic delivery choice for a user message on a session submit request.",
-        "enum": [
-          "default",
-          "follow_up",
-          "interrupt_now"
-        ],
+        "enum": ["default", "follow_up", "interrupt_now"],
         "type": "string"
       },
       "SupervisorCitiesOutputBody": {
@@ -7080,10 +5905,7 @@
             "items": {
               "$ref": "#/components/schemas/CityInfo"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "description": "Total count.",
@@ -7091,10 +5913,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
+        "required": ["items", "total"],
         "type": "object"
       },
       "SupervisorEventListOutputBody": {
@@ -7108,21 +5927,14 @@
             "items": {
               "$ref": "#/components/schemas/TypedTaggedEventStreamEnvelope"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "total": {
             "format": "int64",
             "type": "integer"
           }
         },
-        "required": [
-          "event_cursor",
-          "items",
-          "total"
-        ],
+        "required": ["event_cursor", "items", "total"],
         "type": "object"
       },
       "SupervisorFSPressureSkippedTickPayload": {
@@ -7157,13 +5969,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "avg60",
-          "threshold",
-          "consecutive_skips",
-          "max_consecutive_skips",
-          "outcome"
-        ],
+        "required": ["avg60", "threshold", "consecutive_skips", "max_consecutive_skips", "outcome"],
         "type": "object"
       },
       "SupervisorHealthOutputBody": {
@@ -7201,13 +6007,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "status",
-          "version",
-          "uptime_sec",
-          "cities_total",
-          "cities_running"
-        ],
+        "required": ["status", "version", "uptime_sec", "cities_total", "cities_running"],
         "type": "object"
       },
       "SupervisorShutdownPayload": {
@@ -7219,11 +6019,7 @@
           },
           "mode": {
             "description": "Resulting shutdown mode.",
-            "enum": [
-              "destructive",
-              "preserve_sessions",
-              "unknown"
-            ],
+            "enum": ["destructive", "preserve_sessions", "unknown"],
             "type": "string"
           },
           "signal": {
@@ -7232,17 +6028,11 @@
           },
           "source": {
             "description": "Which path triggered the shutdown.",
-            "enum": [
-              "signal",
-              "socket_stop"
-            ],
+            "enum": ["signal", "socket_stop"],
             "type": "string"
           }
         },
-        "required": [
-          "source",
-          "mode"
-        ],
+        "required": ["source", "mode"],
         "type": "object"
       },
       "SupervisorStartup": {
@@ -7257,19 +6047,14 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "ready": {
             "description": "True when the city is running.",
             "type": "boolean"
           }
         },
-        "required": [
-          "ready"
-        ],
+        "required": ["ready"],
         "type": "object"
       },
       "TaggedEventStreamEnvelope": {
@@ -7306,29 +6091,17 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "city"],
         "type": "object"
       },
       "TranscriptMessageKind": {
         "description": "Direction of a transcript entry.",
-        "enum": [
-          "inbound",
-          "outbound"
-        ],
+        "enum": ["inbound", "outbound"],
         "type": "string"
       },
       "TranscriptProvenance": {
         "description": "Provenance of a transcript entry (freshly observed vs. replayed from persisted history).",
-        "enum": [
-          "live",
-          "hydrated"
-        ],
+        "enum": ["live", "hydrated"],
         "type": "string"
       },
       "TypedEventStreamEnvelope": {
@@ -7601,13 +6374,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope bead.closed",
         "type": "object"
       },
@@ -7643,13 +6410,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope bead.created",
         "type": "object"
       },
@@ -7685,13 +6446,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope bead.updated",
         "type": "object"
       },
@@ -7727,13 +6482,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope city.created",
         "type": "object"
       },
@@ -7769,13 +6518,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope city.resumed",
         "type": "object"
       },
@@ -7811,13 +6554,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope city.suspended",
         "type": "object"
       },
@@ -7853,13 +6590,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope city.unregister_requested",
         "type": "object"
       },
@@ -7895,13 +6626,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope controller.started",
         "type": "object"
       },
@@ -7937,13 +6662,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope controller.stopped",
         "type": "object"
       },
@@ -7979,13 +6698,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope convoy.closed",
         "type": "object"
       },
@@ -8021,13 +6734,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope convoy.created",
         "type": "object"
       },
@@ -8120,13 +6827,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope custom",
         "type": "object"
       },
@@ -8162,13 +6863,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope events.rotated",
         "type": "object"
       },
@@ -8204,13 +6899,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope extmsg.adapter_added",
         "type": "object"
       },
@@ -8246,13 +6935,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope extmsg.adapter_removed",
         "type": "object"
       },
@@ -8288,13 +6971,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope extmsg.bound",
         "type": "object"
       },
@@ -8330,13 +7007,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope extmsg.group_created",
         "type": "object"
       },
@@ -8372,13 +7043,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope extmsg.inbound",
         "type": "object"
       },
@@ -8414,13 +7079,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope extmsg.outbound",
         "type": "object"
       },
@@ -8456,13 +7115,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope extmsg.unbound",
         "type": "object"
       },
@@ -8498,13 +7151,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope gc.store.maintenance.done",
         "type": "object"
       },
@@ -8540,13 +7187,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope gc.store.maintenance.failed",
         "type": "object"
       },
@@ -8582,13 +7223,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope mail.archived",
         "type": "object"
       },
@@ -8624,13 +7259,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope mail.deleted",
         "type": "object"
       },
@@ -8666,13 +7295,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope mail.marked_read",
         "type": "object"
       },
@@ -8708,13 +7331,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope mail.marked_unread",
         "type": "object"
       },
@@ -8750,13 +7367,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope mail.read",
         "type": "object"
       },
@@ -8792,13 +7403,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope mail.replied",
         "type": "object"
       },
@@ -8834,13 +7439,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope mail.sent",
         "type": "object"
       },
@@ -8876,13 +7475,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope order.completed",
         "type": "object"
       },
@@ -8918,13 +7511,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope order.failed",
         "type": "object"
       },
@@ -8960,13 +7547,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope order.fired",
         "type": "object"
       },
@@ -9002,13 +7583,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope pg.credential_resolved",
         "type": "object"
       },
@@ -9044,13 +7619,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope project.identity.stamped",
         "type": "object"
       },
@@ -9086,13 +7655,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope provider.swapped",
         "type": "object"
       },
@@ -9128,13 +7691,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope request.failed",
         "type": "object"
       },
@@ -9170,13 +7727,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope request.result.city.create",
         "type": "object"
       },
@@ -9212,13 +7763,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope request.result.city.unregister",
         "type": "object"
       },
@@ -9254,13 +7799,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope request.result.session.create",
         "type": "object"
       },
@@ -9296,13 +7835,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope request.result.session.message",
         "type": "object"
       },
@@ -9338,13 +7871,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope request.result.session.submit",
         "type": "object"
       },
@@ -9380,13 +7907,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.crashed",
         "type": "object"
       },
@@ -9422,13 +7943,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.drain_acked_with_assigned_work",
         "type": "object"
       },
@@ -9464,13 +7979,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.draining",
         "type": "object"
       },
@@ -9506,13 +8015,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.idle_killed",
         "type": "object"
       },
@@ -9548,13 +8051,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.max_age_killed",
         "type": "object"
       },
@@ -9590,13 +8087,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.quarantined",
         "type": "object"
       },
@@ -9632,13 +8123,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.stopped",
         "type": "object"
       },
@@ -9674,13 +8159,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.stranded",
         "type": "object"
       },
@@ -9716,13 +8195,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.suspended",
         "type": "object"
       },
@@ -9758,13 +8231,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.undrained",
         "type": "object"
       },
@@ -9800,13 +8267,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.updated",
         "type": "object"
       },
@@ -9842,13 +8303,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.woke",
         "type": "object"
       },
@@ -9884,13 +8339,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope session.work_query_failed",
         "type": "object"
       },
@@ -9926,13 +8375,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope supervisor.fs_pressure.skipped_tick",
         "type": "object"
       },
@@ -9968,13 +8411,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope supervisor.shutdown_requested",
         "type": "object"
       },
@@ -10010,13 +8447,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload"],
         "title": "TypedEventStreamEnvelope worker.operation",
         "type": "object"
       },
@@ -10293,14 +8724,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope bead.closed",
         "type": "object"
       },
@@ -10339,14 +8763,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope bead.created",
         "type": "object"
       },
@@ -10385,14 +8802,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope bead.updated",
         "type": "object"
       },
@@ -10431,14 +8841,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope city.created",
         "type": "object"
       },
@@ -10477,14 +8880,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope city.resumed",
         "type": "object"
       },
@@ -10523,14 +8919,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope city.suspended",
         "type": "object"
       },
@@ -10569,14 +8958,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope city.unregister_requested",
         "type": "object"
       },
@@ -10615,14 +8997,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope controller.started",
         "type": "object"
       },
@@ -10661,14 +9036,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope controller.stopped",
         "type": "object"
       },
@@ -10707,14 +9075,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope convoy.closed",
         "type": "object"
       },
@@ -10753,14 +9114,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope convoy.created",
         "type": "object"
       },
@@ -10856,14 +9210,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope custom",
         "type": "object"
       },
@@ -10902,14 +9249,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope events.rotated",
         "type": "object"
       },
@@ -10948,14 +9288,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope extmsg.adapter_added",
         "type": "object"
       },
@@ -10994,14 +9327,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope extmsg.adapter_removed",
         "type": "object"
       },
@@ -11040,14 +9366,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope extmsg.bound",
         "type": "object"
       },
@@ -11086,14 +9405,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope extmsg.group_created",
         "type": "object"
       },
@@ -11132,14 +9444,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope extmsg.inbound",
         "type": "object"
       },
@@ -11178,14 +9483,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope extmsg.outbound",
         "type": "object"
       },
@@ -11224,14 +9522,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope extmsg.unbound",
         "type": "object"
       },
@@ -11270,14 +9561,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope gc.store.maintenance.done",
         "type": "object"
       },
@@ -11316,14 +9600,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope gc.store.maintenance.failed",
         "type": "object"
       },
@@ -11362,14 +9639,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope mail.archived",
         "type": "object"
       },
@@ -11408,14 +9678,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope mail.deleted",
         "type": "object"
       },
@@ -11454,14 +9717,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope mail.marked_read",
         "type": "object"
       },
@@ -11500,14 +9756,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope mail.marked_unread",
         "type": "object"
       },
@@ -11546,14 +9795,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope mail.read",
         "type": "object"
       },
@@ -11592,14 +9834,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope mail.replied",
         "type": "object"
       },
@@ -11638,14 +9873,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope mail.sent",
         "type": "object"
       },
@@ -11684,14 +9912,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope order.completed",
         "type": "object"
       },
@@ -11730,14 +9951,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope order.failed",
         "type": "object"
       },
@@ -11776,14 +9990,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope order.fired",
         "type": "object"
       },
@@ -11822,14 +10029,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope pg.credential_resolved",
         "type": "object"
       },
@@ -11868,14 +10068,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope project.identity.stamped",
         "type": "object"
       },
@@ -11914,14 +10107,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope provider.swapped",
         "type": "object"
       },
@@ -11960,14 +10146,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope request.failed",
         "type": "object"
       },
@@ -12006,14 +10185,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope request.result.city.create",
         "type": "object"
       },
@@ -12052,14 +10224,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope request.result.city.unregister",
         "type": "object"
       },
@@ -12098,14 +10263,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope request.result.session.create",
         "type": "object"
       },
@@ -12144,14 +10302,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope request.result.session.message",
         "type": "object"
       },
@@ -12190,14 +10341,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope request.result.session.submit",
         "type": "object"
       },
@@ -12236,14 +10380,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.crashed",
         "type": "object"
       },
@@ -12282,14 +10419,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.drain_acked_with_assigned_work",
         "type": "object"
       },
@@ -12328,14 +10458,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.draining",
         "type": "object"
       },
@@ -12374,14 +10497,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.idle_killed",
         "type": "object"
       },
@@ -12420,14 +10536,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.max_age_killed",
         "type": "object"
       },
@@ -12466,14 +10575,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.quarantined",
         "type": "object"
       },
@@ -12512,14 +10614,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.stopped",
         "type": "object"
       },
@@ -12558,14 +10653,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.stranded",
         "type": "object"
       },
@@ -12604,14 +10692,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.suspended",
         "type": "object"
       },
@@ -12650,14 +10731,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.undrained",
         "type": "object"
       },
@@ -12696,14 +10770,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.updated",
         "type": "object"
       },
@@ -12742,14 +10809,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.woke",
         "type": "object"
       },
@@ -12788,14 +10848,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope session.work_query_failed",
         "type": "object"
       },
@@ -12834,14 +10887,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope supervisor.fs_pressure.skipped_tick",
         "type": "object"
       },
@@ -12880,14 +10926,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope supervisor.shutdown_requested",
         "type": "object"
       },
@@ -12926,14 +10965,7 @@
             "$ref": "#/components/schemas/WorkflowEventProjection"
           }
         },
-        "required": [
-          "seq",
-          "type",
-          "ts",
-          "actor",
-          "payload",
-          "city"
-        ],
+        "required": ["seq", "type", "ts", "actor", "payload", "city"],
         "title": "TypedTaggedEventStreamEnvelope worker.operation",
         "type": "object"
       },
@@ -12948,10 +10980,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "session_id",
-          "count"
-        ],
+        "required": ["session_id", "count"],
         "type": "object"
       },
       "WorkerOperationEventPayload": {
@@ -13053,14 +11082,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "op_id",
-          "operation",
-          "result",
-          "started_at",
-          "finished_at",
-          "duration_ms"
-        ],
+        "required": ["op_id", "operation", "result", "started_at", "finished_at", "duration_ms"],
         "type": "object"
       },
       "WorkflowAttemptSummary": {
@@ -13079,10 +11101,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "attempt_count",
-          "active_attempt"
-        ],
+        "required": ["attempt_count", "active_attempt"],
         "type": "object"
       },
       "WorkflowBeadResponse": {
@@ -13123,13 +11142,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title",
-          "status",
-          "kind",
-          "metadata"
-        ],
+        "required": ["id", "title", "status", "kind", "metadata"],
         "type": "object"
       },
       "WorkflowDeleteResponse": {
@@ -13154,21 +11167,14 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "workflow_id": {
             "description": "Workflow ID.",
             "type": "string"
           }
         },
-        "required": [
-          "workflow_id",
-          "closed",
-          "deleted"
-        ],
+        "required": ["workflow_id", "closed", "deleted"],
         "type": "object"
       },
       "WorkflowDepResponse": {
@@ -13184,10 +11190,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "from",
-          "to"
-        ],
+        "required": ["from", "to"],
         "type": "object"
       },
       "WorkflowEventProjection": {
@@ -13203,10 +11206,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "event_seq": {
             "format": "int64",
@@ -13277,37 +11277,25 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowBeadResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "deps": {
             "items": {
               "$ref": "#/components/schemas/WorkflowDepResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "logical_edges": {
             "items": {
               "$ref": "#/components/schemas/WorkflowDepResponse"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "logical_nodes": {
             "items": {
               "$ref": "#/components/schemas/LogicalNode"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "partial": {
             "type": "boolean"
@@ -13325,10 +11313,7 @@
             "items": {
               "$ref": "#/components/schemas/ScopeGroup"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "scope_kind": {
             "type": "string"
@@ -13350,10 +11335,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": ["array", "null"]
           },
           "workflow_id": {
             "type": "string"
@@ -13402,10 +11384,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "name",
-          "suspended"
-        ],
+        "required": ["name", "suspended"],
         "type": "object"
       }
     }
@@ -14042,10 +12021,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data",
-                          "event"
-                        ],
+                        "required": ["data", "event"],
                         "title": "Event heartbeat",
                         "type": "object"
                       },
@@ -14068,10 +12044,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data",
-                          "event"
-                        ],
+                        "required": ["data", "event"],
                         "title": "Event turn",
                         "type": "object"
                       }
@@ -14159,10 +12132,7 @@
             "required": true,
             "schema": {
               "description": "Action to perform.",
-              "enum": [
-                "suspend",
-                "resume"
-              ],
+              "enum": ["suspend", "resume"],
               "type": "string"
             }
           }
@@ -14618,10 +12588,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data",
-                          "event"
-                        ],
+                        "required": ["data", "event"],
                         "title": "Event heartbeat",
                         "type": "object"
                       },
@@ -14644,10 +12611,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data",
-                          "event"
-                        ],
+                        "required": ["data", "event"],
                         "title": "Event turn",
                         "type": "object"
                       }
@@ -14745,10 +12709,7 @@
             "required": true,
             "schema": {
               "description": "Action to perform.",
-              "enum": [
-                "suspend",
-                "resume"
-              ],
+              "enum": ["suspend", "resume"],
               "type": "string"
             }
           }
@@ -14851,10 +12812,7 @@
             "name": "running",
             "schema": {
               "description": "Filter by running state. Omit to return all agents.",
-              "enum": [
-                "true",
-                "false"
-              ],
+              "enum": ["true", "false"],
               "type": "string"
             }
           },
@@ -17247,10 +15205,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data",
-                          "event"
-                        ],
+                        "required": ["data", "event"],
                         "title": "Event event",
                         "type": "object"
                       },
@@ -17273,10 +15228,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data",
-                          "event"
-                        ],
+                        "required": ["data", "event"],
                         "title": "Event heartbeat",
                         "type": "object"
                       }
@@ -23926,10 +21878,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data",
-                          "event"
-                        ],
+                        "required": ["data", "event"],
                         "title": "Event activity",
                         "type": "object"
                       },
@@ -23952,10 +21901,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data",
-                          "event"
-                        ],
+                        "required": ["data", "event"],
                         "title": "Event heartbeat",
                         "type": "object"
                       },
@@ -23978,9 +21924,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data"
-                        ],
+                        "required": ["data"],
                         "title": "Event message",
                         "type": "object"
                       },
@@ -24003,10 +21947,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data",
-                          "event"
-                        ],
+                        "required": ["data", "event"],
                         "title": "Event pending",
                         "type": "object"
                       },
@@ -24029,10 +21970,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data",
-                          "event"
-                        ],
+                        "required": ["data", "event"],
                         "title": "Event turn",
                         "type": "object"
                       }
@@ -25172,10 +23110,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data",
-                          "event"
-                        ],
+                        "required": ["data", "event"],
                         "title": "Event heartbeat",
                         "type": "object"
                       },
@@ -25198,10 +23133,7 @@
                             "type": "integer"
                           }
                         },
-                        "required": [
-                          "data",
-                          "event"
-                        ],
+                        "required": ["data", "event"],
                         "title": "Event tagged_event",
                         "type": "object"
                       }

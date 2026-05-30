@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc find-duplicates`
 
 ## bd find-duplicates
@@ -17,8 +18,8 @@ uses text similarity or AI to find issues that discuss the same topic
 with different wording.
 
 Approaches:
-  mechanical  Token-based text similarity (default, no API key needed)
-  ai          LLM-based semantic comparison (requires ANTHROPIC_API_KEY or ai.api_key)
+mechanical Token-based text similarity (default, no API key needed)
+ai LLM-based semantic comparison (requires ANTHROPIC_API_KEY or ai.api_key)
 
 The mechanical approach tokenizes titles and descriptions, then computes
 Jaccard similarity between all issue pairs. It's fast and free but may
@@ -29,12 +30,12 @@ It first uses mechanical pre-filtering to reduce the number of API calls,
 then asks the LLM to judge whether the remaining pairs are true duplicates.
 
 Examples:
-  bd find-duplicates                       # Mechanical similarity (default)
-  bd find-duplicates --threshold 0.4       # Lower threshold = more results
-  bd find-duplicates --method ai           # Use AI for semantic comparison
-  bd find-duplicates --status open         # Only check open issues
-  bd find-duplicates --limit 20            # Show top 20 pairs
-  bd find-duplicates --json                # JSON output
+bd find-duplicates # Mechanical similarity (default)
+bd find-duplicates --threshold 0.4 # Lower threshold = more results
+bd find-duplicates --method ai # Use AI for semantic comparison
+bd find-duplicates --status open # Only check open issues
+bd find-duplicates --limit 20 # Show top 20 pairs
+bd find-duplicates --json # JSON output
 
 ```
 bd find-duplicates [flags]

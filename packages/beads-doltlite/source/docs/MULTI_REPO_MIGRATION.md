@@ -5,6 +5,7 @@ This guide helps you adopt beads' multi-repo workflow for OSS contributions, tea
 ## Quick Start
 
 **Already have beads installed?** Jump to your scenario:
+
 - [OSS Contributor](#oss-contributor-workflow) - Keep planning out of upstream PRs
 - [Team Member](#team-workflow) - Shared planning on branches
 - [Multi-Phase Development](#multi-phase-development) - Separate repos per phase
@@ -24,11 +25,13 @@ By default, beads stores issues in its Dolt database within `.beads/dolt/` in yo
 ## When Do You Need Multi-Repo?
 
 ### You DON'T need multi-repo if:
+
 - ✅ Working solo on your own project
 - ✅ Team with shared repository and trust model
 - ✅ All issues belong in the project's git history
 
 ### You DO need multi-repo if:
+
 - 🔴 Contributing to OSS - don't pollute upstream with planning
 - 🔴 Fork workflow - planning shouldn't appear in PRs
 - 🔴 Multiple work phases - design vs. implementation repos
@@ -59,7 +62,7 @@ bd create "Fix bug" -p 1
 # → Creates in current repo (source_repo = ".")
 
 # Contributor (HTTPS or no push access)
-bd create "Fix bug" -p 1  
+bd create "Fix bug" -p 1
 # → Creates in ~/.beads-planning (source_repo = "~/.beads-planning")
 ```
 
@@ -175,7 +178,7 @@ bd migrate plan-42 --to .
 cd ~/projects/team-project
 bd init --prefix team
 
-# 2. Run team setup wizard  
+# 2. Run team setup wizard
 bd init --team
 
 # The wizard will:
@@ -245,7 +248,7 @@ cd ~/projects/myapp-planning
 git init
 bd init --prefix plan
 
-cd ~/projects/myapp-implementation  
+cd ~/projects/myapp-implementation
 git init
 bd init --prefix impl
 
@@ -295,7 +298,7 @@ git init
 bd init --prefix arch
 
 cd ~/implementer-tasks
-git init  
+git init
 bd init --prefix impl
 
 # 2. Configure aggregation
@@ -330,7 +333,7 @@ bd close impl-10 --reason "Completed"
 bd config set routing.mode auto
 
 # Always use default repo (ignore role detection)
-bd config set routing.mode explicit  
+bd config set routing.mode explicit
 bd config set routing.default "."
 
 # Configure repos for each role
@@ -362,6 +365,7 @@ bd create "Issue" -p 1 --repo /path/to/repo
 **Problem:** `bd create` routes issues to unexpected repository.
 
 **Solution:**
+
 ```bash
 # Check current routing configuration
 bd config get routing.mode
@@ -380,6 +384,7 @@ bd create "Issue" -p 1 --repo .
 **Problem:** `bd list` only shows issues from current repo.
 
 **Solution:**
+
 ```bash
 # Check multi-repo configuration
 bd config get repos.additional
@@ -403,6 +408,7 @@ bd list --json
 **Problem:** Issues created with `discovered-from` dependency appear in wrong repo.
 
 **Solution:** Discovered issues automatically inherit parent's `source_repo`. This is intentional. To override:
+
 ```bash
 bd create "Issue" -p 1 --deps discovered-from:bd-42 --repo /different/repo
 ```
@@ -412,6 +418,7 @@ bd create "Issue" -p 1 --deps discovered-from:bd-42 --repo /different/repo
 **Problem:** Your `~/.beads-planning` changes appear in PRs to upstream.
 
 **Solution:** This shouldn't happen if configured correctly. Verify:
+
 ```bash
 # Check that planning repo is separate from fork
 ls -la ~/.beads-planning/.git  # Should exist
@@ -453,18 +460,21 @@ bd create "Issue" -p 1
 ## Best Practices
 
 ### OSS Contributors
+
 - ✅ Always use `~/.beads-planning` or similar for personal planning
 - ✅ Never commit `.beads/` changes to upstream PRs
 - ✅ Use descriptive prefixes (`plan-`, `exp-`) for clarity
 - ❌ Don't mix planning and implementation in the same repo
 
 ### Teams
+
 - ✅ Use `bd dolt push` to sync the shared Dolt database
 - ✅ Use protected branch workflow for main/master
 - ✅ Review issue changes in PRs like code changes
 - ❌ Don't delete `.beads/` - you lose all issue data
 
 ### Multi-Phase Projects
+
 - ✅ Use clear phase naming (`planning`, `impl`, `maint`)
 - ✅ Link issues across phases with dependencies
 - ✅ Archive completed phases periodically

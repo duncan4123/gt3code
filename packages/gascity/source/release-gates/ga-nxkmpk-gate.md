@@ -11,14 +11,14 @@
 
 ## Criteria
 
-| # | Criterion | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Reviewer PASS verdict in bead notes | PASS | `gascity/reviewer` verdict is PASS with no findings. |
-| 2 | Acceptance criteria met | PASS | `TestImportAddCommandIgnoresInheritedLiveEnv` covers inherited `GC_CITY_PATH`, `GC_CITY_ROOT`, `BEADS_DB_PATH`, and `DOLT_ROOT_PATH` pointing outside the test temp tree. Deployer re-ran it with live `GC_CITY`, `GC_CITY_PATH`, and `BEADS_DB_PATH`; the live `pack.toml` and `.beads/issues.jsonl` stat and sha256 values were unchanged before/after. |
-| 3 | Tests pass on final branch | PASS | Deployer re-ran polluted-env focused import tests, `go vet ./...`, and `make test-fast-parallel`; all passed. |
-| 4 | No high-severity review findings open | PASS | Review notes list "Findings: none"; unresolved HIGH count is 0. |
-| 5 | Final branch is clean | PASS | `git status --short --branch` was clean before this gate file was added. |
-| 6 | Branch diverges cleanly from main | PASS | `origin/main` is an ancestor of `HEAD`; branch is 1 ahead / 0 behind. |
+| #   | Criterion                             | Verdict | Evidence                                                                                                                                                                                                                                                                                                                                                  |
+| --- | ------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Reviewer PASS verdict in bead notes   | PASS    | `gascity/reviewer` verdict is PASS with no findings.                                                                                                                                                                                                                                                                                                      |
+| 2   | Acceptance criteria met               | PASS    | `TestImportAddCommandIgnoresInheritedLiveEnv` covers inherited `GC_CITY_PATH`, `GC_CITY_ROOT`, `BEADS_DB_PATH`, and `DOLT_ROOT_PATH` pointing outside the test temp tree. Deployer re-ran it with live `GC_CITY`, `GC_CITY_PATH`, and `BEADS_DB_PATH`; the live `pack.toml` and `.beads/issues.jsonl` stat and sha256 values were unchanged before/after. |
+| 3   | Tests pass on final branch            | PASS    | Deployer re-ran polluted-env focused import tests, `go vet ./...`, and `make test-fast-parallel`; all passed.                                                                                                                                                                                                                                             |
+| 4   | No high-severity review findings open | PASS    | Review notes list "Findings: none"; unresolved HIGH count is 0.                                                                                                                                                                                                                                                                                           |
+| 5   | Final branch is clean                 | PASS    | `git status --short --branch` was clean before this gate file was added.                                                                                                                                                                                                                                                                                  |
+| 6   | Branch diverges cleanly from main     | PASS    | `origin/main` is an ancestor of `HEAD`; branch is 1 ahead / 0 behind.                                                                                                                                                                                                                                                                                     |
 
 ## Validation
 

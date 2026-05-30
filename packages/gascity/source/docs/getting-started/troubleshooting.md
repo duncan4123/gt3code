@@ -42,11 +42,11 @@ named `StatusError` check results.
 
 Local checks reuse the same script protocol as pack doctor checks:
 
-| Exit code | Result |
-|-----------|--------|
-| 0 | OK |
-| 1 | Warning |
-| 2 or higher | Error |
+| Exit code   | Result  |
+| ----------- | ------- |
+| 0           | OK      |
+| 1           | Warning |
+| 2 or higher | Error   |
 
 The first stdout line becomes the check message. Additional stdout lines are
 shown by `gc doctor --verbose`.
@@ -121,27 +121,27 @@ check.
 
 ### Always required
 
-| Tool | macOS | Debian / Ubuntu |
-|------|-------|-----------------|
-| tmux | `brew install tmux` | `apt install tmux` |
-| git | `brew install git` | `apt install git` |
-| jq | `brew install jq` | `apt install jq` |
-| pgrep | included | `apt install procps` |
-| lsof | included | `apt install lsof` |
+| Tool  | macOS               | Debian / Ubuntu      |
+| ----- | ------------------- | -------------------- |
+| tmux  | `brew install tmux` | `apt install tmux`   |
+| git   | `brew install git`  | `apt install git`    |
+| jq    | `brew install jq`   | `apt install jq`     |
+| pgrep | included            | `apt install procps` |
+| lsof  | included            | `apt install lsof`   |
 
 ### Required for the default beads provider (`bd`)
 
-| Tool | Min version | macOS | Linux |
-|------|-------------|-------|-------|
-| dolt | 2.0.7 or newer | `brew install dolt` | [releases](https://github.com/dolthub/dolt/releases) |
-| bd | 1.0.0 | [releases](https://github.com/gastownhall/beads/releases) | [releases](https://github.com/gastownhall/beads/releases) |
-| flock | -- | `brew install flock` | `apt install util-linux` |
+| Tool  | Min version    | macOS                                                     | Linux                                                     |
+| ----- | -------------- | --------------------------------------------------------- | --------------------------------------------------------- |
+| dolt  | 2.0.7 or newer | `brew install dolt`                                       | [releases](https://github.com/dolthub/dolt/releases)      |
+| bd    | 1.0.0          | [releases](https://github.com/gastownhall/beads/releases) | [releases](https://github.com/gastownhall/beads/releases) |
+| flock | --             | `brew install flock`                                      | `apt install util-linux`                                  |
 
 ### Optional for GitHub gates
 
-| Tool | macOS | Linux |
-|------|-------|-------|
-| gh | `brew install gh` | [cli.github.com](https://cli.github.com/) |
+| Tool | macOS             | Linux                                     |
+| ---- | ----------------- | ----------------------------------------- |
+| gh   | `brew install gh` | [cli.github.com](https://cli.github.com/) |
 
 Gas City can run without `gh`. Maintenance skips GitHub gate checks when the
 GitHub CLI is not installed.
@@ -335,9 +335,9 @@ Common root causes, in rough order of frequency:
 - **Credentials rotated or expired.** SSH key removed from the remote
   host, HTTPS token expired. The captured stderr usually reads
   `Permission denied (publickey)` or `remote: Invalid username or
-  password`.
+password`.
 - **Remote URL typo or deleted repo.** stderr reads `does not appear to
-  be a git repository` or `repository not found`.
+be a git repository` or `repository not found`.
 - **Network partition.** stderr reads `Could not resolve host` or a
   connection-timeout message. If the host is also firewalled from the
   rest of the internet, this will recover once connectivity returns.

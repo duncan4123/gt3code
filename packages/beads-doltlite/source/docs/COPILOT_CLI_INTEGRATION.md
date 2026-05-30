@@ -7,11 +7,13 @@ For **VS Code + MCP**, see [COPILOT_INTEGRATION.md](COPILOT_INTEGRATION.md).
 ## Integration Approach
 
 **Recommended: Copilot CLI plugin + repository instructions** - Beads uses Copilot CLI's native plugin manifest plus repository instructions:
+
 - `.copilot-plugin/plugin.json` registers `bd prime` hooks natively
 - `.github/copilot-instructions.md` provides repository-specific workflow guidance
 - Direct CLI commands with `--json` flags remain the primary operational interface
 
 **Alternative: VS Code MCP** - For Copilot Chat in the editor:
+
 - Native tool calling through MCP
 - Higher context overhead from tool schemas
 - Use when you want editor-native tool access instead of terminal-first workflow
@@ -45,6 +47,7 @@ For **VS Code + MCP**, see [COPILOT_INTEGRATION.md](COPILOT_INTEGRATION.md).
 4. **Attention quality** - Models generally perform better with tighter, more relevant context
 
 **The math:**
+
 - MCP tool schemas can add 10-50k tokens to context
 - `bd prime` adds ~1-2k tokens of workflow context
 - That is an order-of-magnitude reduction in overhead
@@ -63,6 +66,7 @@ bd setup copilot --remove
 ```
 
 **What it installs:**
+
 - `.copilot-plugin/plugin.json`
   - `SessionStart` hook: Runs `bd prime` when Copilot CLI starts a session
   - `PreCompact` hook: Runs `bd prime` before context compaction

@@ -7,6 +7,7 @@
 ## What This Provides
 
 An MCP server that exposes bd functionality to Claude Desktop and other MCP clients, allowing Claude to:
+
 - Query ready work
 - Create and update issues
 - Manage dependencies
@@ -41,6 +42,7 @@ Restart Claude Desktop and you're done! Claude can now manage your beads issues.
 ## Full Documentation
 
 See the [beads-mcp README](../../integrations/beads-mcp/README.md) for:
+
 - Installation instructions
 - Configuration options
 - Environment variables
@@ -168,21 +170,19 @@ const execAsync = promisify(exec);
 
 const server = new Server({
   name: "beads",
-  version: "1.0.0"
+  version: "1.0.0",
 });
 
 // Register ready work tool
 server.tool("beads_ready_work", async (params) => {
-  const { stdout } = await execAsync(
-    `bd ready --json --limit ${params.limit || 10}`
-  );
+  const { stdout } = await execAsync(`bd ready --json --limit ${params.limit || 10}`);
   return JSON.parse(stdout);
 });
 
 // Register create issue tool
 server.tool("beads_create_issue", async (params) => {
   const { stdout } = await execAsync(
-    `bd create "${params.title}" -d "${params.description}" -p ${params.priority} -t ${params.type} --json`
+    `bd create "${params.title}" -d "${params.description}" -p ${params.priority} -t ${params.type} --json`,
   );
   return JSON.parse(stdout);
 });

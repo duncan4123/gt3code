@@ -6,6 +6,7 @@ sidebar_position: 620
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc migrate`
 
 ## bd migrate
@@ -15,10 +16,9 @@ Database migration and data transformation commands.
 Without subcommand, checks and updates database metadata to current version.
 
 Subcommands:
-  hooks       Plan git hook migration to marker-managed format
-  issues      Move issues between repositories
-  sync        Set up sync.branch workflow for multi-clone setups
-
+hooks Plan git hook migration to marker-managed format
+issues Move issues between repositories
+sync Set up sync.branch workflow for multi-clone setups
 
 ```
 bd migrate [flags]
@@ -39,14 +39,14 @@ bd migrate [flags]
 Analyze git hook files and sidecar artifacts for migration to marker-managed format.
 
 Modes:
-  --dry-run  Preview migration operations without changing files
-  --apply    Apply migration operations
+--dry-run Preview migration operations without changing files
+--apply Apply migration operations
 
 Examples:
-  bd migrate hooks --dry-run
-  bd migrate hooks --apply
-  bd migrate hooks --apply --yes
-  bd migrate hooks --dry-run --json
+bd migrate hooks --dry-run
+bd migrate hooks --apply
+bd migrate hooks --apply --yes
+bd migrate hooks --dry-run --json
 
 ```
 bd migrate hooks [path] [flags]
@@ -66,22 +66,28 @@ bd migrate hooks [path] [flags]
 Move issues from one source repository to another with filtering and dependency preservation.
 
 This command updates the source_repo field for selected issues, allowing you to:
+
 - Move contributor planning issues to upstream repository
 - Reorganize issues across multi-phase repositories
 - Consolidate issues from multiple repos
 
 Examples:
-  # Preview migration from planning repo to current repo
-  bd migrate-issues --from ~/.beads-planning --to . --dry-run
 
-  # Move all open P1 bugs
-  bd migrate-issues --from ~/repo1 --to ~/repo2 --priority 1 --type bug --status open
+# Preview migration from planning repo to current repo
 
-  # Move specific issues with their dependencies
-  bd migrate-issues --from . --to ~/archive --id bd-abc --id bd-xyz --include closure
+bd migrate-issues --from ~/.beads-planning --to . --dry-run
 
-  # Move issues with label filter
-  bd migrate-issues --from . --to ~/feature-work --label frontend --label urgent
+# Move all open P1 bugs
+
+bd migrate-issues --from ~/repo1 --to ~/repo2 --priority 1 --type bug --status open
+
+# Move specific issues with their dependencies
+
+bd migrate-issues --from . --to ~/archive --id bd-abc --id bd-xyz --include closure
+
+# Move issues with label filter
+
+bd migrate-issues --from . --to ~/feature-work --label frontend --label urgent
 
 ```
 bd migrate issues [flags]
@@ -113,7 +119,7 @@ This sets the sync.branch config value so that issue data is committed
 to a dedicated branch, keeping your main branch clean.
 
 Example:
-  bd migrate sync beads-sync
+bd migrate sync beads-sync
 
 ```
 bd migrate sync <branch> [flags]

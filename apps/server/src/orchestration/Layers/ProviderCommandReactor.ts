@@ -322,7 +322,8 @@ const make = Effect.gen(function* () {
         if (
           activeSession !== undefined &&
           (thread.session?.providerInstanceId !== activeSession.providerInstanceId ||
-            thread.session?.status !== mapProviderSessionStatusToOrchestrationStatus(activeSession.status))
+            thread.session?.status !==
+              mapProviderSessionStatusToOrchestrationStatus(activeSession.status))
         ) {
           yield* bindSessionToThread(activeSession);
         }

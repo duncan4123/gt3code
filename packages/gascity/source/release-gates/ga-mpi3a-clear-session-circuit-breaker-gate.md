@@ -23,20 +23,20 @@ release criteria supplied by the deployer role prompt.
 
 ## Criteria
 
-| # | Criterion | Result | Evidence |
-|---|-----------|--------|----------|
-| 1 | Review PASS present | PASS | `ga-mpi3a` notes contain `REVIEWER VERDICT: PASS` for `5381615e`. The carried prerequisite review bead `ga-brf9n` contains `REVIEW VERDICT: PASS` for `c849db89e`. |
-| 2 | Acceptance criteria met | PASS | The prerequisite commit moves the `restart_requested` kill block after drain-ack handling and before rate-limit, stability, and churn gates. The source commit clears named-session circuit breaker state after explicit `gc session kill` and restart-requested reconciler kills, reusing the reset circuit-breaker path. Tests cover the preemption gates and circuit-open-to-wakeable recovery paths. |
-| 3 | Tests pass | PASS | Focused `cmd/gc` regression tests passed. `LOCAL_TEST_JOBS=8 make test-fast-parallel` passed all fast shards. `go vet ./...` passed. `git diff --check origin/main...HEAD` passed. |
-| 4 | No high-severity review findings open | PASS | Reviewer notes list no HIGH findings. The only noted item for `ga-mpi3a` is MINOR / no action required around loading the session bead before kill. |
-| 5 | Final branch is clean | PASS | `git status --short --branch` was clean before this gate file was added. |
-| 6 | Branch diverges cleanly from main | PASS | `git merge-tree --write-tree origin/main HEAD` completed without conflicts (`5768f9f812527fc0c025902ea41f95bd7782e09d`). |
+| #   | Criterion                             | Result | Evidence                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --- | ------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS   | `ga-mpi3a` notes contain `REVIEWER VERDICT: PASS` for `5381615e`. The carried prerequisite review bead `ga-brf9n` contains `REVIEW VERDICT: PASS` for `c849db89e`.                                                                                                                                                                                                                                       |
+| 2   | Acceptance criteria met               | PASS   | The prerequisite commit moves the `restart_requested` kill block after drain-ack handling and before rate-limit, stability, and churn gates. The source commit clears named-session circuit breaker state after explicit `gc session kill` and restart-requested reconciler kills, reusing the reset circuit-breaker path. Tests cover the preemption gates and circuit-open-to-wakeable recovery paths. |
+| 3   | Tests pass                            | PASS   | Focused `cmd/gc` regression tests passed. `LOCAL_TEST_JOBS=8 make test-fast-parallel` passed all fast shards. `go vet ./...` passed. `git diff --check origin/main...HEAD` passed.                                                                                                                                                                                                                       |
+| 4   | No high-severity review findings open | PASS   | Reviewer notes list no HIGH findings. The only noted item for `ga-mpi3a` is MINOR / no action required around loading the session bead before kill.                                                                                                                                                                                                                                                      |
+| 5   | Final branch is clean                 | PASS   | `git status --short --branch` was clean before this gate file was added.                                                                                                                                                                                                                                                                                                                                 |
+| 6   | Branch diverges cleanly from main     | PASS   | `git merge-tree --write-tree origin/main HEAD` completed without conflicts (`5768f9f812527fc0c025902ea41f95bd7782e09d`).                                                                                                                                                                                                                                                                                 |
 
 ## Commits Evaluated
 
-| Bead | Review | Commit |
-|------|--------|--------|
-| ga-k0n20.1.1 | PASS via ga-brf9n | `c849db89e` - `fix(gc): preempt autonomous gates for reset requests` |
+| Bead         | Review            | Commit                                                                 |
+| ------------ | ----------------- | ---------------------------------------------------------------------- |
+| ga-k0n20.1.1 | PASS via ga-brf9n | `c849db89e` - `fix(gc): preempt autonomous gates for reset requests`   |
 | ga-k0n20.1.2 | PASS via ga-mpi3a | `5381615e` - `fix(gc): clear session circuit breaker on explicit kill` |
 
 ## Acceptance Evidence

@@ -6,6 +6,7 @@ sidebar_position: 210
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc import`
 
 ## bd import
@@ -17,7 +18,7 @@ If no file is specified, imports from the configured import.path under .beads/
 'bd export': new issues are created and existing issues are updated (upsert
 semantics).
 
-Memory records (lines with "_type":"memory") are automatically detected and
+Memory records (lines with "\_type":"memory") are automatically detected and
 imported as persistent memories (equivalent to 'bd remember'). This makes
 'bd export | bd import' a full round-trip for both issues and memories.
 
@@ -26,37 +27,37 @@ Each JSONL line should map to an issue. The importer accepts every field
 "title" is required; everything else is optional.
 
 Common fields:
-  title                  Required. Short summary.
-  description            Long-form body.
-  design, notes,         Additional content sections.
-    acceptance_criteria
-  issue_type             bug | feature | task | epic | chore | ...
-  priority               0-4 (0 = critical). 0 is preserved (no omitempty).
-  status                 open | in_progress | blocked | closed | ...
-                         (rows with status "tombstone" are skipped)
-  assignee, owner,       Ownership metadata.
-    created_by
-  labels                 Array of strings.
-  dependencies           Array of &#123;issue_id, depends_on_id, type, ...&#125;.
-  comments               Array of comment objects.
-  external_ref,          Cross-system identifiers (e.g. "gh-9").
-    source_system
-  due_at, defer_until    RFC3339 timestamps for scheduling.
-  metadata               Arbitrary JSON object preserved verbatim.
+title Required. Short summary.
+description Long-form body.
+design, notes, Additional content sections.
+acceptance_criteria
+issue_type bug | feature | task | epic | chore | ...
+priority 0-4 (0 = critical). 0 is preserved (no omitempty).
+status open | in_progress | blocked | closed | ...
+(rows with status "tombstone" are skipped)
+assignee, owner, Ownership metadata.
+created_by
+labels Array of strings.
+dependencies Array of &#123;issue_id, depends_on_id, type, ...&#125;.
+comments Array of comment objects.
+external_ref, Cross-system identifiers (e.g. "gh-9").
+source_system
+due_at, defer_until RFC3339 timestamps for scheduling.
+metadata Arbitrary JSON object preserved verbatim.
 
 Timestamps (created_at, updated_at, started_at, closed_at) are preserved
 when present in the JSONL and otherwise filled in by the importer. The
 legacy "wisp" boolean is accepted as an alias for "ephemeral".
 
 EXAMPLES:
-  bd import                        # Import from configured import.path
-  bd import backup.jsonl           # Import from a specific file
-  bd import -i backup.jsonl        # Legacy alias for a specific file
-  bd import -                      # Read JSONL from stdin
-  cat issues.jsonl | bd import -   # Pipe JSONL from another tool
-  bd import --dry-run              # Show what would be imported
-  bd import --dedup                # Skip issues with duplicate titles
-  bd import --json                 # Structured output with created IDs
+bd import # Import from configured import.path
+bd import backup.jsonl # Import from a specific file
+bd import -i backup.jsonl # Legacy alias for a specific file
+bd import - # Read JSONL from stdin
+cat issues.jsonl | bd import - # Pipe JSONL from another tool
+bd import --dry-run # Show what would be imported
+bd import --dedup # Skip issues with duplicate titles
+bd import --json # Structured output with created IDs
 
 ```
 bd import [file|-] [flags]

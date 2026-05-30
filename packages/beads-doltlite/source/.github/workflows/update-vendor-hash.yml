@@ -37,8 +37,8 @@ on:
   pull_request_target:
     branches: [main]
     paths:
-      - 'go.mod'
-      - 'go.sum'
+      - "go.mod"
+      - "go.sum"
 
 permissions:
   contents: write

@@ -1,8 +1,8 @@
 # Plan: shared `port_resolve.sh` helper kills :=3307 fallback (ga-lsois slice 1/3)
 
 > **Status:** decomposing — 2026-05-11
-> **Parent architecture:** `ga-lsois` (closed) — *Dog/maintenance
-> scripts default `GC_DOLT_PORT=3307` → CRITICAL alarm fatigue.*
+> **Parent architecture:** `ga-lsois` (closed) — _Dog/maintenance
+> scripts default `GC_DOLT_PORT=3307` → CRITICAL alarm fatigue._
 > **Designer spec:** `ga-u0lx9p` — full design body (684 lines, 3
 > graphviz visuals); pins function body, stderr template, exit
 > code, source-line edits, lint test, and the 8 builder tests.
@@ -49,9 +49,9 @@ ga-a75ro.1, ga-vt6q), this is one bead's worth of work.
 
 ## Children
 
-| ID            | Title                                                                                       | Routing label    | Routes to         | Depends on |
-|---------------|---------------------------------------------------------------------------------------------|------------------|-------------------|------------|
-| `ga-rq2e5a`   | feat(packs/dolt): port_resolve.sh helper kills :=3307 fallback (ga-lsois slice 1/3)         | `ready-to-build` | `gascity/builder` | (none; design closed) |
+| ID          | Title                                                                               | Routing label    | Routes to         | Depends on            |
+| ----------- | ----------------------------------------------------------------------------------- | ---------------- | ----------------- | --------------------- |
+| `ga-rq2e5a` | feat(packs/dolt): port_resolve.sh helper kills :=3307 fallback (ga-lsois slice 1/3) | `ready-to-build` | `gascity/builder` | (none; design closed) |
 
 ## Acceptance for the parent (ga-u0lx9p)
 

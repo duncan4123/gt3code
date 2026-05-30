@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc search`
 
 ## bd search
@@ -17,18 +18,18 @@ Text queries search titles. Use --desc-contains for description search.
 Use --status all to include closed issues.
 
 Examples:
-  bd search "authentication bug"
-  bd search "login" --status open
-  bd search "database" --label backend --limit 10
-  bd search --query "performance" --assignee alice
-  bd search "bd-5q" # Search by partial ID (fast prefix match)
-  bd search "security" --priority-min 0 --priority-max 2
-  bd search "bug" --created-after 2025-01-01
-  bd search "refactor" --status all  # Include closed issues
-  bd search "bug" --sort priority
-  bd search "task" --sort created --reverse
-  bd search "api" --desc-contains "endpoint"
-  bd search "cleanup" --no-assignee --no-labels
+bd search "authentication bug"
+bd search "login" --status open
+bd search "database" --label backend --limit 10
+bd search --query "performance" --assignee alice
+bd search "bd-5q" # Search by partial ID (fast prefix match)
+bd search "security" --priority-min 0 --priority-max 2
+bd search "bug" --created-after 2025-01-01
+bd search "refactor" --status all # Include closed issues
+bd search "bug" --sort priority
+bd search "task" --sort created --reverse
+bd search "api" --desc-contains "endpoint"
+bd search "cleanup" --no-assignee --no-labels
 
 ```
 bd search [query] [flags]

@@ -18,6 +18,7 @@ bd rename bd-42 bd-new-id --dry-run  # Preview
 ```
 
 Updates:
+
 - All dependencies pointing to old ID
 - All references in other issues
 - Comments and descriptions
@@ -32,6 +33,7 @@ bd merge bd-42 bd-43 --into bd-41 --dry-run
 ```
 
 What gets merged:
+
 - Dependencies → target
 - Text references updated across all issues
 - Source issues closed with merge reason
@@ -55,6 +57,7 @@ bd admin cleanup --force
 ```
 
 **When to compact:**
+
 - Database > 10MB with old closed issues
 - After major milestones
 - Before archiving project phase
@@ -104,6 +107,7 @@ bd events watch
 ```
 
 Events:
+
 - `issue.created`
 - `issue.updated`
 - `issue.closed`

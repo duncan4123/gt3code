@@ -67,26 +67,29 @@ CREATE TABLE kv (
 );
 ```
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `key` | VARCHAR(255) | Primary key, the lookup key |
-| `value` | TEXT | The stored value (always string) |
-| `set_at` | DATETIME | When the value was set (UTC) |
+| Column   | Type         | Description                                            |
+| -------- | ------------ | ------------------------------------------------------ |
+| `key`    | VARCHAR(255) | Primary key, the lookup key                            |
+| `value`  | TEXT         | The stored value (always string)                       |
+| `set_at` | DATETIME     | When the value was set (UTC)                           |
 | `set_by` | VARCHAR(255) | Actor who set it (e.g., "beads/crew/collins", "human") |
 
 ### Design Decisions
 
 **Why not use the config table?**
+
 - Config is for beads internal settings (sync mode, integrations, etc.)
 - Mixing user data with internal config creates namespace collisions
 - Separate table is cleaner and avoids future conflicts
 
 **Why not make KV pairs into issues/beads?**
+
 - KV is meant to be lightweight - issues have significant overhead (id, title, description, status, priority, type, etc.)
 - Different lifecycle - KV is "set and forget", issues are "open → work → close"
 - Would pollute `bd list` with non-work entries
 
 **Why track `set_at` and `set_by`?**
+
 - Attribution: know who set a value and when
 - Debugging: trace when configuration changed
 - Future: enables conflict resolution in multi-writer scenarios
@@ -109,6 +112,7 @@ KV data syncs via the standard beads-sync mechanism:
 ```
 
 This format is:
+
 - Human-readable and diffable in git
 - Streaming-friendly (append without rewriting)
 - Consistent with `issues.jsonl` pattern
@@ -117,12 +121,12 @@ This format is:
 
 For server mode, add these operations to the RPC protocol:
 
-| Operation | Args | Response |
-|-----------|------|----------|
-| `kv_set` | `{key, value}` | `{success: bool}` |
-| `kv_get` | `{key}` | `{value: string, found: bool}` |
-| `kv_delete` | `{key}` | `{success: bool}` |
-| `kv_list` | `{prefix?: string}` | `{items: [{key, value, set_at, set_by}]}` |
+| Operation   | Args                | Response                                  |
+| ----------- | ------------------- | ----------------------------------------- |
+| `kv_set`    | `{key, value}`      | `{success: bool}`                         |
+| `kv_get`    | `{key}`             | `{value: string, found: bool}`            |
+| `kv_delete` | `{key}`             | `{success: bool}`                         |
+| `kv_list`   | `{prefix?: string}` | `{items: [{key, value, set_at, set_by}]}` |
 
 ## Future Considerations
 

@@ -25,6 +25,7 @@ The lock file is located at `.beads/.exclusive-lock` and contains JSON:
 ```
 
 **Fields:**
+
 - `holder` (string, required): Name of the tool holding the lock (e.g., "vc-executor", "ci-runner")
 - `pid` (int, required): Process ID of the lock holder
 - `hostname` (string, required): Hostname where the process is running
@@ -43,6 +44,7 @@ The Dolt server checks for exclusive locks at the start of each sync cycle:
 ### Stale Lock Detection
 
 A lock is considered stale if:
+
 - The hostname matches the current machine (case-insensitive) AND
 - The PID does not exist on the local system (returns ESRCH)
 
@@ -122,19 +124,19 @@ Always use cleanup handlers to ensure locks are released:
 ```go
 func main() {
     beadsDir := ".beads"
-    
+
     // Acquire lock
     if err := acquireLock(beadsDir, "my-tool", "1.0.0"); err != nil {
         log.Fatal(err)
     }
-    
+
     // Ensure lock is released on exit
     defer func() {
         if err := releaseLock(beadsDir); err != nil {
             log.Printf("Warning: failed to release lock: %v", err)
         }
     }()
-    
+
     // Do work with beads database...
 }
 ```
@@ -144,6 +146,7 @@ func main() {
 ### Multiple Writers Without Server
 
 The exclusive lock protocol **only prevents Dolt server interference**. It does NOT provide:
+
 - ❌ Mutual exclusion between multiple external tools
 - ❌ Transaction isolation or ACID guarantees
 - ❌ Protection against direct file system manipulation
@@ -157,6 +160,7 @@ Dolt handles git worktrees natively. The exclusive lock protocol is separate fro
 ### Remote Hosts
 
 Locks from remote hosts are always assumed valid because the server cannot verify remote PIDs. This means:
+
 - Stale locks from remote hosts will **not** be automatically cleaned up
 - You must manually remove stale remote locks
 
@@ -222,6 +226,7 @@ func IsProcessAlive(pid int, hostname string) bool
 ## Questions?
 
 For integration help, see:
+
 - **AGENTS.md** - General workflow guidance
 - **README.md** - Server configuration
 - **examples/** - Sample integrations

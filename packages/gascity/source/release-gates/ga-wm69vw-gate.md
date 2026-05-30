@@ -12,14 +12,14 @@ Project manifest note: `docs/PROJECT_MANIFEST.md` is not present in this reposit
 
 ## Gate Summary
 
-| # | Criterion | Result | Evidence |
-|---|-----------|--------|----------|
-| 1 | Review PASS present | PASS | `ga-wm69vw` notes contain reviewer verdict `PASS - routing to gascity/deployer`. Review findings are informational only. |
-| 2 | Acceptance criteria met | PASS | Source bead `ga-9h05hk` is closed. Pinned SQL, timeout value, skip reason, force-blocker kind, interface method, production probe, pure planner helper, fatal blocker helper, run-stage wiring, and all five test names are present. Documented deviations were reviewer-approved: timeout is a test-overridable `var`, two compile-only fake methods were added, and two `internal/api` lint fixes are included. |
-| 3 | Tests pass | PASS | Focused cleanup tests, `internal/api`, vet, build, dashboard check, and the sharded fast baseline passed. See test evidence below. |
-| 4 | No high-severity review findings open | PASS | Review notes list only `info` observations; no HIGH or request-changes findings are open. |
-| 5 | Final branch is clean | PASS | `git status --short --branch` showed only `## builder/ga-9h05hk-1...fork/builder/ga-9h05hk-1` before adding this gate file. |
-| 6 | Branch diverges cleanly from main | PASS | `git merge-tree --write-tree HEAD origin/main` exited 0 and produced tree `12171949ef15327b233f0d8b6114e1f2476d60cf`. Diff against `origin/main...HEAD` is the expected 10 files / 774 insertions / 4 deletions. |
+| #   | Criterion                             | Result | Evidence                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --- | ------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS   | `ga-wm69vw` notes contain reviewer verdict `PASS - routing to gascity/deployer`. Review findings are informational only.                                                                                                                                                                                                                                                                                          |
+| 2   | Acceptance criteria met               | PASS   | Source bead `ga-9h05hk` is closed. Pinned SQL, timeout value, skip reason, force-blocker kind, interface method, production probe, pure planner helper, fatal blocker helper, run-stage wiring, and all five test names are present. Documented deviations were reviewer-approved: timeout is a test-overridable `var`, two compile-only fake methods were added, and two `internal/api` lint fixes are included. |
+| 3   | Tests pass                            | PASS   | Focused cleanup tests, `internal/api`, vet, build, dashboard check, and the sharded fast baseline passed. See test evidence below.                                                                                                                                                                                                                                                                                |
+| 4   | No high-severity review findings open | PASS   | Review notes list only `info` observations; no HIGH or request-changes findings are open.                                                                                                                                                                                                                                                                                                                         |
+| 5   | Final branch is clean                 | PASS   | `git status --short --branch` showed only `## builder/ga-9h05hk-1...fork/builder/ga-9h05hk-1` before adding this gate file.                                                                                                                                                                                                                                                                                       |
+| 6   | Branch diverges cleanly from main     | PASS   | `git merge-tree --write-tree HEAD origin/main` exited 0 and produced tree `12171949ef15327b233f0d8b6114e1f2476d60cf`. Diff against `origin/main...HEAD` is the expected 10 files / 774 insertions / 4 deletions.                                                                                                                                                                                                  |
 
 ## Acceptance Evidence
 
@@ -42,14 +42,14 @@ Project manifest note: `docs/PROJECT_MANIFEST.md` is not present in this reposit
 
 ## Test Evidence
 
-| Command | Result | Notes |
-|---------|--------|-------|
-| `go test ./cmd/gc -run 'TestProbeLiveSessions|TestRunDoltCleanup|TestPlanDoltDrops' -count=1` | PASS | `ok github.com/gastownhall/gascity/cmd/gc 1.986s` |
-| `go test ./internal/api/... -count=1` | PASS | `internal/api` and `internal/api/genclient` passed. |
-| `go vet ./...` | PASS | No output. |
-| `go build ./...` | PASS | No output. |
-| `make dashboard-check` | PASS | OpenAPI TS generation, Vite build, typecheck, and dashboard package tests passed; no generated-file drift. |
-| `make test-fast-parallel` | PASS | All fast jobs passed: `unit-core`, `unit-cmd-gc-1-of-6` through `unit-cmd-gc-6-of-6`, and `fsys-darwin-compile`. |
+| Command                                       | Result             | Notes                                                                                                            |
+| --------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------- | ---- | ------------------------------------------------- |
+| `go test ./cmd/gc -run 'TestProbeLiveSessions | TestRunDoltCleanup | TestPlanDoltDrops' -count=1`                                                                                     | PASS | `ok github.com/gastownhall/gascity/cmd/gc 1.986s` |
+| `go test ./internal/api/... -count=1`         | PASS               | `internal/api` and `internal/api/genclient` passed.                                                              |
+| `go vet ./...`                                | PASS               | No output.                                                                                                       |
+| `go build ./...`                              | PASS               | No output.                                                                                                       |
+| `make dashboard-check`                        | PASS               | OpenAPI TS generation, Vite build, typecheck, and dashboard package tests passed; no generated-file drift.       |
+| `make test-fast-parallel`                     | PASS               | All fast jobs passed: `unit-core`, `unit-cmd-gc-1-of-6` through `unit-cmd-gc-6-of-6`, and `fsys-darwin-compile`. |
 
 Diagnostic note: a raw non-sharded `go test -timeout=240s ./cmd/gc/... ./internal/api/... -count=1` timed out in `TestCmdStopMarginExhaustion`. The isolated test passed immediately with `go test ./cmd/gc -run '^TestCmdStopMarginExhaustion$' -count=1 -v` (`PASS`, 1.59s). `TESTING.md` directs broad local sweeps to `make test-fast-parallel`, which passed.
 

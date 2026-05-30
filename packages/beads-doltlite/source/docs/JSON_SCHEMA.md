@@ -55,6 +55,7 @@ bd show beads-abc --json | jq '.schema_version'
 Current version: **1**
 
 The `schema_version` field is an integer that increments when:
+
 - Fields are added, renamed, or removed
 - Output structure changes (e.g., nesting depth)
 - Field types change (e.g., string to integer)
@@ -84,8 +85,8 @@ Arrays are wrapped the same way:
 {
   "schema_version": 1,
   "data": [
-    {"id": "beads-abc", "title": "First"},
-    {"id": "beads-def", "title": "Second"}
+    { "id": "beads-abc", "title": "First" },
+    { "id": "beads-def", "title": "Second" }
   ]
 }
 ```
@@ -137,6 +138,7 @@ Errors with `--json` active emit JSON to stderr:
 ### bd list --json
 
 Required fields per item:
+
 - `id` (string): Issue ID (e.g., "beads-abc")
 - `title` (string): Issue title
 - `status` (string): open, in_progress, closed, deferred
@@ -145,6 +147,7 @@ Required fields per item:
 - `created_at` (string): RFC3339 timestamp
 
 Optional fields:
+
 - `description`, `owner`, `updated_at`, `closed_at`
 - `labels` (string[]): Attached labels
 - `dependencies` (object[]): Dependency records
@@ -161,6 +164,7 @@ and optional `parent` fields.
 
 Returns issues that are blocked by unresolved dependencies.
 Each item includes all standard issue fields plus:
+
 - `blocked_by_count` (number): Number of blocking dependencies
 - `blocked_by` (string[]): IDs of blocking issues
 
@@ -168,6 +172,7 @@ Each item includes all standard issue fields plus:
 
 Returns a single object (not wrapped in `items`). Same required fields as list
 items, plus:
+
 - `description` (string)
 - `acceptance_criteria` (string)
 - `dependencies` (object[]): Full dependency records
@@ -176,6 +181,7 @@ items, plus:
 ### `import --json`
 
 Returns a summary object when `--json` is active:
+
 - `source` (string): File path or "stdin"
 - `created` (number): Issues created
 - `skipped` (number): Issues skipped (dedup)

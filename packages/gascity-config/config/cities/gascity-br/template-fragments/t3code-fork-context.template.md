@@ -33,18 +33,22 @@ jj diff --from <change-id> --to <change-id>
 ```
 
 Check rescue bookmarks:
+
 ```bash
 jj bookmark list | grep rescue
 ```
+
 Common rescue bookmarks: `rescue/feature-set-repair-20260518`, `rescue/pre-worker-sidebar`, `rescue/current-accidental-sidebar`
 
 Search older upstream-sync branches:
+
 ```bash
 jj bookmark list | grep t3code/
 jj bookmark list | grep gc-
 ```
 
 Look at snapshot branches:
+
 ```bash
 jj bookmark list | grep snapshot
 ```
@@ -64,6 +68,7 @@ When adding features:
 ### Package Structure
 
 **Upstream packages (synced from pingdotgg/t3code):**
+
 - `apps/server` — WebSocket server, provider session management
 - `apps/web` — React/Vite UI
 - `apps/desktop` — Electron desktop app
@@ -71,6 +76,7 @@ When adding features:
 - `packages/shared` — Shared runtime utilities
 
 **Fork-owned packages (our integrations):**
+
 - `packages/gascity/` — GasCity orchestration SDK
 - `packages/beads-doltlite/` — BEADS issue tracker
 - `packages/doltlite/` — DoltLite embedded database
@@ -85,16 +91,19 @@ When adding features:
 ### Integration Points
 
 **GasCity ↔ T3 Code:**
+
 - `apps/server/src/gc/` — GasCity API client and integration layers
 - `apps/server/src/ws.ts` — WebSocket server with GasCity diagnostics
 - `apps/web/src/routes/settings.gascity.tsx` — GasCity settings page
 - `packages/gascity-config/` — Bundled city configuration shipped with T3 Code
 
 **BEADS ↔ T3 Code:**
+
 - Issue tracking via `bd` CLI
 - Dolt database for persistent structured memory
 
 **DoltLite ↔ BEADS:**
+
 - `packages/doltlite/` provides the embedded Dolt database
 - `packages/beads-doltlite/` uses DoltLite for issue storage
 
@@ -109,6 +118,7 @@ bun dev
 ```
 
 Runtime paths:
+
 - T3 Code data: `./.t3-dev`
 - GasCity supervisor/runtime: `./.t3-dev/gascity`
 - GasCity worktrees: `./.t3-dev/worktrees`
@@ -121,10 +131,11 @@ All bundled GasCity paths are derived from the T3 Code install root.
 See `docs/t3code-fork-stack-ledger.md` for the current fork-owned changes that should be replayed when rebasing onto upstream/main.
 
 Key conflict surfaces:
+
 - `apps/server/src/gc/**` — GasCity integration
 - `apps/server/src/persistence/**` — Doltlite/checkpoints
 - `apps/server/src/orchestration/**` — Provider orchestration
 - `apps/web/src/components/Sidebar.tsx` — Left sidebar
 - `apps/web/src/components/ChatView.tsx` — Right sidebar/chat
 - `packages/gascity-config/config/**` — Bundled config
-{{ end }}
+  {{ end }}

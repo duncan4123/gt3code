@@ -45,7 +45,7 @@ A curated list of community-built UIs, extensions, and integrations for Beads. R
 
 ## Analytics & Observability
 
-* **[Thread](https://github.com/jklenk/thread)** - Read-only forensics and analytics layer for Beads. Reads local Dolt history and produces fidelity scores, rework cost metrics, session compliance scoring, and a self-contained HTML report. Add `Run 'thread prime --json' at session start` to your `AGENTS.md` to give agents project health context before they claim their first bead. 
+- **[Thread](https://github.com/jklenk/thread)** - Read-only forensics and analytics layer for Beads. Reads local Dolt history and produces fidelity scores, rework cost metrics, session compliance scoring, and a self-contained HTML report. Add `Run 'thread prime --json' at session start` to your `AGENTS.md` to give agents project health context before they claim their first bead.
 
 Install with `uv tool install git+https://github.com/jklenk/thread`. Built by [@jklenk](https://github.com/jklenk). (Python/DuckDB)
 
@@ -99,7 +99,7 @@ Install with `uv tool install git+https://github.com/jklenk/thread`. Built by [@
 
 - **[Beadster](https://github.com/beadster/beadster)** - macOS app for browsing and managing issues from `.beads/` directories in git repositories. Built by [@podviaznikov](https://github.com/podviaznikov). (Swift)
 
--  **[Parade](https://github.com/JeremyKalmus/parade)** - Electron app for workflow orchestration with visual Kanban board, discovery wizard, and task visualization. Run with `npx parade-init`. Built by [@JeremyKalmus](https://github.com/JeremyKalmus). (Electron/React)
+- **[Parade](https://github.com/JeremyKalmus/parade)** - Electron app for workflow orchestration with visual Kanban board, discovery wizard, and task visualization. Run with `npx parade-init`. Built by [@JeremyKalmus](https://github.com/JeremyKalmus). (Electron/React)
 
 - **[jira-beads-sync](https://github.com/conallob/jira-beads-sync)** - CLI tool & Claude Code plugin to sync tasks from Jira into beads and publish beads task states back to Jira. Built by [@conallob](https://github.com/conallob). (Go)
 

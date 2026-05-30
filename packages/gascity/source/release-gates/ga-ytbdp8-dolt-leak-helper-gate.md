@@ -23,14 +23,14 @@ artifact `472674043` onto `e26cdef5d` as `28c0b031d`.
 
 ## Criteria
 
-| # | Criterion | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Reviewer PASS verdict in bead notes | PASS | `gascity/reviewer` PASS at HEAD `79b3e64a` (per gm-k19yck). |
-| 2 | Acceptance criteria met | PASS | Helper added and applied via `writeCityRuntimeConfig*` writers in the original helper branch; the helper code is already present on `main`, so this PR now records the release gate only. |
-| 3 | Tests pass on final branch | PASS | Original helper validation passed `go test ./cmd/gc/ -run '^TestCityRuntimeReload' -count=1` (13/13); post-rebase artifact validation passed `go test ./test/docsync/...`. |
-| 4 | No high-severity review findings open | PASS | No findings in routing message. |
-| 5 | Working tree clean | PASS | `git status` clean before gate-file commit. |
-| 6 | Branch diverges cleanly from main | PASS | Post-rebase review head carries the replayed artifact commit plus maintainer provenance fixup on current `main`; the original helper and identity-chain commits are already in `main`. |
+| #   | Criterion                             | Verdict | Evidence                                                                                                                                                                                  |
+| --- | ------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Reviewer PASS verdict in bead notes   | PASS    | `gascity/reviewer` PASS at HEAD `79b3e64a` (per gm-k19yck).                                                                                                                               |
+| 2   | Acceptance criteria met               | PASS    | Helper added and applied via `writeCityRuntimeConfig*` writers in the original helper branch; the helper code is already present on `main`, so this PR now records the release gate only. |
+| 3   | Tests pass on final branch            | PASS    | Original helper validation passed `go test ./cmd/gc/ -run '^TestCityRuntimeReload' -count=1` (13/13); post-rebase artifact validation passed `go test ./test/docsync/...`.                |
+| 4   | No high-severity review findings open | PASS    | No findings in routing message.                                                                                                                                                           |
+| 5   | Working tree clean                    | PASS    | `git status` clean before gate-file commit.                                                                                                                                               |
+| 6   | Branch diverges cleanly from main     | PASS    | Post-rebase review head carries the replayed artifact commit plus maintainer provenance fixup on current `main`; the original helper and identity-chain commits are already in `main`.    |
 
 ## Original validation (deployer re-run on `deploy/ga-ytbdp8` at helper HEAD `79b3e64a`)
 

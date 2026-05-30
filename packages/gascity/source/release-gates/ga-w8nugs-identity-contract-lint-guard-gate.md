@@ -16,14 +16,14 @@ the slice-3 lint guard, this gate note, and the merge-repair fixup.
 
 ## Criteria
 
-| # | Criterion | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Reviewer PASS verdict in bead notes | PASS | `gascity/reviewer` PASS at HEAD `5cbf1d75` (per gm-w7ta0o). |
-| 2 | Acceptance criteria met | PASS | New test `TestNoExternalIdentityWriters` greps the codebase for `identity.toml` writers outside the contract package; merge repair allowlists the non-writer `.gitignore` negation template. |
-| 3 | Tests pass on final branch | PASS | `go test ./internal/beads/contract` — PASS after merge repair. |
-| 4 | No high-severity review findings open | PASS | Reviewer routing message indicates clean PASS; no findings. |
-| 5 | Working tree clean | PASS | `git status` clean before gate-file commit. |
-| 6 | Branch diverges cleanly from main | PASS | Rebased onto current `main`; lower stacked slices are no longer carried by this PR. |
+| #   | Criterion                             | Verdict | Evidence                                                                                                                                                                                     |
+| --- | ------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Reviewer PASS verdict in bead notes   | PASS    | `gascity/reviewer` PASS at HEAD `5cbf1d75` (per gm-w7ta0o).                                                                                                                                  |
+| 2   | Acceptance criteria met               | PASS    | New test `TestNoExternalIdentityWriters` greps the codebase for `identity.toml` writers outside the contract package; merge repair allowlists the non-writer `.gitignore` negation template. |
+| 3   | Tests pass on final branch            | PASS    | `go test ./internal/beads/contract` — PASS after merge repair.                                                                                                                               |
+| 4   | No high-severity review findings open | PASS    | Reviewer routing message indicates clean PASS; no findings.                                                                                                                                  |
+| 5   | Working tree clean                    | PASS    | `git status` clean before gate-file commit.                                                                                                                                                  |
+| 6   | Branch diverges cleanly from main     | PASS    | Rebased onto current `main`; lower stacked slices are no longer carried by this PR.                                                                                                          |
 
 ## Original validation (deployer re-run on `deploy/ga-w8nugs` at HEAD `5cbf1d75`)
 

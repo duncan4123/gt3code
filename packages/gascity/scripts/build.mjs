@@ -74,7 +74,13 @@ const runtimeLibraryPath = path.join(gcHome, "bin", doltliteLibrary);
 
 if (
   isFresh({
-    outputs: [outputPath, outputLibraryPath, outputLibrarySonamePath, runtimeBinaryPath, runtimeLibraryPath].filter(Boolean),
+    outputs: [
+      outputPath,
+      outputLibraryPath,
+      outputLibrarySonamePath,
+      runtimeBinaryPath,
+      runtimeLibraryPath,
+    ].filter(Boolean),
     stampPath,
     stamp,
     inputRoots: [sourceRoot, beadsSourceRoot],
@@ -175,7 +181,10 @@ function installToRuntime() {
   copyFileSync(outputPath, runtimeBinaryPath);
   copyFileSync(outputLibraryPath, runtimeLibraryPath);
   if (outputLibrarySonamePath) {
-    copyFileSync(outputLibrarySonamePath, path.join(path.dirname(runtimeBinaryPath), "libdoltlite.so.0"));
+    copyFileSync(
+      outputLibrarySonamePath,
+      path.join(path.dirname(runtimeBinaryPath), "libdoltlite.so.0"),
+    );
   }
   console.log(`installed ${runtimeBinaryPath}`);
   console.log(`installed ${runtimeLibraryPath}`);

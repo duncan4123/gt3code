@@ -21,7 +21,9 @@ export const ensureGcLookupTables = Effect.gen(function* () {
   `);
   yield* sql.unsafe(`CREATE INDEX IF NOT EXISTS main.idx_gc_beads_status ON gc_beads(status)`);
   yield* sql.unsafe(`CREATE INDEX IF NOT EXISTS main.idx_gc_beads_assignee ON gc_beads(assignee)`);
-  yield* sql.unsafe(`CREATE INDEX IF NOT EXISTS main.idx_gc_beads_epic ON gc_beads(epic_parent_id)`);
+  yield* sql.unsafe(
+    `CREATE INDEX IF NOT EXISTS main.idx_gc_beads_epic ON gc_beads(epic_parent_id)`,
+  );
   yield* sql.unsafe(`CREATE INDEX IF NOT EXISTS main.idx_gc_beads_type ON gc_beads(issue_type)`);
 
   yield* sql.unsafe(`

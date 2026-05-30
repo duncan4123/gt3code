@@ -14,14 +14,14 @@
 
 ## Criteria
 
-| # | Criterion | Result | Evidence |
-|---|-----------|--------|----------|
-| 1 | Review PASS present | PASS | Deploy bead `ga-iix6p` notes contain `VERDICT: pass`, with review scope `6a029a4d2` and `FINDINGS: none`. |
-| 2 | Acceptance criteria met | PASS | The PR implements the scoped ADR 0001 read-path routing and StoreHealth surfaces: typed store-maintenance event payloads are registered, `/v0/status` and `gc status` expose StoreHealth, generated OpenAPI/dashboard client artifacts are updated, and the routed command matrix covers rig, order, session, convoy, mail, beads, status, and wait reads. The fix commit also resolves the prior acceptance-test compile failure and live-contract `cache_not_live` cleanup retry finding. |
-| 3 | Tests pass | PASS | Local deployer gate passed: `make test-fast-parallel`, `go vet ./...`, `make dashboard-check`, and `git diff --check`. GitHub PR checks are green, including `CI / required`, `CI / preflight`, `CI / integration`, CodeQL, dashboard, acceptance A, all cmd/gc process shards, package integration shards, rest shards, and worker-core gates. |
-| 4 | No high-severity review findings open | PASS | `ga-iix6p` reports `FINDINGS: none`; the prior `ga-0c0xl` P1/P2 request-changes findings are marked fixed in the review notes. |
-| 5 | Final branch is clean | PASS | `git status --short --branch` showed only `## feat/adr-0001-status-routing...fork/feat/adr-0001-status-routing` before adding this markdown-only gate commit. `make dashboard-check` produced no generated-file drift. |
-| 6 | Branch diverges cleanly from main | PASS | `git merge-tree --write-tree origin/main HEAD` exited 0 and produced tree `e491ecc30360e86beb52044d5721f7ea80dc1890`; `gh pr view 1149` reports `mergeStateStatus: CLEAN`. |
+| #   | Criterion                             | Result | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --- | ------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS   | Deploy bead `ga-iix6p` notes contain `VERDICT: pass`, with review scope `6a029a4d2` and `FINDINGS: none`.                                                                                                                                                                                                                                                                                                                                                                                   |
+| 2   | Acceptance criteria met               | PASS   | The PR implements the scoped ADR 0001 read-path routing and StoreHealth surfaces: typed store-maintenance event payloads are registered, `/v0/status` and `gc status` expose StoreHealth, generated OpenAPI/dashboard client artifacts are updated, and the routed command matrix covers rig, order, session, convoy, mail, beads, status, and wait reads. The fix commit also resolves the prior acceptance-test compile failure and live-contract `cache_not_live` cleanup retry finding. |
+| 3   | Tests pass                            | PASS   | Local deployer gate passed: `make test-fast-parallel`, `go vet ./...`, `make dashboard-check`, and `git diff --check`. GitHub PR checks are green, including `CI / required`, `CI / preflight`, `CI / integration`, CodeQL, dashboard, acceptance A, all cmd/gc process shards, package integration shards, rest shards, and worker-core gates.                                                                                                                                             |
+| 4   | No high-severity review findings open | PASS   | `ga-iix6p` reports `FINDINGS: none`; the prior `ga-0c0xl` P1/P2 request-changes findings are marked fixed in the review notes.                                                                                                                                                                                                                                                                                                                                                              |
+| 5   | Final branch is clean                 | PASS   | `git status --short --branch` showed only `## feat/adr-0001-status-routing...fork/feat/adr-0001-status-routing` before adding this markdown-only gate commit. `make dashboard-check` produced no generated-file drift.                                                                                                                                                                                                                                                                      |
+| 6   | Branch diverges cleanly from main     | PASS   | `git merge-tree --write-tree origin/main HEAD` exited 0 and produced tree `e491ecc30360e86beb52044d5721f7ea80dc1890`; `gh pr view 1149` reports `mergeStateStatus: CLEAN`.                                                                                                                                                                                                                                                                                                                  |
 
 ## Acceptance Evidence
 
@@ -49,13 +49,13 @@
 
 ## Test Evidence
 
-| Command | Result | Notes |
-|---------|--------|-------|
-| `make test-fast-parallel` | PASS | All fast jobs passed: `fsys-darwin-compile`, `unit-core`, and `unit-cmd-gc-1-of-6` through `unit-cmd-gc-6-of-6`. |
-| `go vet ./...` | PASS | No output. |
-| `make dashboard-check` | PASS | OpenAPI TS generation, Vite build, TypeScript typecheck, and `go test ./cmd/gc/dashboard/...` passed. |
-| `git diff --check` | PASS | No whitespace errors. |
-| `gh pr checks 1149 --watch=false` | PASS | Required CI, CodeQL, dashboard, acceptance, process, integration, rest, and worker-core checks were all passing; optional path-gated Mac/Docker/K8s/MCP lanes were skipped by policy. |
+| Command                           | Result | Notes                                                                                                                                                                                 |
+| --------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `make test-fast-parallel`         | PASS   | All fast jobs passed: `fsys-darwin-compile`, `unit-core`, and `unit-cmd-gc-1-of-6` through `unit-cmd-gc-6-of-6`.                                                                      |
+| `go vet ./...`                    | PASS   | No output.                                                                                                                                                                            |
+| `make dashboard-check`            | PASS   | OpenAPI TS generation, Vite build, TypeScript typecheck, and `go test ./cmd/gc/dashboard/...` passed.                                                                                 |
+| `git diff --check`                | PASS   | No whitespace errors.                                                                                                                                                                 |
+| `gh pr checks 1149 --watch=false` | PASS   | Required CI, CodeQL, dashboard, acceptance, process, integration, rest, and worker-core checks were all passing; optional path-gated Mac/Docker/K8s/MCP lanes were skipped by policy. |
 
 ## Branch Evidence
 

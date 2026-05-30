@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc github`
 
 ## bd github
@@ -13,11 +14,11 @@ Generated from `bd help --doc github`
 Commands for syncing issues between beads and GitHub.
 
 Configuration can be set via 'bd config' or environment variables:
-  github.token / GITHUB_TOKEN           - Personal access token
-  github.owner / GITHUB_OWNER           - Repository owner
-  github.repo / GITHUB_REPO             - Repository name
-  github.repository / GITHUB_REPOSITORY - Combined "owner/repo" format
-  github.url / GITHUB_API_URL           - Custom API URL (GitHub Enterprise)
+github.token / GITHUB_TOKEN - Personal access token
+github.owner / GITHUB_OWNER - Repository owner
+github.repo / GITHUB_REPO - Repository name
+github.repository / GITHUB_REPOSITORY - Combined "owner/repo" format
+github.url / GITHUB_API_URL - Custom API URL (GitHub Enterprise)
 
 ```
 bd github
@@ -78,6 +79,7 @@ bd github status
 Synchronize issues between beads and GitHub.
 
 By default, performs bidirectional sync:
+
 - Pulls new/updated issues from GitHub to beads
 - Pushes local beads issues to GitHub
 

@@ -28,32 +28,38 @@ bd dolt show
 ## Solution
 
 **Step 1:** Stop the Dolt server
+
 ```bash
 bd dolt stop
 ```
 
 **Step 2:** Back up current state
+
 ```bash
 cp -r .beads .beads.backup
 ```
 
 **Step 3:** Preview what doctor would fix
+
 ```bash
 bd doctor --dry-run
 ```
 
 **Step 4:** Rebuild database
+
 ```bash
 bd doctor --fix
 ```
 
 **Step 5:** Verify recovery
+
 ```bash
 bd doctor
 bd list
 ```
 
 **Step 6:** Restart the Dolt server
+
 ```bash
 dolt sql-server
 ```

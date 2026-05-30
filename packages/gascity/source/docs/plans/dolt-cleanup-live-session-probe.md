@@ -38,7 +38,7 @@ stays 0").
 The designer (ga-lyv6d4) pinned every literal string and signature:
 
 - Exact SQL (`SELECT db, COUNT(*) FROM information_schema.processlist
-  WHERE db IS NOT NULL AND db != '' GROUP BY db`).
+WHERE db IS NOT NULL AND db != '' GROUP BY db`).
 - Exact deadline (`2 * time.Second`).
 - Exact reason / kind strings (`live-session` /
   `live-session-probe-failed`).
@@ -64,9 +64,9 @@ five new tests, ~150 LOC net. One bead.
 
 ## Children
 
-| ID            | Title                                                                                  | Routing label    | Routes to         | Depends on |
-|---------------|----------------------------------------------------------------------------------------|------------------|-------------------|------------|
-| `ga-9h05hk`   | feat(dolt-cleanup): live-session SHOW PROCESSLIST probe + fail-closed (ga-nw4z6 slice 2/5) | `ready-to-build` | `gascity/builder` | (none; slice 1 closed) |
+| ID          | Title                                                                                      | Routing label    | Routes to         | Depends on             |
+| ----------- | ------------------------------------------------------------------------------------------ | ---------------- | ----------------- | ---------------------- |
+| `ga-9h05hk` | feat(dolt-cleanup): live-session SHOW PROCESSLIST probe + fail-closed (ga-nw4z6 slice 2/5) | `ready-to-build` | `gascity/builder` | (none; slice 1 closed) |
 
 ## Acceptance for the parent (ga-lyv6d4)
 

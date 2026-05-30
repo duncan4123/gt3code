@@ -15,14 +15,14 @@ this PR's diff includes both commits.
 
 ## Criteria
 
-| # | Criterion | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Reviewer PASS verdict in bead notes | PASS | `gascity/reviewer` PASS at HEAD `e89f19d4` (per gm-gampdp). |
-| 2 | Acceptance criteria met | PASS | `WriteProjectIdentity` + 2 helpers + 10 subtests B1-B10 in 1:1 alignment with the writer design. |
-| 3 | Tests pass on final branch | PASS | `go test ./internal/beads/contract -count=1` — PASS. |
-| 4 | No high-severity review findings open | PASS | Reviewer routing message indicates clean PASS; no findings noted. |
-| 5 | Working tree clean | PASS | `git status` clean before gate-file commit. |
-| 6 | Branch diverges cleanly from main | PASS | 2 commits ahead, 0 behind `origin/main`. Stacked relationship is intentional. |
+| #   | Criterion                             | Verdict | Evidence                                                                                         |
+| --- | ------------------------------------- | ------- | ------------------------------------------------------------------------------------------------ |
+| 1   | Reviewer PASS verdict in bead notes   | PASS    | `gascity/reviewer` PASS at HEAD `e89f19d4` (per gm-gampdp).                                      |
+| 2   | Acceptance criteria met               | PASS    | `WriteProjectIdentity` + 2 helpers + 10 subtests B1-B10 in 1:1 alignment with the writer design. |
+| 3   | Tests pass on final branch            | PASS    | `go test ./internal/beads/contract -count=1` — PASS.                                             |
+| 4   | No high-severity review findings open | PASS    | Reviewer routing message indicates clean PASS; no findings noted.                                |
+| 5   | Working tree clean                    | PASS    | `git status` clean before gate-file commit.                                                      |
+| 6   | Branch diverges cleanly from main     | PASS    | 2 commits ahead, 0 behind `origin/main`. Stacked relationship is intentional.                    |
 
 ## Validation (deployer re-run on `deploy/ga-v88loq` at HEAD `e89f19d4`)
 

@@ -78,11 +78,11 @@ needs = ["review"]
 
 ## Formula Types
 
-| Type | Description |
-|------|-------------|
-| `workflow` | Standard step sequence |
+| Type        | Description                     |
+| ----------- | ------------------------------- |
+| `workflow`  | Standard step sequence          |
 | `expansion` | Template for expansion operator |
-| `aspect` | Cross-cutting concerns |
+| `aspect`    | Cross-cutting concerns          |
 
 ## Variables
 
@@ -109,11 +109,11 @@ title = "Deploy {{version}} to {{environment}}"
 
 ## Step Types
 
-| Type | Description |
-|------|-------------|
-| `task` | Normal work step (default) |
-| `human` | Requires human action |
-| `gate` | Async coordination point |
+| Type    | Description                |
+| ------- | -------------------------- |
+| `task`  | Normal work step (default) |
+| `human` | Requires human action      |
+| `gate`  | Async coordination point   |
 
 ## Dependencies
 
@@ -186,6 +186,7 @@ title = "Security scan before {step.title}"
 ## Formula Locations
 
 Formulas are searched in order:
+
 1. `.beads/formulas/` (project-level)
 2. `~/.beads/formulas/` (user-level)
 3. Built-in formulas

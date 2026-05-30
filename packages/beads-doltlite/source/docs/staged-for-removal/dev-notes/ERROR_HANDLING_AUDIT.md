@@ -1,7 +1,8 @@
 # Error Handling Audit Report
+
 **Date:** 2025-11-24
 **Issue:** bd-1qwo
-**Scope:** cmd/bd/*.go
+**Scope:** cmd/bd/\*.go
 
 This document audits error handling patterns across the beads CLI codebase to ensure consistency with the guidelines established in [ERROR_HANDLING.md](../../ERROR_HANDLING.md).
 
@@ -10,11 +11,13 @@ This document audits error handling patterns across the beads CLI codebase to en
 **Status:** 🟡 Needs Improvement
 **Files Audited:** create.go, init.go, sync.go, export.go, import.go
 **Patterns Found:**
+
 - ✅ Pattern A (Exit): Generally consistent
 - ⚠️ Pattern B (Warn): Some inconsistencies found
 - ✅ Pattern C (Ignore): Correctly applied
 
 **Key Findings:**
+
 1. **Metadata operations** are handled inconsistently - some use Pattern A (fatal), some use Pattern B (warn)
 2. **File permission errors** mostly use Pattern B correctly
 3. **Cleanup operations** correctly use Pattern C
@@ -27,9 +30,11 @@ This document audits error handling patterns across the beads CLI codebase to en
 ### Correct Usage Examples
 
 #### User Input Validation
+
 All validation failures correctly use Pattern A with clear error messages:
 
 **create.go:31-32, 46-49, 57-58**
+
 ```go
 if len(args) > 0 {
     fmt.Fprintf(os.Stderr, "Error: cannot specify both title and --file flag\n")
@@ -38,6 +43,7 @@ if len(args) > 0 {
 ```
 
 **create.go:74-76, 107-108**
+
 ```go
 tmpl, err := loadTemplate(fromTemplate)
 if err != nil {
@@ -47,6 +53,7 @@ if err != nil {
 ```
 
 **create.go:199-222** - ID validation
+
 ```go
 requestedPrefix, err := validation.ValidateIDFormat(explicitID)
 if err != nil {
@@ -56,9 +63,11 @@ if err != nil {
 ```
 
 #### Critical Database Operations
+
 Core database operations correctly use Pattern A:
 
 **create.go:320-323**
+
 ```go
 if err := store.CreateIssue(ctx, issue, actor); err != nil {
     fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -67,6 +76,7 @@ if err := store.CreateIssue(ctx, issue, actor); err != nil {
 ```
 
 **init.go:77-78, 96-97, 104-105, 112-115**
+
 ```go
 cwd, err := os.Getwd()
 if err != nil {
@@ -76,6 +86,7 @@ if err != nil {
 ```
 
 **init.go:201-204**
+
 ```go
 store, err := sqlite.New(ctx, initDBPath)
 if err != nil {
@@ -85,6 +96,7 @@ if err != nil {
 ```
 
 **sync.go:52-54, 59-60**
+
 ```go
 if jsonlPath == "" {
     fmt.Fprintf(os.Stderr, "Error: not in a bd workspace (no .beads directory found)\n")
@@ -93,6 +105,7 @@ if jsonlPath == "" {
 ```
 
 **sync.go:82-83, 110-117, 122-124**
+
 ```go
 if err := showSyncStatus(ctx); err != nil {
     fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -101,6 +114,7 @@ if err := showSyncStatus(ctx); err != nil {
 ```
 
 **export.go:146-148**
+
 ```go
 if format != "jsonl" {
     fmt.Fprintf(os.Stderr, "Error: only 'jsonl' format is currently supported\n")
@@ -109,6 +123,7 @@ if format != "jsonl" {
 ```
 
 **export.go:205-207, 212-215, 223-225, 231-233, 239-241, 247-249**
+
 ```go
 priorityMin, err := validation.ValidatePriority(priorityMinStr)
 if err != nil {
@@ -118,6 +133,7 @@ if err != nil {
 ```
 
 **export.go:256-259**
+
 ```go
 issues, err := store.SearchIssues(ctx, "", filter)
 if err != nil {
@@ -127,6 +143,7 @@ if err != nil {
 ```
 
 **export.go:270-277** - Safety check with clear guidance
+
 ```go
 fmt.Fprintf(os.Stderr, "Error: refusing to export empty database over non-empty JSONL file\n")
 fmt.Fprintf(os.Stderr, "  Database has 0 issues, JSONL has %d issues\n", existingCount)
@@ -137,6 +154,7 @@ os.Exit(1)
 ```
 
 **import.go:42-44**
+
 ```go
 if err := os.MkdirAll(dbDir, 0750); err != nil {
     fmt.Fprintf(os.Stderr, "Error: failed to create database directory: %v\n", err)
@@ -145,6 +163,7 @@ if err := os.MkdirAll(dbDir, 0750); err != nil {
 ```
 
 **import.go:55-58, 92-94**
+
 ```go
 store, err = sqlite.New(rootCtx, dbPath)
 if err != nil {
@@ -154,6 +173,7 @@ if err != nil {
 ```
 
 **import.go:76-84** - Interactive mode detection
+
 ```go
 if input == "" && term.IsTerminal(int(os.Stdin.Fd())) {
     fmt.Fprintf(os.Stderr, "Error: No input specified.\n\n")
@@ -164,6 +184,7 @@ if input == "" && term.IsTerminal(int(os.Stdin.Fd())) {
 ```
 
 **import.go:177-179**
+
 ```go
 if err := json.Unmarshal([]byte(line), &issue); err != nil {
     fmt.Fprintf(os.Stderr, "Error parsing line %d: %v\n", lineNum, err)
@@ -172,6 +193,7 @@ if err := json.Unmarshal([]byte(line), &issue); err != nil {
 ```
 
 **import.go:184-187**
+
 ```go
 if err := scanner.Err(); err != nil {
     fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
@@ -180,6 +202,7 @@ if err := scanner.Err(); err != nil {
 ```
 
 **import.go:199-202**
+
 ```go
 cwd, err := os.Getwd()
 if err != nil {
@@ -189,6 +212,7 @@ if err != nil {
 ```
 
 **import.go:207-210**
+
 ```go
 if err := store.SetConfig(initCtx, "issue_prefix", detectedPrefix); err != nil {
     fmt.Fprintf(os.Stderr, "Error: failed to set issue prefix: %v\n", err)
@@ -197,6 +221,7 @@ if err := store.SetConfig(initCtx, "issue_prefix", detectedPrefix); err != nil {
 ```
 
 **import.go:247, 258, 260-261** - Error handling with detailed reports
+
 ```go
 if result != nil && len(result.CollisionIDs) > 0 {
     fmt.Fprintf(os.Stderr, "\n=== Collision Detection Report ===\n")
@@ -214,7 +239,9 @@ os.Exit(1)
 ### ✅ Correct Usage
 
 #### Optional File Creation
+
 **create.go:333-334, 340-341**
+
 ```go
 if err := store.AddLabel(ctx, issue.ID, label, actor); err != nil {
     fmt.Fprintf(os.Stderr, "Warning: failed to add label %s: %v\n", label, err)
@@ -222,6 +249,7 @@ if err := store.AddLabel(ctx, issue.ID, label, actor); err != nil {
 ```
 
 **init.go:155-157, 161-163, 167-169**
+
 ```go
 if err := createConfigYaml(localBeadsDir, false); err != nil {
     fmt.Fprintf(os.Stderr, "Warning: failed to create config.yaml: %v\n", err)
@@ -230,6 +258,7 @@ if err := createConfigYaml(localBeadsDir, false); err != nil {
 ```
 
 **init.go:236-238, 272-274, 284-286**
+
 ```go
 if err := store.SetMetadata(ctx, "bd_version", Version); err != nil {
     fmt.Fprintf(os.Stderr, "Warning: failed to store version metadata: %v\n", err)
@@ -238,6 +267,7 @@ if err := store.SetMetadata(ctx, "bd_version", Version); err != nil {
 ```
 
 **init.go:247-248, 262-263**
+
 ```go
 if err := store.SetMetadata(ctx, "repo_id", repoID); err != nil {
     fmt.Fprintf(os.Stderr, "Warning: failed to set repo_id: %v\n", err)
@@ -245,7 +275,9 @@ if err := store.SetMetadata(ctx, "repo_id", repoID); err != nil {
 ```
 
 #### Git Hook Installation
+
 **init.go:332-336**
+
 ```go
 if err := installGitHooks(); err != nil && !quiet {
     yellow := color.New(color.FgYellow).SprintFunc()
@@ -255,6 +287,7 @@ if err := installGitHooks(); err != nil && !quiet {
 ```
 
 **init.go:341-346** - Merge driver installation
+
 ```go
 if err := installMergeDriver(); err != nil && !quiet {
     yellow := color.New(color.FgYellow).SprintFunc()
@@ -264,12 +297,15 @@ if err := installMergeDriver(); err != nil && !quiet {
 ```
 
 #### Import/Export Warnings
+
 **sync.go:156, 257, 329, 335**
+
 ```go
 fmt.Fprintf(os.Stderr, "Warning: failed to count issues before import: %v\n", err)
 ```
 
 **sync.go:161-164**
+
 ```go
 if orphaned, err := checkOrphanedDeps(ctx, store); err != nil {
     fmt.Fprintf(os.Stderr, "Warning: orphaned dependency check failed: %v\n", err)
@@ -279,6 +315,7 @@ if orphaned, err := checkOrphanedDeps(ctx, store); err != nil {
 ```
 
 **sync.go:720-722, 740-743, 750-752, 760-762**
+
 ```go
 if err := os.Chmod(jsonlPath, 0600); err != nil {
     // Non-fatal warning
@@ -287,6 +324,7 @@ if err := os.Chmod(jsonlPath, 0600); err != nil {
 ```
 
 **export.go:30, 59**
+
 ```go
 if err := file.Close(); err != nil {
     fmt.Fprintf(os.Stderr, "Warning: failed to close file: %v\n", err)
@@ -294,11 +332,13 @@ if err := file.Close(); err != nil {
 ```
 
 **export.go:267**
+
 ```go
 fmt.Fprintf(os.Stderr, "Warning: failed to read existing JSONL: %v\n", err)
 ```
 
 **import.go:98, 159**
+
 ```go
 if err := f.Close(); err != nil {
     fmt.Fprintf(os.Stderr, "Warning: failed to close input file: %v\n", err)
@@ -310,7 +350,9 @@ if err := f.Close(); err != nil {
 **Issue:** Metadata operations are handled inconsistently across files. Some treat them as fatal (Pattern A), others as warnings (Pattern B).
 
 #### Pattern A (Exit) - Less Common
+
 **init.go:207-210**
+
 ```go
 // Sets issue prefix - FATAL
 if err := store.SetConfig(ctx, "issue_prefix", prefix); err != nil {
@@ -321,6 +363,7 @@ if err := store.SetConfig(ctx, "issue_prefix", prefix); err != nil {
 ```
 
 **init.go:224-228**
+
 ```go
 // Sets sync branch - FATAL
 if err := syncbranch.Set(ctx, store, branch); err != nil {
@@ -331,7 +374,9 @@ if err := syncbranch.Set(ctx, store, branch); err != nil {
 ```
 
 #### Pattern B (Warn) - More Common
+
 **init.go:236-238**
+
 ```go
 // Stores version metadata - WARNING
 if err := store.SetMetadata(ctx, "bd_version", Version); err != nil {
@@ -341,6 +386,7 @@ if err := store.SetMetadata(ctx, "bd_version", Version); err != nil {
 ```
 
 **init.go:247-248, 262-263**
+
 ```go
 // Stores repo_id and clone_id - WARNING
 if err := store.SetMetadata(ctx, "repo_id", repoID); err != nil {
@@ -352,6 +398,7 @@ if err := store.SetMetadata(ctx, "clone_id", cloneID); err != nil {
 ```
 
 **sync.go:740-752** - Multiple metadata warnings
+
 ```go
 if err := store.SetMetadata(ctx, "last_import_hash", currentHash); err != nil {
     // Non-fatal warning: Metadata update failures are intentionally non-fatal...
@@ -365,6 +412,7 @@ if err := store.SetMetadata(ctx, "last_import_time", exportTime); err != nil {
 
 **Recommendation:**
 Based on the documentation and intent, metadata operations should follow this pattern:
+
 - **Configuration metadata** (issue_prefix, sync.branch): **Pattern A** - These are fundamental to operation
 - **Tracking metadata** (bd_version, repo_id, last_import_hash): **Pattern B** - These enhance functionality but system works without them
 
@@ -377,12 +425,15 @@ Based on the documentation and intent, metadata operations should follow this pa
 ### Correct Usage
 
 #### Resource Cleanup
+
 **init.go:209, 326-327**
+
 ```go
 _ = store.Close()
 ```
 
 **sync.go:696-698, 701-703**
+
 ```go
 defer func() {
     _ = tempFile.Close()
@@ -393,7 +444,9 @@ defer func() {
 ```
 
 #### Deferred Operations
+
 **create.go, init.go, sync.go** - Multiple instances of cleanup in defer blocks
+
 ```go
 defer func() { _ = store.Close() }()
 ```
@@ -405,7 +458,9 @@ All cleanup operations correctly use Pattern C with no user-visible output.
 ## Specific Inconsistencies Identified
 
 ### 1. Parent-Child Dependency Addition
+
 **create.go:327-335**
+
 ```go
 // Pattern B - warn on parent-child dependency failure
 if parentID != "" {
@@ -421,6 +476,7 @@ if parentID != "" {
 ```
 
 **create.go:382-384** - Regular dependencies (same pattern)
+
 ```go
 if err := store.AddDependency(ctx, dep, actor); err != nil {
     fmt.Fprintf(os.Stderr, "Warning: failed to add dependency %s -> %s: %v\n", issue.ID, dependsOnID, err)
@@ -430,7 +486,9 @@ if err := store.AddDependency(ctx, dep, actor); err != nil {
 **Analysis:** ✅ Correct - Dependencies are auxiliary to issue creation. The issue exists even if dependencies fail.
 
 ### 2. Label Addition
+
 **create.go:338-342**
+
 ```go
 for _, label := range labels {
     if err := store.AddLabel(ctx, issue.ID, label, actor); err != nil {
@@ -442,7 +500,9 @@ for _, label := range labels {
 **Analysis:** ✅ Correct - Labels are auxiliary. The issue exists even if labels fail to attach.
 
 ### 3. File Permission Changes
+
 **sync.go:724-727**
+
 ```go
 if err := os.Chmod(jsonlPath, 0600); err != nil {
     // Non-fatal warning
@@ -453,7 +513,9 @@ if err := os.Chmod(jsonlPath, 0600); err != nil {
 **Analysis:** ✅ Correct - File was already written successfully. Permissions are a security enhancement.
 
 ### 4. Database Mtime Updates
+
 **sync.go:756-762**
+
 ```go
 if err := TouchDatabaseFile(dbPath, jsonlPath); err != nil {
     // Non-fatal warning
@@ -472,7 +534,7 @@ if err := TouchDatabaseFile(dbPath, jsonlPath); err != nil {
 1. **Document Metadata Distinction**
    - Create clear guidelines for "configuration metadata" vs "tracking metadata"
    - Configuration metadata (issue_prefix, sync.branch): Pattern A
-   - Tracking metadata (bd_version, repo_id, last_import_*): Pattern B
+   - Tracking metadata (bd*version, repo_id, last_import*\*): Pattern B
    - Update ERROR_HANDLING.md with this distinction
 
 2. **Review init.go Metadata Handling**
@@ -505,6 +567,7 @@ if err := TouchDatabaseFile(dbPath, jsonlPath); err != nil {
 ## Files Not Yet Audited
 
 The following files in cmd/bd/ still need review:
+
 - update.go
 - list.go
 - show.go
@@ -517,7 +580,7 @@ The following files in cmd/bd/ still need review:
 - compact.go
 - config.go
 - validate.go
-- doctor/* (doctor package files)
+- doctor/\* (doctor package files)
 - And ~50 more command files
 
 **Next Steps:** Extend audit to remaining files, focusing on high-usage commands first.
@@ -528,11 +591,11 @@ The following files in cmd/bd/ still need review:
 
 ### Pattern Compliance Scorecard
 
-| Pattern | Status | Compliance Rate | Issues Found |
-|---------|--------|-----------------|--------------|
-| Pattern A (Exit) | ✅ Excellent | ~95% | Minor: metadata distinction |
-| Pattern B (Warn) | ⚠️ Good | ~90% | Moderate: metadata handling |
-| Pattern C (Ignore) | ✅ Excellent | ~98% | None |
+| Pattern            | Status       | Compliance Rate | Issues Found                |
+| ------------------ | ------------ | --------------- | --------------------------- |
+| Pattern A (Exit)   | ✅ Excellent | ~95%            | Minor: metadata distinction |
+| Pattern B (Warn)   | ⚠️ Good      | ~90%            | Moderate: metadata handling |
+| Pattern C (Ignore) | ✅ Excellent | ~98%            | None                        |
 
 ### Overall Assessment
 
@@ -566,9 +629,10 @@ The codebase demonstrates strong adherence to error handling patterns with a few
 
 ### sync.go ✅ MOSTLY CONSISTENT
 
-*Note: This file handles Dolt sync operations (daemon_sync.go was removed during Dolt migration).*
+_Note: This file handles Dolt sync operations (daemon_sync.go was removed during Dolt migration)._
 
 **Pattern A (Exit):** Used for critical failures but returns early to channel instead of os.Exit
+
 ```go
 // sync.go - Returns error to channel, caller decides
 if err != nil {
@@ -578,6 +642,7 @@ if err != nil {
 ```
 
 **Pattern B (Warn):** Uses internal logging (log.log) which is appropriate for server background operations
+
 ```go
 // Non-fatal warnings logged to internal log
 log.log("warning: failed to update metadata: %v", err)
@@ -590,6 +655,7 @@ log.log("warning: failed to update metadata: %v", err)
 ### list.go ✅ CONSISTENT
 
 **Pattern A (Exit):** Correctly applied for database errors and ID resolution
+
 ```go
 // list.go:~200-210
 issues, err := store.SearchIssues(ctx, "", filter)
@@ -600,6 +666,7 @@ if err != nil {
 ```
 
 **Pattern B (Warn):** Used for non-critical label lookup failures in batch operations
+
 ```go
 // Individual label fetch failures warn but continue
 for _, issue := range issues {
@@ -617,6 +684,7 @@ for _, issue := range issues {
 ### show.go (includes update, close functionality) ✅ CONSISTENT
 
 **Pattern A (Exit):** Correctly applied for ID resolution and issue retrieval
+
 ```go
 // show.go - ID resolution
 fullID, err := utils.ResolvePartialID(ctx, store, args[0])
@@ -627,6 +695,7 @@ if err != nil {
 ```
 
 **Pattern A (Exit):** Core update operations
+
 ```go
 // show.go - UpdateIssue
 if err := store.UpdateIssue(ctx, fullID, updates, actor); err != nil {
@@ -642,6 +711,7 @@ if err := store.UpdateIssue(ctx, fullID, updates, actor); err != nil {
 ### dep.go ✅ CONSISTENT
 
 **Pattern A (Exit):** Correctly applied for ID resolution and dependency operations
+
 ```go
 // dep.go:37-44 - ID resolution
 resp, err := rpcClient.ResolveID(resolveArgs)
@@ -652,6 +722,7 @@ if err != nil {
 ```
 
 **Pattern B (Warn):** Used for cycle detection after successful dependency add
+
 ```go
 // dep.go:111-133 - Cycle warning is non-fatal
 cycles, err := store.DetectCycles(ctx)
@@ -670,6 +741,7 @@ if err != nil {
 ### label.go ✅ CONSISTENT
 
 **Pattern A (Exit):** Used for ID resolution in singleton operations
+
 ```go
 // label.go:167-182 - labelListCmd
 if err != nil {
@@ -679,6 +751,7 @@ if err != nil {
 ```
 
 **Pattern B (Warn):** Used for batch operations - continues on individual failures
+
 ```go
 // label.go:32-35 - processBatchLabelOperation
 if err != nil {
@@ -694,6 +767,7 @@ if err != nil {
 ### comments.go ✅ CONSISTENT
 
 **Pattern A (Exit):** Correctly applied for all comment operations
+
 ```go
 // comments.go:45-50
 if err != nil {
@@ -703,6 +777,7 @@ if err != nil {
 ```
 
 **Pattern A with fallback:** Interesting pattern for RPC compatibility
+
 ```go
 // comments.go:42-50 - Fallback to direct mode
 if isUnknownOperationError(err) {
@@ -723,6 +798,7 @@ if isUnknownOperationError(err) {
 ### delete.go ✅ MOSTLY CONSISTENT
 
 **Pattern A (Exit):** Core deletion operations
+
 ```go
 // delete.go:91-98
 issue, err := store.GetIssue(ctx, issueID)
@@ -737,6 +813,7 @@ if issue == nil {
 ```
 
 **Pattern B (Warn):** Used for auxiliary cleanup operations
+
 ```go
 // delete.go:202-206 - Reference update warning
 if err := store.UpdateIssue(ctx, id, updates, actor); err != nil {
@@ -764,6 +841,7 @@ if err := removeIssueFromJSONL(issueID); err != nil {
 ### compact.go ✅ CONSISTENT
 
 **Pattern A (Exit):** Validation and core operations
+
 ```go
 // compact.go:107-114 - Mode validation
 if activeModes == 0 {
@@ -783,6 +861,7 @@ if !eligible {
 ```
 
 **Pattern B (Warn):** Used for non-critical config loading and pruning
+
 ```go
 // compact.go:916-919 - Config load warning
 cfg, err := configfile.Load(beadsDir)
@@ -808,6 +887,7 @@ if err != nil {
 ### config.go ✅ CONSISTENT
 
 **Pattern A (Exit):** All config operations are fatal since they require direct database access
+
 ```go
 // config.go:40-43
 if err := ensureDirectMode("config set requires direct database access"); err != nil {
@@ -829,6 +909,7 @@ if err := syncbranch.Set(ctx, store, value); err != nil {
 ### validate.go ✅ MOSTLY CONSISTENT
 
 **Pattern A (Exit):** Core validation failures
+
 ```go
 // validate.go:28-32 - Server mode not supported
 if rpcClient != nil {
@@ -846,6 +927,7 @@ if err != nil {
 ```
 
 **Pattern B (Warn):** Results contain errors but command completes with summary
+
 ```go
 // validate.go:152-161 - hasFailures check determines exit code
 func (r *validationResults) hasFailures() bool {
@@ -870,6 +952,7 @@ func (r *validationResults) hasFailures() bool {
 ### Additional Pattern Observations
 
 1. **Batch Operations Pattern:** Multiple commands (label, delete) use a `continue` pattern for batch operations that correctly implements Pattern B semantics:
+
    ```go
    for _, item := range items {
        if err := processItem(item); err != nil {
@@ -888,15 +971,15 @@ func (r *validationResults) hasFailures() bool {
 
 ### Updated Pattern Compliance Scorecard
 
-| Pattern | Status | Compliance Rate | Notes |
-|---------|--------|-----------------|-------|
-| Pattern A (Exit) | ✅ Excellent | ~97% | Consistent across all audited files |
-| Pattern B (Warn) | ✅ Excellent | ~95% | Good use of continue pattern for batches |
-| Pattern C (Ignore) | ✅ Excellent | ~98% | Cleanup operations properly silent |
+| Pattern            | Status       | Compliance Rate | Notes                                    |
+| ------------------ | ------------ | --------------- | ---------------------------------------- |
+| Pattern A (Exit)   | ✅ Excellent | ~97%            | Consistent across all audited files      |
+| Pattern B (Warn)   | ✅ Excellent | ~95%            | Good use of continue pattern for batches |
+| Pattern C (Ignore) | ✅ Excellent | ~98%            | Cleanup operations properly silent       |
 
 ### Files Still Needing Audit
 
-- doctor/* (doctor package files)
+- doctor/\* (doctor package files)
 - server-related files
 - stats.go
 - duplicates.go

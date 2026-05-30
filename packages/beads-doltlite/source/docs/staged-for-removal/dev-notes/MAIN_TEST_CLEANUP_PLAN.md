@@ -1,10 +1,12 @@
 # main_test.go Cleanup Plan
 
 ## Problem
+
 main_test.go has 18 tests using deprecated global state (isDirty, flushTimer, flushMutex).
 These tests are slow (14 newTestStore() calls) and redundant with flush_manager_test.go.
 
 ## Root Cause
+
 - FlushManager refactoring (bd-52) moved flush logic to isolated FlushManager
 - Legacy path kept "for backward compatibility with tests"
 - main_test.go still tests the DEPRECATED legacy path
@@ -97,23 +99,27 @@ After removing legacy path:
 ## Expected Impact
 
 ### Before:
+
 - 18 tests in main_test.go
 - 14 newTestStore() calls
 - ~15-20 seconds runtime (estimated)
 - Testing deprecated code path
 
 ### After Phase 1:
+
 - 11 tests in main_test.go (7 deleted)
 - ~6-8 newTestStore() calls (auto-import tests)
 - ~5-7 seconds runtime (estimated)
 - Testing only integration behavior
 
 ### After Phase 2:
+
 - Same test count
 - Cleaner code (no legacy path)
 - Tests use FlushManager directly
 
 ### After Phase 3:
+
 - Same test count
 - No global state pollution
 - Tests can run in parallel (t.Parallel())

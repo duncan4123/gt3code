@@ -1,6 +1,17 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -72,9 +83,13 @@ function materializeSource(manifest: Manifest, destination: string): string {
 }
 
 function assertCleanGitWorktree(repo: string): void {
-  const status = execFileSync("git", ["-C", repo, "status", "--porcelain"], { encoding: "utf8" }).trim();
+  const status = execFileSync("git", ["-C", repo, "status", "--porcelain"], {
+    encoding: "utf8",
+  }).trim();
   if (status) {
-    throw new Error(`Refusing to export into dirty repo ${repo}. Commit, stash, or clean it first.`);
+    throw new Error(
+      `Refusing to export into dirty repo ${repo}. Commit, stash, or clean it first.`,
+    );
   }
 }
 
@@ -181,7 +196,9 @@ function runForManifest(manifest: Manifest): boolean {
       rmSync(packagePath, { recursive: true, force: true });
       mkdirSync(packagePath, { recursive: true });
       copyDir(sourcePath, packagePath, excludes);
-      console.log(`${manifest.name}: pulled ${manifest.syncedBranch}@${actualCommit} into ${manifest.path}`);
+      console.log(
+        `${manifest.name}: pulled ${manifest.syncedBranch}@${actualCommit} into ${manifest.path}`,
+      );
       return true;
     }
 
@@ -202,9 +219,13 @@ function runForManifest(manifest: Manifest): boolean {
       return true;
     }
 
-    console.log(`${manifest.name}: ${drift ? "drift" : "ok"} (${manifest.syncedBranch}@${actualCommit})`);
+    console.log(
+      `${manifest.name}: ${drift ? "drift" : "ok"} (${manifest.syncedBranch}@${actualCommit})`,
+    );
     if (manifest.syncedCommit && manifest.syncedCommit !== actualCommit) {
-      console.log(`  note: manifest commit is ${manifest.syncedCommit}, branch currently resolves to ${actualCommit}`);
+      console.log(
+        `  note: manifest commit is ${manifest.syncedCommit}, branch currently resolves to ${actualCommit}`,
+      );
     }
     if (command === "diff" || drift) {
       for (const line of changed.slice(0, 80)) {
@@ -221,7 +242,9 @@ function runForManifest(manifest: Manifest): boolean {
 }
 
 if (!["check", "diff", "pull", "export"].includes(command)) {
-  console.error("Usage: node scripts/package-source-sync.ts [check|diff|pull|export] [package-name...]");
+  console.error(
+    "Usage: node scripts/package-source-sync.ts [check|diff|pull|export] [package-name...]",
+  );
   process.exit(2);
 }
 

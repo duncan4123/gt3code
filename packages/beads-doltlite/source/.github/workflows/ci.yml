@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   merge_group:
 
 concurrency:
@@ -57,7 +57,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
       - name: Build cmd/bd (CGO_ENABLED=0, gms_pure_go)
         env:
@@ -99,7 +99,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
       - name: Build bd
         run: CGO_ENABLED=0 go build -tags gms_pure_go -o bd ./cmd/bd/
@@ -145,18 +145,18 @@ jobs:
           # Linux: full test suite with coverage
           - os: ubuntu-latest
             coverage: true
-            test-flags: '-v -race -short -coverprofile=coverage.out'
+            test-flags: "-v -race -short -coverprofile=coverage.out"
           # macOS: full test suite, no coverage (faster)
           - os: macos-latest
             coverage: false
-            test-flags: '-v -race -short'
+            test-flags: "-v -race -short"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
       - name: Install Dolt (Linux/macOS)
         run: curl -fsSL https://github.com/dolthub/dolt/releases/latest/download/install.sh | sudo bash
@@ -224,7 +224,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
       - name: Install Dolt CLI
         run: curl -fsSL https://github.com/dolthub/dolt/releases/latest/download/install.sh | sudo bash
@@ -271,7 +271,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
       - name: Build embedded bd binary
         run: go build -tags gms_pure_go -race -o /tmp/bd-embedded-test ./cmd/bd/
@@ -367,7 +367,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
       - name: Configure Git
         run: |
@@ -392,7 +392,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
       - name: Check gofmt
         run: make fmt-check
@@ -406,7 +406,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9

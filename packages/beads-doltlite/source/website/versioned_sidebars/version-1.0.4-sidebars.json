@@ -15,19 +15,13 @@
       "type": "category",
       "label": "Core Concepts",
       "collapsed": true,
-      "items": [
-        "core-concepts/index",
-        "core-concepts/issues",
-        "core-concepts/hash-ids"
-      ]
+      "items": ["core-concepts/index", "core-concepts/issues", "core-concepts/hash-ids"]
     },
     {
       "type": "category",
       "label": "Architecture",
       "collapsed": true,
-      "items": [
-        "architecture/index"
-      ]
+      "items": ["architecture/index"]
     },
     {
       "type": "category",
@@ -72,34 +66,30 @@
       "type": "category",
       "label": "Multi-Agent",
       "collapsed": true,
+      "items": ["multi-agent/index", "multi-agent/routing", "multi-agent/coordination"]
+    },
+    {
+      "type": "category",
+      "label": "Integrations",
+      "collapsed": true,
       "items": [
-        "multi-agent/index",
-        "multi-agent/routing",
-        "multi-agent/coordination"
+        "integrations/index",
+        "integrations/aider",
+        "integrations/claude-code",
+        "integrations/codex",
+        "integrations/cody",
+        "integrations/cursor",
+        "integrations/factory",
+        "integrations/gemini",
+        "integrations/junie",
+        "integrations/kilocode",
+        "integrations/mux",
+        "integrations/opencode",
+        "integrations/windsurf",
+        "integrations/mcp-server",
+        "integrations/github-copilot"
       ]
     },
-      {
-        "type": "category",
-        "label": "Integrations",
-        "collapsed": true,
-        "items": [
-          "integrations/index",
-          "integrations/aider",
-          "integrations/claude-code",
-          "integrations/codex",
-          "integrations/cody",
-          "integrations/cursor",
-          "integrations/factory",
-          "integrations/gemini",
-          "integrations/junie",
-          "integrations/kilocode",
-          "integrations/mux",
-          "integrations/opencode",
-          "integrations/windsurf",
-          "integrations/mcp-server",
-          "integrations/github-copilot"
-        ]
-      },
     {
       "type": "category",
       "label": "Reference",

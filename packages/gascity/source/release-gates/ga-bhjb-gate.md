@@ -26,13 +26,13 @@ needed after the rebase because the canonical helper already lives in
 
 ## Verification
 
-| Check | Result |
-|-------|--------|
-| Rebase onto current `origin/main` | PASS |
-| Focused pre-rebase PR tests | PASS |
-| Focused post-conflict regression tests | PASS |
-| Pre-commit hook | PASS |
-| Branch working tree | Clean |
+| Check                                  | Result |
+| -------------------------------------- | ------ |
+| Rebase onto current `origin/main`      | PASS   |
+| Focused pre-rebase PR tests            | PASS   |
+| Focused post-conflict regression tests | PASS   |
+| Pre-commit hook                        | PASS   |
+| Branch working tree                    | Clean  |
 
 Focused tests run after resolving conflicts:
 

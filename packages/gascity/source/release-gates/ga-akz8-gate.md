@@ -7,26 +7,26 @@
 
 ## Gate criteria
 
-| # | Criterion | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Review PASS present | PASS | ga-akz8 notes: `review_verdict: pass` from gascity/reviewer at commit 9ee8a10e. Second-pass (gascity/reviewer-1) also PASS per mail gm-wisp-ceq. Single-pass required while gemini second-pass is disabled; two independent PASSes here exceed the bar. |
-| 2 | Acceptance criteria met | PASS | See matrix below. |
-| 3 | Tests pass | PASS | Reviewer's test glob verified on cherry-picked branch — see evidence below. |
-| 4 | No high-severity review findings open | PASS | Two `severity: info` findings on neighboring concerns (test improvement and pre-existing race in convergence_tick.go, out of scope per originating spec). Zero HIGH findings. |
-| 5 | Final branch is clean | PASS | `git status` clean on tracked paths. Untracked `.gitkeep` is pre-existing, not introduced by this change. |
-| 6 | Branch diverges cleanly from main | PASS | Fresh cut from `origin/main`. Single commit. Only structural conflict was `issues.jsonl` (bd work-tracking artifact — not on main), stripped via the documented EXCLUDES pattern. |
+| #   | Criterion                             | Verdict | Evidence                                                                                                                                                                                                                                                |
+| --- | ------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS    | ga-akz8 notes: `review_verdict: pass` from gascity/reviewer at commit 9ee8a10e. Second-pass (gascity/reviewer-1) also PASS per mail gm-wisp-ceq. Single-pass required while gemini second-pass is disabled; two independent PASSes here exceed the bar. |
+| 2   | Acceptance criteria met               | PASS    | See matrix below.                                                                                                                                                                                                                                       |
+| 3   | Tests pass                            | PASS    | Reviewer's test glob verified on cherry-picked branch — see evidence below.                                                                                                                                                                             |
+| 4   | No high-severity review findings open | PASS    | Two `severity: info` findings on neighboring concerns (test improvement and pre-existing race in convergence_tick.go, out of scope per originating spec). Zero HIGH findings.                                                                           |
+| 5   | Final branch is clean                 | PASS    | `git status` clean on tracked paths. Untracked `.gitkeep` is pre-existing, not introduced by this change.                                                                                                                                               |
+| 6   | Branch diverges cleanly from main     | PASS    | Fresh cut from `origin/main`. Single commit. Only structural conflict was `issues.jsonl` (bd work-tracking artifact — not on main), stripped via the documented EXCLUDES pattern.                                                                       |
 
 ## Acceptance criteria matrix (ga-8nbr scope)
 
-| Criterion | Met | Evidence |
-|-----------|-----|----------|
-| `reloadMu sync.Mutex` added to `cityRuntime` adjacent to `activeReload` | YES | `cmd/gc/city_runtime.go:80`. |
-| `handleReloadRequest` busy-check + activeReload store under lock, channel sends outside lock | YES | `cmd/gc/city_runtime.go:787-814`. |
-| `failActiveReload` swaps activeReload under lock, replies outside | YES | `cmd/gc/city_runtime.go:816-827`. |
-| All `tick()` activeReload access sites take `reloadMu` | YES | Trace-detail read (~604-609), reload-source read (~675-686), end-of-tick clear (~776-781), deferred panic-recovery clear (~673-676). |
-| `run()` spawns dedicated accept goroutine with `safeTick(handleReloadRequest, "reload-accept")` | YES | `cmd/gc/city_runtime.go:499-512`. `reloadReqCh` case removed from main select. |
-| Deferred cleanup waits for `acceptDone` then calls `failActiveReload` | YES | `cmd/gc/city_runtime.go:513-516` — avoids shutdown race between accept goroutine and the prior inline `ctx.Done()` path. |
-| Regression test: reload accept unblocks during slow reconciler tick | YES | `TestCityRuntimeReloadAcceptNotBlockedBySlowTick` added in `cmd/gc/city_runtime_test.go`. |
+| Criterion                                                                                       | Met | Evidence                                                                                                                             |
+| ----------------------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `reloadMu sync.Mutex` added to `cityRuntime` adjacent to `activeReload`                         | YES | `cmd/gc/city_runtime.go:80`.                                                                                                         |
+| `handleReloadRequest` busy-check + activeReload store under lock, channel sends outside lock    | YES | `cmd/gc/city_runtime.go:787-814`.                                                                                                    |
+| `failActiveReload` swaps activeReload under lock, replies outside                               | YES | `cmd/gc/city_runtime.go:816-827`.                                                                                                    |
+| All `tick()` activeReload access sites take `reloadMu`                                          | YES | Trace-detail read (~604-609), reload-source read (~675-686), end-of-tick clear (~776-781), deferred panic-recovery clear (~673-676). |
+| `run()` spawns dedicated accept goroutine with `safeTick(handleReloadRequest, "reload-accept")` | YES | `cmd/gc/city_runtime.go:499-512`. `reloadReqCh` case removed from main select.                                                       |
+| Deferred cleanup waits for `acceptDone` then calls `failActiveReload`                           | YES | `cmd/gc/city_runtime.go:513-516` — avoids shutdown race between accept goroutine and the prior inline `ctx.Done()` path.             |
+| Regression test: reload accept unblocks during slow reconciler tick                             | YES | `TestCityRuntimeReloadAcceptNotBlockedBySlowTick` added in `cmd/gc/city_runtime_test.go`.                                            |
 
 ## Test evidence
 

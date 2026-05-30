@@ -86,16 +86,16 @@ mechanism is provably composable from the primitives.
 
 Capabilities activate progressively via config presence.
 
-| Level | Adds                    |
-| ----- | ----------------------- |
-| 0-1   | Session + tasks         |
-| 2     | Task loop               |
-| 3     | Multiple agents + pool  |
-| 4     | Messaging               |
-| 5     | Formulas & molecules    |
-| 6     | Health monitoring       |
-| 7     | Orders                  |
-| 8     | Full orchestration      |
+| Level | Adds                   |
+| ----- | ---------------------- |
+| 0-1   | Session + tasks        |
+| 2     | Task loop              |
+| 3     | Multiple agents + pool |
+| 4     | Messaging              |
+| 5     | Formulas & molecules   |
+| 6     | Health monitoring      |
+| 7     | Orders                 |
+| 8     | Full orchestration     |
 
 ## Architecture docs
 
@@ -116,7 +116,7 @@ Load-bearing invariants enforced by CI (violating any fails the
 build; full rationale is in the architecture docs):
 
 - **Object model at the center.** `internal/{beads, mail, convoy,
-  formula, events, session, worker, sling, ...}` is the canonical
+formula, events, session, worker, sling, ...}` is the canonical
   domain. The CLI (`cmd/gc/`) and the HTTP+SSE API
   (`internal/api/`) are projections over it. Neither re-implements
   domain logic. `internal/agent/` is a small helper package

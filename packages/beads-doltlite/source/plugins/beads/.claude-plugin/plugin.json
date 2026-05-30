@@ -9,12 +9,7 @@
   "repository": "https://github.com/gastownhall/beads",
   "license": "MIT",
   "homepage": "https://github.com/gastownhall/beads",
-  "keywords": [
-    "issue-tracker",
-    "task-management",
-    "ai-workflow",
-    "agent-memory"
-  ],
+  "keywords": ["issue-tracker", "task-management", "ai-workflow", "agent-memory"],
   "skills": "./skills/",
   "commands": "./skills/beads/commands/",
   "hooks": {

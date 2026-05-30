@@ -9,10 +9,10 @@ This guide is the practical migration companion for moving from the
 PackV2 was an initiative to address multiple problems in the way we
 write down how a city or a package works. There was a lot of
 entanglement between:
+
 - The definition of a pack or a city that can be versioned, shared, and used in many contexts.
 - The deployment configuration of how things project directories specific to your machine get rigged to a city.
 - The runtime information that Gas City needs to manage opaquely to users.
-
 
 In 0.14.0 and earlier, a city was kind of a pack, but kind of not.
 PackV2 clears that up.
@@ -47,7 +47,7 @@ this last-call-before-deprecation wave.
 
 > **Compatibility note:** This wave is the last call before deprecation,
 > not a promise of seamless in-place PackV1 preservation. `gc doctor
-> --fix` handles the safe mechanical rewrites that are currently
+--fix` handles the safe mechanical rewrites that are currently
 > available. Older cities and packs may still require manual
 > restructuring into PackV2 shape.
 
@@ -277,11 +277,11 @@ packs; use flat files under top-level `orders/` instead.
 For the Wave 2 hard-error rollout, the maintained pack inventory was checked
 on May 22, 2026 before enabling this behavior:
 
-| Repository or pack set | Legacy nested order paths found | Status |
-|---|---:|---|
-| `gastownhall/gascity` | 0 | In-tree fixtures and built-in packs use flat order files. |
-| `gastownhall/gascity-packs` | 0 | Public Gas City pack collection has no `orders/<name>/order.toml` or `formulas/orders/<name>/order.toml` files. |
-| `gascity/gas-city-inc` pack roots | 0 | Maintained internal workflow and role packs use flat order files. |
+| Repository or pack set            | Legacy nested order paths found | Status                                                                                                          |
+| --------------------------------- | ------------------------------: | --------------------------------------------------------------------------------------------------------------- |
+| `gastownhall/gascity`             |                               0 | In-tree fixtures and built-in packs use flat order files.                                                       |
+| `gastownhall/gascity-packs`       |                               0 | Public Gas City pack collection has no `orders/<name>/order.toml` or `formulas/orders/<name>/order.toml` files. |
+| `gascity/gas-city-inc` pack roots |                               0 | Maintained internal workflow and role packs use flat order files.                                               |
 
 If another imported pack still ships nested order files, upgrade that pack or
 vendor it and rename each `orders/<name>/order.toml` file to
@@ -464,12 +464,12 @@ agent-specific ones into `agents/<name>/mcp/`.
 The old three-layer prompt injection pipeline is replaced by explicit
 template inclusion.
 
-| Old mechanism | New model |
-|---|---|
-| `global_fragments` in workspace config | Gone — move content to `template-fragments/` and use explicit `{{ template "name" . }}` in `.template.md` prompts |
-| `inject_fragments` on agent config | Gone — same approach |
-| `inject_fragments_append` on patches | Gone — same approach |
-| All `.md` files run through Go templates | Only `.template.md` files run through Go templates |
+| Old mechanism                            | New model                                                                                                         |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `global_fragments` in workspace config   | Gone — move content to `template-fragments/` and use explicit `{{ template "name" . }}` in `.template.md` prompts |
+| `inject_fragments` on agent config       | Gone — same approach                                                                                              |
+| `inject_fragments_append` on patches     | Gone — same approach                                                                                              |
+| All `.md` files run through Go templates | Only `.template.md` files run through Go templates                                                                |
 
 For migration convenience, `[agent_defaults].append_fragments`
 auto-appends named fragments to `.template.md` prompts without editing
@@ -606,7 +606,6 @@ Use TOML when you actually need:
 - metadata
 - explicit placement
 
-
 ## Reference: Gas City 0.14.0 `city.toml` elements to PackV2
 
 This is the exhaustive top-level lookup table for the old `city.toml`
@@ -624,44 +623,44 @@ schema, plus the qualified rows that matter most during migration.
 > paths and workspace identity often need a hand edit because their machine-local
 > target is the root city's `.gc/site.toml`.
 
-| 0.14.0 element | What it did | New home or action |
-|---|---|---|
-| `include` | Merged extra config fragments into `city.toml` before load | Remove as part of migration. Move real composition to imports and move remaining config to `pack.toml`, `city.toml`, or discovered directories. |
-| `[workspace]` | Held city metadata and pack composition in one place | Split across the root `pack.toml`, `city.toml`, and `.gc/`. |
-| `workspace.name` | Workspace identity | Move to `.gc/site.toml` as `workspace_name`. Runtime identity resolves from registered alias (supervisor-managed flows), then site binding / legacy config, then directory basename. `pack.name` remains the portable definition identity and init-time default only. |
-| `workspace.prefix` | Workspace bead prefix | Move to `.gc/site.toml` as `workspace_prefix`. Runtime/API surfaces use the effective site-bound prefix when present and otherwise derive from the effective city name. |
-| `workspace.includes` | City-level pack composition | Move to `[imports.*]` in the root city `pack.toml`. |
-| `workspace.default_rig_includes` | Default pack composition for newly added rigs | Move each default include to `[defaults.rig.imports.<binding>]` entries in the root city `pack.toml`. |
-| `[providers.*]` | Named provider presets | Usually move to `[providers.*]` in the root city `pack.toml`, unless the setting is truly deployment-only. |
-| `[packs.*]` | Named remote pack sources used by includes | Collapse into `[imports.*]` entries. There should no longer be a separate `[packs.*]` registry in `city.toml`. |
-| `[[agent]]` | Inline agent definitions | Move to `agents/<name>/`, with optional `agent.toml`. |
-| `agent.prompt_template` | Path to agent prompt | Move to `agents/<name>/prompt.template.md` for templated prompts. Use `prompt.md` only for plain, non-templated Markdown. |
-| `agent.overlay_dir` | Path to overlay content | Move content to `agents/<name>/overlay/` or pack-wide `overlay/`. |
-| `agent.session_setup_script` | Path to setup script | Keep as a path-valued field, but point at a pack-local file, usually next to the thing that uses it or under `assets/`. |
-| `agent.namepool` | Path to names file | Move toward agent-local content such as `agents/<name>/namepool.txt` if retained. |
-| `[[named_session]]` | Named reusable sessions | Move to `[[named_session]]` in the root city `pack.toml`. |
-| `[[rigs]]` | Rig deployment entries | Keep in `city.toml`. |
-| `rigs.path` | Machine-local project binding | Move to `.gc/site.toml`. Schema-2 root `city.toml` rejects this field; editor/init paths persist copied or edited bindings into `.gc/site.toml` and stop writing it back to authored `city.toml`. |
-| `rigs.prefix` | Derived rig prefix | Keep in `city.toml` in the current release wave. It is deployment state, but not yet extracted into separate site-binding storage. |
-| `rigs.suspended` | Operational toggle | Keep in `city.toml` in the current release wave. It remains deployment/runtime state rather than portable pack definition. |
-| `rigs.includes` | Rig-scoped pack composition | Move to rig-scoped imports in `city.toml`. |
-| `rigs.overrides` | Rig-specific customization of imported agents | Keep as rig-level deployment customization in `city.toml`. |
-| `[patches]` | Post-merge modifications | Move pack-definition patches to `pack.toml`. Keep rig-specific patches with the rig in `city.toml`. |
-| `[beads]` | Bead store backend choice | Keep in `city.toml`. |
-| `[session]` | Session substrate config | Keep in `city.toml`, except site-local bindings. |
-| `[mail]` | Mail substrate config | Keep in `city.toml`. |
-| `[events]` | Events substrate config | Keep in `city.toml`. |
-| `[dolt]` | Dolt connection defaults | Keep in `city.toml`. |
-| `[formulas]` | Formula directory config | Prefer convention. Keep only if a remaining pack-wide formula policy survives; otherwise remove. |
-| `formulas.dir` | Formula directory path | Replace with the fixed top-level `formulas/` convention. |
-| `[daemon]` | Controller daemon behavior | Keep in `city.toml`. |
-| `[orders]` | Order runtime policy such as skip lists and timeouts | Keep in `city.toml`. |
-| `[api]` | API server deployment config | Keep in `city.toml`, except machine-local bind details. |
-| `[chat_sessions]` | Chat session runtime policy | Keep in `city.toml`. |
-| `[session_sleep]` | Sleep policy defaults | Keep in `city.toml`. |
-| `[convergence]` | Convergence limits | Keep in `city.toml`. |
-| `[[service]]` | Workspace-owned service declarations | Keep in `city.toml` if they are deployment-owned services. |
-| `[agent_defaults]` | Defaults applied to agents in this city | Lives in both `pack.toml` (pack-wide portable defaults) and `city.toml` (city-level deployment overrides). City layers on top of pack. As of release v0.15.0, the actively-applied defaults are still narrow: `default_sling_formula` plus `[agent_defaults].append_fragments`. |
+| 0.14.0 element                   | What it did                                                | New home or action                                                                                                                                                                                                                                                              |
+| -------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `include`                        | Merged extra config fragments into `city.toml` before load | Remove as part of migration. Move real composition to imports and move remaining config to `pack.toml`, `city.toml`, or discovered directories.                                                                                                                                 |
+| `[workspace]`                    | Held city metadata and pack composition in one place       | Split across the root `pack.toml`, `city.toml`, and `.gc/`.                                                                                                                                                                                                                     |
+| `workspace.name`                 | Workspace identity                                         | Move to `.gc/site.toml` as `workspace_name`. Runtime identity resolves from registered alias (supervisor-managed flows), then site binding / legacy config, then directory basename. `pack.name` remains the portable definition identity and init-time default only.           |
+| `workspace.prefix`               | Workspace bead prefix                                      | Move to `.gc/site.toml` as `workspace_prefix`. Runtime/API surfaces use the effective site-bound prefix when present and otherwise derive from the effective city name.                                                                                                         |
+| `workspace.includes`             | City-level pack composition                                | Move to `[imports.*]` in the root city `pack.toml`.                                                                                                                                                                                                                             |
+| `workspace.default_rig_includes` | Default pack composition for newly added rigs              | Move each default include to `[defaults.rig.imports.<binding>]` entries in the root city `pack.toml`.                                                                                                                                                                           |
+| `[providers.*]`                  | Named provider presets                                     | Usually move to `[providers.*]` in the root city `pack.toml`, unless the setting is truly deployment-only.                                                                                                                                                                      |
+| `[packs.*]`                      | Named remote pack sources used by includes                 | Collapse into `[imports.*]` entries. There should no longer be a separate `[packs.*]` registry in `city.toml`.                                                                                                                                                                  |
+| `[[agent]]`                      | Inline agent definitions                                   | Move to `agents/<name>/`, with optional `agent.toml`.                                                                                                                                                                                                                           |
+| `agent.prompt_template`          | Path to agent prompt                                       | Move to `agents/<name>/prompt.template.md` for templated prompts. Use `prompt.md` only for plain, non-templated Markdown.                                                                                                                                                       |
+| `agent.overlay_dir`              | Path to overlay content                                    | Move content to `agents/<name>/overlay/` or pack-wide `overlay/`.                                                                                                                                                                                                               |
+| `agent.session_setup_script`     | Path to setup script                                       | Keep as a path-valued field, but point at a pack-local file, usually next to the thing that uses it or under `assets/`.                                                                                                                                                         |
+| `agent.namepool`                 | Path to names file                                         | Move toward agent-local content such as `agents/<name>/namepool.txt` if retained.                                                                                                                                                                                               |
+| `[[named_session]]`              | Named reusable sessions                                    | Move to `[[named_session]]` in the root city `pack.toml`.                                                                                                                                                                                                                       |
+| `[[rigs]]`                       | Rig deployment entries                                     | Keep in `city.toml`.                                                                                                                                                                                                                                                            |
+| `rigs.path`                      | Machine-local project binding                              | Move to `.gc/site.toml`. Schema-2 root `city.toml` rejects this field; editor/init paths persist copied or edited bindings into `.gc/site.toml` and stop writing it back to authored `city.toml`.                                                                               |
+| `rigs.prefix`                    | Derived rig prefix                                         | Keep in `city.toml` in the current release wave. It is deployment state, but not yet extracted into separate site-binding storage.                                                                                                                                              |
+| `rigs.suspended`                 | Operational toggle                                         | Keep in `city.toml` in the current release wave. It remains deployment/runtime state rather than portable pack definition.                                                                                                                                                      |
+| `rigs.includes`                  | Rig-scoped pack composition                                | Move to rig-scoped imports in `city.toml`.                                                                                                                                                                                                                                      |
+| `rigs.overrides`                 | Rig-specific customization of imported agents              | Keep as rig-level deployment customization in `city.toml`.                                                                                                                                                                                                                      |
+| `[patches]`                      | Post-merge modifications                                   | Move pack-definition patches to `pack.toml`. Keep rig-specific patches with the rig in `city.toml`.                                                                                                                                                                             |
+| `[beads]`                        | Bead store backend choice                                  | Keep in `city.toml`.                                                                                                                                                                                                                                                            |
+| `[session]`                      | Session substrate config                                   | Keep in `city.toml`, except site-local bindings.                                                                                                                                                                                                                                |
+| `[mail]`                         | Mail substrate config                                      | Keep in `city.toml`.                                                                                                                                                                                                                                                            |
+| `[events]`                       | Events substrate config                                    | Keep in `city.toml`.                                                                                                                                                                                                                                                            |
+| `[dolt]`                         | Dolt connection defaults                                   | Keep in `city.toml`.                                                                                                                                                                                                                                                            |
+| `[formulas]`                     | Formula directory config                                   | Prefer convention. Keep only if a remaining pack-wide formula policy survives; otherwise remove.                                                                                                                                                                                |
+| `formulas.dir`                   | Formula directory path                                     | Replace with the fixed top-level `formulas/` convention.                                                                                                                                                                                                                        |
+| `[daemon]`                       | Controller daemon behavior                                 | Keep in `city.toml`.                                                                                                                                                                                                                                                            |
+| `[orders]`                       | Order runtime policy such as skip lists and timeouts       | Keep in `city.toml`.                                                                                                                                                                                                                                                            |
+| `[api]`                          | API server deployment config                               | Keep in `city.toml`, except machine-local bind details.                                                                                                                                                                                                                         |
+| `[chat_sessions]`                | Chat session runtime policy                                | Keep in `city.toml`.                                                                                                                                                                                                                                                            |
+| `[session_sleep]`                | Sleep policy defaults                                      | Keep in `city.toml`.                                                                                                                                                                                                                                                            |
+| `[convergence]`                  | Convergence limits                                         | Keep in `city.toml`.                                                                                                                                                                                                                                                            |
+| `[[service]]`                    | Workspace-owned service declarations                       | Keep in `city.toml` if they are deployment-owned services.                                                                                                                                                                                                                      |
+| `[agent_defaults]`               | Defaults applied to agents in this city                    | Lives in both `pack.toml` (pack-wide portable defaults) and `city.toml` (city-level deployment overrides). City layers on top of pack. As of release v0.15.0, the actively-applied defaults are still narrow: `default_sling_formula` plus `[agent_defaults].append_fragments`. |
 
 > **Schema contract note:** This rollout also changes the generated schema
 > contract: checked-in `city.toml` files and downstream validators must no
@@ -673,54 +672,54 @@ schema, plus the qualified rows that matter most during migration.
 This is the lookup table for the old shareable-pack schema and the
 transitional pack fields that people are likely to have.
 
-| 0.14.0 element | What it did | New home or action |
-|---|---|---|
-| `[pack]` | Pack metadata | Keep in `pack.toml`. |
-| `pack.name` | Pack identity | Keep in `[pack]`. |
-| `pack.version` | Pack version | Keep in `[pack]`. |
-| `pack.schema` | Pack schema version | Keep in `[pack]`, updated to the new schema as needed. |
-| `pack.requires_gc` | Minimum supported gc version | Keep in `[pack]`. |
-| `pack.city_agents` | City-vs-rig stamping hint in the old pack system | Revisit during migration. The new model prefers agent-local definition and scope rules instead of this field. |
-| `pack.includes` | Pack-to-pack composition | Replace with `[imports.*]` in `pack.toml`. |
-| `pack.requires` | Pack requirements | Keep in `[pack]` if the requirement model survives unchanged; otherwise migrate to the current requirement shape in the design docs. |
-| `[imports.*]` | Named imports in transitional configs | Keep in `pack.toml`. This is the new composition surface. |
-| `[[agent]]` | Inline pack agent definitions | Move to `agents/<name>/`, with optional `agent.toml`. |
-| `agent.prompt_template` | Agent prompt file path | Move to `agents/<name>/prompt.template.md` for templated prompts. Use `prompt.md` only for plain, non-templated Markdown. |
-| `agent.overlay_dir` | Agent overlay path | Move content to `agents/<name>/overlay/` or `overlay/`. |
-| `agent.session_setup_script` | Agent setup script path | Keep as a path-valued field pointing at a pack-local file. |
-| `[[named_session]]` | Pack-defined named sessions | Keep in `pack.toml`. |
-| `[[service]]` | Pack-defined services | Keep only if services remain pack-defined in the new model. Otherwise move city-owned services to `city.toml`. |
-| `[providers.*]` | Provider presets used by the pack | Keep in `pack.toml`. |
-| `[formulas]` | Formula directory config | Prefer convention. Remove directory wiring and use top-level `formulas/`. |
-| `formulas.dir` | Formula directory path | Replace with top-level `formulas/`. |
-| `[patches]` | Pack-level patching rules | Keep in `pack.toml`. |
-| `[[doctor]]` | Pack doctor inventory | Move toward `doctor/<name>/run.sh` by default, with optional `doctor.toml` when needed. |
-| `doctor.script` | Path to doctor entrypoint | Keep as a pack-local path, usually `doctor/<name>/run.sh`. |
-| `[[commands]]` | Pack command inventory | Move toward `commands/<name>/run.sh` by default, with optional `command.toml` when needed. |
-| `commands.script` | Path to command entrypoint | Keep as a pack-local path, usually `commands/<name>/run.sh`. |
-| `[global]` | Pack-wide session-live behavior | Keep in `pack.toml` if the pack-global surface survives as designed. |
+| 0.14.0 element               | What it did                                      | New home or action                                                                                                                   |
+| ---------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `[pack]`                     | Pack metadata                                    | Keep in `pack.toml`.                                                                                                                 |
+| `pack.name`                  | Pack identity                                    | Keep in `[pack]`.                                                                                                                    |
+| `pack.version`               | Pack version                                     | Keep in `[pack]`.                                                                                                                    |
+| `pack.schema`                | Pack schema version                              | Keep in `[pack]`, updated to the new schema as needed.                                                                               |
+| `pack.requires_gc`           | Minimum supported gc version                     | Keep in `[pack]`.                                                                                                                    |
+| `pack.city_agents`           | City-vs-rig stamping hint in the old pack system | Revisit during migration. The new model prefers agent-local definition and scope rules instead of this field.                        |
+| `pack.includes`              | Pack-to-pack composition                         | Replace with `[imports.*]` in `pack.toml`.                                                                                           |
+| `pack.requires`              | Pack requirements                                | Keep in `[pack]` if the requirement model survives unchanged; otherwise migrate to the current requirement shape in the design docs. |
+| `[imports.*]`                | Named imports in transitional configs            | Keep in `pack.toml`. This is the new composition surface.                                                                            |
+| `[[agent]]`                  | Inline pack agent definitions                    | Move to `agents/<name>/`, with optional `agent.toml`.                                                                                |
+| `agent.prompt_template`      | Agent prompt file path                           | Move to `agents/<name>/prompt.template.md` for templated prompts. Use `prompt.md` only for plain, non-templated Markdown.            |
+| `agent.overlay_dir`          | Agent overlay path                               | Move content to `agents/<name>/overlay/` or `overlay/`.                                                                              |
+| `agent.session_setup_script` | Agent setup script path                          | Keep as a path-valued field pointing at a pack-local file.                                                                           |
+| `[[named_session]]`          | Pack-defined named sessions                      | Keep in `pack.toml`.                                                                                                                 |
+| `[[service]]`                | Pack-defined services                            | Keep only if services remain pack-defined in the new model. Otherwise move city-owned services to `city.toml`.                       |
+| `[providers.*]`              | Provider presets used by the pack                | Keep in `pack.toml`.                                                                                                                 |
+| `[formulas]`                 | Formula directory config                         | Prefer convention. Remove directory wiring and use top-level `formulas/`.                                                            |
+| `formulas.dir`               | Formula directory path                           | Replace with top-level `formulas/`.                                                                                                  |
+| `[patches]`                  | Pack-level patching rules                        | Keep in `pack.toml`.                                                                                                                 |
+| `[[doctor]]`                 | Pack doctor inventory                            | Move toward `doctor/<name>/run.sh` by default, with optional `doctor.toml` when needed.                                              |
+| `doctor.script`              | Path to doctor entrypoint                        | Keep as a pack-local path, usually `doctor/<name>/run.sh`.                                                                           |
+| `[[commands]]`               | Pack command inventory                           | Move toward `commands/<name>/run.sh` by default, with optional `command.toml` when needed.                                           |
+| `commands.script`            | Path to command entrypoint                       | Keep as a pack-local path, usually `commands/<name>/run.sh`.                                                                         |
+| `[global]`                   | Pack-wide session-live behavior                  | Keep in `pack.toml` if the pack-global surface survives as designed.                                                                 |
 
 ## Reference: old top-level directories
 
 This table is the filesystem companion to the two schema tables above.
 
-| Old directory or pattern | What it meant in 0.14.0 | New home or action |
-|---|---|---|
-| `prompts/` | Shared bucket of prompt templates addressed by path | Move prompt content into `agents/<name>/prompt.template.md` for templated prompts. Use `prompt.md` only for plain, non-templated Markdown. |
-| `scripts/` | Shared bucket of helper and entrypoint scripts | Do not preserve as a standard top-level directory. Put entrypoint scripts next to what uses them, and put general helpers under `assets/`. |
-| `formulas/` | Formula directory, sometimes path-wired via TOML | Keep as the fixed top-level `formulas/` convention. |
-| `formulas/orders/` | Nested order definitions under formulas | Move to top-level `orders/` using flat `*.toml` files. |
-| `orders/` | Top-level order directory in some cities | Standardize on this location, but use flat `orders/<name>.toml` files. |
-| `overlay/` | Pack-wide overlay bucket | Keep as top-level `overlay/`. Agent-local overlays live under `agents/<name>/overlay/`. |
-| `overlays/` | Pack-wide overlay bucket named plural in some older packs and earlier drafts of this guide | Rename to `overlay/` — the loader only discovers the singular form. |
-| `namepools/` | Shared bucket of agent name pools | Move toward agent-local files if retained. |
-| `commands/` with ad hoc scripts | Command helper directory plus TOML wiring | Keep `commands/`, but organize as entry directories such as `commands/<name>/run.sh`. |
-| `doctor/` with ad hoc scripts | Doctor helper directory plus TOML wiring | Keep `doctor/`, but organize as entry directories such as `doctor/<name>/run.sh`. |
-| `skills/` | Current city pack skills directory in newer layouts | Keep as top-level `skills/`. |
-| `mcp/` | Current city pack MCP directory in newer layouts | Keep as top-level `mcp/`. |
-| `template-fragments/` | Shared prompt-fragment directory in newer layouts | Keep as top-level `template-fragments/`. |
-| `packs/` | Local vendored packs or bootstrap imports | Do not treat as a standard top-level directory. If you need opaque embedded packs, place them under `assets/` and import them explicitly. |
-| loose helper files at pack root | Arbitrary files mixed into controlled surface area | Keep standard repo documents like `README.md`, `LICENSE*`, `CONTRIBUTING.md`, and `CHANGELOG*` at pack root. Move other opaque helpers under `assets/`. |
+| Old directory or pattern        | What it meant in 0.14.0                                                                    | New home or action                                                                                                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prompts/`                      | Shared bucket of prompt templates addressed by path                                        | Move prompt content into `agents/<name>/prompt.template.md` for templated prompts. Use `prompt.md` only for plain, non-templated Markdown.              |
+| `scripts/`                      | Shared bucket of helper and entrypoint scripts                                             | Do not preserve as a standard top-level directory. Put entrypoint scripts next to what uses them, and put general helpers under `assets/`.              |
+| `formulas/`                     | Formula directory, sometimes path-wired via TOML                                           | Keep as the fixed top-level `formulas/` convention.                                                                                                     |
+| `formulas/orders/`              | Nested order definitions under formulas                                                    | Move to top-level `orders/` using flat `*.toml` files.                                                                                                  |
+| `orders/`                       | Top-level order directory in some cities                                                   | Standardize on this location, but use flat `orders/<name>.toml` files.                                                                                  |
+| `overlay/`                      | Pack-wide overlay bucket                                                                   | Keep as top-level `overlay/`. Agent-local overlays live under `agents/<name>/overlay/`.                                                                 |
+| `overlays/`                     | Pack-wide overlay bucket named plural in some older packs and earlier drafts of this guide | Rename to `overlay/` — the loader only discovers the singular form.                                                                                     |
+| `namepools/`                    | Shared bucket of agent name pools                                                          | Move toward agent-local files if retained.                                                                                                              |
+| `commands/` with ad hoc scripts | Command helper directory plus TOML wiring                                                  | Keep `commands/`, but organize as entry directories such as `commands/<name>/run.sh`.                                                                   |
+| `doctor/` with ad hoc scripts   | Doctor helper directory plus TOML wiring                                                   | Keep `doctor/`, but organize as entry directories such as `doctor/<name>/run.sh`.                                                                       |
+| `skills/`                       | Current city pack skills directory in newer layouts                                        | Keep as top-level `skills/`.                                                                                                                            |
+| `mcp/`                          | Current city pack MCP directory in newer layouts                                           | Keep as top-level `mcp/`.                                                                                                                               |
+| `template-fragments/`           | Shared prompt-fragment directory in newer layouts                                          | Keep as top-level `template-fragments/`.                                                                                                                |
+| `packs/`                        | Local vendored packs or bootstrap imports                                                  | Do not treat as a standard top-level directory. If you need opaque embedded packs, place them under `assets/` and import them explicitly.               |
+| loose helper files at pack root | Arbitrary files mixed into controlled surface area                                         | Keep standard repo documents like `README.md`, `LICENSE*`, `CONTRIBUTING.md`, and `CHANGELOG*` at pack root. Move other opaque helpers under `assets/`. |
 
 ## Suggested migration order
 

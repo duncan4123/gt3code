@@ -3,9 +3,6 @@ name = "jj"
 version = "0.2.0"
 schema = 2
 
-[formulas]
-dir = "formulas"
-
 [[named_session]]
 template = "planner"
 scope = "rig"

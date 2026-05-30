@@ -69,6 +69,7 @@ This master script automates the **entire release process**:
 ### Output
 
 The script provides colorful, step-by-step progress output:
+
 - 🟨 Yellow: Current step
 - 🟩 Green: Step completed
 - 🟥 Red: Errors
@@ -77,6 +78,7 @@ The script provides colorful, step-by-step progress output:
 ### What Happens Next
 
 After the script finishes:
+
 - GitHub Actions builds binaries for all platforms (~5 minutes)
 - PyPI package is published automatically
 - Users can `brew upgrade beads` to get the new version
@@ -104,6 +106,7 @@ Bumps the version number across all beads components in a single command.
 ### What It Does
 
 Updates version in all these files:
+
 - `cmd/bd/version.go` - bd CLI version constant
 - `plugins/beads/.claude-plugin/plugin.json` - Claude plugin version
 - `plugins/beads/.codex-plugin/plugin.json` - Codex plugin version
@@ -182,6 +185,7 @@ This script is called automatically by GoReleaser during the release process:
 ### Graceful Degradation
 
 If the signing secrets are not configured:
+
 - The script prints a warning and exits successfully
 - GoReleaser continues without signing
 - The release proceeds with unsigned Windows binaries

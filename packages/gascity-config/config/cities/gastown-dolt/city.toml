@@ -108,7 +108,26 @@ restart_window = "1h"
 shutdown_timeout = "5s"
 
 [orders]
-skip = ["beads-health", "cross-rig-deps", "digest-generate", "dolt-health", "dolt-remotes-patrol", "doltlite-compact", "gate-sweep", "mol-dog-backup", "mol-dog-compactor", "mol-dog-doctor", "mol-dog-jsonl", "mol-dog-phantom-db", "mol-dog-reaper", "mol-dog-stale-db", "orphan-sweep", "prune-branches", "spawn-storm-detect", "wisp-compact"]
+skip = [
+  "beads-health",
+  "cross-rig-deps",
+  "digest-generate",
+  "dolt-health",
+  "dolt-remotes-patrol",
+  "doltlite-compact",
+  "gate-sweep",
+  "mol-dog-backup",
+  "mol-dog-compactor",
+  "mol-dog-doctor",
+  "mol-dog-jsonl",
+  "mol-dog-phantom-db",
+  "mol-dog-reaper",
+  "mol-dog-stale-db",
+  "orphan-sweep",
+  "prune-branches",
+  "spawn-storm-detect",
+  "wisp-compact",
+]
 
 [agent_defaults]
 model = "deepseek/deepseek-v4-flash"

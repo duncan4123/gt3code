@@ -6,6 +6,7 @@ sidebar_position: 999
 ---
 
 <!-- AUTO-GENERATED: do not edit manually -->
+
 Generated from `bd help --doc info`
 
 ## bd info
@@ -13,18 +14,19 @@ Generated from `bd help --doc info`
 Display information about the current database.
 
 This command helps debug issues where bd is using an unexpected database. It shows:
-  - The absolute path to the database file
-  - Database statistics (issue count)
-  - Schema information (with --schema flag)
-  - What's new in recent versions (with --whats-new flag)
+
+- The absolute path to the database file
+- Database statistics (issue count)
+- Schema information (with --schema flag)
+- What's new in recent versions (with --whats-new flag)
 
 Examples:
-  bd info
-  bd info --json
-  bd info --schema --json
-  bd info --whats-new
-  bd info --whats-new --json
-  bd info --thanks
+bd info
+bd info --json
+bd info --schema --json
+bd info --whats-new
+bd info --whats-new --json
+bd info --thanks
 
 ```
 bd info [flags]

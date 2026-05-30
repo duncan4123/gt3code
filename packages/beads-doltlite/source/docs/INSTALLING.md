@@ -6,28 +6,29 @@ Complete installation guide for all platforms.
 
 Beads has several components - here's what they are and when you need them:
 
-| Component | What It Is | When You Need It |
-|-----------|------------|------------------|
-| **bd CLI** | Core command-line tool | Always - this is the foundation |
-| **Claude Code Plugin** | Slash commands + enhanced UX | Optional - if you want `/beads:ready`, `/beads:create` commands |
-| **MCP Server (beads-mcp)** | Model Context Protocol interface | Only for MCP-only environments (Claude Desktop, Amp) |
+| Component                  | What It Is                       | When You Need It                                                |
+| -------------------------- | -------------------------------- | --------------------------------------------------------------- |
+| **bd CLI**                 | Core command-line tool           | Always - this is the foundation                                 |
+| **Claude Code Plugin**     | Slash commands + enhanced UX     | Optional - if you want `/beads:ready`, `/beads:create` commands |
+| **MCP Server (beads-mcp)** | Model Context Protocol interface | Only for MCP-only environments (Claude Desktop, Amp)            |
 
 **How they relate:**
+
 - The **bd CLI** is the core - install it first via Homebrew, npm, or script
-- The **Plugin** enhances Claude Code with slash commands but *requires* the CLI installed
-- The **MCP server** is an *alternative* to the CLI for environments without shell access
+- The **Plugin** enhances Claude Code with slash commands but _requires_ the CLI installed
+- The **MCP server** is an _alternative_ to the CLI for environments without shell access
 
 **Important:** Beads is installed system-wide, not cloned into your project. The `.beads/` directory in your project only contains the issue database.
 
 **Typical setups:**
 
-| Environment | What to Install |
-|-------------|-----------------|
+| Environment                   | What to Install                            |
+| ----------------------------- | ------------------------------------------ |
 | Claude Code, Cursor, Windsurf | bd CLI (+ optional Plugin for Claude Code) |
-| GitHub Copilot (VS Code) | bd CLI + MCP server |
-| Claude Desktop (no shell) | MCP server only |
-| Terminal / scripts | bd CLI only |
-| CI/CD pipelines | bd CLI only |
+| GitHub Copilot (VS Code)      | bd CLI + MCP server                        |
+| Claude Desktop (no shell)     | MCP server only                            |
+| Terminal / scripts            | bd CLI only                                |
+| CI/CD pipelines               | bd CLI only                                |
 
 **Are they mutually exclusive?** No - you can have CLI + Plugin + MCP all installed. They don't conflict. But most users only need the CLI.
 
@@ -40,12 +41,13 @@ brew install beads
 ```
 
 **Why Homebrew?**
+
 - ✅ Simple one-command install
 - ✅ Automatic updates via `brew upgrade`
 - ✅ No need to install Go
 - ✅ Handles PATH setup automatically
 
-### [Mise-en-place](https://mise.jdx.dev)  (macOS/Linux/Windows)
+### [Mise-en-place](https://mise.jdx.dev) (macOS/Linux/Windows)
 
 You can install beads using mise from the latest GitHub release:
 
@@ -54,9 +56,10 @@ mise install github:gastownhall/beads
 mise use -g github:gastownhall/beads
 ```
 
-**NOTE**: The `-g` enables beads globally.  To enable project-specific versions, omit that.
+**NOTE**: The `-g` enables beads globally. To enable project-specific versions, omit that.
 
 **Why Mise?**
+
 - ✅ Same as Homebrew: simple, updates via `mise up`, works without Go, handles PATH
 - ✅ Supports all platforms
 - ✅ Always the latest release
@@ -71,6 +74,7 @@ curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/inst
 ```
 
 The installer will:
+
 - Detect your platform (macOS/Linux/FreeBSD, amd64/arm64)
 - Verify downloaded release archives against release `checksums.txt`
 - Fall back to the supported `go install` modes if Go is available
@@ -85,16 +89,16 @@ BEADS_INSTALL_RESIGN_MACOS=1 curl -fsSL https://raw.githubusercontent.com/gastow
 
 ### Comparison of Installation Methods
 
-| Method | Best For | Updates | Prerequisites | Notes |
-|--------|----------|---------|---------------|-------|
-| **Homebrew** | macOS/Linux users | `brew upgrade beads` | Homebrew | Recommended. Handles everything automatically |
-| **npm** | JS/Node.js projects | `npm update -g @beads/bd` | Node.js | Convenient if npm is your ecosystem |
-| **bun** | JS/Bun.js projects | `bun install -g --trust @beads/bd` | Bun.js | Convenient if bun is your ecosystem |
-| **Install script** | Quick setup, CI/CD | Re-run script | curl, bash | Good for automation and one-liners |
-| **go install (nocgo)** | Go developers, simplest install | Re-run command | Go 1.24+ | **Server-mode only** (no embedded Dolt) |
-| **go install (cgo)** | Go developers wanting embedded mode | Re-run command | Go 1.24+, C compiler | Full embedded-Dolt support |
-| **From source** | Contributors only | `git pull && go build` | Go, git | Full control, can modify code |
-| **AUR (Arch)** | Arch Linux users | `yay -Syu` | yay/paru | Community-maintained |
+| Method                 | Best For                            | Updates                            | Prerequisites        | Notes                                         |
+| ---------------------- | ----------------------------------- | ---------------------------------- | -------------------- | --------------------------------------------- |
+| **Homebrew**           | macOS/Linux users                   | `brew upgrade beads`               | Homebrew             | Recommended. Handles everything automatically |
+| **npm**                | JS/Node.js projects                 | `npm update -g @beads/bd`          | Node.js              | Convenient if npm is your ecosystem           |
+| **bun**                | JS/Bun.js projects                  | `bun install -g --trust @beads/bd` | Bun.js               | Convenient if bun is your ecosystem           |
+| **Install script**     | Quick setup, CI/CD                  | Re-run script                      | curl, bash           | Good for automation and one-liners            |
+| **go install (nocgo)** | Go developers, simplest install     | Re-run command                     | Go 1.24+             | **Server-mode only** (no embedded Dolt)       |
+| **go install (cgo)**   | Go developers wanting embedded mode | Re-run command                     | Go 1.24+, C compiler | Full embedded-Dolt support                    |
+| **From source**        | Contributors only                   | `git pull && go build`             | Go, git              | Full control, can modify code                 |
+| **AUR (Arch)**         | Arch Linux users                    | `yay -Syu`                         | yay/paru             | Community-maintained                          |
 
 **TL;DR:** Use Homebrew if available. Use npm if you're in a Node.js environment. Use the script for quick one-off installs or CI.
 
@@ -112,22 +116,26 @@ If you don't have a preference, `brew install beads` / `install.sh` give you the
 ### macOS
 
 **Via Homebrew** (recommended):
+
 ```bash
 brew install beads
 ```
 
 **Via go install** (server-mode only, simplest):
+
 ```bash
 CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest
 # Then: bd init --server   (requires a running dolt sql-server)
 ```
 
 **Via go install** (embedded-capable, needs Xcode CLI tools):
+
 ```bash
 CGO_ENABLED=1 GOFLAGS=-tags=gms_pure_go go install github.com/steveyegge/beads/cmd/bd@latest
 ```
 
 **From source**:
+
 ```bash
 git clone https://github.com/gastownhall/beads
 cd beads
@@ -138,11 +146,13 @@ sudo mv bd /usr/local/bin/
 ### Linux
 
 **Via Homebrew** (works on Linux too):
+
 ```bash
 brew install beads
 ```
 
 **Arch Linux** (AUR):
+
 ```bash
 # Install from AUR
 yay -S beads-git
@@ -153,17 +163,20 @@ paru -S beads-git
 Thanks to [@v4rgas](https://github.com/v4rgas) for maintaining the AUR package!
 
 **Via go install** (server-mode only, simplest):
+
 ```bash
 CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest
 # Then: bd init --server   (requires a running dolt sql-server)
 ```
 
 **Via go install** (embedded-capable, needs gcc):
+
 ```bash
 CGO_ENABLED=1 GOFLAGS=-tags=gms_pure_go go install github.com/steveyegge/beads/cmd/bd@latest
 ```
 
 **From source**:
+
 ```bash
 git clone https://github.com/gastownhall/beads
 cd beads
@@ -174,11 +187,13 @@ sudo mv bd /usr/local/bin/
 ### FreeBSD
 
 **Via Quick Install Script**:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
 ```
 
 **Via go install** (server-mode only, simplest):
+
 ```bash
 CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest
 ```
@@ -188,10 +203,12 @@ CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest
 Beads now ships with native Windows support—no MSYS or MinGW required.
 
 **Prerequisites:**
+
 - [Go 1.24+](https://go.dev/dl/) installed (add `%USERPROFILE%\go\bin` to your `PATH`)
 - Git for Windows
 
 **Via PowerShell script**:
+
 ```pwsh
 irm https://raw.githubusercontent.com/gastownhall/beads/main/install.ps1 | iex
 ```
@@ -199,6 +216,7 @@ irm https://raw.githubusercontent.com/gastownhall/beads/main/install.ps1 | iex
 The script installs a prebuilt Windows release if available and verifies the downloaded ZIP checksum against release `checksums.txt`. Go is only required for `go install` or building from source.
 
 **Via go install** (server-mode only, simplest):
+
 ```pwsh
 $env:CGO_ENABLED="0"; go install github.com/steveyegge/beads/cmd/bd@latest
 # Then: bd init --server   (requires a running dolt sql-server)
@@ -207,6 +225,7 @@ $env:CGO_ENABLED="0"; go install github.com/steveyegge/beads/cmd/bd@latest
 This produces a server-mode-only binary with no C compiler requirement — the fastest path to a working `bd` on Windows.
 
 **Via go install** (embedded-capable, needs MinGW):
+
 ```pwsh
 $env:CGO_ENABLED="1"; $env:GOFLAGS="-tags=gms_pure_go"; go install github.com/steveyegge/beads/cmd/bd@latest
 ```
@@ -214,6 +233,7 @@ $env:CGO_ENABLED="1"; $env:GOFLAGS="-tags=gms_pure_go"; go install github.com/st
 Requires MinGW-w64 gcc on your PATH. ICU is **not** required — `gms_pure_go` selects Go's stdlib `regexp`.
 
 **From source**:
+
 ```pwsh
 git clone https://github.com/gastownhall/beads
 cd beads
@@ -224,11 +244,13 @@ Move-Item bd.exe $env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\
 The `-tags gms_pure_go` flag tells go-mysql-server to use Go's stdlib regexp instead of ICU.
 
 **Verify installation**:
+
 ```pwsh
 bd version
 ```
 
 **Windows notes:**
+
 - The Dolt server listens on a loopback TCP endpoint
 - Allow `bd.exe` loopback traffic through any host firewall
 
@@ -242,16 +264,19 @@ stdlib `regexp` instead of ICU regex. See [ICU-POLICY.md](ICU-POLICY.md) for
 details.
 
 macOS (Homebrew):
+
 ```bash
 brew install zstd
 ```
 
 Linux (Debian/Ubuntu):
+
 ```bash
 sudo apt-get install -y libzstd-dev
 ```
 
 Linux (Fedora/RHEL):
+
 ```bash
 sudo dnf install -y libzstd-devel
 ```
@@ -287,6 +312,7 @@ bd setup mux      # Mux - creates/updates AGENTS.md
 ```
 
 **How it works:**
+
 - `bd init` creates or updates `AGENTS.md` by default unless you use `--skip-agents` or `--stealth`
 - Editor hooks/rules inject `bd prime` automatically on session start
 - Codex 0.129.0+ uses native `/hooks`: SessionStart injects `bd prime`, compact hooks mark context stale, and the next prompt after compaction refreshes Beads context once
@@ -296,12 +322,14 @@ bd setup mux      # Mux - creates/updates AGENTS.md
 - `bd onboard` prints the small manual snippet for unsupported agents or custom instruction files
 
 **Why this is recommended:**
+
 - **Context efficient** - ~1-2k tokens vs 10-50k for MCP tool schemas
 - **Lower latency** - Direct CLI calls, no MCP protocol overhead
 - **Universal** - Works with any editor that has shell access
 - **More sustainable** - Less compute per request
 
 **Verify installation:**
+
 ```bash
 bd setup claude --check   # Check Claude Code integration
 bd setup copilot --check  # Check GitHub Copilot CLI project integration
@@ -324,6 +352,7 @@ For enhanced UX with slash commands:
 ```
 
 The plugin adds:
+
 - Slash commands: `/beads:ready`, `/beads:create`, `/beads:show`, `/beads:update`, `/beads:close`, etc.
 - Task agent for autonomous execution
 
@@ -334,11 +363,13 @@ See [PLUGIN.md](PLUGIN.md) for complete plugin documentation.
 For VS Code with GitHub Copilot:
 
 1. **Install beads-mcp:**
+
    ```bash
    uv tool install beads-mcp
    ```
 
 2. **Configure MCP** - Create `.vscode/mcp.json` in your project:
+
    ```json
    {
      "servers": {
@@ -351,11 +382,11 @@ For VS Code with GitHub Copilot:
 
    **For all projects:** Add to VS Code user-level MCP config:
 
-   | Platform | Path |
-   |----------|------|
-   | macOS | `~/Library/Application Support/Code/User/mcp.json` |
-   | Linux | `~/.config/Code/User/mcp.json` |
-   | Windows | `%APPDATA%\Code\User\mcp.json` |
+   | Platform | Path                                               |
+   | -------- | -------------------------------------------------- |
+   | macOS    | `~/Library/Application Support/Code/User/mcp.json` |
+   | Linux    | `~/.config/Code/User/mcp.json`                     |
+   | Windows  | `%APPDATA%\Code\User\mcp.json`                     |
 
    ```json
    {
@@ -369,6 +400,7 @@ For VS Code with GitHub Copilot:
    ```
 
 3. **Initialize project:**
+
    ```bash
    bd init --quiet
    ```
@@ -435,6 +467,7 @@ Add to your MCP settings:
 ```
 
 **Trade-offs:**
+
 - ✅ Works in MCP-only environments
 - ❌ Higher context overhead (MCP schemas add 10-50k tokens)
 - ❌ Additional latency from MCP protocol
@@ -474,6 +507,7 @@ CGO_ENABLED=0 go install github.com/steveyegge/beads/cmd/bd@latest
 Some users report crashes when running `bd init` or other commands on macOS. This is typically caused by CGO/SQLite compatibility issues.
 
 **Workaround:**
+
 ```bash
 # Install an embedded-capable build
 CGO_ENABLED=1 GOFLAGS=-tags=gms_pure_go go install github.com/steveyegge/beads/cmd/bd@latest
@@ -492,11 +526,13 @@ If you installed via Homebrew, this shouldn't be necessary as the formula alread
 If the Claude Code plugin's MCP server fails immediately after installation, it's likely that `uv` is not installed or not in your PATH.
 
 **Symptoms:**
+
 - Plugin slash commands work, but MCP tools are unavailable
 - Error logs show `command not found: uv`
 - Server fails silently on startup
 
 **Solution:**
+
 ```bash
 # Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh

@@ -14,13 +14,13 @@ Wisps are "vapor phase" molecules - issues stored with `Ephemeral=true` in the m
 
 ## Use Cases
 
-| Scenario | Why Wisp? |
-|----------|-----------|
-| Release workflows | One-time execution, no audit trail needed |
-| Operational loops | Recurring cycles that auto-clean up |
-| Health checks | Diagnostics that shouldn't clutter history |
-| Local experiments | Quick throwaway work |
-| Agent coordination | Local-only parallel coordination |
+| Scenario           | Why Wisp?                                  |
+| ------------------ | ------------------------------------------ |
+| Release workflows  | One-time execution, no audit trail needed  |
+| Operational loops  | Recurring cycles that auto-clean up        |
+| Health checks      | Diagnostics that shouldn't clutter history |
+| Local experiments  | Quick throwaway work                       |
+| Agent coordination | Local-only parallel coordination           |
 
 ## Creating Wisps
 
@@ -94,12 +94,12 @@ bd mol burn <wisp-id>        # Delete without digest
 
 ## Wisp vs Molecule
 
-| Aspect | Molecule (pour) | Wisp |
-|--------|-----------------|------|
-| Phase | Liquid | Vapor |
-| Persistence | Permanent, syncs via Dolt | Ephemeral, local-only |
-| Use case | Tracked work, audit trail | Temporary ops, one-time runs |
-| Cleanup | Manual close/archive | Squash, burn, or GC |
+| Aspect      | Molecule (pour)           | Wisp                         |
+| ----------- | ------------------------- | ---------------------------- |
+| Phase       | Liquid                    | Vapor                        |
+| Persistence | Permanent, syncs via Dolt | Ephemeral, local-only        |
+| Use case    | Tracked work, audit trail | Temporary ops, one-time runs |
+| Cleanup     | Manual close/archive      | Squash, burn, or GC          |
 
 ## Phase Control
 

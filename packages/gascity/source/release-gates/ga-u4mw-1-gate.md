@@ -7,21 +7,21 @@
 
 ## Gate criteria
 
-| # | Criterion | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Review PASS present | PASS | ga-u4mw.1 passed at commit 225d34b3 (mail `gm-wisp-qdsv` from gascity/reviewer). Single-pass sufficient while gemini second-pass is disabled. |
-| 2 | Acceptance criteria met | PASS | All eight done-when checkboxes in ga-u4mw satisfied; three new tests (`TestCheckBeadStateRoutedWithoutConvoyIsNotIdempotent`, `TestCheckBeadStateRoutedWithClosedConvoyIsNotIdempotent`, `TestDoSlingRecoversMissingConvoyOnPreRoutedBead`) all PASS on the release branch. |
-| 3 | Tests pass | PASS | `TestDryRunIdempotentBead` — the regression that blocked the previous gate — now PASSes after cherry-picking builder follow-up `b33a8336`. `go vet ./...` clean, `go build ./...` clean. Two `TestDoConvoyAutoclose*` failures reproduce identically on `origin/main@adaa6f47` (JSON unmarshal errors in `provider_store_resolution_test.go`) — pre-existing, not introduced by this change. |
-| 4 | No high-severity review findings open | PASS | Zero HIGH findings; reviewer PASS with no blocking items. |
-| 5 | Final branch is clean | PASS | `git status` shows tracked tree clean; only `release-gates/` (this file) and a `.gitkeep` untracked (pre-existing workspace scaffold). |
-| 6 | Branch diverges cleanly from main | PASS | Two commits ahead of `origin/main` with no merge conflicts. |
+| #   | Criterion                             | Verdict | Evidence                                                                                                                                                                                                                                                                                                                                                                                     |
+| --- | ------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS    | ga-u4mw.1 passed at commit 225d34b3 (mail `gm-wisp-qdsv` from gascity/reviewer). Single-pass sufficient while gemini second-pass is disabled.                                                                                                                                                                                                                                                |
+| 2   | Acceptance criteria met               | PASS    | All eight done-when checkboxes in ga-u4mw satisfied; three new tests (`TestCheckBeadStateRoutedWithoutConvoyIsNotIdempotent`, `TestCheckBeadStateRoutedWithClosedConvoyIsNotIdempotent`, `TestDoSlingRecoversMissingConvoyOnPreRoutedBead`) all PASS on the release branch.                                                                                                                  |
+| 3   | Tests pass                            | PASS    | `TestDryRunIdempotentBead` — the regression that blocked the previous gate — now PASSes after cherry-picking builder follow-up `b33a8336`. `go vet ./...` clean, `go build ./...` clean. Two `TestDoConvoyAutoclose*` failures reproduce identically on `origin/main@adaa6f47` (JSON unmarshal errors in `provider_store_resolution_test.go`) — pre-existing, not introduced by this change. |
+| 4   | No high-severity review findings open | PASS    | Zero HIGH findings; reviewer PASS with no blocking items.                                                                                                                                                                                                                                                                                                                                    |
+| 5   | Final branch is clean                 | PASS    | `git status` shows tracked tree clean; only `release-gates/` (this file) and a `.gitkeep` untracked (pre-existing workspace scaffold).                                                                                                                                                                                                                                                       |
+| 6   | Branch diverges cleanly from main     | PASS    | Two commits ahead of `origin/main` with no merge conflicts.                                                                                                                                                                                                                                                                                                                                  |
 
 ## Cherry-pick log
 
-| Source SHA | Branch SHA | Summary |
-|------------|------------|---------|
-| 225d34b3 | 3d1e61d3 | fix(sling): recover missing auto-convoy on pre-routed beads (ga-u4mw) |
-| b33a8336 | 07f14576 | test(sling): seed live convoy parent in TestDryRunIdempotentBead (ga-u4mw.1) |
+| Source SHA | Branch SHA | Summary                                                                      |
+| ---------- | ---------- | ---------------------------------------------------------------------------- |
+| 225d34b3   | 3d1e61d3   | fix(sling): recover missing auto-convoy on pre-routed beads (ga-u4mw)        |
+| b33a8336   | 07f14576   | test(sling): seed live convoy parent in TestDryRunIdempotentBead (ga-u4mw.1) |
 
 `EXCLUDES`: `issues.jsonl` (bd sync artifact not present on `origin/main`).
 

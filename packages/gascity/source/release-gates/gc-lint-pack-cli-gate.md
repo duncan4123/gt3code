@@ -7,14 +7,14 @@ Commit under review: 3a2027c7b
 
 ## Gate Checklist
 
-| # | Criterion | Result | Evidence |
-|---|-----------|--------|----------|
-| 1 | Review PASS present | PASS | `bd show ga-4add8` notes contain `VERDICT: pass`; findings: none. |
-| 2 | Acceptance criteria met | PASS | `gc lint <pack>` is wired into `cmd/gc/main.go`; lint implementation, tests, CLI docs, config loader support, and JSON schema are present; focused tests and CLI smoke checks pass. |
-| 3 | Tests pass | PASS | `go test ./cmd/gc ./internal/config -run 'TestLint|Test(RenderPrompt|ParseWithPromptTemplate|QualifiedName|EffectiveWorkQuery|EffectiveSlingQuery|ExpandPacks)'` PASS; `go run ./cmd/gc lint examples/gastown/packs/gastown` PASS; `go run ./cmd/gc lint examples/bd --json` PASS; `go vet ./...` PASS; `make test-fast-parallel` PASS. |
-| 4 | No high-severity review findings open | PASS | Review notes list `Findings: none`; unresolved HIGH findings count is 0. |
-| 5 | Final branch is clean | PASS | `git status --short` was clean before writing this gate artifact; the gate artifact is committed as the final branch change. |
-| 6 | Branch diverges cleanly from main | PASS | `git merge-tree $(git merge-base HEAD origin/main) HEAD origin/main` completed with no conflicts. |
+| #   | Criterion                             | Result | Evidence                                                                                                                                                                            |
+| --- | ------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ----------------------- | ------------- | ------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Review PASS present                   | PASS   | `bd show ga-4add8` notes contain `VERDICT: pass`; findings: none.                                                                                                                   |
+| 2   | Acceptance criteria met               | PASS   | `gc lint <pack>` is wired into `cmd/gc/main.go`; lint implementation, tests, CLI docs, config loader support, and JSON schema are present; focused tests and CLI smoke checks pass. |
+| 3   | Tests pass                            | PASS   | `go test ./cmd/gc ./internal/config -run 'TestLint                                                                                                                                  | Test(RenderPrompt | ParseWithPromptTemplate | QualifiedName | EffectiveWorkQuery | EffectiveSlingQuery | ExpandPacks)'`PASS;`go run ./cmd/gc lint examples/gastown/packs/gastown`PASS;`go run ./cmd/gc lint examples/bd --json`PASS;`go vet ./...`PASS;`make test-fast-parallel` PASS. |
+| 4   | No high-severity review findings open | PASS   | Review notes list `Findings: none`; unresolved HIGH findings count is 0.                                                                                                            |
+| 5   | Final branch is clean                 | PASS   | `git status --short` was clean before writing this gate artifact; the gate artifact is committed as the final branch change.                                                        |
+| 6   | Branch diverges cleanly from main     | PASS   | `git merge-tree $(git merge-base HEAD origin/main) HEAD origin/main` completed with no conflicts.                                                                                   |
 
 ## Acceptance Evidence
 

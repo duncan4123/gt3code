@@ -10,14 +10,14 @@
 
 ## Criteria
 
-| # | Criterion | Verdict | Evidence |
-|---|-----------|---------|----------|
-| 1 | Reviewer PASS verdict in bead notes | PASS | `gascity/reviewer` PASS at HEAD `fb001b57`; 2 INFO findings, none block. |
-| 2 | Acceptance criteria met | PASS | All 5 suggested-focus items in handoff verified by reviewer; 10/10 test cases cover the documented decision branches. |
-| 3 | Tests pass on final branch | PASS | `go test ./internal/doctor/ -run TestPreStartScriptsCheck -count=1` — 10/10 PASS in 5ms. |
-| 4 | No high-severity review findings open | PASS | Reviewer findings: 2 INFO (scope-of-detection comment opportunity, FixHint test pinning suggestion); 0 HIGH. |
-| 5 | Working tree clean | PASS | `git status` clean prior to gate-file commit. |
-| 6 | Branch diverges cleanly from main | PASS | 1 commit ahead, 0 behind `origin/main`. PR shows `MERGEABLE`. |
+| #   | Criterion                             | Verdict | Evidence                                                                                                              |
+| --- | ------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
+| 1   | Reviewer PASS verdict in bead notes   | PASS    | `gascity/reviewer` PASS at HEAD `fb001b57`; 2 INFO findings, none block.                                              |
+| 2   | Acceptance criteria met               | PASS    | All 5 suggested-focus items in handoff verified by reviewer; 10/10 test cases cover the documented decision branches. |
+| 3   | Tests pass on final branch            | PASS    | `go test ./internal/doctor/ -run TestPreStartScriptsCheck -count=1` — 10/10 PASS in 5ms.                              |
+| 4   | No high-severity review findings open | PASS    | Reviewer findings: 2 INFO (scope-of-detection comment opportunity, FixHint test pinning suggestion); 0 HIGH.          |
+| 5   | Working tree clean                    | PASS    | `git status` clean prior to gate-file commit.                                                                         |
+| 6   | Branch diverges cleanly from main     | PASS    | 1 commit ahead, 0 behind `origin/main`. PR shows `MERGEABLE`.                                                         |
 
 ## Validation (deployer re-run on `deploy/ga-mvvitw` at HEAD `fb001b57`)
 
@@ -29,6 +29,7 @@
 ## CI status (PR #1778)
 
 All required CI gates SUCCESS at HEAD `fb001b57`:
+
 - `CI / required` — SUCCESS
 - `Preflight / unit cover` — SUCCESS
 - `cmd/gc process / shards 1-2,3-4,5-6 of 6` — SUCCESS
