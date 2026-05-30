@@ -11,7 +11,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const DEFAULT_GASCITY_API_URL = "http://127.0.0.1:8372";
 export const DEFAULT_T3_HOME_PATH = join(repoRoot, ".t3-dev");
 export const DEFAULT_T3CODE_GASCITY_HOME = join(DEFAULT_T3_HOME_PATH, "gascity");
-export const DEFAULT_GC_CITY_PATH = getBundledGascityConfigLayout("gascity-br").rootDir;
+export const DEFAULT_GC_CITY_PATH = getBundledGascityConfigLayout("gastown-dolt").rootDir;
 
 export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) =>
   path.resolve(DEFAULT_T3_HOME_PATH),

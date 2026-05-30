@@ -11,4 +11,5 @@
 name = "maintenance"
 schema = 2
 
-# formulas use well-known formulas/ directory
+[formulas]
+dir = "formulas"

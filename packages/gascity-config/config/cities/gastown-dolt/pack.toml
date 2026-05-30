@@ -1,68 +1,82 @@
+# Gas Town — domain-specific coding workflow pack.
+#
+# Gastown roles: mayor (coordinator), deacon (patrol), boot (watchdog),
+# plus rig-scoped agents (witness, refinery, polecat).
+# Dog (utility pool) is defined here with tmux theming; maintenance provides
+# the fallback (unthemed) dog. Mechanical housekeeping lives in maintenance.
+#
+# Referenced by both workspace.pack and rigs[].pack:
+#   workspace.pack → expands city-scoped agents only (mayor, deacon, boot)
+#   rigs[].pack    → expands rig agents only (witness, refinery, polecat)
+#
+# Crew members are individually named and declared inline in city.toml.
+
 [pack]
-name = "gastown-dolt"
+name = "gastown"
 schema = 2
 
-[imports.gastown]
-source = "../../packs/gastown-upstream"
+[imports.maintenance]
+source = "../maintenance"
+
+[global]
+session_live = [
+    "{{.ConfigDir}}/assets/scripts/tmux-theme.sh {{.Session}} {{.Agent}} {{.ConfigDir}}",
+    "{{.ConfigDir}}/assets/scripts/tmux-keybindings.sh {{.ConfigDir}}",
+]
+
+[[patches.agent]]
+name = "dog"
+wake_mode = "fresh"
+work_dir = ".gc/agents/dogs/{{.AgentBase}}"
+
+[[named_session]]
+template = "mayor"
+scope = "city"
+mode = "always"
+
+[[named_session]]
+template = "deacon"
+scope = "city"
+mode = "always"
+
+[[named_session]]
+template = "boot"
+scope = "city"
+mode = "always"
+
+[[named_session]]
+template = "witness"
+scope = "rig"
+mode = "always"
+
+[[named_session]]
+template = "refinery"
+scope = "rig"
+mode = "on_demand"
 
 [imports.bd]
 source = "../../packs/bd"
 export = true
-
 [imports.dolt]
 source = "../../packs/dolt"
 export = true
 
 [providers.codex]
 base = "builtin:codex"
+options_schema_merge = "by_key"
 command = "codex"
 ready_delay_ms = 0
-options_schema_merge = "by_key"
-
 [providers.codex.env]
 GC_MODEL = "gpt-5.5"
 
-[[providers.codex.options_schema]]
-key = "model"
-label = "Model"
-type = "select"
-
-[[providers.codex.options_schema.choices]]
-value = ""
-label = "Default"
-
-[[providers.codex.options_schema.choices]]
-value = "gpt-5.5"
-label = "GPT-5.5"
-flag_args = ["--model", "gpt-5.5"]
-
-[[providers.codex.options_schema.choices]]
-value = "gpt-5.4"
-label = "GPT-5.4"
-flag_args = ["--model", "gpt-5.4"]
-
-[[providers.codex.options_schema.choices]]
-value = "gpt-5.4-mini"
-label = "GPT-5.4 Mini"
-flag_args = ["--model", "gpt-5.4-mini"]
-
-[[providers.codex.options_schema.choices]]
-value = "o4-mini"
-label = "o4-mini"
-flag_args = ["--model", "o4-mini"]
-
-[[providers.codex.options_schema.choices]]
-value = "o3"
-label = "o3"
-flag_args = ["--model", "o3"]
-
 [providers.deepseek]
 base = "builtin:opencode"
+ready_delay_ms = 0
 supports_acp = false
-
 [providers.deepseek.env]
 GC_PROVIDER = "opencode"
 GC_MODEL = "deepseek/deepseek-v4-pro"
 GC_OPENCODE_AGENT = "build"
 
-
+[agent_defaults]
+model = "deepseek-v4-pro"

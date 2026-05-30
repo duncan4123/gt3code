@@ -1,5 +1,5 @@
 [workspace]
-provider = "codex"
+provider = "deepseek"
 global_fragments = ["command-glossary", "operational-awareness"]
 
 [[rigs]]
@@ -12,6 +12,7 @@ source = "../../packs/gastown-upstream"
 [[rigs]]
 name = "beadstui"
 prefix = "btui"
+suspended = true
 [rigs.imports]
 [rigs.imports.gastown]
 source = "../../packs/gastown-upstream"
@@ -33,55 +34,47 @@ suspended = false
 [[patches.agent]]
 dir = ""
 name = "gastown.mayor"
-provider = "deepseek"
 wake_mode = "resume"
 
 [[patches.agent]]
 dir = ""
 name = "gastown.deacon"
-provider = "deepseek"
 wake_mode = "resume"
 
 [[patches.agent]]
 dir = ""
 name = "gastown.boot"
-provider = "deepseek"
 wake_mode = "resume"
 
 [[patches.agent]]
 dir = "t3code"
 name = "gastown.witness"
-provider = "deepseek"
 wake_mode = "resume"
 
 [[patches.agent]]
 dir = "t3code"
 name = "gastown.refinery"
-provider = "deepseek"
 wake_mode = "resume"
 
 [[patches.agent]]
 dir = "t3code"
 name = "gastown.polecat"
-provider = "deepseek"
 wake_mode = "resume"
-
-[[patches.agent]]
-dir = "t3code"
-name = "gastown.merger"
-provider = "deepseek"
-wake_mode = "resume"
+min_active_sessions = 1
 
 [[patches.agent]]
 dir = "beadstui"
 name = "gastown.witness"
-provider = "deepseek"
 wake_mode = "resume"
 
 [[patches.agent]]
 dir = "beadstui"
 name = "gastown.refinery"
-provider = "deepseek"
+wake_mode = "resume"
+
+[[patches.agent]]
+dir = "beadstui"
+name = "gastown.polecat"
 wake_mode = "resume"
 
 [[patches.agent]]
@@ -89,18 +82,6 @@ dir = "beadstui"
 name = "gastown.polecat"
 provider = "deepseek"
 wake_mode = "resume"
-
-[[patches.agent]]
-dir = "beadstui"
-name = "gastown.merger"
-provider = "deepseek"
-wake_mode = "resume"
-
-[beads]
-provider = "bd"
-
-[session]
-provider = "t3bridge"
 
 [daemon]
 formula_v2 = true
@@ -111,3 +92,11 @@ shutdown_timeout = "5s"
 
 [orders]
 skip = ["beads-health", "cross-rig-deps", "digest-generate", "dolt-health", "dolt-remotes-patrol", "doltlite-compact", "gate-sweep", "mol-dog-backup", "mol-dog-compactor", "mol-dog-doctor", "mol-dog-jsonl", "mol-dog-phantom-db", "mol-dog-reaper", "mol-dog-stale-db", "orphan-sweep", "prune-branches", "spawn-storm-detect", "wisp-compact"]
+
+[agent_defaults]
+model = "deepseek/deepseek-v4-flash"
+
+
+[[patches.agent]]
+name = "dog"
+wake_mode = "resume"
