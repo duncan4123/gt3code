@@ -15,8 +15,19 @@
 name = "gastown"
 schema = 2
 
+[imports.gastown]
+source = "../../packs/gastown-upstream"
+
 [imports.maintenance]
-source = "../maintenance"
+source = "../../packs/maintenance"
+
+[imports.bd]
+source = "../../packs/bd"
+export = true
+
+[imports.dolt]
+source = "../../packs/dolt"
+export = true
 
 [global]
 session_live = [
@@ -29,46 +40,6 @@ name = "dog"
 wake_mode = "fresh"
 work_dir = ".gc/agents/dogs/{{.AgentBase}}"
 
-[[named_session]]
-template = "mayor"
-scope = "city"
-mode = "always"
-
-[[named_session]]
-template = "deacon"
-scope = "city"
-mode = "always"
-
-[[named_session]]
-template = "boot"
-scope = "city"
-mode = "always"
-
-[[named_session]]
-template = "witness"
-scope = "rig"
-mode = "always"
-
-[[named_session]]
-template = "refinery"
-scope = "rig"
-mode = "on_demand"
-
-[imports.bd]
-source = "../../packs/bd"
-export = true
-[imports.dolt]
-source = "../../packs/dolt"
-export = true
-
-[providers.codex]
-base = "builtin:codex"
-options_schema_merge = "by_key"
-command = "codex"
-ready_delay_ms = 0
-[providers.codex.env]
-GC_MODEL = "gpt-5.5"
-
 [providers.deepseek]
 base = "builtin:opencode"
 ready_delay_ms = 0
@@ -77,6 +48,3 @@ supports_acp = false
 GC_PROVIDER = "opencode"
 GC_MODEL = "deepseek/deepseek-v4-pro"
 GC_OPENCODE_AGENT = "build"
-
-[agent_defaults]
-model = "deepseek-v4-pro"

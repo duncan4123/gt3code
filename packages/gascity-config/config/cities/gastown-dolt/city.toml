@@ -44,7 +44,10 @@ wake_mode = "resume"
 [[patches.agent]]
 dir = ""
 name = "gastown.boot"
+provider = "deepseek"
 wake_mode = "resume"
+[patches.agent.option_defaults]
+model = "deepseek/deepseek-v4-flash"
 
 [[patches.agent]]
 dir = "t3code"
@@ -83,6 +86,20 @@ name = "gastown.polecat"
 provider = "deepseek"
 wake_mode = "resume"
 
+[[patches.agent]]
+dir = ""
+name = "dog"
+provider = "deepseek"
+wake_mode = "fresh"
+min_active_sessions = 1
+[patches.agent.option_defaults]
+model = "deepseek/deepseek-v4-flash"
+
+[session]
+provider = "t3bridge"
+startup_timeout = "2m"
+nudge_ready_timeout = "30s"
+
 [daemon]
 formula_v2 = true
 patrol_interval = "30s"
@@ -95,8 +112,3 @@ skip = ["beads-health", "cross-rig-deps", "digest-generate", "dolt-health", "dol
 
 [agent_defaults]
 model = "deepseek/deepseek-v4-flash"
-
-
-[[patches.agent]]
-name = "dog"
-wake_mode = "resume"
