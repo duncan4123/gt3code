@@ -27,6 +27,7 @@ import (
 )
 
 func main() {
+	applySessionEnvFallback()
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
@@ -1052,6 +1053,76 @@ func eventActor() string {
 		return beadsActor
 	}
 	return "human"
+}
+
+// applySessionEnvFallback walks up from the current working directory looking
+// for a .gc-session-env shell snippet. When found, it parses simple export KEY='VALUE'
+// lines and sets any corresponding environment variable that is not already
+// present. This bridges the gap between the controller-injected session env vars
+// (stored in thread metadata) and agent runtimes that do not inherit the
+// controller's process environment (e.g. opencode sessions).
+func applySessionEnvFallback() {
+	dir, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	envPath := findSessionEnvFileUp(dir)
+	if envPath == "" {
+		return
+	}
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		rest, hasExport := strings.CutPrefix(line, "export ")
+		if !hasExport {
+			continue
+		}
+		key, value, foundEq := strings.Cut(rest, "=")
+		if !foundEq {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = unquoteShellAssign(value)
+		if key == "" || value == "" {
+			continue
+		}
+		if os.Getenv(key) != "" {
+			continue
+		}
+		_ = os.Setenv(key, value)
+	}
+}
+
+// findSessionEnvFileUp walks up from dir looking for a .gc-session-env file.
+func findSessionEnvFileUp(dir string) string {
+	for {
+		p := filepath.Join(dir, ".gc-session-env")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+// unquoteShellAssign strips surrounding single quotes from a shell assignment
+// value and unescapes embedded '\'' sequences. Empty string returns as-is.
+func unquoteShellAssign(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
+		inner := value[1 : len(value)-1]
+		return strings.ReplaceAll(inner, "'\\''", "'")
+	}
+	return value
 }
 
 // openCityStore locates the city root from the current directory and opens a

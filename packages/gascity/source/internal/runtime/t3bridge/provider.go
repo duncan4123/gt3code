@@ -1398,6 +1398,39 @@ func buildThreadEnv(env map[string]string) map[string]string {
 	return threadEnv
 }
 
+// writeSessionEnvFile writes GC_* session environment variables to a
+// .gc-session-env shell snippet in the session's work directory. This
+// bridges the gap between controller-injected env vars and agent runtimes
+// (e.g. opencode) that may not inherit the controller's process environment.
+func writeSessionEnvFile(cfg runtime.Config) {
+	workDir := strings.TrimSpace(cfg.WorkDir)
+	if workDir == "" {
+		return
+	}
+	if cfg.Env == nil {
+		return
+	}
+	var buf bytes.Buffer
+	for key, value := range cfg.Env {
+		if !strings.HasPrefix(key, "GC_") || value == "" {
+			continue
+		}
+		fmt.Fprintf(&buf, "export %s='%s'\n", key, strings.ReplaceAll(value, "'", "'\\''"))
+	}
+	if buf.Len() == 0 {
+		return
+	}
+	envPath := filepath.Join(workDir, ".gc-session-env")
+	if err := os.MkdirAll(filepath.Dir(envPath), 0700); err != nil {
+		fmt.Fprintf(os.Stderr, "t3bridge: mkdir for session env file %s: %v\n", envPath, err) //nolint:errcheck
+		return
+	}
+	if err := os.WriteFile(envPath, buf.Bytes(), 0600); err != nil {
+		fmt.Fprintf(os.Stderr, "t3bridge: write session env file %s: %v\n", envPath, err) //nolint:errcheck
+		return
+	}
+}
+
 func buildGCMetadata(envelope StartupEnvelope, runtimeProvider string, sessionEnv map[string]string) map[string]interface{} {
 	state := "active"
 	groupKind := "workspace"
@@ -2034,6 +2067,8 @@ func (p *Provider) Start(_ context.Context, name string, cfg runtime.Config) err
 		cfg.Env = make(map[string]string)
 	}
 	cfg.Env["GC_STARTUP_ENVELOPE"] = string(envelopeJSON)
+
+	writeSessionEnvFile(cfg)
 
 	snapshot, err := p.rpcSnapshot()
 	if err != nil {

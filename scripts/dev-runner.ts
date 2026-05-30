@@ -335,6 +335,7 @@ export function createDevRunnerEnv({
         devUrl?.toString() ??
         `http://${isDesktopMode ? DESKTOP_DEV_LOOPBACK_HOST : "localhost"}:${webPort}`,
       T3CODE_HOME: resolvedBaseDir,
+      T3CODE_TELEMETRY_ENABLED: "false",
     };
 
     if (!isDesktopMode) {

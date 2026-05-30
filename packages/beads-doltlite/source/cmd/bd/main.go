@@ -1343,6 +1343,8 @@ func validateWorkspaceIdentity(ctx context.Context, beadsDir string) {
 }
 
 func main() {
+	applySessionEnvFallback()
+
 	// BD_NAME overrides the binary name in help text (e.g. BD_NAME=ops makes
 	// "ops --help" show "ops" instead of "bd"). Useful for multi-instance
 	// setups where wrapper scripts set BEADS_DIR for routing.
@@ -1359,4 +1361,71 @@ func main() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+// applySessionEnvFallback walks up from the current working directory looking
+// for a .gc-session-env shell snippet. When found, it parses simple export KEY='VALUE'
+// lines and sets any corresponding environment variable that is not already
+// present. This bridges the gap between the controller-injected session env vars
+// (stored in thread metadata) and agent runtimes (e.g. opencode) that do not
+// inherit the controller's process environment.
+func applySessionEnvFallback() {
+	dir, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	envPath := findSessionEnvFileUp(dir)
+	if envPath == "" {
+		return
+	}
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		rest, hasExport := strings.CutPrefix(line, "export ")
+		if !hasExport {
+			continue
+		}
+		key, value, foundEq := strings.Cut(rest, "=")
+		if !foundEq {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = unquoteShellAssign(value)
+		if key == "" || value == "" {
+			continue
+		}
+		if os.Getenv(key) != "" {
+			continue
+		}
+		_ = os.Setenv(key, value)
+	}
+}
+
+func findSessionEnvFileUp(dir string) string {
+	for {
+		p := filepath.Join(dir, ".gc-session-env")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+func unquoteShellAssign(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
+		inner := value[1 : len(value)-1]
+		return strings.ReplaceAll(inner, "'\\''", "'")
+	}
+	return value
 }

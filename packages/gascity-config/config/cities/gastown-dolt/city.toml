@@ -4,7 +4,7 @@ global_fragments = ["command-glossary", "operational-awareness"]
 
 [[rigs]]
 name = "t3code"
-prefix = "t3"
+prefix = "t3c"
 [rigs.imports]
 [rigs.imports.gastown]
 source = "../../packs/gastown-upstream"
@@ -117,4 +117,4 @@ model = "deepseek/deepseek-v4-flash"
 [[patches.agent]]
 dir = "t3code"
 name = "polecat"
-max_active_sessions = 6
+max_active_sessions = 7
