@@ -1065,11 +1065,20 @@ export function makeOpenCodeAdapter(
                   detail: "OpenCode session.create returned no session payload.",
                 });
               }
+              const resumeCursor = {
+                sessionId: openCodeSession.data.id,
+                provider: PROVIDER,
+                directory,
+                ...(input.resumeCursor !== undefined
+                  ? { previousCursor: input.resumeCursor }
+                  : {}),
+              };
               return {
                 sessionScope,
                 server,
                 client,
                 openCodeSession: openCodeSession.data,
+                resumeCursor,
               };
             }).pipe(Effect.provideService(Scope.Scope, sessionScope)),
           );
@@ -1102,6 +1111,9 @@ export function makeOpenCodeAdapter(
           status: "ready",
           runtimeMode: input.runtimeMode,
           cwd: directory,
+          ...(started.resumeCursor !== undefined
+            ? { resumeCursor: started.resumeCursor }
+            : {}),
           ...(input.modelSelection ? { model: input.modelSelection.model } : {}),
           threadId: input.threadId,
           createdAt,
